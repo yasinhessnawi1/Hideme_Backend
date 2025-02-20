@@ -1,5 +1,3 @@
-import os
-import json
 import logging
 import fitz
 from presidio_analyzer import RecognizerResult
@@ -8,15 +6,28 @@ from src import config
 
 
 class PDFExtractor:
-    def __init__(self, original_pdf):
-        self.original_pdf = original_pdf
-        self.src_dir = os.path.dirname(original_pdf)
-        self.output_json = os.path.join(self.src_dir, "Redacted_Output_ML.json")
+    def __init__(self, pdf_input):
+        """
+        Initialize PDFExtractor.
+        ✅ Accepts EITHER a file path OR a PyMuPDF document.
+        """
+        # If file path is given
+        if isinstance(pdf_input, str):
+            self.pdf_document = fitz.open(pdf_input)
+
+        # If PyMuPDF document is given
+        elif isinstance(pdf_input, fitz.Document):
+            self.pdf_document = pdf_input
+
+        else:
+            raise ValueError("Invalid input! Expected file path or PyMuPDF Document.")
 
         # Use Presidio Analyzer and NLP engine from config
         self.analyzer = config.analyzer
-        self.nlp = config.nlp  # spaCy NLP model
-        self.ner_pipeline = config.ner_pipeline  # Custom NER pipeline
+        # spaCy NLP model
+        self.nlp = config.nlp
+        # Custom NER pipeline
+        self.ner_pipeline = config.ner_pipeline
         self.anonymizer = config.anonymizer
 
     def detect_sensitive_data(self, text):
@@ -85,10 +96,7 @@ class PDFExtractor:
         extracted_data = {"pages": []}
 
         try:
-            # Open PDF
-            pdf = fitz.open(self.original_pdf)
-
-            for page_num, page in enumerate(pdf):
+            for page_num, page in enumerate(self.pdf_document):
                 logging.info(f"📄 Processing page {page_num + 1}")
                 page_data = {"text": []}
 
@@ -130,9 +138,6 @@ class PDFExtractor:
             logging.error(f"❌ Failed to process PDF: {e}")
             return {}
 
-        # Save output to JSON file
-        with open(self.output_json, "w", encoding="utf-8") as json_file:
-            json.dump(extracted_data, json_file, indent=4, ensure_ascii=False)
-
-        logging.info(f"✅ Data with ALL entity redactions saved in {self.output_json}")
+        logging.info("✅ Successfully extracted data from PDF.")
+        # Now directly returning data, NOT saving a JSON file.
         return extracted_data
