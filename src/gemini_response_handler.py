@@ -5,22 +5,18 @@ import re
 
 class ResponseHandler:
     """
-    Handles processing and saving of API responses per page, ensuring placeholders are inserted at the correct positions.
+    Handles processing and sending of extracted text per page to Gemini API.
     """
 
-    def __init__(self, gemini_api, output_path="Redacted_Output_LLM.json"):
+    def __init__(self, gemini_api):
         """
-        Initializes the ResponseHandler with an API client and output path.
-
-        :param gemini_api: An instance of the GeminiAPI class.
-        :param output_path: The file path to save the JSON response.
+        Initializes the ResponseHandler with an API client.
         """
         self.gemini_api = gemini_api
-        self.output_path = output_path
 
     def save_responses_per_page(self, extracted_pages):
         """
-        Processes and sends extracted text per page, ensuring placeholders are added correctly.
+        Processes and sends extracted text per page to Gemini API.
         """
         logging.info("📤 Starting Gemini API processing...")
 
@@ -29,7 +25,7 @@ class ResponseHandler:
             processed_page = self.process_page(page, page_index)
             final_output["pages"].append(processed_page)
 
-        self.save_output(final_output)
+        # Now returning JSON directly instead of saving.
         return final_output
 
     def process_page(self, page, page_index):
@@ -38,7 +34,9 @@ class ResponseHandler:
             return self.get_empty_page_placeholder(page_index)
 
         logging.info(f"📤 Sending Page {page_index + 1} to Gemini API...")
-        return self.get_processed_page(self.gemini_api.send_request(self.get_page_text(page)), page_index)
+        response = self.gemini_api.send_request(self.get_page_text(page))
+
+        return self.get_processed_page(response, page_index)
 
     @staticmethod
     def get_page_text(page):
@@ -60,9 +58,15 @@ class ResponseHandler:
 
     @staticmethod
     def parse_response(response):
-        """Parses JSON response from Gemini API."""
-        cleaned_response = re.search(r"\{.*}", response.strip("`").strip(), re.DOTALL)
-        json_data = json.loads(cleaned_response.group(0)) if cleaned_response else {}
+        """
+        Parses JSON response from Gemini API.
+        """
+        try:
+            json_data = json.loads(response)
+        except json.JSONDecodeError:
+            cleaned_response = re.search(r"\{.*}", response.strip("`").strip(), re.DOTALL)
+            json_data = json.loads(cleaned_response.group(0)) if cleaned_response else {}
+
         return {"text": json_data["pages"][0]["text"]} if "pages" in json_data else {}
 
     @staticmethod
@@ -78,9 +82,3 @@ class ResponseHandler:
         return {"text": [
             {"original_text": "Error processing this page", "anonymized_text": "Error processing this page",
              "entities": []}]}
-
-    def save_output(self, final_output):
-        """Saves the final output JSON."""
-        with open(self.output_path, "w", encoding="utf-8") as json_file:
-            json.dump(final_output, json_file, indent=4, ensure_ascii=False)
-        logging.info(f"✅ All processed data saved in {self.output_path}")

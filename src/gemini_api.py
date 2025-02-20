@@ -1,19 +1,27 @@
 import logging
+import os
 
 import google.generativeai as genai
+from dotenv import load_dotenv
 
+# Load environment variables from .env
+load_dotenv()
 
 class GeminiAPI:
     """
     Handles sending a request to the Google Gemini API and receiving the response.
     """
 
-    def __init__(self, api_key):
+    def __init__(self):
         """
-        Initializes the Gemini API client.
-        :param api_key: The Google Gemini API key.
+        Initializes the Gemini API client securely by loading the API key from the .env file.
         """
-        self.api_key = api_key
+        self.api_key = os.getenv("GEMINI_API_KEY")
+
+        if not self.api_key:
+            logging.error("❌ Gemini API Key is missing! Set GEMINI_API_KEY in .env")
+            raise ValueError("GEMINI_API_KEY is not set in the environment.")
+
         genai.configure(api_key=self.api_key)
 
     @staticmethod
