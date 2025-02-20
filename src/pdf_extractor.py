@@ -11,7 +11,7 @@ class PDFExtractor:
     def __init__(self, original_pdf):
         self.original_pdf = original_pdf
         self.src_dir = os.path.dirname(original_pdf)
-        self.output_json = os.path.join(self.src_dir, "Redacted_Output.json")
+        self.output_json = os.path.join(self.src_dir, "Redacted_Output_ML.json")
 
         # Use Presidio Analyzer and NLP engine from config
         self.analyzer = config.analyzer

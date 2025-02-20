@@ -17,7 +17,7 @@ LOG_FILE = os.path.join(LOG_DIR, "app.log")
 # Configure logging to use UTF-8 encoding
 logging.basicConfig(
     # Log all levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
         # Use UTF-8 for log file
@@ -57,7 +57,6 @@ except Exception as e:
 
 # Create NER Pipeline
 ner_pipeline = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="first")
-
 
 # Configure Presidio to use Norwegian (`nb`)
 nlp_configuration = {
