@@ -58,7 +58,6 @@ except Exception as e:
 # Create NER Pipeline
 ner_pipeline = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="first")
 
-
 # Configure Presidio to use Norwegian (`nb`)
 nlp_configuration = {
     "nlp_engine_name": "spacy",
