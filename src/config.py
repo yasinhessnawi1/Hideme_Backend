@@ -2,6 +2,9 @@ import spacy
 import logging
 import os
 
+from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
+from presidio_analyzer.nlp_engine import NlpEngineProvider, NerModelConfiguration
+from presidio_anonymizer import AnonymizerEngine
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 
 # Ensure logs directory exists
@@ -54,3 +57,72 @@ except Exception as e:
 
 # Create NER Pipeline
 ner_pipeline = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="first")
+
+
+# Configure Presidio to use Norwegian (`nb`)
+nlp_configuration = {
+    "nlp_engine_name": "spacy",
+    # Norwegian language support
+    "models": [{"lang_code": "nb", "model_name": "nb_core_news_lg"}]
+}
+
+# Initialize NLP Engine
+provider = NlpEngineProvider()
+provider.nlp_configuration = nlp_configuration
+spacy_nlp_engine = provider.create_engine()
+
+# Map `GPE_LOC` to `LOCATION`
+ner_model_config = NerModelConfiguration()
+ner_model_config.model_to_presidio_entity_mapping["GPE_LOC"] = "LOCATION"
+
+# Create Presidio Analyzer and Anonymizer
+analyzer = AnalyzerEngine(nlp_engine=spacy_nlp_engine, supported_languages=["nb"])
+anonymizer = AnonymizerEngine()
+
+# Norwegian Fødselsnummer (National ID)
+fodselsnummer_pattern = Pattern(
+    name="Fodselsnummer Pattern",
+    # Matches 11-digit Norwegian National ID
+    regex=r"\b\d{6}\s?\d{5}\b",
+    score=0.9
+)
+fodselsnummer_recognizer = PatternRecognizer(
+    supported_entity="NO_FODSELSNUMMER",
+    patterns=[fodselsnummer_pattern],
+    supported_language="nb"
+)
+
+phone_number_pattern = Pattern(
+    name="Norwegian Phone Number Pattern",
+    regex=r"\b(?:\+47\s?)?(\d{2}\s?\d{2}\s?\d{2}\s?\d{2})\b",
+    score=0.95
+)
+phone_number_recognizer = PatternRecognizer(
+    supported_entity="NO_PHONE_NUMBER",
+    patterns=[phone_number_pattern],
+    supported_language="nb"
+)
+
+# Norwegian Address
+address_pattern = Pattern(
+    name="Norwegian Address Pattern",
+    regex=r"(\b(?:[A-Za-zÆØÅæøå]+\s){1,4}\d{1,4}(?:,\s)?\d{4}\s[A-Za-zÆØÅæøå]+)|"
+          r"(\bPostboks\s?\d{1,5}(?:,\s)?\d{4}\s[A-Za-zÆØÅæøå]+)|"
+          r"(\b\d{4}\s[A-Za-zÆØÅæøå]+\b)|"
+          r"(\b[A-Za-zÆØÅæøå]+\s\d{1,4},?\s?\d{4}\s[A-Za-zÆØÅæøå]+\b)",
+    score=0.98
+)
+address_recognizer = PatternRecognizer(
+    supported_entity="NO_ADDRESS",
+    patterns=[address_pattern],
+    supported_language="nb"
+)
+
+# Register Custom Recognizers in Presidio
+analyzer.registry.add_recognizer(fodselsnummer_recognizer)
+analyzer.registry.add_recognizer(phone_number_recognizer)
+analyzer.registry.add_recognizer(address_recognizer)
+
+logging.info("✅ Added Norwegian custom recognizers to Presidio!")
+
+print("✅ Presidio now supports Norwegian!")
