@@ -1,6 +1,4 @@
 import os
-import json
-import logging
 from presidio_analyzer import (
     AnalyzerEngine,
     Pattern,

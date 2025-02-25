@@ -68,6 +68,6 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.REMOTE_SSH_KEY }}
           script: |
-            cd /path/to/Hideme_Backend  # update with the directory where your docker-compose.yml is located
+            cd Hideme_Backend  # update with the directory where your docker-compose.yml is located
             docker-compose pull
             docker-compose up -d
