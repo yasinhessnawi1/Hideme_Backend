@@ -68,6 +68,7 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.REMOTE_SSH_KEY }}
           script: |
+            export GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             cd Hideme_Backend/backend  # update with the directory where your docker-compose.yml is located
             docker-compose pull
             docker-compose up -d
