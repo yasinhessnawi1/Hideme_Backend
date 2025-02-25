@@ -35,14 +35,13 @@ variable "instance_name" {
 variable "machine_type" {
   description = "The machine type for the compute instance"
   type        = string
-  default     = "n1-standard-4"
 }
-
+/*
 variable "gpu_type" {
   description = "The type of GPU to attach to the instance"
   type        = string
 }
-
+*/
 variable "disk_size" {
   description = "The size of the boot disk in GB"
   type        = number
@@ -52,5 +51,5 @@ variable "disk_size" {
 variable "gpu_count" {
   description = "Number of GPUs to attach"
   type        = number
-  default     = 1
+  default     = 0
 }

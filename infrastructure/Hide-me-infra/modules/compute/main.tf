@@ -4,12 +4,6 @@ resource "google_compute_address" "static_ip" {
   region  = var.region
 }
 
-resource "google_compute_disk" "data_disk" {
-  name  = "${var.instance_name}-data-disk"
-  type  = "pd-standard"
-  zone  = var.zone
-  size  = 100  # Adjust size as needed.
-}
 # Create the Compute Engine instance.
 resource "google_compute_instance" "vm_instance" {
   name         = var.instance_name
@@ -31,16 +25,15 @@ resource "google_compute_instance" "vm_instance" {
       nat_ip = google_compute_address.static_ip.address
     }
   }
-  attached_disk {
-    source      = google_compute_disk.data_disk.id
-    device_name = "data-disk"
-  }
 
   # Attach a GPU accelerator.
+  /*
   guest_accelerator {
     type  = var.gpu_type
     count = var.gpu_count
   }
+
+   */
 
   scheduling {
     on_host_maintenance = "TERMINATE"
