@@ -32,7 +32,6 @@ jobs:
           pytest || echo "No tests found."
 
       - name: Build Docker Image with Docker Compose
-        working-directory: backend
         run: docker compose build
 
   push-image:
