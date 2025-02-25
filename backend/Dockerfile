@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the requirements file.
 COPY requirements.txt .
 
-# Copy any .env backup file if present.
+# Optionally copy the .env backup file (if it exists).
 COPY .env* .
 
 # Upgrade pip and install dependencies.
