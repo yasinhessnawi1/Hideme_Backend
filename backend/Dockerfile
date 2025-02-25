@@ -24,7 +24,7 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code.
-COPY backend /app
+COPY . /app
 
 # Expose the port that the application will run on.
 EXPOSE 8000
