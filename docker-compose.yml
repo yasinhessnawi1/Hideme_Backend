@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Map your environment variables here.
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # Add any additional environment variables if needed.
+    volumes:
+      # Optionally mount the current directory (for development).
+      - .:/app
