@@ -1,4 +1,4 @@
-name: Manual CI/CD Pipeline
+name: CI/CD Pipeline
 
 on:
   workflow_dispatch:
@@ -7,7 +7,15 @@ on:
         description: 'Deploy after building? (true/false)'
         required: false
         default: 'false'
+# Trigger on push to main
+  push:
+    branches:
+      - main
 
+  # Trigger on pull request targeting main
+  pull_request:
+    branches:
+      - main
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -54,10 +62,11 @@ jobs:
         with:
           context: backend
           push: true
-          tags: yasinmh99/mybackend:latest
+          tags: yasinmh99/hideme:latest
 
   deploy:
-    if: ${{ github.event.inputs.deploy == 'true' }}
+    needs: push-image
+    if: ${{ github.event.inputs.deploy == 'true' || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to Remote Server via SSH
@@ -69,7 +78,7 @@ jobs:
           script: |
             export GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             sudo rm -rf Hideme_Backend
-            git clone --branch yasinhessnawi1-patch-2 git@github.com:yasinhessnawi1/Hideme_Backend.git
+            git clone --branch main git@github.com:yasinhessnawi1/Hideme_Backend.git
             cd Hideme_Backend/backend
             echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
             docker-compose build
