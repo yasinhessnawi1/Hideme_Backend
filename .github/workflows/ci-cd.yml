@@ -70,6 +70,7 @@ jobs:
             export GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             sudo rm -rf Hideme_Backend
             git clone git@github.com:yasinhessnawi1/Hideme_Backend.git
+            git -c credential.helper= -c core.quotepath=false -c log.showSignature=false checkout -B yasinhessnawi1-patch-2 origin/yasinhessnawi1-patch-2 --
             cd Hideme_Backend/backend
             echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
             docker-compose build
