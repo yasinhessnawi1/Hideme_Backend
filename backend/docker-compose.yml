@@ -2,12 +2,17 @@ version: "3.9"
 
 services:
   web:
-    build: ..
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
-      # Map  environment variables here.
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # This will use the GEMINI_API_KEY from your host’s environment or from GitHub Secrets (via your deployment step).
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    # Optionally, if you want to load local backup environment variables (which can be overridden by the host env)
+    env_file:
+      - ./backend/.env
     volumes:
-      # Optionally mount the current directory (for development).
-      - .:/backend
+      # Optional: Mount the code for development (remove or adjust for production)
+      - ./backend:/Hideme_Backend/backend

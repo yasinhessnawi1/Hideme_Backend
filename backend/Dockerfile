@@ -4,7 +4,6 @@ FROM python:3.12.6-slim
 # Prevent Python from writing .pyc files and enable unbuffered logging.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    # Set PYTHONPATH so that "backend" is discoverable (if needed).
     PYTHONPATH=/Hideme_Backend
 
 # Set the working directory to the backend folder.
@@ -19,12 +18,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxslt1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file (which is in the current folder).
+# Copy the requirements file.
 COPY requirements.txt .
-COPY .env .
+
+# Copy any .env backup file if present.
+COPY .env* .
 
 # Upgrade pip and install dependencies.
-RUN pip install --upgrade pip && pip install  -r requirements.txt
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the backend code.
 COPY . .
