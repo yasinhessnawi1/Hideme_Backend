@@ -1,4 +1,4 @@
-import logging
+from backend.app.utils.logger import default_logger as logging
 import pymupdf  # PyMuPDF provides fast, efficient PDF text extraction
 
 

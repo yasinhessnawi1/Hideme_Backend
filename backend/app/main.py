@@ -3,7 +3,7 @@ from fastapi import FastAPI
 
 # Import the routers from your routes modules.
 from backend.app.routes import ai_routes, presidio_routes, pdf_routes
-from backend.app.utils.logger import default_logger as logger, default_logger
+from backend.app.utils.logger import default_logger as logger
 
 
 def create_app() -> FastAPI:

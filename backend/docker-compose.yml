@@ -1,0 +1,17 @@
+
+services:
+  web:
+    build:
+      context: .         # Use current directory (i.e. backend folder)
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # This will use the GEMINI_API_KEY from the host (or from GitHub Secrets via deployment)
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    # Optionally load additional environment variables from a backup .env file.
+    env_file:
+      - .env
+    # For development, you might mount the code. For production, you might remove or adjust this.
+    volumes:
+      - .:/Hideme_Backend/backend

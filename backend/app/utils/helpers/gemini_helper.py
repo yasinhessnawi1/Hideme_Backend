@@ -1,6 +1,5 @@
-import logging
 import os
-
+from backend.app.utils.logger import default_logger as logging
 import google.generativeai as genai
 from dotenv import load_dotenv
 from backend.app.configs.gemini_config import GEMINI_PROMPT_HEADER, GEMINI_PROMPT_FOOTER, AVAILABLE_ENTITIES, \

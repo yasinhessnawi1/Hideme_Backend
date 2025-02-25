@@ -1,5 +1,4 @@
 import pymupdf  # PyMuPDF package
-import logging
 from backend.app.utils.logger import default_logger as logger
 
 class PDFRedactionService:
