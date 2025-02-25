@@ -34,7 +34,7 @@ jobs:
           pytest || echo "No tests found."
 
       - name: Build Docker Image
-        run: docker build -t mybackend:latest backend
+        run: docker build -t mybackend:latest .
 
   push-image:
     needs: build
