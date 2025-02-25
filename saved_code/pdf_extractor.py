@@ -1,8 +1,8 @@
 import logging
-import fitz
+import pymupdf
 from presidio_analyzer import RecognizerResult
 
-from src import config
+from backend.app import configs
 
 
 class PDFExtractor:
@@ -13,22 +13,22 @@ class PDFExtractor:
         """
         # If file path is given
         if isinstance(pdf_input, str):
-            self.pdf_document = fitz.open(pdf_input)
+            self.pdf_document = pymupdf.open(pdf_input)
 
         # If PyMuPDF document is given
-        elif isinstance(pdf_input, fitz.Document):
+        elif isinstance(pdf_input, pymupdf.Document):
             self.pdf_document = pdf_input
 
         else:
             raise ValueError("Invalid input! Expected file path or PyMuPDF Document.")
 
-        # Use Presidio Analyzer and NLP engine from config
-        self.analyzer = config.analyzer
+        # Use Presidio Analyzer and NLP engine from configs
+        self.analyzer = configs.analyzer
         # spaCy NLP model
-        self.nlp = config.nlp
+        self.nlp = configs.nlp
         # Custom NER pipeline
-        self.ner_pipeline = config.ner_pipeline
-        self.anonymizer = config.anonymizer
+        self.ner_pipeline = configs.ner_pipeline
+        self.anonymizer = configs.anonymizer
 
     def detect_sensitive_data(self, text):
         """
@@ -78,7 +78,7 @@ class PDFExtractor:
                 score=entity["score"]
             )
             for entity in ner_results
-            if entity["entity_group"] in ["PER", "LOC", "ORG", "DATE", "MISC", "GPE", "PROD", "EVT", "DRV"]
+            if entity["entity_group"] in ["PER", "LOC", "DATE", "MISC", "GPE", "PROD", "EVT", "DRV"]
         ]
 
         # Combine both detection results

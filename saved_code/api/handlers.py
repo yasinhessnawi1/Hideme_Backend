@@ -2,9 +2,9 @@ import logging
 import fitz
 from flask import jsonify
 from werkzeug.utils import secure_filename
-from src.pdf_extractor import PDFExtractor
-from src.gemini_api import GeminiAPI
-from src.gemini_response_handler import ResponseHandler
+from saved_code.pdf_extractor import PDFExtractor
+from saved_code.gemini_api import GeminiAPI
+from saved_code.gemini_response_handler import ResponseHandler
 
 # Initialize API clients
 gemini_api = GeminiAPI()
