@@ -11,4 +11,4 @@ services:
       # Add any additional environment variables if needed.
     volumes:
       # Optionally mount the current directory (for development).
-      - .:/app
+      - .:/backend
