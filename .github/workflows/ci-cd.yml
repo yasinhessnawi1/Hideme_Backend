@@ -32,7 +32,7 @@ jobs:
           pytest || echo "No tests found."
 
       - name: Build Docker Image with Docker Compose
-      - working-directory: Hideme_Backend/backend
+        working-directory: Hideme_Backend/backend
         run: docker compose build
 
   push-image:
