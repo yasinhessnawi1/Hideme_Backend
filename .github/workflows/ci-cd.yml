@@ -68,7 +68,7 @@ jobs:
           key: ${{ secrets.REMOTE_SSH_KEY }}
           script: |
             export GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-            rm -rf Hideme_Backend
+            sudo rm -rf Hideme_Backend
             git clone git@github.com:yasinhessnawi1/Hideme_Backend.git
             cd Hideme_Backend/backend
             echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
