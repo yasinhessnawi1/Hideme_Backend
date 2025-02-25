@@ -15,6 +15,9 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Debug: List Repository Files
+        run: ls -R  # Debugging step to check file structure
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -27,12 +30,10 @@ jobs:
           pip install pytest
 
       - name: Run Tests
-        run: |
-          # This will run your tests when they exist; if no tests are found, it will simply exit 0.
-          pytest || echo "No tests found."
+        run: pytest || echo "No tests found."
 
       - name: Build Docker Image with Docker Compose
-        working-directory: Hideme_Backend/backend
+        working-directory: backend
         run: docker compose build
 
   push-image:
@@ -51,10 +52,9 @@ jobs:
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
         with:
-          # Use the same context and Dockerfile as defined in your docker-compose.yml.
           context: backend
           push: true
-          tags: yasinmh99/mybackend:latest  # update with your Docker Hub image name
+          tags: yasinmh99/mybackend:latest
 
   deploy:
     needs: push-image
@@ -68,12 +68,9 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.REMOTE_SSH_KEY }}
           script: |
-            # Inject the GEMINI_API_KEY into the environment at runtime.
             export GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             rm -rf Hideme_Backend
             git clone git@github.com:yasinhessnawi1/Hideme_Backend.git
-            # Change directory to where your docker-compose.yml is located.
             cd Hideme_Backend/backend
-            # Pull the latest image and start containers.
             docker-compose pull
             docker-compose up -d
