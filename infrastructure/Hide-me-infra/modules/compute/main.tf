@@ -10,6 +10,7 @@ resource "google_compute_instance" "vm_instance" {
   machine_type = var.machine_type
   zone         = var.zone
   project      = var.project
+
   allow_stopping_for_update = true
 
   boot_disk {
@@ -45,7 +46,9 @@ resource "google_compute_instance" "vm_instance" {
 
   }
 
+
   metadata = merge(
+
       var.use_ssh_keys ? {
       "block-project-ssh-keys" = "FALSE"
       # When using SSH keys, disable OS Login and inject the key.

@@ -1,14 +1,16 @@
 # Use an official lightweight Python image.
-FROM python:3.10-slim
+FROM python:3.12.6-slim
 
 # Prevent Python from writing .pyc files and enable unbuffered logging.
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    # Set PYTHONPATH so that "backend" is discoverable (if needed).
+    PYTHONPATH=/Hideme_Backend
 
-# Set the working directory in the container.
-WORKDIR /backend
+# Set the working directory to the backend folder.
+WORKDIR /Hideme_Backend/backend
 
-# Install system dependencies needed to compile packages.
+# Install system dependencies required for building packages.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
@@ -17,17 +19,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxslt1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the dependency file(s) first for caching.
-COPY requirements.txt /backend/requirements.txt
+# Copy the requirements file (which is in the current folder).
+COPY requirements.txt .
 
 # Upgrade pip and install dependencies.
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application code.
-COPY . /backend
+# Copy the rest of the backend code.
+COPY . .
 
-# Expose the port that the application will run on.
+# Expose the port your FastAPI app will run on.
 EXPOSE 8000
 
-# Command to run the FastAPI application using Uvicorn.
+# Run the FastAPI app via Uvicorn.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
