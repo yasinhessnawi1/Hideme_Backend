@@ -1,4 +1,3 @@
-
 # Create an unmanaged instance group containing the backend instance.
 resource "google_compute_instance_group" "backend_group" {
   name    = "${var.instance_name}-ig"
@@ -25,28 +24,6 @@ resource "google_compute_health_check" "default" {
   }
 }
 
-resource "google_compute_health_check" "tcp_health_check" {
-  name                = "${var.instance_name}-tcp-hc"
-  check_interval_sec  = 5
-  timeout_sec         = 5
-  healthy_threshold   = 2
-  unhealthy_threshold = 2
-
-  tcp_health_check {
-    port = 22
-  }
-}
-
-resource "google_compute_backend_service" "tcp_backend" {
-  name          = "${var.instance_name}-tcp-backend"
-  protocol      = "TCP"
-  timeout_sec   = 10
-  health_checks = [google_compute_health_check.tcp_health_check.self_link]
-
-  backend {
-    group = google_compute_instance_group.backend_group.self_link
-  }
-}
 
 # Define a backend service that uses the instance group.
 resource "google_compute_backend_service" "default" {
@@ -69,11 +46,13 @@ resource "google_compute_url_map" "default" {
 }
 
 
+
 # Create a target HTTP proxy to route requests using the URL map.
 resource "google_compute_target_http_proxy" "default" {
   name    = "${var.instance_name}-http-proxy"
   url_map = google_compute_url_map.default.self_link
 }
+
 
 
 # Reserve a global static IP address for the load balancer.

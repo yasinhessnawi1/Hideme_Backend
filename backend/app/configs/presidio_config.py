@@ -46,7 +46,9 @@ REQUESTED_ENTITIES = [
     "PHONE_NUMBER",  # Telephone number.
     "MEDICAL_LICENSE",  # Common medical license numbers.
     "URL",  # Uniform Resource Locator.
-
+    "NO_ADDRESS",  # Norwegian home addresses.
+    "NO_PHONE_NUMBER",  # Norwegian phone numbers.
+    "NO_FODSELSNUMMER",  # Norwegian national identity number.
     # USA Entities
     # "US_BANK_NUMBER",  # 8 to 17 digits.
     # "US_DRIVER_LICENSE",

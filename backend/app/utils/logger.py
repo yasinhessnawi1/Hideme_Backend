@@ -9,7 +9,7 @@ class AppLogger:
 
     def __init__(self, name: str = __name__):
         self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(logging.INFO)
 
         # Only add handlers if they haven't been added yet.
         if not self.logger.handlers:

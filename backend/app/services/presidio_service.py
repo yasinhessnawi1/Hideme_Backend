@@ -1,5 +1,6 @@
 import os
 
+
 from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer, RecognizerResult
 
 from presidio_analyzer.nlp_engine import NlpEngineProvider, NerModelConfiguration
@@ -67,11 +68,13 @@ class PresidioService:
         Detects sensitive entities in each page's text using Presidio Analyzer and the custom NER pipeline.
         Then, maps detected character offsets to bounding boxes.
 
+
         :param extracted_data: Dictionary containing text and bounding box information.
         :param requested_entities: List of entity types to detect.
         :return: (anonymized_text, results_json, redaction_mapping)
         """
         requested_entities = requested_entities or REQUESTED_ENTITIES
+
         combined_results = []
         redaction_mapping = {"pages": []}
         anonymized_texts = []
