@@ -65,7 +65,7 @@ jobs:
           tags: yasinmh99/hideme:latest
 
   deploy:
-    if: ${{ github.event.inputs.deploy == 'true' || github.event_name == 'push' || github.event_name == 'pull_reqeust' }}
+    if: ${{ github.event.inputs.deploy == 'true' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to Remote Server via SSH
@@ -75,34 +75,37 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.REMOTE_SSH_KEY }}
           script: |
-            script: |
-              export GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            export GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
 
-              # Write the GitHub secret (bash script) to a file
-              echo "${{ secrets.SETUP_SCRIPT }}" > setup.sh
+            # Create the setup script file and write the secret content to it properly
+            cat << 'EOF' > setup.sh
+            ${{ secrets.SETUP_SCRIPT }}
+            EOF
 
-              # Make it executable
-              chmod +x setup.sh
+            # Ensure the script has correct formatting
+            dos2unix setup.sh || true
 
-              # Run the setup script
-              sudo ./setup.sh
+            # Make it executable
+            chmod +x setup.sh
 
-              # Ensure SSH knows the host and doesn't prompt for confirmation
-              mkdir -p ~/.ssh
-              ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+            # Run the setup script
+            sudo ./setup.sh
 
-              # Remove the old directory
-              sudo rm -rf Hideme_Backend
+            # Ensure SSH knows the host and doesn't prompt for confirmation
+            mkdir -p ~/.ssh
+            ssh-keyscan -H github.com >> ~/.ssh/known_hosts
 
-              # Clone the repository without SSH host confirmation issues
-              git clone --branch yasinhessnawi1-patch-2 git@github.com:yasinhessnawi1/Hideme_Backend.git
-            
-              cd Hideme_Backend/backend
-            
-              # Set environment variable
-              echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
-            
-              # Build and run the Docker container
-              sudo docker compose build
-              sudo docker compose up -d
+            # Remove the old directory
+            sudo rm -rf Hideme_Backend
 
+            # Clone the repository without SSH host confirmation issues
+            git clone --branch yasinhessnawi1-patch-2 git@github.com:yasinhessnawi1/Hideme_Backend.git
+
+            cd Hideme_Backend/backend
+
+            # Set environment variable
+            echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+
+            # Build and run the Docker container
+            sudo docker compose build
+            sudo docker compose up -d
