@@ -213,3 +213,5 @@ terraform.rc
 
 logs/
 models/
+
+server_setup.sh

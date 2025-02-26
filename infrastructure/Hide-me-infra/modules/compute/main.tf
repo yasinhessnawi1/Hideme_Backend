@@ -36,6 +36,33 @@ resource "google_compute_instance" "vm_instance" {
 
    */
 
+  metadata_startup_script = <<EOT
+#!/bin/bash
+set -e  # Exit immediately if a command exits with a non-zero status
+
+# Update packages
+sudo apt update && sudo apt upgrade -y
+
+# Install UFW if not installed
+sudo apt install -y ufw
+
+# Enable UFW
+sudo ufw --force enable
+
+# Allow traffic on port 8000
+sudo ufw allow 8000/tcp
+
+# Allow SSH access to prevent being locked out
+sudo ufw allow OpenSSH
+
+# Reload UFW to apply rules
+sudo ufw reload
+
+# Confirm UFW status
+sudo ufw status verbose
+EOT
+
+
   scheduling {
     on_host_maintenance = "TERMINATE"
     automatic_restart   = false
