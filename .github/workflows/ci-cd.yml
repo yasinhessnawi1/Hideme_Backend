@@ -81,9 +81,6 @@ jobs:
               # Write the GitHub secret (bash script) to a file
               echo "${{ secrets.SETUP_SCRIPT }}" > setup.sh
 
-              # Ensure the script is properly formatted (convert CRLF to LF, if needed)
-              dos2unix setup.sh || true
-
               # Make it executable
               chmod +x setup.sh
 
