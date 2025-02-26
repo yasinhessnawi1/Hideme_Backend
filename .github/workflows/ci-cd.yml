@@ -80,5 +80,5 @@ jobs:
             git clone --branch yasinhessnawi1-patch-2 git@github.com:yasinhessnawi1/Hideme_Backend.git
             cd Hideme_Backend/backend
             echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
-            sudo docker-compose build
-            sudo docker-compose up -d
+            sudo docker compose build
+            sudo docker compose up -d
