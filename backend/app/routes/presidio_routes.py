@@ -11,6 +11,7 @@ router = APIRouter()
 # Initialize our Presidio detection service
 presidio_service = PresidioService()
 
+
 @router.post("/detect")
 async def presidio_detect_sensitive(file: UploadFile = File(...)):
     """
@@ -27,7 +28,6 @@ async def presidio_detect_sensitive(file: UploadFile = File(...)):
 
             extractor = PDFTextExtractor(tmp_path)
             extracted_data = extractor.extract_text_with_positions()
-            print(extracted_data)
         else:
             text = contents.decode("utf-8")
             extracted_data = {
@@ -38,7 +38,7 @@ async def presidio_detect_sensitive(file: UploadFile = File(...)):
 
         anonymized_text, results_json, redaction_mapping = presidio_service.detect_sensitive_data(extracted_data)
         return JSONResponse(content={
-            #"anonymized_text": anonymized_text,
+            "anonymized_text": anonymized_text,
             "results": results_json,
             "redaction_mapping": redaction_mapping
         })

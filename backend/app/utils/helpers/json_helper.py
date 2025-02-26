@@ -4,7 +4,7 @@ from typing import List
 from presidio_analyzer import RecognizerResult
 
 
-def PresidioToJsonConverter(detected_entities):
+def presidiotojsonconverter(detected_entities):
     """
     Custom converter for non-serializable objects.
     If the object is a RecognizerResult, convert it to a dict.
@@ -32,7 +32,7 @@ def convert_to_json(data, indent=2):
     :raises ValueError: If conversion fails.
     """
     try:
-        json_str = json.dumps(data, indent=indent, ensure_ascii=False, default=PresidioToJsonConverter)
+        json_str = json.dumps(data, indent=indent, ensure_ascii=False, default=presidiotojsonconverter)
         return json_str
     except Exception as e:
         raise ValueError(f"Error converting data to JSON: {e}")
@@ -42,7 +42,7 @@ def convert_to_json(data, indent=2):
 
 
 def print_analyzer_results(results: List[RecognizerResult], text: str):
-    """Print the results in a human readable way."""
+    """Print the results in a human-readable way."""
 
     for i, result in enumerate(results):
         print(f"Result {i}:")
