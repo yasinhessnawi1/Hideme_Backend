@@ -9,17 +9,17 @@ from backend.app.services.pdf_redaction_service import PDFRedactionService
 
 router = APIRouter()
 
+
 @router.post("/pdf-redact")
 async def pdf_redact(
-    file: UploadFile = File(...),
-    redaction_mapping: str = Form(None)
+        file: UploadFile = File(...),
+        redaction_mapping: str = Form(None)
 ):
     """
     Endpoint that accepts a PDF file and a redaction mapping (as a JSON string) via form-data.
     The PDF file is processed by the PDFRedactionService to apply redactions based on the provided mapping.
     Returns the redacted PDF file.
     """
-    print(redaction_mapping)
     try:
         # Parse the redaction mapping from the form data if provided.
         if redaction_mapping:

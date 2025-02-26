@@ -11,6 +11,7 @@ router = APIRouter()
 # Initialize our Gemini detection service
 gemini_service = GeminiService()
 
+
 @router.post("/ai_detect_sensitive")
 async def ai_detect_sensitive(file: UploadFile = File(...)):
     """
@@ -39,8 +40,8 @@ async def ai_detect_sensitive(file: UploadFile = File(...)):
 
         anonymized_text, results_json, redaction_mapping = gemini_service.detect_sensitive_data(extracted_data)
         return JSONResponse(content={
-            #"anonymized_text": anonymized_text,
-            #"results": results_json,
+            "anonymized_text": anonymized_text,
+            "results": results_json,
             "redaction_mapping": redaction_mapping
         })
     except Exception as e:

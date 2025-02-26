@@ -12,9 +12,7 @@ Assign the correct **BIO-based entity tags** to each detected item:
 Each detected sensitive item must be tagged with the correct entity type:
         """
 
-
-
-GEMINI_PROMPT_FOOTER =      """
+GEMINI_PROMPT_FOOTER = """
         ---
         ### **✅ JSON Output Format**
         Immediately return a structured JSON output in the following format:
@@ -151,7 +149,8 @@ FAMILY = "- ** FAMILY_RELATION ** → Family and relationship data(e.g., 'kona V
 BEHAVIORAL_PATTERN = "- ** BEHAVIORAL_PATTERN ** → Behavioral pattern data"
 POLITICAL_CASE = "- ** POLITICAL_CASE ** → Political - related cases"
 ECONOMIC_STATUS = "- ** ECONOMIC_STATUS ** → Economic information(e.g., 'dårlig økonomi' should be tagged)  "
-AVAILABLE_ENTITIES = [PHONE , EMAIL, ADDRESS, DATE, GOVID, FINANCIAL, EMPLOYMENT, HEALTH, SEXUAL, CRIMINAL, CONTEXT, INFO, FAMILY, BEHAVIORAL_PATTERN, POLITICAL_CASE, ECONOMIC_STATUS]
+AVAILABLE_ENTITIES = [PHONE, EMAIL, ADDRESS, DATE, GOVID, FINANCIAL, EMPLOYMENT, HEALTH, SEXUAL, CRIMINAL, CONTEXT,
+                      INFO, FAMILY, BEHAVIORAL_PATTERN, POLITICAL_CASE, ECONOMIC_STATUS]
 
 SYSTEM_INSTRUCTION = """
 You must strictly follow these system instructions while processing the text:
