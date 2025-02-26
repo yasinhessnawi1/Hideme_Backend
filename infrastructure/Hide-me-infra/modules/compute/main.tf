@@ -35,6 +35,7 @@ resource "google_compute_instance" "vm_instance" {
   }
 
    */
+
   metadata_startup_script = <<EOT
 #!/bin/bash
 set -e  # Exit immediately if a command exits with a non-zero status
@@ -60,6 +61,7 @@ sudo ufw reload
 # Confirm UFW status
 sudo ufw status verbose
 EOT
+
 
   scheduling {
     on_host_maintenance = "TERMINATE"

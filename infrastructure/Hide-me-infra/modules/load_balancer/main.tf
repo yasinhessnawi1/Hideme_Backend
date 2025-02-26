@@ -1,3 +1,4 @@
+# Create an unmanaged instance group containing the backend instance.
 resource "google_compute_instance_group" "backend_group" {
   name    = "${var.instance_name}-ig"
   zone    = var.instance_zone
@@ -7,6 +8,7 @@ resource "google_compute_instance_group" "backend_group" {
     var.instance_self_link
   ]
 }
+
 
 # HTTP health check
 resource "google_compute_health_check" "default" {
@@ -22,7 +24,8 @@ resource "google_compute_health_check" "default" {
   }
 }
 
-# HTTP Backend Service
+
+# Define a backend service that uses the instance group.
 resource "google_compute_backend_service" "default" {
   name          = "${var.instance_name}-backend"
   protocol      = "HTTP"
@@ -35,25 +38,31 @@ resource "google_compute_backend_service" "default" {
   }
 }
 
-# URL Map
+
+# Create a URL map to direct incoming requests to the backend service.
 resource "google_compute_url_map" "default" {
   name            = "${var.instance_name}-url-map"
   default_service = google_compute_backend_service.default.self_link
 }
 
-# HTTP Proxy
+
+
+# Create a target HTTP proxy to route requests using the URL map.
 resource "google_compute_target_http_proxy" "default" {
   name    = "${var.instance_name}-http-proxy"
   url_map = google_compute_url_map.default.self_link
 }
 
-# Global Static IP
+
+
+# Reserve a global static IP address for the load balancer.
 resource "google_compute_global_address" "default" {
   name    = "${var.instance_name}-lb-ip"
   project = var.project
 }
 
-# Forwarding Rule
+
+# Create a global forwarding rule to route traffic to the target HTTP proxy.
 resource "google_compute_global_forwarding_rule" "default" {
   name       = "${var.instance_name}-fwd-rule"
   project    = var.project
@@ -76,3 +85,4 @@ resource "google_compute_firewall" "allow_backend_traffic" {
   source_ranges = ["0.0.0.0/0"]  # Consider restricting this for security
   target_tags   = ["backend"]
 }
+

@@ -1,5 +1,3 @@
-# backend/app/configs/presidio_config.py
-
 ENTITIES_CONFIG = {
     # (Your custom recognizer configurations, if any, can be placed here)
     # Example:
@@ -36,7 +34,7 @@ NER_MODEL = "kushtrim/norbert3-large-ner"
 # List of requested entity types based on your table.
 REQUESTED_ENTITIES = [
     # General entities
-    #"CREDIT_CARD",  # A credit card number between 12 to 19 digits.
+    # "CREDIT_CARD",  # A credit card number between 12 and 19 digits.
     "CRYPTO",  # A crypto wallet (e.g. Bitcoin address).
     "DATE_TIME",  # Dates or time periods.
     "EMAIL_ADDRESS",  # An email address.
@@ -52,47 +50,47 @@ REQUESTED_ENTITIES = [
     "NO_PHONE_NUMBER",  # Norwegian phone numbers.
     "NO_FODSELSNUMMER",  # Norwegian national identity number.
     # USA Entities
-    #"US_BANK_NUMBER",  # 8 to 17 digits.
-    #"US_DRIVER_LICENSE",
-    #"US_ITIN",  # Nine digits starting with 9 and containing 7 or 8.
-    #"US_PASSPORT",  # 9-digit US passport.
-    #"US_SSN",  # 9-digit Social Security Number.
+    # "US_BANK_NUMBER",  # 8 to 17 digits.
+    # "US_DRIVER_LICENSE",
+    # "US_ITIN",  # Nine digits starting with 9 and containing 7 or 8.
+    # "US_PASSPORT",  # 9-digit US passport.
+    # "US_SSN",  # 9-digit Social Security Number.
 
     # UK Entities
-    #"UK_NHS",  # 10-digit NHS number.
-    #"UK_NINO",  # National Insurance Number.
+    # "UK_NHS",  # 10-digit NHS number.
+    # "UK_NINO",  # National Insurance Number.
 
     # Spain Entities
-    #"ES_NIF",  # Spanish NIF (Personal tax ID).
-    #"ES_NIE",  # Spanish NIE (Foreigners ID).
+    # "ES_NIF",  # Spanish NIF (Personal tax ID).
+    # "ES_NIE",  # Spanish NIE (Foreigners ID).
 
     # Italy Entities
-    #"IT_FISCAL_CODE",  # Italian fiscal code.
-    #"IT_DRIVER_LICENSE",
-    #"IT_VAT_CODE",
-    #"IT_PASSPORT",
-    #"IT_IDENTITY_CARD",
+    # "IT_FISCAL_CODE",  # Italian fiscal code.
+    # "IT_DRIVER_LICENSE",
+    # "IT_VAT_CODE",
+    # "IT_PASSPORT",
+    # "IT_IDENTITY_CARD",
 
     # Poland Entities
-    #"PL_PESEL",  # Polish PESEL number.
+    # "PL_PESEL",  # Polish PESEL number.
 
     # Singapore Entities
-    #"SG_NRIC_FIN",  # National Registration ID card.
-    #"SG_UEN",  # Unique Entity Number.
+    # "SG_NRIC_FIN",  # National Registration ID card.
+    # "SG_UEN",  # Unique Entity Number.
 
     # Australia Entities
-    #"AU_ABN",  # Australian Business Number.
-    #"AU_ACN",  # Australian Company Number.
-    #"AU_TFN",  # Tax File Number.
-    #"AU_MEDICARE",  # Medicare number.
+    # "AU_ABN",  # Australian Business Number.
+    # "AU_ACN",  # Australian Company Number.
+    # "AU_TFN",  # Tax File Number.
+    # "AU_MEDICARE",  # Medicare number.
 
     # India Entities
-    #"IN_PAN",  # Permanent Account Number.
-    #"IN_AADHAAR",  # 12-digit Aadhaar.
-    #"IN_VEHICLE_REGISTRATION",
-    #"IN_VOTER",  # Voter ID.
-    #"IN_PASSPORT",
+    # "IN_PAN",  # Permanent Account Number.
+    # "IN_AADHAAR",  # 12-digit Aadhaar.
+    # "IN_VEHICLE_REGISTRATION",
+    # "IN_VOTER",  # Voter ID.
+    # "IN_PASSPORT",
 
     # Finland Entity
-    #"FI_PERSONAL_IDENTITY_CODE"  # Finnish Personal Identity Code.
+    # "FI_PERSONAL_IDENTITY_CODE"  # Finnish Personal Identity Code.
 ]

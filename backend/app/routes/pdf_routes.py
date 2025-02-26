@@ -8,10 +8,11 @@ from backend.app.services.pdf_redaction_service import PDFRedactionService
 from backend.app.utils.logger import default_logger as logging
 router = APIRouter()
 
+
 @router.post("/redact")
 async def pdf_redact(
-    file: UploadFile = File(...),
-    redaction_mapping: str = Form(None)
+        file: UploadFile = File(...),
+        redaction_mapping: str = Form(None)
 ):
     """
     Endpoint that accepts a PDF file and a redaction mapping (as a JSON string) via form-data.
@@ -20,6 +21,7 @@ async def pdf_redact(
     """
     logging.info("Received request to redact PDF.")
     logging.info(f"Redaction mapping: {redaction_mapping}")
+
     try:
         # Parse the redaction mapping from the form data if provided.
         if redaction_mapping:

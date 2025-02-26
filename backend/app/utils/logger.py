@@ -1,10 +1,12 @@
 import os
 import logging
 
+
 class AppLogger:
     """
     A helper class to create and configure a logger for the application.
     """
+
     def __init__(self, name: str = __name__):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)
@@ -24,6 +26,7 @@ class AppLogger:
 
     def get_logger(self):
         return self.logger
+
 
 # Create a default logger instance that other modules can import
 default_logger = AppLogger().get_logger()

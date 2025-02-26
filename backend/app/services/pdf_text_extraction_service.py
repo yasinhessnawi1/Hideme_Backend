@@ -1,5 +1,6 @@
 from backend.app.utils.logger import default_logger as logging
-import pymupdf  # PyMuPDF provides fast, efficient PDF text extraction
+import pymupdf  
+
 
 
 class PDFTextExtractor:
@@ -46,7 +47,8 @@ class PDFTextExtractor:
         """
         extracted_data = {"pages": []}
         try:
-            for page_num, page in enumerate(self.pdf_document):
+            for page_num in range(len(self.pdf_document)):
+                page = self.pdf_document[page_num]
                 logging.info(f"Processing page {page_num + 1}")
                 page_words = []
                 # get_text("words") returns a list of tuples:

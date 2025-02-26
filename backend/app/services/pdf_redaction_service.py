@@ -1,5 +1,9 @@
-import pymupdf  # PyMuPDF package
+
+import pymupdf
+
+
 from backend.app.utils.logger import default_logger as logger
+
 
 class PDFRedactionService:
     def __init__(self, pdf_path):
@@ -57,7 +61,7 @@ class PDFRedactionService:
                     bbox = item["bbox"]
                     rect = pymupdf.Rect(bbox["x0"], bbox["y0"], bbox["x1"], bbox["y1"])
                     page.add_redact_annot(rect, fill=(0, 0, 0), text=item.get("entity_type"), text_color=(1, 1, 1))
-                    #logger.info("Redacting entity %s on page %d at %s", item.get("entity_type"), page_num, rect)
+                    # logger.info("Redacting entity %s on page %d at %s", item.get("entity_type"), page_num, rect)
 
             # Apply redactions on the page.
             page.apply_redactions()

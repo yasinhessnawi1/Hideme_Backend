@@ -21,6 +21,7 @@ async def presidio_detect_sensitive(
     # Accept the requested_entities as a form field.
     requested_entities: Optional[str] = Form(None)
 ):
+
     """
     Endpoint that accepts an uploaded file (PDF or text), extracts its text (with positions if PDF),
     and uses the Presidio service to detect sensitive information.
@@ -52,6 +53,7 @@ async def presidio_detect_sensitive(
         )
         logging.info(f"redaction_mapping: {redaction_mapping}")
         return JSONResponse(content={
+
             "redaction_mapping": redaction_mapping
         })
     except Exception as e:

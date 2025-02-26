@@ -96,7 +96,8 @@ jobs:
             sudo rm -rf Hideme_Backend
 
             # Clone the repository without SSH host confirmation issues
-            git clone --branch yasinhessnawi1-patch-2 git@github.com:yasinhessnawi1/Hideme_Backend.git
+
+            git clone --branch main git@github.com:yasinhessnawi1/Hideme_Backend.git
 
             cd Hideme_Backend/backend
 
