@@ -65,8 +65,6 @@ jobs:
           tags: yasinmh99/hideme:latest
 
   deploy:
-    needs: push-image
-    if: ${{ github.event.inputs.deploy == 'true' || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to Remote Server via SSH
