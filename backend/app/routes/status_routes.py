@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 router = APIRouter()
 
-@router.post("/status")
+@router.get("/status")
 async def status():
     """
     Endpoint that accepts an uploaded file (PDF or text). If the file is a PDF, we extract its text with positions.
