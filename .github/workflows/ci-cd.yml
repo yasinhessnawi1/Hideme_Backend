@@ -82,14 +82,11 @@ jobs:
             ${{ secrets.SETUP_SCRIPT }}
             EOF
 
-            # Ensure the script has correct formatting
-            dos2unix setup.sh || true
-
             # Make it executable
             chmod +x setup.sh
 
             # Run the setup script
-            sudo ./setup.sh
+            ./setup.sh
 
             # Ensure SSH knows the host and doesn't prompt for confirmation
             mkdir -p ~/.ssh
