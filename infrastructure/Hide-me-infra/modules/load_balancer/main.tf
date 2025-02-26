@@ -27,7 +27,7 @@ resource "google_compute_backend_service" "default" {
   name          = "${var.instance_name}-backend"
   protocol      = "HTTP"
   port_name     = "http"
-  timeout_sec   = 10
+  timeout_sec   = 30
   health_checks = [google_compute_health_check.default.self_link]
 
   backend {

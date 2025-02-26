@@ -11,7 +11,7 @@ router = APIRouter()
 # Initialize our Gemini detection service
 gemini_service = GeminiService()
 
-@router.post("/ai_detect_sensitive")
+@router.post("/detect")
 async def ai_detect_sensitive(file: UploadFile = File(...)):
     """
     Endpoint that accepts an uploaded file (PDF or text). If the file is a PDF, we extract its text with positions.

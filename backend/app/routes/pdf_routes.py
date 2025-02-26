@@ -9,7 +9,7 @@ from backend.app.services.pdf_redaction_service import PDFRedactionService
 
 router = APIRouter()
 
-@router.post("/pdf-redact")
+@router.post("/redact")
 async def pdf_redact(
     file: UploadFile = File(...),
     redaction_mapping: str = Form(None)
