@@ -12,7 +12,7 @@ def create_app() -> FastAPI:
     """
     Create and configure the FastAPI application.
     """
-    app_api = FastAPI(
+    app = FastAPI(
         title="Sensitive Data Detection and Redaction API",
         version="1.0",
         description="API for detecting and redacting sensitive information from documents."
@@ -36,7 +36,7 @@ def create_app() -> FastAPI:
     app.include_router(presidio_routes.router, prefix="/ml", tags=["Machine Learning Detection"])
     app.include_router(pdf_routes.router, prefix="/pdf", tags=["PDF Redaction"])
     app.include_router(status_routes.router, tags=["Status"])
-
+    return app
 
 
 
