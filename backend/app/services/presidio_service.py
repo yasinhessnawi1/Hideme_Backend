@@ -144,6 +144,7 @@ class PresidioService:
         if requested_entities is None:
             requested_entities = REQUESTED_ENTITIES
 
+
         combined_results = []
         redaction_mapping = {"pages": []}
         anonymized_texts = []

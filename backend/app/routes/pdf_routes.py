@@ -1,12 +1,11 @@
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
 from fastapi.responses import FileResponse
-import logging
 import os
 import json
 from tempfile import NamedTemporaryFile
 
 from backend.app.services.pdf_redaction_service import PDFRedactionService
-
+from backend.app.utils.logger import default_logger as logging
 router = APIRouter()
 
 @router.post("/redact")
@@ -19,7 +18,8 @@ async def pdf_redact(
     The PDF file is processed by the PDFRedactionService to apply redactions based on the provided mapping.
     Returns the redacted PDF file.
     """
-    print(redaction_mapping)
+    logging.info("Received request to redact PDF.")
+    logging.info(f"Redaction mapping: {redaction_mapping}")
     try:
         # Parse the redaction mapping from the form data if provided.
         if redaction_mapping:
