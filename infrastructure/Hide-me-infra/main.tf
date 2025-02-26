@@ -29,7 +29,6 @@ module "compute" {
   region        = var.region
   machine_type  = var.machine_type
   subnetwork    = module.network.subnetwork_self_link
-  gpu_type      = var.gpu_type
   gpu_count     = var.gpu_count
   project       = var.project
   disk_size     = var.disk_size

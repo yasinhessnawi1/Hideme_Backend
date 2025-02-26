@@ -4,18 +4,13 @@ resource "google_compute_address" "static_ip" {
   region  = var.region
 }
 
-resource "google_compute_disk" "data_disk" {
-  name  = "${var.instance_name}-data-disk"
-  type  = "pd-standard"
-  zone  = var.zone
-  size  = 100  # Adjust size as needed.
-}
 # Create the Compute Engine instance.
 resource "google_compute_instance" "vm_instance" {
   name         = var.instance_name
   machine_type = var.machine_type
   zone         = var.zone
   project      = var.project
+
   allow_stopping_for_update = true
 
   boot_disk {
@@ -31,16 +26,42 @@ resource "google_compute_instance" "vm_instance" {
       nat_ip = google_compute_address.static_ip.address
     }
   }
-  attached_disk {
-    source      = google_compute_disk.data_disk.id
-    device_name = "data-disk"
-  }
 
   # Attach a GPU accelerator.
+  /*
   guest_accelerator {
     type  = var.gpu_type
     count = var.gpu_count
   }
+
+   */
+
+  metadata_startup_script = <<EOT
+#!/bin/bash
+set -e  # Exit immediately if a command exits with a non-zero status
+
+# Update packages
+sudo apt update && sudo apt upgrade -y
+
+# Install UFW if not installed
+sudo apt install -y ufw
+
+# Enable UFW
+sudo ufw --force enable
+
+# Allow traffic on port 8000
+sudo ufw allow 8000/tcp
+
+# Allow SSH access to prevent being locked out
+sudo ufw allow OpenSSH
+
+# Reload UFW to apply rules
+sudo ufw reload
+
+# Confirm UFW status
+sudo ufw status verbose
+EOT
+
 
   scheduling {
     on_host_maintenance = "TERMINATE"
@@ -52,7 +73,9 @@ resource "google_compute_instance" "vm_instance" {
 
   }
 
+
   metadata = merge(
+
       var.use_ssh_keys ? {
       "block-project-ssh-keys" = "FALSE"
       # When using SSH keys, disable OS Login and inject the key.

@@ -1,7 +1,7 @@
-import logging
 import spacy
 from spacy.cli import download as spacy_download
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
+from backend.app.utils.logger import default_logger as logging
 
 
 def get_spacy_model(model_name):

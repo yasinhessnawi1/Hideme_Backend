@@ -1,5 +1,6 @@
-import logging
+
 import pymupdf
+from backend.app.utils.logger import default_logger as logging
 
 
 class PDFTextExtractor:

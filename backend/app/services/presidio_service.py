@@ -1,5 +1,7 @@
 import os
+
 from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer, RecognizerResult
+
 from presidio_analyzer.nlp_engine import NlpEngineProvider, NerModelConfiguration
 from presidio_anonymizer import AnonymizerEngine
 

@@ -1,10 +1,10 @@
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
-import logging
 from tempfile import NamedTemporaryFile
 
 from backend.app.services.gemini_service import GeminiService
 from backend.app.services.pdf_text_extraction_service import PDFTextExtractor
+from backend.app.utils.logger import default_logger as logging
 
 router = APIRouter()
 
@@ -12,7 +12,8 @@ router = APIRouter()
 gemini_service = GeminiService()
 
 
-@router.post("/ai_detect_sensitive")
+
+@router.post("/detect")
 async def ai_detect_sensitive(file: UploadFile = File(...)):
     """
     Endpoint that accepts an uploaded file (PDF or text). If the file is a PDF, we extract its text with positions.

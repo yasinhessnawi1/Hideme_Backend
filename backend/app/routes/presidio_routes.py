@@ -12,7 +12,7 @@ router = APIRouter()
 presidio_service = PresidioService()
 
 
-@router.post("/presidio_detect_sensitive")
+@router.post("/detect")
 async def presidio_detect_sensitive(file: UploadFile = File(...)):
     """
     Endpoint that accepts an uploaded file (PDF or text), extracts its text (with positions if PDF)

@@ -1,7 +1,9 @@
 import uvicorn
 from fastapi import FastAPI
 
-from backend.app.routes import ai_routes, presidio_routes, pdf_routes
+# Import the routers from your routes modules.
+from backend.app.routes import ai_routes, presidio_routes, pdf_routes, status_routes
+
 from backend.app.utils.logger import default_logger as logger
 
 
@@ -21,6 +23,11 @@ def create_app() -> FastAPI:
     app_api.include_router(pdf_routes.router, prefix="/pdf", tags=["PDF Redaction"])
 
     return app_api
+
+
+    app.include_router(status_routes.router, tags=["Status"])
+
+
 
 
 app = create_app()

@@ -1,5 +1,6 @@
 import pymupdf
 
+
 from backend.app.utils.logger import default_logger as logger
 
 
