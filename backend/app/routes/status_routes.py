@@ -1,8 +1,8 @@
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-
 router = APIRouter()
+
 
 @router.get("/status")
 async def status():
@@ -12,4 +12,4 @@ async def status():
     Returns the anonymized text, the detection results, and the redaction mapping.
     """
 
-    return JSONResponse(content= {"status": "success"})
+    return JSONResponse(content={"status": "success"})

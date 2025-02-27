@@ -1,6 +1,5 @@
 from backend.app.utils.logger import default_logger as logging
-import pymupdf  
-
+import pymupdf
 
 
 class PDFTextExtractor:
@@ -78,6 +77,3 @@ class PDFTextExtractor:
     def close(self):
         """Close the PDF document."""
         self.pdf_document.close()
-
-
-
