@@ -5,6 +5,7 @@ import json
 from tempfile import NamedTemporaryFile
 
 from backend.app.services.pdf_redaction_service import PDFRedactionService
+from backend.app.services.pdf_text_extraction_service import PDFTextExtractor
 from backend.app.utils.logger import default_logger as logging
 router = APIRouter()
 
@@ -49,3 +50,31 @@ async def pdf_redact(
     except Exception as e:
         logging.error(f"Error in pdf_redact: {e}")
         raise HTTPException(status_code=500, detail="Error redacting PDF")
+
+
+@router.post("/extract")
+async def pdf_redact(
+        file: UploadFile = File(...),
+):
+    """
+    Endpoint that accepts a PDF file and a redaction mapping (as a JSON string) via form-data.
+    The PDF file is processed by the PDFRedactionService to apply redactions based on the provided mapping.
+    Returns the redacted PDF file.
+    """
+    try:
+
+        # Save the uploaded file to a temporary location.
+        contents = await file.read()
+        with NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(contents)
+            tmp_input_path = tmp.name
+
+        # Initialize the PDF redaction service.
+        pdf_redactor = PDFTextExtractor(tmp_input_path)
+        extracted_data = pdf_redactor.extract_text_with_positions()
+
+        return extracted_data
+    except Exception as e:
+        logging.error(f"Error in pdf_redact: {e}")
+        raise HTTPException(status_code=500, detail="Error redacting PDF")
+

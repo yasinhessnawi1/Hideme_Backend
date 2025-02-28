@@ -10,6 +10,7 @@ Analyze the following inspection report text and extract all sensitive informati
 ## **🛑 Named Entity Categories (NER Tags)**
 Assign the correct **BIO-based entity tags** to each detected item:
 Each detected sensitive item must be tagged with the correct entity type:
+detect only and only the entities listed below:
         """
 
 GEMINI_PROMPT_FOOTER = """
@@ -128,29 +129,25 @@ Copy
   ]
 }
 
-        """
-ORGANIZATION = "- **ORG** → Organizations  "
-PERSON = "- ** PERSON ** → Persons"
-PHONE = "- ** NO_PHONE_NUMBER ** → Norwegian Phone Numbers"
+"""
+AVAILABLE_ENTITIES = {"PHONE": "- ** NO_PHONE_NUMBER ** → Norwegian Phone Numbers",
+                        "EMAIL": "- ** EMAIL_ADDRESS ** → Email Addresses",
+                        "ADDRESS": "- ** NO_ADDRESS ** → Norwegian Home/street Addresses",
+                        "DATE": "- ** DATE_TIME ** → Dates and Timestamps",
+                        "GOVID": "- ** GOV_ID ** → Government - Issued Identifiers any identification number",
+                        "FINANCIAL": "- ** FINANCIAL_INFO ** → Financial Data (contextually financial data not just words about money)",
+                        "EMPLOYMENT": "- ** EMPLOYMENT_INFO ** → Employment and Professional Details",
+                        "HEALTH": "- ** HEALTH_INFO ** → Health - Related Information",
+                      "SEXUAL": "- ** SEXUAL_ORIENTATION ** → Sexual Relationships and Orientation",
+                        "CRIMINAL": "- ** CRIMINAL_RECORD ** → Crime - Related Information",
+                        "CONTEXT": "- ** CONTEXT_SENSITIVE ** → Context - Sensitive Information",
+                        "INFO": "- ** IDENTIFIABLE_IMAGE ** → Any Identifiable Image Reference",
+                        "FAMILY": "- ** FAMILY_RELATION ** → Family and Relationship Data",
+                        "BEHAVIORAL_PATTERN": "- ** BEHAVIORAL_PATTERN ** → Behavioral Pattern Data",
+                        "POLITICAL_CASE": "- ** POLITICAL_CASE ** → Political - Related Cases",
+                        "ECONOMIC_STATUS": "- ** ECONOMIC_STATUS ** → Economic Information"
+                      }
 
-EMAIL = "- ** EMAIL_ADDRESS ** → Email adresses"
-ADDRESS = "- ** NO_ADDRESS ** → Norwegian home addresses"
-DATE = "- ** DATE_TIME ** → Dates and timestamps"
-GOVID = "- ** GOV_ID ** → Government - issued identifiers(e.g., passport numbers, nationalIDs)"
-FINANCIAL = "- ** FINANCIAL_INFO ** → Financial data(e.g., bankaccount numbers, credit card details)"
-EMPLOYMENT = "- ** EMPLOYMENT_INFO ** → Employment and professional details"
-
-HEALTH = "- ** HEALTH_INFO ** → Health - related information(e.g., 'TSE-prøver')"
-SEXUAL = "- ** SEXUAL_ORIENTATION ** → Sexual relationships and orientation"
-CRIMINAL = "- ** CRIMINAL_RECORD ** → Crime - related information"
-CONTEXT = "- ** CONTEXT_SENSITIVE ** → Context - sensitive"
-INFO = "information(e.g., IP addresses, internal discussions)"
-FAMILY = "- ** FAMILY_RELATION ** → Family and relationship data(e.g., 'kona Vera' should be entirely tagged)"
-BEHAVIORAL_PATTERN = "- ** BEHAVIORAL_PATTERN ** → Behavioral pattern data"
-POLITICAL_CASE = "- ** POLITICAL_CASE ** → Political - related cases"
-ECONOMIC_STATUS = "- ** ECONOMIC_STATUS ** → Economic information(e.g., 'dårlig økonomi' should be tagged)  "
-AVAILABLE_ENTITIES = [PHONE, EMAIL, ADDRESS, DATE, GOVID, FINANCIAL, EMPLOYMENT, HEALTH, SEXUAL, CRIMINAL, CONTEXT,
-                      INFO, FAMILY, BEHAVIORAL_PATTERN, POLITICAL_CASE, ECONOMIC_STATUS]
 
 SYSTEM_INSTRUCTION = """
 You must strictly follow these system instructions while processing the text:
@@ -160,6 +157,8 @@ Named Entity Recognition (NER) Extraction
 Scan the provided inspection report text and identify all sensitive entities listed under the NER categories.
 Use the BIO tagging scheme for each entity.
 Ensure correct tokenization and tagging for multi-word entities (e.g., "Ole M. Johansen").
+detect only and only the entities provided by user prompt.
+
 Anonymization
 
 Replace each detected entity with its corresponding placeholder tag.

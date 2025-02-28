@@ -25,7 +25,6 @@ class GeminiService:
         :param requested_entities: List of entity types to detect.
         :return: (anonymized_text, results_json, redaction_mapping)
         """
-        requested_entities = requested_entities or AVAILABLE_ENTITIES
         combined_results = []
         redaction_mapping = {"pages": []}
         anonymized_texts = []

@@ -215,3 +215,6 @@ logs/
 backend/app/models/
 
 server_setup.sh
+ready_data/
+data_generation/ready_data/
+data_generation/data/

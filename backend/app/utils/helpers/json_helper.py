@@ -1,7 +1,13 @@
 import json
-from typing import List
+from typing import List, Optional
+from zoneinfo import available_timezones
 
+from fastapi import HTTPException
 from presidio_analyzer import RecognizerResult
+
+from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
+from backend.app.configs.presidio_config import REQUESTED_ENTITIES
+from backend.app.utils.logger import default_logger as logging
 
 
 def presidiotojsonconverter(detected_entities):
@@ -50,3 +56,18 @@ def print_analyzer_results(results: List[RecognizerResult], text: str):
 
         if result.analysis_explanation is not None:
             print(f" {result.analysis_explanation.textual_explanation}")
+
+
+def validate_requested_entities(requested_entities: Optional[str]):
+    # Ensure `requested_entities` is a valid JSON string or set it to an empty list
+    if requested_entities:
+        logging.info("Validating requested entities...", requested_entities)
+        requested_entities = json.loads(requested_entities)
+        available_entities = list(list(AVAILABLE_ENTITIES.keys()) + REQUESTED_ENTITIES)
+        for entity in requested_entities:
+            print("entity", entity)
+            if entity not in available_entities:
+                raise HTTPException(status_code=400,
+                                    detail=f"Invalid entity type: {entity}. Available entities: {available_entities}")
+
+
