@@ -19,9 +19,6 @@ async def pdf_redact(
     The PDF file is processed by the PDFRedactionService to apply redactions based on the provided mapping.
     Returns the redacted PDF file.
     """
-    logging.info("Received request to redact PDF.")
-    logging.info(f"Redaction mapping: {redaction_mapping}")
-
     try:
         # Parse the redaction mapping from the form data if provided.
         if redaction_mapping:

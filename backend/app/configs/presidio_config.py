@@ -1,3 +1,5 @@
+import os
+
 ENTITIES_CONFIG = {
     # (Your custom recognizer configurations, if any, can be placed here)
     # Example:
@@ -26,6 +28,12 @@ ENTITIES_CONFIG = {
         ]
     }
 }
+
+# Base directory of the project
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Define the local path to the Hugging Face NER model (relative path)
+LOCAL_HF_MODEL_PATH = os.path.join(BASE_DIR, "models", "local_kushtrim_norbert3_large_ner")
+
 
 DEFAULT_LANGUAGE = "nb"
 SPACY_MODEL = "nb_core_news_lg"

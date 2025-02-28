@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Import the routers from your routes modules.
 from backend.app.routes import ai_routes, presidio_routes, pdf_routes, status_routes
-
 from backend.app.utils.logger import default_logger as logger
 
 
@@ -43,5 +42,5 @@ def create_app() -> FastAPI:
 app = create_app()
 
 if __name__ == "__main__":
-    logger.info("Starting server...")
+    logger.info("✅ Starting server...")
     uvicorn.run(app, host="0.0.0.0", port=8000)

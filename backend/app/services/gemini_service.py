@@ -1,4 +1,3 @@
-import json
 from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
 from backend.app.utils.logger import default_logger as logger
 from backend.app.utils.helpers.gemini_helper import GeminiHelper
@@ -55,29 +54,30 @@ class GeminiService:
                     for entity in text_entry.get("entities", []):
                         entity_text = entity["original_text"]
 
-                        # Fix incorrect offsets
-                        fixed_start, fixed_end = TextUtils.recompute_offsets(full_text, entity_text)
-                        if fixed_start is None or fixed_end is None:
-                            continue  # Skip if we cannot match the entity
+                        matches = TextUtils.recompute_offsets(full_text, entity_text)
+                        if not matches:
+                            continue  # Skip if no matches found
 
-                        # Map corrected offsets to bounding boxes
-                        bbox = TextUtils.map_offsets_to_bboxes(full_text, mapping, (fixed_start, fixed_end))
+                        for fixed_start, fixed_end in matches:  # Iterate over all matches
+                            bboxes = TextUtils.map_offsets_to_bboxes(full_text, mapping, (fixed_start, fixed_end))
 
-                        if bbox:
-                            page_sensitive.append({
+                            if bboxes:
+                                for bbox in bboxes:  # ✅ Loop over multiple bounding boxes
+                                    page_sensitive.append({
+                                        "original_text": full_text[fixed_start:fixed_end],
+                                        "entity_type": entity["entity_type"],
+                                        "start": fixed_start,
+                                        "end": fixed_end,
+                                        "score": entity["score"],
+                                        "bbox": bbox  # ✅ Now stores correct per-line bounding boxes!
+                                    })
+
+                            combined_results.append({
                                 "entity_type": entity["entity_type"],
                                 "start": fixed_start,
                                 "end": fixed_end,
-                                "score": entity["score"],
-                                "bbox": bbox
+                                "score": entity["score"]
                             })
-
-                        combined_results.append({
-                            "entity_type": entity["entity_type"],
-                            "start": fixed_start,
-                            "end": fixed_end,
-                            "score": entity["score"]
-                        })
 
             redaction_mapping["pages"].append({"page": page_number, "sensitive": page_sensitive})
 
