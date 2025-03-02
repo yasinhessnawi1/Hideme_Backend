@@ -1,5 +1,5 @@
 # Create an unmanaged instance group containing the backend instance.
-resource "google_compute_instance_group" "backend_group" {
+resource "google_compute_instance_group" "backend-group" {
   name    = "${var.instance_name}-ig"
   zone    = var.instance_zone
   project = var.project
@@ -34,7 +34,7 @@ resource "google_compute_backend_service" "default" {
   health_checks = [google_compute_health_check.default.self_link]
 
   backend {
-    group = google_compute_instance_group.backend_group.self_link
+    group = google_compute_instance_group.backend-group.self_link
   }
 }
 
