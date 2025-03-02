@@ -19,7 +19,7 @@ gemini_service = GeminiService()
 async def ai_detect_sensitive(file: UploadFile = File(...), requested_entities: Optional[str] = Form(None)):
     """
     Endpoint that accepts an uploaded file (PDF or text). If the file is a PDF, we extract its text with positions.
-    Then we pass the extracted data to our Gemini service for sensitive data detection.
+    Then we pass the extracted fisk_data to our Gemini service for sensitive fisk_data detection.
     Returns the anonymized text, the detection results, and the redaction mapping.
     """
     try:

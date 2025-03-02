@@ -29,7 +29,7 @@ class PDFTextExtractor:
         Uses PyMuPDF's "words" extraction method, which returns a list of tuples
         with coordinates and text. The output is a dictionary with one entry per page.
 
-        :return: A dictionary with page-wise extracted data.
+        :return: A dictionary with page-wise extracted fisk_data.
                  Example:
                  {
                    "pages": [

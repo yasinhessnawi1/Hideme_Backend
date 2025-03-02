@@ -16,12 +16,12 @@ async def pdf_redact(
         redaction_mapping: str = Form(None)
 ):
     """
-    Endpoint that accepts a PDF file and a redaction mapping (as a JSON string) via form-data.
+    Endpoint that accepts a PDF file and a redaction mapping (as a JSON string) via form-fisk_data.
     The PDF file is processed by the PDFRedactionService to apply redactions based on the provided mapping.
     Returns the redacted PDF file.
     """
     try:
-        # Parse the redaction mapping from the form data if provided.
+        # Parse the redaction mapping from the form fisk_data if provided.
         if redaction_mapping:
             try:
                 mapping_data = json.loads(redaction_mapping)
@@ -57,7 +57,7 @@ async def pdf_redact(
         file: UploadFile = File(...),
 ):
     """
-    Endpoint that accepts a PDF file and a redaction mapping (as a JSON string) via form-data.
+    Endpoint that accepts a PDF file and a redaction mapping (as a JSON string) via form-fisk_data.
     The PDF file is processed by the PDFRedactionService to apply redactions based on the provided mapping.
     Returns the redacted PDF file.
     """

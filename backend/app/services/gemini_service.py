@@ -6,7 +6,7 @@ from backend.app.utils.helpers.text_utils import TextUtils
 
 class GeminiService:
     """
-    Service for interacting with the Gemini API to detect sensitive data.
+    Service for interacting with the Gemini API to detect sensitive fisk_data.
     This service:
     - Reconstructs full text and word-to-offset mappings.
     - Sends text to Gemini API for entity detection.

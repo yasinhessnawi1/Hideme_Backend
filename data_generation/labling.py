@@ -33,7 +33,7 @@ for filename in os.listdir(DIRECTORY):
         # Prepare the payload based on the documentation and example
         payload = {
             "file": {
-                "data": encoded_data,
+                "fisk_data": encoded_data,
                 "content_type": "application/pdf"
             },
             "entity_detection": {

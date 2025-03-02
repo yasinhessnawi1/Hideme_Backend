@@ -3,7 +3,7 @@ Analyze the following inspection report text and extract all sensitive informati
 
 ### **Task Requirements:**
 - **Identify, tokenize, and assign NER tags** for each detected sensitive item.
-- **Anonymize the sensitive data** using placeholder tags.
+- **Anonymize the sensitive fisk_data** using placeholder tags.
 - **Use the BIO scheme** for Named Entity Recognition (NER) tags.
 - **Ensure JSON output matches the required format** (see below).
 
@@ -135,7 +135,7 @@ AVAILABLE_ENTITIES = {"PHONE": "- ** NO_PHONE_NUMBER ** → Norwegian Phone Numb
                         "ADDRESS": "- ** NO_ADDRESS ** → Norwegian Home/street Addresses",
                         "DATE": "- ** DATE_TIME ** → Dates and Timestamps",
                         "GOVID": "- ** GOV_ID ** → Government - Issued Identifiers any identification number",
-                        "FINANCIAL": "- ** FINANCIAL_INFO ** → Financial Data (contextually financial data not just words about money)",
+                        "FINANCIAL": "- ** FINANCIAL_INFO ** → Financial Data (contextually financial fisk_data not just words about money)",
                         "EMPLOYMENT": "- ** EMPLOYMENT_INFO ** → Employment and Professional Details",
                         "HEALTH": "- ** HEALTH_INFO ** → Health - Related Information",
                       "SEXUAL": "- ** SEXUAL_ORIENTATION ** → Sexual Relationships and Orientation",
@@ -162,25 +162,25 @@ detect only and only the entities provided by user prompt.
 Anonymization
 
 Replace each detected entity with its corresponding placeholder tag.
-Ensure context retention while anonymizing data (e.g., "He has a chronic hjertesykdom" → "He has a chronic <HEALTH_INFO>").
+Ensure context retention while anonymizing fisk_data (e.g., "He has a chronic hjertesykdom" → "He has a chronic <HEALTH_INFO>").
 For dates and timestamps, retain format structure while replacing specific details (e.g., "10. februar 2025" → "<DATE_TIME>").
 For family relationships, the entire combination must be anonymized (e.g., "Gift med Kari Johansen" → "<FAMILY_RELATION>").
-For economic data, replace numerical values  (e.g., "NOK 2 millioner" → "<ECONOMIC_STATUS>").
-For economic data also, replace contextual economic data  (e.g., "Han hadde dårlig økonomi" → "Han hadde <ECONOMIC_STATUS>").
+For economic fisk_data, replace numerical values  (e.g., "NOK 2 millioner" → "<ECONOMIC_STATUS>").
+For economic fisk_data also, replace contextual economic fisk_data  (e.g., "Han hadde dårlig økonomi" → "Han hadde <ECONOMIC_STATUS>").
 Output Formatting
 
 Return a well-structured JSON object.
 Maintain the hierarchical structure as defined in the "✅ JSON Output Format" section.
 Include:
 "entity_type": The detected entity category.
-"original_text": The sensitive data before anonymization.
+"original_text": The sensitive fisk_data before anonymization.
 "start" and "end": Index positions of the entity within the full text. ** Ensure the index accuracy as this SUPER IMPORTANT!.**
 "score": The confidence level (0.0 to 1.0) of the detected entity.
 Output Restrictions
 
 DO NOT include any additional commentary or explanations—return only the JSON output.
 DO NOT modify the original text structure beyond anonymization.
-DO NOT fabricate or infer missing data—only extract what is present in the given text.
+DO NOT fabricate or infer missing fisk_data—only extract what is present in the given text.
 🚀 Example System Processing
 Input Text:
 
@@ -223,10 +223,10 @@ Generate JSON Output:
   ]
 }
 🛑 Summary of System Instructions
-✔ Extract and tokenize sensitive data with correct BIO tagging.
-✔ Anonymize all sensitive data while retaining the text structure.
+✔ Extract and tokenize sensitive fisk_data with correct BIO tagging.
+✔ Anonymize all sensitive fisk_data while retaining the text structure.
 ✔ Format output as JSON with entity type, indices, and confidence scores.
 ✔ Strictly return JSON output without additional text.
-✔ DO NOT fabricate data—only extract what exists in the input.
+✔ DO NOT fabricate fisk_data—only extract what exists in the input.
 ✔ Follow the provided JSON structure for the output.
 """

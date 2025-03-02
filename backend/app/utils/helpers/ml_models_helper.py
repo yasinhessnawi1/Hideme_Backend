@@ -43,3 +43,5 @@ def get_hf_ner_pipeline(model_path=LOCAL_HF_MODEL_PATH, aggregation_strategy="si
         logging.error(f"❌ Failed to load Hugging Face model from '{model_path}': {e}")
         ner_pipe = None
     return ner_pipe
+
+

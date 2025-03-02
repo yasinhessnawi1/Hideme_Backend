@@ -1,7 +1,10 @@
+import time
+
 from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer, RecognizerResult
 
 from presidio_analyzer.nlp_engine import NlpEngineProvider, NerModelConfiguration
 from presidio_anonymizer import AnonymizerEngine
+
 
 from backend.app.configs.presidio_config import (
     DEFAULT_LANGUAGE, ENTITIES_CONFIG, REQUESTED_ENTITIES, SPACY_MODEL, LOCAL_HF_MODEL_PATH
@@ -23,13 +26,18 @@ class PresidioService:
     """
 
     def __init__(self):
+
         spacy_model = SPACY_MODEL
         get_spacy_model(spacy_model)  # Ensure spaCy model is loaded
 
+
         nlp_configuration = {
             "nlp_engine_name": "spacy",
-            "models": [{"lang_code": DEFAULT_LANGUAGE, "model_name": spacy_model}]
+            "models": [{"lang_code": DEFAULT_LANGUAGE, "model_name": spacy_model} ]
         }
+
+
+
         provider = NlpEngineProvider()
         provider.nlp_configuration = nlp_configuration
         spacy_nlp_engine = provider.create_engine()
@@ -85,6 +93,7 @@ class PresidioService:
             full_text, mapping = TextUtils.reconstruct_text_and_mapping(words)
             anonymized_texts.append(full_text)
 
+
             # Run Presidio Analyzer
             page_results = self.analyzer.analyze(text=full_text, language=DEFAULT_LANGUAGE, entities=requested_entities)
 
@@ -132,6 +141,7 @@ class PresidioService:
                                     "score": res.score,
                                     "bbox": bbox  # ✅ Now stores correct per-line bounding boxes!
                                 })
+
                 else:
                     logger.warning(f"⚠️ No matches found for entity '{entity_text}', skipping.")
 
