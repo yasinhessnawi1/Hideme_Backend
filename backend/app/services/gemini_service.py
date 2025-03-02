@@ -1,4 +1,3 @@
-from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
 from backend.app.utils.logger import default_logger as logger
 from backend.app.utils.helpers.gemini_helper import GeminiHelper
 from backend.app.utils.helpers.text_utils import TextUtils

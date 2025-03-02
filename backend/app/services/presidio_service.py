@@ -1,5 +1,3 @@
-import time
-
 from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer, RecognizerResult
 
 from presidio_analyzer.nlp_engine import NlpEngineProvider, NerModelConfiguration
@@ -65,7 +63,8 @@ class PresidioService:
         # Initialize custom NER pipeline
         self.ner_pipeline = get_hf_ner_pipeline(LOCAL_HF_MODEL_PATH)
         logger.info(
-            "✅ Custom NER pipeline initialized successfully!" if self.ner_pipeline else "❌ Failed to initialize NER pipeline.")
+            "✅ Custom NER pipeline initialized successfully!" if self.ner_pipeline
+            else "❌ Failed to initialize NER pipeline.")
 
     def detect_sensitive_data(self, extracted_data, requested_entities=None):
         """

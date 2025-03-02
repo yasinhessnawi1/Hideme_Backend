@@ -1,6 +1,5 @@
 import json
 from typing import List, Optional
-from zoneinfo import available_timezones
 
 from fastapi import HTTPException
 from presidio_analyzer import RecognizerResult
@@ -58,20 +57,35 @@ def print_analyzer_results(results: List[RecognizerResult], text: str):
             print(f" {result.analysis_explanation.textual_explanation}")
 
 
-def validate_requested_entities(requested_entities: Optional[str], lables = None):
-    # Ensure `requested_entities` is a valid JSON string or set it to an empty list
-    if requested_entities and not lables:
-        logging.info("Validating requested entities...", requested_entities)
-        requested_entities = json.loads(requested_entities)
-        available_entities = list(list(AVAILABLE_ENTITIES.keys()) + REQUESTED_ENTITIES)
-        for entity in requested_entities:
-            print("entity", entity)
-            if entity not in available_entities:
-                raise HTTPException(status_code=400,
-                                    detail=f"Invalid entity type: {entity}. Available entities: {available_entities}")
+def validate_requested_entities(requested_entities: Optional[str], labels: Optional[List[str]] = None):
+    """
+    Validates and filters requested entities.
 
-    elif lables and requested_entities:
-        requested_entities = json.loads(requested_entities)
-        for entity in requested_entities:
-            if entity not in lables:
-                raise HTTPException(status_code=400, detail="Invalid entity")
+    :param requested_entities: JSON string or Python list containing requested entities.
+    :param labels: List of valid labels to compare against.
+    :return: List of valid requested entities.
+    :raises HTTPException: If none of the requested entities are valid.
+    """
+    if requested_entities:
+        logging.info(f"🔍 Validating requested entities: {requested_entities}")
+
+        # ✅ Ensure `requested_entities` is a Python list (handle JSON string case)
+        if isinstance(requested_entities, str):
+            try:
+                requested_entities = json.loads(requested_entities)  # Convert JSON string to list
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON format in requested_entities")
+
+        if not isinstance(requested_entities, list):
+            raise HTTPException(status_code=400, detail="requested_entities must be a list")
+
+        # ✅ Define available entities based on provided labels or default to known entities
+        available_entities = labels if labels else list(AVAILABLE_ENTITIES.keys()) + REQUESTED_ENTITIES
+
+        # ✅ Filter out only valid requested entities
+        valid_entities = [entity for entity in requested_entities if entity in available_entities]
+
+        if not valid_entities:
+            raise HTTPException(status_code=400, detail="No valid entities found in the request.")
+
+        return valid_entities  # ✅ Return filtered valid entities
