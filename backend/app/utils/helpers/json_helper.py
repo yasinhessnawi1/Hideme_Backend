@@ -1,7 +1,13 @@
 import json
-from typing import List
+from typing import List, Optional
+from zoneinfo import available_timezones
 
+from fastapi import HTTPException
 from presidio_analyzer import RecognizerResult
+
+from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
+from backend.app.configs.presidio_config import REQUESTED_ENTITIES
+from backend.app.utils.logger import default_logger as logging
 
 
 def presidiotojsonconverter(detected_entities):
@@ -9,7 +15,7 @@ def presidiotojsonconverter(detected_entities):
     Custom converter for non-serializable objects.
     If the object is a RecognizerResult, convert it to a dict.
     """
-    # Format entity data
+    # Format entity fisk_data
     return [
         {
             "entity_type": e.entity_type,
@@ -24,9 +30,9 @@ def presidiotojsonconverter(detected_entities):
 
 def convert_to_json(data, indent=2):
     """
-    Convert the provided data to a JSON string.
+    Convert the provided fisk_data to a JSON string.
 
-    :param data: The data to convert (typically a dict or list).
+    :param data: The fisk_data to convert (typically a dict or list).
     :param indent: Indentation level for pretty-printing (default is 2).
     :return: A JSON-formatted string.
     :raises ValueError: If conversion fails.
@@ -35,7 +41,7 @@ def convert_to_json(data, indent=2):
         json_str = json.dumps(data, indent=indent, ensure_ascii=False, default=presidiotojsonconverter)
         return json_str
     except Exception as e:
-        raise ValueError(f"Error converting data to JSON: {e}")
+        raise ValueError(f"Error converting fisk_data to JSON: {e}")
 
 
 # Helper method to print results nicely
@@ -50,3 +56,22 @@ def print_analyzer_results(results: List[RecognizerResult], text: str):
 
         if result.analysis_explanation is not None:
             print(f" {result.analysis_explanation.textual_explanation}")
+
+
+def validate_requested_entities(requested_entities: Optional[str], lables = None):
+    # Ensure `requested_entities` is a valid JSON string or set it to an empty list
+    if requested_entities and not lables:
+        logging.info("Validating requested entities...", requested_entities)
+        requested_entities = json.loads(requested_entities)
+        available_entities = list(list(AVAILABLE_ENTITIES.keys()) + REQUESTED_ENTITIES)
+        for entity in requested_entities:
+            print("entity", entity)
+            if entity not in available_entities:
+                raise HTTPException(status_code=400,
+                                    detail=f"Invalid entity type: {entity}. Available entities: {available_entities}")
+
+    elif lables and requested_entities:
+        requested_entities = json.loads(requested_entities)
+        for entity in requested_entities:
+            if entity not in lables:
+                raise HTTPException(status_code=400, detail="Invalid entity")

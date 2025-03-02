@@ -1,6 +1,7 @@
 import os
 
 import json
+from operator import indexOf
 
 from backend.app.utils.logger import default_logger as logging
 
@@ -35,9 +36,12 @@ class GeminiHelper:
         """
         Constructs the Gemini API prompt dynamically using the provided text and requested entities.
         """
-        requested_entities = requested_entities or AVAILABLE_ENTITIES
+        if requested_entities is None:  # Explicitly check for None
+            requested_entities = list(AVAILABLE_ENTITIES.values())  # Convert to list
+
         entities_str = "\n".join(f"- **{entity}**" for entity in requested_entities)
         return f"{GEMINI_PROMPT_HEADER}{entities_str}\n\n### **Inspection Report Text:**\n{text}\n{GEMINI_PROMPT_FOOTER}"
+
 
     def send_request(self, text, requested_entities=None):
         """

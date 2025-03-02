@@ -1,6 +1,5 @@
 from backend.app.utils.logger import default_logger as logging
-import pymupdf  
-
+import pymupdf
 
 
 class PDFTextExtractor:
@@ -30,7 +29,7 @@ class PDFTextExtractor:
         Uses PyMuPDF's "words" extraction method, which returns a list of tuples
         with coordinates and text. The output is a dictionary with one entry per page.
 
-        :return: A dictionary with page-wise extracted data.
+        :return: A dictionary with page-wise extracted fisk_data.
                  Example:
                  {
                    "pages": [
@@ -78,6 +77,3 @@ class PDFTextExtractor:
     def close(self):
         """Close the PDF document."""
         self.pdf_document.close()
-
-
-

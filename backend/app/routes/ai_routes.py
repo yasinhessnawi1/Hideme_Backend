@@ -1,9 +1,12 @@
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
 from tempfile import NamedTemporaryFile
 
 from backend.app.services.gemini_service import GeminiService
 from backend.app.services.pdf_text_extraction_service import PDFTextExtractor
+from backend.app.utils.helpers.json_helper import validate_requested_entities
 from backend.app.utils.logger import default_logger as logging
 
 router = APIRouter()
@@ -13,13 +16,14 @@ gemini_service = GeminiService()
 
 
 @router.post("/detect")
-async def ai_detect_sensitive(file: UploadFile = File(...)):
+async def ai_detect_sensitive(file: UploadFile = File(...), requested_entities: Optional[str] = Form(None)):
     """
     Endpoint that accepts an uploaded file (PDF or text). If the file is a PDF, we extract its text with positions.
-    Then we pass the extracted data to our Gemini service for sensitive data detection.
+    Then we pass the extracted fisk_data to our Gemini service for sensitive fisk_data detection.
     Returns the anonymized text, the detection results, and the redaction mapping.
     """
     try:
+        validate_requested_entities(requested_entities)
         contents = await file.read()
         if file.content_type == "application/pdf":
             with NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -38,7 +42,7 @@ async def ai_detect_sensitive(file: UploadFile = File(...)):
                 ]
             }
 
-        anonymized_text, results_json, redaction_mapping = gemini_service.detect_sensitive_data(extracted_data)
+        anonymized_text, results_json, redaction_mapping = gemini_service.detect_sensitive_data(extracted_data, requested_entities)
         return JSONResponse(content={
             "redaction_mapping": redaction_mapping
         })
