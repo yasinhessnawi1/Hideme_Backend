@@ -48,7 +48,7 @@ sudo apt install -y ufw
 
 # Enable UFW
 sudo ufw --force enable
-
+sudo ufw enable
 # Allow traffic on port 8000
 sudo ufw allow 8000/tcp
 
