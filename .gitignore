@@ -216,5 +216,4 @@ backend/app/models/
 
 server_setup.sh
 data_generation/ready_data/
-data_generation/ready_data/
 data_generation/fisk_data/

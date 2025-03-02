@@ -16,36 +16,54 @@ gemini_service = GeminiService()
 
 
 @router.post("/detect")
-async def ai_detect_sensitive(file: UploadFile = File(...), requested_entities: Optional[str] = Form(None)):
+async def ai_detect_sensitive(
+    file: UploadFile = File(...),
+    requested_entities: Optional[str] = Form(None)
+):
     """
-    Endpoint that accepts an uploaded file (PDF or text). If the file is a PDF, we extract its text with positions.
-    Then we pass the extracted fisk_data to our Gemini service for sensitive fisk_data detection.
-    Returns the anonymized text, the detection results, and the redaction mapping.
+    Endpoint for detecting sensitive data using AI (Gemini).
     """
     try:
-        validate_requested_entities(requested_entities)
+        # ✅ Validate and filter requested entities
+        requested_entities = validate_requested_entities(requested_entities)
+        logging.info(f"✅ Filtered Requested Entities: {requested_entities}")
+
+        # Read file contents
         contents = await file.read()
+
+        # Extract text from PDF or text file
         if file.content_type == "application/pdf":
             with NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(contents)
                 tmp_path = tmp.name
-
             extractor = PDFTextExtractor(tmp_path)
             extracted_data = extractor.extract_text_with_positions()
         else:
-            # For non-PDF files assume a plain text file
             text = contents.decode("utf-8")
-            # Create a dummy extracted_data with a single page and one “word”
             extracted_data = {
-                "pages": [
-                    {"page": 1, "words": [{"text": text, "x0": 0, "y0": 0, "x1": 100, "y1": 10}]}
-                ]
+                "pages": [{"page": 1, "words": [{"text": text, "x0": 0, "y0": 0, "x1": 100, "y1": 10}]}]
             }
 
-        anonymized_text, results_json, redaction_mapping = gemini_service.detect_sensitive_data(extracted_data, requested_entities)
-        return JSONResponse(content={
-            "redaction_mapping": redaction_mapping
-        })
+        # ✅ Detect all entities using Gemini
+        anonymized_text, results_json, redaction_mapping = gemini_service.detect_sensitive_data(
+            extracted_data, requested_entities
+        )
+
+        # ✅ Filter only requested entities
+        filtered_redaction_mapping = {
+            "pages": [
+                {
+                    "page": page["page"],
+                    "sensitive": [
+                        entity for entity in page["sensitive"] if entity["entity_type"] in requested_entities
+                    ]
+                }
+                for page in redaction_mapping["pages"]
+            ]
+        }
+
+        return JSONResponse(content={"redaction_mapping": filtered_redaction_mapping})
+
     except Exception as e:
-        logging.error(f"Error in ai_detect_sensitive: {e}")
+        logging.error(f"❌ Error in ai_detect_sensitive: {e}")
         raise HTTPException(status_code=500, detail="Error processing file")
