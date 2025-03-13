@@ -1,32 +1,58 @@
+"""
+Centralized logging configuration for the application.
+"""
 import os
 import logging
+import sys
+from logging.handlers import RotatingFileHandler
 
+# Create logs directory if it doesn't exist
+os.makedirs("logs", exist_ok=True)
 
-class AppLogger:
-    """
-    A helper class to create and configure a logger for the application.
-    """
+# Define custom formatter that handles special characters
+class Utf8Formatter(logging.Formatter):
+    def formatMessage(self, record):
+        # Ensure all log messages are encoded correctly
+        return super().formatMessage(record)
 
-    def __init__(self, name: str = __name__):
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.INFO)
+# Configure logging with UTF-8 encoding
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        # Use sys.stdout with encoding specified
+        logging.StreamHandler(stream=sys.stdout),
+        # Use UTF-8 encoding for file handler
+        RotatingFileHandler(
+            "logs/app.log",
+            maxBytes=10485760,  # 10 MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+    ]
+)
 
-        # Only add handlers if they haven't been added yet.
-        if not self.logger.handlers:
-            formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-            # Create logs directory relative to this file
-            log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../logs")
-            os.makedirs(log_dir, exist_ok=True)
-            file_handler = logging.FileHandler(os.path.join(log_dir, "app.log"), encoding="utf-8")
-            file_handler.setFormatter(formatter)
-            stream_handler = logging.StreamHandler()
-            stream_handler.setFormatter(formatter)
-            self.logger.addHandler(file_handler)
-            self.logger.addHandler(stream_handler)
+# Create default logger
+default_logger = logging.getLogger("document_processing")
+default_logger.setLevel(logging.INFO)
 
-    def get_logger(self):
-        return self.logger
+# Replace checkmark emoji with text equivalent to avoid encoding issues
+def log_info(message, *args, **kwargs):
+    # Replace Unicode characters that might cause encoding issues
+    safe_message = message.replace("❌", "[ERROR]").replace("⚠️", "[WARNING]")
+    default_logger.info(safe_message, *args, **kwargs)
 
+def log_error(message, *args, **kwargs):
+    safe_message = message.replace("[OK]", "[ERROR]").replace("❌", "[ERROR]").replace("⚠️", "[WARNING]")
+    default_logger.error(safe_message, *args, **kwargs)
 
-# Create a default logger instance that other modules can import
-default_logger = AppLogger().get_logger()
+def log_warning(message, *args, **kwargs):
+    safe_message = message.replace("[OK]", "[WARNING]").replace("❌", "[ERROR]").replace("⚠️", "[WARNING]")
+    default_logger.warning(safe_message, *args, **kwargs)
+
+def log_debug(message, *args, **kwargs):
+    safe_message = message.replace("[OK]", "[DEBUG]").replace("❌", "[ERROR]").replace("⚠️", "[WARNING]")
+    default_logger.info(safe_message, *args, **kwargs)
+
+# Export functions
+__all__ = ["default_logger", "log_info", "log_error", "log_warning", "log_debug"]
