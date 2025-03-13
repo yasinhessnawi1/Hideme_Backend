@@ -29,9 +29,7 @@ def get_spacy_model(model_name: str) -> Any:
         log_info(f"[OK] Downloaded and loaded spaCy model '{model_name}'")
     return model
 
-    except Exception as e:
-        log_error(f"[OK] Failed to load Hugging Face model from '{model_path}': {e}")
-        return None
+
 def get_hf_ner_pipeline(model_path: str, aggregation_strategy: str = "simple") -> Optional[Any]:
     """
     Load a Hugging Face NER pipeline from a local or remote model.
@@ -55,4 +53,7 @@ def get_hf_ner_pipeline(model_path: str, aggregation_strategy: str = "simple") -
         )
 
         log_info(f"[OK] Successfully loaded Hugging Face model from '{model_path}'")
-        return ner_pipe
+        return ner_pipe # Return the pipeline
+    except Exception as e:
+        log_error(f"[ERROR] Failed to load Hugging Face model from '{model_path}': {e}")
+        return None
