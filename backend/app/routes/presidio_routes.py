@@ -27,9 +27,11 @@ async def presidio_detect_sensitive(
     Detects sensitive information in a PDF or text file using Presidio.
     """
     try:
-        # ✅ Validate and filter requested entities
+
+        # Ensure `requested_entities` is a valid JSON string or set it to an empty list
         requested_entities = validate_requested_entities(requested_entities)
-        logging.info(f"✅ Filtered Requested Entities: {requested_entities}")
+
+        logging.info(f"Requested entities: {requested_entities}")
 
         # Read file contents
         contents = await file.read()
@@ -44,32 +46,21 @@ async def presidio_detect_sensitive(
         else:
             extracted_data = contents.decode("utf-8")  # Assume text files are UTF-8 encoded
 
-        # ✅ Detect all entities using Presidio
+        # Detect sensitive fisk_data using Presidio
         anonymized_text, results_json, redaction_mapping = presidio_service.detect_sensitive_data(
             extracted_data, requested_entities
         )
 
-        # ✅ Filter only requested entities
-        filtered_redaction_mapping = {
-            "pages": [
-                {
-                    "page": page["page"],
-                    "sensitive": [
-                        entity for entity in page["sensitive"] if entity["entity_type"] in requested_entities
-                    ]
-                }
-                for page in redaction_mapping["pages"]
-            ]
-        }
-
-        return JSONResponse(content={"redaction_mapping": filtered_redaction_mapping})
+        return JSONResponse(content={
+            "redaction_mapping": redaction_mapping
+        })
 
     except json.JSONDecodeError:
-        logging.error("❌ Invalid JSON format in requested_entities")
+        logging.error("Invalid JSON format in requested_entities")
         raise HTTPException(status_code=400, detail="Invalid JSON format in requested_entities")
 
     except Exception as e:
-        logging.error(f"❌ Error in presidio detect sensitive: {e}")
+        logging.error(f"Error in presidio_detect_sensitive: {e}")
         raise HTTPException(status_code=500, detail="Error processing file")
 
 

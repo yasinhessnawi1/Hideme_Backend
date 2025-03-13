@@ -131,6 +131,7 @@ Copy
 
 """
 AVAILABLE_ENTITIES = {"PHONE": "- ** NO_PHONE_NUMBER ** → Norwegian Phone Numbers",
+                        "PERSON": "- ** PERSON ** → Norwegian Names",
                         "EMAIL": "- ** EMAIL_ADDRESS ** → Email Addresses",
                         "ADDRESS": "- ** NO_ADDRESS ** → Norwegian Home/street Addresses",
                         "DATE": "- ** DATE_TIME ** → Dates and Timestamps",
@@ -138,7 +139,7 @@ AVAILABLE_ENTITIES = {"PHONE": "- ** NO_PHONE_NUMBER ** → Norwegian Phone Numb
                         "FINANCIAL": "- ** FINANCIAL_INFO ** → Financial Data (contextually financial fisk_data not just words about money)",
                         "EMPLOYMENT": "- ** EMPLOYMENT_INFO ** → Employment and Professional Details",
                         "HEALTH": "- ** HEALTH_INFO ** → Health - Related Information",
-                      "SEXUAL": "- ** SEXUAL_ORIENTATION ** → Sexual Relationships and Orientation",
+                        "SEXUAL": "- ** SEXUAL_ORIENTATION ** → Sexual Relationships and Orientation",
                         "CRIMINAL": "- ** CRIMINAL_RECORD ** → Crime - Related Information",
                         "CONTEXT": "- ** CONTEXT_SENSITIVE ** → Context - Sensitive Information",
                         "INFO": "- ** IDENTIFIABLE_IMAGE ** → Any Identifiable Image Reference",

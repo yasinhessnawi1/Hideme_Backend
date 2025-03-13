@@ -1,75 +1,136 @@
 import os
-import base64
 import json
+import re
 import time
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-import requests
+# Load API Key
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backend', '.env'))
+API_KEY = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=API_KEY)
 
-from data_generation.generate_text import PRIVATE_AI_API_KEY
+DATA_FOLDER = os.path.join(os.path.dirname(__file__), 'data')
+TRAINING_FOLDER = os.path.join(os.path.dirname(__file__), 'training_data')
 
-# Replace with your actual API key and directory path
-API_URL = "https://api.private-ai.com/community/v4/process/files/base64"
-API_KEY = PRIVATE_AI_API_KEY
-DIRECTORY = "data"
+if not os.path.exists(TRAINING_FOLDER):
+    os.makedirs(TRAINING_FOLDER)
 
-# Prepare the headers (include the API key if required)
-headers = {
-    "Content-Type": "application/json",
-    "x-api-key": API_KEY
-}
-count = 0
-# Loop over each file in the directory
-for filename in os.listdir(DIRECTORY):
-    if count == 70:
-        break
-    if filename.lower().endswith('.pdf'):
-        file_path = os.path.join(DIRECTORY, filename)
 
-        # Read and encode the PDF file in base64
-        with open(file_path, "rb") as f:
-            file_bytes = f.read()
-        encoded_data = base64.b64encode(file_bytes).decode("utf-8")
+def get_all_txt_files():
+    """Retrieve all .txt files from DATA_FOLDER, sorted by creation time (oldest first)."""
+    txt_files = [f for f in os.listdir(DATA_FOLDER) if f.endswith('.txt')]
+    txt_files.sort(key=lambda f: os.path.getctime(os.path.join(DATA_FOLDER, f)))  # Sort by creation time
+    return txt_files
 
-        # Prepare the payload based on the documentation and example
-        payload = {
-            "file": {
-                "fisk_data": encoded_data,
-                "content_type": "application/pdf"
-            },
-            "entity_detection": {
-                "return_entity": True,
-                "accuracy": "high_multilingual"
-            },
-            "pdf_options": {
-                "density": 150,
-                "max_resolution": 2000,
-                "enable_pdf_text_layer": True
-            },
-            "audio_options": {
-                "bleep_start_padding": 0,
-                "bleep_end_padding": 0
-            },
 
-        }
+def clean_json_response(response_text):
+    """Clean and parse the API response JSON."""
+    cleaned_text = re.sub(r"```json\s*|\s*```", "", response_text).strip()
 
-        # Make the API request
-        response = requests.post(API_URL, json=payload, headers=headers)
-        count += 1
-        try:
-            response_json = response.json()
-        except json.JSONDecodeError:
-            print(f"Error decoding JSON response for {filename}")
-            continue
-        if "processed_file" in response_json:
-            del response_json["processed_file"]
-        # Define the output JSON file path using the same base name as the PDF
-        json_filename = os.path.splitext(filename)[0] + ".txt"
-        json_path = os.path.join(DIRECTORY, json_filename)
+    try:
+        data = json.loads(cleaned_text)
+        if "text_input" in data and data["text_input"].endswith("["):
+            data["text_input"] = data["text_input"].rstrip("[")
+        return data
+    except json.JSONDecodeError as e:
+        print("JSON Decode Error:", e)
+        return {"error": "Invalid response from Gemini"}
 
-        # Save the JSON response with pretty printing
-        with open(json_path, "w", encoding="utf-8") as json_file:
-            json.dump(response_json, json_file, indent=4, ensure_ascii=False)
 
-        print(f"Processed {filename} and saved response as {json_filename}")
-        time.sleep(12)
-        print(f"Waiting for 12 seconds before the next request...")
+def extract_sensitive_data(text):
+    """Send text to Gemini API to extract and label sensitive data in structured format."""
+    prompt = (
+        "Analyze the following text and extract all sensitive entities according to the categories below. "
+        "Ensure the output is a valid JSON format.\n\n"
+        "**Sensitive Data Categories:**\n"
+        "- **NO_PHONE_NUMBER** → Norwegian Phone Numbers\n"
+        "- **PERSON** → Norwegian Names\n"
+        "- **EMAIL_ADDRESS** → Email Addresses\n"
+        "- **NO_ADDRESS** → Norwegian Home/Street Addresses\n"
+        "- **DATE_TIME** → Dates and Timestamps\n"
+        "- **GOV_ID** → Government-Issued Identifiers (any identification number)\n"
+        "- **FINANCIAL_INFO** → Financial Data (contextually financial fisk_data, not just words about money)\n"
+        "- **EMPLOYMENT_INFO** → Employment and Professional Details\n"
+        "- **HEALTH_INFO** → Health-Related Information\n"
+        "- **SEXUAL_ORIENTATION** → Sexual Relationships and Orientation\n"
+        "- **CRIMINAL_RECORD** → Crime-Related Information\n"
+        "- **CONTEXT_SENSITIVE** → Context-Sensitive Information\n"
+        "- **IDENTIFIABLE_IMAGE** → Any Identifiable Image Reference\n"
+        "- **FAMILY_RELATION** → Family and Relationship Data\n"
+        "- **BEHAVIORAL_PATTERN** → Behavioral Pattern Data\n"
+        "- **POLITICAL_CASE** → Political-Related Cases\n"
+        "- **ECONOMIC_STATUS** → Economic Information\n\n"
+        "### **Expected JSON Output Format:**\n"
+        "{\n"
+        '  "text_input": "Original text...",\n'
+        '  "output": {\n'
+        '    "PERSON": ["John Doe"],\n'
+        '    "NO_ADDRESS": ["123 Main St"],\n'
+        '    "POSTAL_CODE": "12345",\n'
+        '    "NO_PHONE_NUMBER": "123-456-7890",\n'
+        '    "EMAIL_ADDRESS": "john.doe@email.com",\n'
+        '    "GOV_ID": "12345678901",\n'
+        '    "FINANCIAL_INFO": ["500,000 NOK"],\n'
+        '    "CRIMINAL_RECORD": ["Fraud Conviction"],\n'
+        '    "HEALTH_INFO": ["Diabetes Type 2"],\n'
+        '    "POLITICAL_CASE": "Member of Party X",\n'
+        '    "FAMILY_RELATION": ["Spouse: Jane Doe"],\n'
+        '    "ECONOMIC_STATUS": "Debt of 500,000 NOK"\n'
+        "  }\n"
+        "}\n"
+        "**Ensure that the response is valid JSON without any Markdown syntax.**\n"
+        f"Text: {text}"
+    )
+
+    model = genai.GenerativeModel("gemini-1.5-pro")
+    response = model.generate_content(prompt)
+
+    raw_response = response.text
+    print("Raw API Response:", raw_response)  # Debugging print
+
+    return clean_json_response(raw_response)
+
+
+def process_all_reports():
+    """Iterate through all .txt reports, process each, and wait 20 seconds between API calls."""
+    txt_files = get_all_txt_files()
+
+    if not txt_files:
+        print("No report files found!")
+        return
+
+    for txt_file in txt_files:
+        file_path = os.path.join(DATA_FOLDER, txt_file)
+
+        with open(file_path, 'r', encoding='utf-8') as file:
+            report_text = file.read().strip()
+
+        print(f"Processing: {file_path}")
+        labeled_data = extract_sensitive_data(report_text)
+
+        if "error" in labeled_data:
+            print("Error in response:", labeled_data["error"])
+            continue  # Skip this file and move to the next one
+
+        # Convert to JSONL format with proper Unicode encoding
+        jsonl_entry = json.dumps({
+            "text_input": labeled_data.get("text_input", "").encode("utf-8").decode("utf-8"),
+            "output": labeled_data.get("output", {})
+        }, ensure_ascii=False)  # Ensure readable characters (å, ø, æ, etc.)
+
+        training_file = os.path.join(TRAINING_FOLDER, "training_data.jsonl")
+
+        # Append to training file
+        with open(training_file, 'a', encoding='utf-8') as file:
+            file.write(jsonl_entry + '\n')
+
+        print(f"Labeled training data saved to {training_file}")
+
+        # Wait 5 seconds before processing the next file
+        print("Waiting 5 seconds before processing the next file...")
+        time.sleep(5)
+
+
+if __name__ == "__main__":
+    process_all_reports()
