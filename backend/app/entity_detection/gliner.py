@@ -92,7 +92,7 @@ class GlinerEntityDetector(BaseEntityDetector):
             # Personal pronouns (subject)
             "jeg", "du", "han", "hun", "den", "det", "vi", "dere", "de",
             # Personal pronouns (object)
-            "meg", "deg", "ham", "henne", "den", "det", "oss", "dere", "dem",
+            "meg", "deg", "ham", "henne", "den", "det", "oss", "dem",
             # Possessive pronouns
             "min", "mi", "mitt", "mine", "din", "di", "ditt", "dine",
             "hans", "hennes", "dens", "dets", "vår", "vårt", "våre",
@@ -100,13 +100,13 @@ class GlinerEntityDetector(BaseEntityDetector):
             # Reflexive pronouns
             "seg", "selv",
             # Demonstrative pronouns
-            "denne", "dette", "disse", "den", "det", "de",
+            "denne", "dette", "disse",
             # Interrogative pronouns
             "hvem", "hva", "hvilken", "hvilket", "hvilke",
             # Indefinite pronouns
             "noen", "noe", "ingen", "ingenting", "alle", "enhver", "ethvert", "hver", "hvert",
             # Relative pronouns
-            "som", "hvilken", "hvilket", "hvilke"
+            "som"
         }
 
         # Convert to lowercase for case-insensitive matching

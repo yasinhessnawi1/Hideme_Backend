@@ -8,7 +8,6 @@ from backend.app.factory.document_processing import (
     DocumentProcessingFactory,
     DocumentFormat,
     EntityDetectionEngine,
-    HybridEntityDetector
 )
 
 # Export classes
@@ -16,5 +15,4 @@ __all__ = [
     "DocumentProcessingFactory",
     "DocumentFormat",
     "EntityDetectionEngine",
-    "HybridEntityDetector"
 ]
