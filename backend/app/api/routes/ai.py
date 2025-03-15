@@ -1,23 +1,23 @@
 """
-Gemini AI-based entity detection routes with parallel processing support.
+Gemini AI-based entity detection routes with parallel processing and output sanitization.
 """
 import json
 import time
 import os
 import asyncio
-from typing import Optional, List
+from typing import Optional
 from tempfile import NamedTemporaryFile
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Form
+from fastapi import APIRouter, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 
 from backend.app.factory.document_processing import (
     DocumentProcessingFactory,
     DocumentFormat,
-    EntityDetectionEngine
 )
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.logger import default_logger as logger, log_info, log_warning
+from backend.app.utils.sanitize_utils import sanitize_detection_output
 
 router = APIRouter()
 
@@ -35,9 +35,11 @@ async def ai_detect_sensitive(
         requested_entities: JSON string of entity types to detect (optional)
 
     Returns:
-        JSON response with redaction mapping
+        JSON response with sanitized redaction mapping
     """
     start_time = time.time()
+    processing_times = {}
+
     try:
         # Process requested entities (can be None)
         entity_list = None
@@ -49,9 +51,13 @@ async def ai_detect_sensitive(
                 log_warning("[WARNING] Invalid JSON format in requested_entities, using default Gemini entities")
 
         # Read file contents
+        file_read_start = time.time()
         contents = await file.read()
+        file_read_time = time.time() - file_read_start
+        processing_times["file_read_time"] = file_read_time
 
         # Handle different file types
+        extract_start = time.time()
         if file.content_type == "application/pdf":
             with NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(contents)
@@ -81,40 +87,55 @@ async def ai_detect_sensitive(
                     }
                 ]
             }
+        extract_time = time.time() - extract_start
+        processing_times["extraction_time"] = extract_time
 
-        # Get the cached Gemini detector
+        # Get the Gemini detector from initialization service
         detector = initialization_service.get_gemini_detector()
-        if not detector:
-            log_warning("[WARNING] No cached Gemini detector found, creating a new one")
-            detector = DocumentProcessingFactory.create_entity_detector(
-                EntityDetectionEngine.GEMINI
-            )
 
         # Detect sensitive data using async method
-        extract_start = time.time()
-        _, entities, redaction_mapping = await detector.detect_sensitive_data_async(
+        detection_start = time.time()
+        anonymized_text, entities, redaction_mapping = await detector.detect_sensitive_data_async(
             extracted_data, entity_list
         )
-        detection_time = time.time() - extract_start
+        detection_time = time.time() - detection_start
+        processing_times["detection_time"] = detection_time
 
-        # Calculate total time
+        # Calculate total time and word count metrics
         total_time = time.time() - start_time
+        processing_times["total_time"] = total_time
 
-        # Build performance metrics
-        performance = {
-            "detection_time": detection_time,
-            "total_time": total_time,
-        }
+        # Calculate word count and entity density
+        total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
+        processing_times["words_count"] = total_words
+        processing_times["pages_count"] = len(extracted_data.get("pages", []))
+
+        if total_words > 0 and entities:
+            entity_density = (len(entities) / total_words) * 1000  # Entities per 1000 words
+            processing_times["entity_density"] = entity_density
+
+        # Sanitize output for consistent response format
+        sanitized_response = sanitize_detection_output(
+            anonymized_text, entities, redaction_mapping, processing_times
+        )
+
+        # Add model information
+        sanitized_response["model_info"] = {"engine": "gemini"}
 
         log_info(f"[PERF] Gemini detection completed in {total_time:.2f}s " 
-                f"(Detect: {detection_time:.2f}s)")
+                f"(Extract: {extract_time:.2f}s, Detect: {detection_time:.2f}s), "
+                f"Found {sanitized_response['entities_detected']['total']} entities")
 
-        return JSONResponse(content={
-            "redaction_mapping": redaction_mapping,
-            "entities_detected": len(entities),
-            "performance": performance
-        })
+        return JSONResponse(content=sanitized_response)
 
     except Exception as e:
         logger.error(f"[ERROR] Error in ai_detect_sensitive: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+        # Return standardized error response
+        error_response = {
+            "redaction_mapping": {"pages": []},
+            "entities_detected": {"total": 0, "by_type": {}, "by_page": {}},
+            "error": str(e),
+            "performance": {"total_time": time.time() - start_time},
+            "model_info": {"engine": "gemini"}
+        }
+        return JSONResponse(status_code=500, content=error_response)

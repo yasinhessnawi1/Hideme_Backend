@@ -1,14 +1,14 @@
 """
-Simplified GLiNER entity detection implementation with improved model persistence.
+Optimized GLiNER entity detection implementation with proper initialization flag handling.
 
-This module provides a streamlined implementation of the GLiNER entity detector
-that downloads the model once and saves it to a local file for future use.
+This module ensures the _is_initialized flag is correctly set after model loading.
 """
 import os
 import asyncio
 import re
 import threading
 import time
+import shutil
 import torch
 from typing import Dict, Any, List, Optional, Tuple, Union
 
@@ -26,18 +26,22 @@ from backend.app.utils.helpers.text_utils import TextUtils
 from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
 from backend.app.utils.logger import default_logger as logger, log_info, log_warning, log_error
 from backend.app.configs.gliner_config import GLINER_MODEL_PATH, GLINER_MODEL_NAME, GLINER_ENTITIES
+from backend.app.utils.sanitize_utils import deduplicate_entities
 
 
 class GlinerEntityDetector(BaseEntityDetector):
     """
-    Service for detecting sensitive information using GLiNER with improved model persistence.
-
-    This implementation downloads the model once and saves it to a local file, then
-    loads it from this file for all subsequent requests.
+    Service for detecting sensitive information using GLiNER with proper initialization flag handling.
     """
 
     # Class-level lock for model initialization
     _model_lock = threading.RLock()
+
+    # Class-level flag to track initialization status
+    _global_initializing = False
+
+    # Class-level variable to track initialization time
+    _global_initialization_time = None
 
     def __init__(
         self,
@@ -47,7 +51,7 @@ class GlinerEntityDetector(BaseEntityDetector):
         local_files_only: bool = False
     ):
         """
-        Initialize the GLiNER entity detector with improved model persistence.
+        Initialize the GLiNER entity detector with proper initialization flag handling.
 
         Args:
             model_name: Name or path of the GLiNER model to use
@@ -59,9 +63,9 @@ class GlinerEntityDetector(BaseEntityDetector):
         self.model = None
 
         # Local model settings
-        self.local_model_path = local_model_path
+        self.local_model_path = local_model_path or os.path.dirname(GLINER_MODEL_PATH)
         self.local_files_only = local_files_only
-        self.model_file_path = GLINER_MODEL_PATH if local_model_path else None
+        self.model_dir_path = GLINER_MODEL_PATH
 
         # Check if GLiNER is available
         if not GLINER_AVAILABLE:
@@ -92,7 +96,7 @@ class GlinerEntityDetector(BaseEntityDetector):
             # Personal pronouns (subject)
             "jeg", "du", "han", "hun", "den", "det", "vi", "dere", "de",
             # Personal pronouns (object)
-            "meg", "deg", "ham", "henne", "den", "det", "oss", "dere", "dem",
+            "meg", "deg", "ham", "henne", "den", "det", "oss", "dem",
             # Possessive pronouns
             "min", "mi", "mitt", "mine", "din", "di", "ditt", "dine",
             "hans", "hennes", "dens", "dets", "vår", "vårt", "våre",
@@ -100,13 +104,13 @@ class GlinerEntityDetector(BaseEntityDetector):
             # Reflexive pronouns
             "seg", "selv",
             # Demonstrative pronouns
-            "denne", "dette", "disse", "den", "det", "de",
+            "denne", "dette", "disse",
             # Interrogative pronouns
             "hvem", "hva", "hvilken", "hvilket", "hvilke",
             # Indefinite pronouns
             "noen", "noe", "ingen", "ingenting", "alle", "enhver", "ethvert", "hver", "hvert",
             # Relative pronouns
-            "som", "hvilken", "hvilket", "hvilke"
+            "som"
         }
 
         # Convert to lowercase for case-insensitive matching
@@ -114,7 +118,7 @@ class GlinerEntityDetector(BaseEntityDetector):
 
     def _initialize_model(self, max_retries: int = 2) -> bool:
         """
-        Initialize the GLiNER model with improved persistence.
+        Initialize the GLiNER model with proper initialization flag handling.
 
         Args:
             max_retries: Maximum number of retries for initialization
@@ -126,15 +130,52 @@ class GlinerEntityDetector(BaseEntityDetector):
             log_error("[ERROR] GLiNER package not installed. Please install with 'pip install gliner'")
             return False
 
-        with self._model_lock:
-            # Check if already initialized
-            if self._is_initialized and self.model is not None:
-                return True
+        # Check if already initialized
+        if self._is_initialized and self.model is not None:
+            return True
 
+        # If global initialization is in progress, wait for it to complete
+        with self._model_lock:
+            if GlinerEntityDetector._global_initializing:
+                # Another thread is initializing, wait a bit and check if it completes
+                init_start_time = time.time()
+                max_wait_time = 60  # Wait up to 60 seconds
+
+                log_info("[GLINER] Another thread is initializing the GLiNER model, waiting...")
+
+                while GlinerEntityDetector._global_initializing and (time.time() - init_start_time) < max_wait_time:
+                    # Release the lock temporarily
+                    self._model_lock.release()
+                    time.sleep(1)  # Wait for 1 second
+                    self._model_lock.acquire()
+
+                # Check if initialization completed while waiting
+                if not GlinerEntityDetector._global_initializing and GlinerEntityDetector._global_initialization_time:
+                    # Model was initialized by another thread
+                    self._is_initialized = True
+                    self._initialization_time = GlinerEntityDetector._global_initialization_time
+                    self._last_used = time.time()
+                    return True
+
+                # If still initializing after max wait time, continue with own initialization
+                if GlinerEntityDetector._global_initializing:
+                    log_warning("[GLINER] Timeout waiting for another thread to initialize GLiNER model, proceeding with own initialization")
+
+            # Set global initializing flag
+            GlinerEntityDetector._global_initializing = True
+
+        try:
             start_time = time.time()
 
-            # Determine if we should try to load from local file
+            # Determine if we should try to load from local model directory
             local_model_exists = self._check_local_model_exists()
+            log_info(f"[GLINER] Local model exists check: {local_model_exists}")
+
+            if local_model_exists:
+                log_info(f"[GLINER] Model directory contents: {os.listdir(self.model_dir_path)}")
+
+                # Fix configuration file discrepancy if needed
+                self._fix_config_file_discrepancy()
 
             # Save original local_files_only setting
             original_local_files_only = self.local_files_only
@@ -143,43 +184,53 @@ class GlinerEntityDetector(BaseEntityDetector):
             for attempt in range(max_retries):
                 try:
                     if local_model_exists:
-                        # Try to load from local file
-                        log_info(f"[OK] Loading GLiNER model from local file: {self.model_file_path}")
-                        if self._load_local_model(self.model_file_path):
+                        # Try to load from local directory
+                        log_info(f"[OK] Loading GLiNER model from local directory: {self.model_dir_path}")
+                        if self._load_local_model(self.model_dir_path):
                             break
                         else:
                             local_model_exists = False  # Failed to load, try downloading
-                            log_warning("[WARNING] Failed to load GLiNER model from local file, will try downloading")
+                            log_warning("[WARNING] Failed to load GLiNER model from local directory, will try downloading")
                             # Reset local_files_only to allow downloading
                             self.local_files_only = False
 
                     if not local_model_exists:
                         if original_local_files_only:
                             log_warning(
-                                "[WARNING] Local model file not found but local_files_only=True, attempting download anyway")
+                                "[WARNING] Local model directory not found but local_files_only=True, attempting download anyway")
 
                         # Download from HuggingFace
                         log_info(f"[OK] Downloading GLiNER model from HuggingFace: {self.model_name}")
                         self.model = GLiNER.from_pretrained(self.model_name)
 
-                        # Save model to local file if path is specified
-                        if self.local_model_path and self.model_file_path:
-                            self._save_model_to_file(self.model_file_path)
+                        # Save model to local directory if path is specified
+                        if self.local_model_path:
+                            self._save_model_to_directory(self.model_dir_path)
 
+                    # IMPORTANT: Explicitly check if model was loaded properly
                     if self.model is not None:
-                        # Update status
+                        # Explicitly set initialized flag to True
                         self._is_initialized = True
                         self._initialization_time = time.time() - start_time
                         self._last_used = time.time()
 
+                        # Update global initialization time
+                        GlinerEntityDetector._global_initialization_time = self._initialization_time
+
                         log_info(f"[OK] GLiNER model initialized successfully in {self._initialization_time:.2f}s")
+                        log_info(f"[OK] Initialization flag explicitly set to: {self._is_initialized}")
 
                         # Test model with simple prediction
-                        self._test_model()
+                        test_success = self._test_model()
+
+                        # Only set initialized to True if test also succeeds
+                        if not test_success:
+                            log_warning("[WARNING] Model was loaded but failed test, setting initialized to False")
+                            self._is_initialized = False
 
                         # Restore original local_files_only setting
                         self.local_files_only = original_local_files_only
-                        return True
+                        return self._is_initialized
 
                 except Exception as e:
                     log_error(f"[ERROR] Failed to initialize GLiNER model (attempt {attempt + 1}/{max_retries}): {e}")
@@ -192,36 +243,104 @@ class GlinerEntityDetector(BaseEntityDetector):
             self.local_files_only = original_local_files_only
             return self._is_initialized
 
+        finally:
+            # Reset global initializing flag
+            with self._model_lock:
+                GlinerEntityDetector._global_initializing = False
+
+    def _fix_config_file_discrepancy(self) -> None:
+        """
+        Fix configuration file discrepancy by creating a copy of gliner_config.json as config.json.
+
+        This resolves the issue where the GLiNER library expects config.json but the
+        model directory has gliner_config.json instead.
+        """
+        try:
+            # Check if gliner_config.json exists but config.json doesn't
+            gliner_config_path = os.path.join(self.model_dir_path, 'gliner_config.json')
+            config_path = os.path.join(self.model_dir_path, 'config.json')
+
+            if os.path.exists(gliner_config_path) and not os.path.exists(config_path):
+                log_info(f"[GLINER] Creating config.json from gliner_config.json")
+                shutil.copy2(gliner_config_path, config_path)
+                log_info(f"[GLINER] Successfully created config.json")
+        except Exception as e:
+            log_warning(f"[GLINER] Failed to fix config file discrepancy: {e}")
+
     def _check_local_model_exists(self) -> bool:
         """
-        Check if a valid local model exists.
+        Check if a valid local model directory exists.
 
         Returns:
-            True if a valid local model file exists, False otherwise
+            True if a valid local model directory exists, False otherwise
         """
-        return (
-            self.local_model_path and
-            self.model_file_path and
-            os.path.exists(self.model_file_path) and
-            os.path.getsize(self.model_file_path) > 1000000  # Ensure it's a valid file (>1MB)
-        )
+        # Check if the directory exists
+        if not os.path.exists(self.model_dir_path):
+            log_warning(f"[GLINER] Model directory does not exist: {self.model_dir_path}")
+            return False
 
-    def _test_model(self) -> None:
-        """Test the GLiNER model with a simple prediction to verify functionality."""
+        # Check if it's a directory
+        if not os.path.isdir(self.model_dir_path):
+            log_warning(f"[GLINER] Model path is not a directory: {self.model_dir_path}")
+            return False
+
+        # Check for required model files
+        required_files = ['pytorch_model.bin']
+        # Either config.json or gliner_config.json should exist
+        config_files = ['config.json', 'gliner_config.json']
+
+        # Check if at least one config file exists
+        has_config = any(os.path.exists(os.path.join(self.model_dir_path, f)) for f in config_files)
+        if not has_config:
+            log_warning(f"[GLINER] No configuration file found in model directory")
+            return False
+
+        # Check for other required files
+        missing_files = [f for f in required_files if not os.path.exists(os.path.join(self.model_dir_path, f))]
+
+        if missing_files:
+            log_warning(f"[GLINER] Missing required model files: {missing_files}")
+            return False
+
+        log_info(f"[GLINER] Found valid model directory at {self.model_dir_path}")
+        return True
+
+    def _test_model(self) -> bool:
+        """
+        Test the GLiNER model with a simple prediction to verify functionality.
+
+        Returns:
+            True if the test was successful, False otherwise
+        """
         try:
+            if not self.model:
+                log_warning("[WARNING] Cannot test model - model not initialized")
+                return False
+
             test_text = "John Smith works at Microsoft."
             test_entities = ["Person", "Organization"]
+
+            # Test if the predict_entities method exists and can be called
+            if not hasattr(self.model, "predict_entities"):
+                log_warning("[WARNING] Model doesn't have predict_entities method")
+                return False
+
+            # Try to run a prediction
             results = self.model.predict_entities(test_text, test_entities, threshold=0.5)
+
+            # Log test results
             log_info(f"[OK] GLiNER model test successful. Found {len(results)} entities.")
+            return True
         except Exception as test_error:
             log_warning(f"[WARNING] GLiNER model test failed: {test_error}")
+            return False
 
-    def _save_model_to_file(self, model_path: str) -> bool:
+    def _save_model_to_directory(self, model_dir: str) -> bool:
         """
-        Save model using GLiNER's native method.
+        Save model to directory using GLiNER's native method.
 
         Args:
-            model_path: Path where to save the model
+            model_dir: Directory path where to save the model
 
         Returns:
             True if saving succeeded, False otherwise
@@ -232,51 +351,100 @@ class GlinerEntityDetector(BaseEntityDetector):
                 return False
 
             # Create directory
-            os.makedirs(os.path.dirname(model_path), exist_ok=True)
-            log_info(f"[OK] Saving GLiNER model to directory: {model_path}")
+            os.makedirs(model_dir, exist_ok=True)
+            log_info(f"[OK] Saving GLiNER model to directory: {model_dir}")
 
             # Use GLiNER's native save method if available
             if hasattr(self.model, "save_pretrained"):
-                self.model.save_pretrained(model_path)
+                self.model.save_pretrained(model_dir)
                 log_info("[OK] Used GLiNER's native save_pretrained method")
             else:
                 # Fallback to manual save
-                torch.save(self.model.state_dict(), os.path.join(model_path, "model.pt"))
+                torch.save(self.model.state_dict(), os.path.join(model_dir, "pytorch_model.bin"))
                 if hasattr(self.model, "config"):
-                    self.model.config.save_pretrained(model_path)
+                    self.model.config.save_pretrained(model_dir)
 
-            log_info(f"[OK] GLiNER model saved successfully to {model_path}")
+            log_info(f"[OK] GLiNER model saved successfully to {model_dir}")
             return True
         except Exception as e:
-            log_error(f"[ERROR] Failed to save model to file: {e}")
+            log_error(f"[ERROR] Failed to save model to directory: {e}")
             return False
 
-    def _load_local_model(self, model_path: str) -> bool:
+    def _load_local_model(self, model_dir: str) -> bool:
         """
-        Load model using GLiNER's native method.
+        Load model from directory using GLiNER's native method with additional error handling.
 
         Args:
-            model_path: Path to the model directory
+            model_dir: Path to the model directory
 
         Returns:
             True if loading succeeded, False otherwise
         """
         try:
-            log_info(f"[OK] Loading GLiNER model from directory: {model_path}")
+            log_info(f"[OK] Loading GLiNER model from directory: {model_dir}")
 
-            # Check if it's a directory or file
-            if os.path.isdir(model_path):
-                # Use GLiNER's from_pretrained method
-                self.model = GLiNER.from_pretrained(
-                    model_path,
-                    local_files_only=True
-                )
-                log_info("[OK] Loaded model using GLiNER's native from_pretrained method")
-            else:
-                log_error("[ERROR] Expected a directory for model path")
+            # Check if it's a directory
+            if not os.path.isdir(model_dir):
+                log_error(f"[ERROR] Expected a directory for model path: {model_dir}")
                 return False
 
-            return True
+            # Fix config file discrepancy before loading
+            self._fix_config_file_discrepancy()
+
+            # Use GLiNER's from_pretrained method with error catching
+            try:
+                # Check if the config.json file exists after fixing
+                config_path = os.path.join(model_dir, 'config.json')
+                if not os.path.exists(config_path):
+                    log_warning(f"[GLINER] config.json still doesn't exist after fix attempt")
+
+                self.model = GLiNER.from_pretrained(
+                    model_dir,
+                    local_files_only=True
+                )
+
+                # Explicitly set the initialized flag to True after successful load
+                self._is_initialized = True
+
+                log_info("[OK] Loaded model using GLiNER's native from_pretrained method")
+                log_info(f"[LOAD] Initialization flag explicitly set to: {self._is_initialized}")
+                return True
+            except Exception as load_error:
+                log_error(f"[ERROR] Failed to load model with native method: {load_error}")
+
+                # Try specifying the configuration file directly
+                try:
+                    # Check if gliner_config.json exists
+                    gliner_config_path = os.path.join(model_dir, 'gliner_config.json')
+                    config_path = os.path.join(model_dir, 'config.json')
+
+                    config_file = config_path if os.path.exists(config_path) else gliner_config_path
+
+                    if os.path.exists(config_file):
+                        log_info(f"[GLINER] Trying to load with explicit config path: {config_file}")
+
+                        # Import necessary classes if available
+                        try:
+                            from transformers import AutoConfig
+                            config = AutoConfig.from_pretrained(config_file)
+                            self.model = GLiNER.from_pretrained(
+                                model_dir,
+                                config=config,
+                                local_files_only=True
+                            )
+
+                            # Explicitly set the initialized flag to True after successful load
+                            self._is_initialized = True
+
+                            log_info("[OK] Loaded model with explicit config")
+                            log_info(f"[LOAD] Initialization flag explicitly set to: {self._is_initialized}")
+                            return True
+                        except ImportError:
+                            log_warning("[WARNING] Could not import AutoConfig from transformers")
+                except Exception as config_error:
+                    log_error(f"[ERROR] Failed to load with explicit config: {config_error}")
+
+                return False
         except Exception as e:
             log_error(f"[ERROR] Failed to load local model: {e}")
             return False
@@ -306,9 +474,13 @@ class GlinerEntityDetector(BaseEntityDetector):
             if not requested_entities:
                 requested_entities = self.default_entities
 
+            # Check initialization status explicitly
+            log_info(f"[GLINER] Current initialization status: {self._is_initialized}, model is {'available' if self.model is not None else 'not available'}")
+
             # Make sure the model is initialized
             if not self._is_initialized or self.model is None:
                 # Try to initialize again if needed
+                log_info("[GLINER] Model not initialized, attempting initialization")
                 success = self._initialize_model()
                 if not success:
                     log_error("[ERROR] GLiNER model initialization failed. Returning empty results.")
@@ -431,6 +603,12 @@ class GlinerEntityDetector(BaseEntityDetector):
 
             # Process text with GLiNER (this will run in a thread)
             log_info(f"[OK] Processing text with GLiNER on page {page_number}")
+
+            # Check if model is available before processing
+            if not self.model:
+                log_warning(f"[WARNING] GLiNER model not available, skipping page {page_number}")
+                return {"page": page_number, "sensitive": []}, []
+
             page_entities = await asyncio.to_thread(self._process_text_with_gliner, full_text, requested_entities)
 
             if not page_entities:
@@ -519,7 +697,7 @@ class GlinerEntityDetector(BaseEntityDetector):
 
     def _process_text_with_gliner(self, text: str, requested_entities: List[str]) -> List[Dict[str, Any]]:
         """
-        Process text with GLiNER to extract entities.
+        Process text with GLiNER to extract entities with robust error handling.
 
         Args:
             text: Text to process
@@ -532,12 +710,15 @@ class GlinerEntityDetector(BaseEntityDetector):
             if not text or len(text.strip()) < 3:
                 return []
 
-            # Ensure model is initialized
-            if not self._is_initialized or self.model is None:
-                success = self._initialize_model()
-                if not success:
-                    log_error("[ERROR] GLiNER model initialization failed in _process_text_with_gliner")
-                    return []
+            # Ensure model is initialized and available
+            if not self.model:
+                log_error("[ERROR] GLiNER model not available in _process_text_with_gliner")
+                return []
+
+            # Check initialization status explicitly
+            if not self._is_initialized:
+                log_error("[ERROR] GLiNER model not properly initialized in _process_text_with_gliner")
+                return []
 
             # Update last used timestamp
             self._last_used = time.time()
@@ -557,7 +738,7 @@ class GlinerEntityDetector(BaseEntityDetector):
                 all_entities.extend(paragraph_entities)
 
             # Deduplicate and filter entities
-            deduplicated_entities = self._deduplicate_entities(all_entities)
+            deduplicated_entities = deduplicate_entities(all_entities)
             filtered_entities = self._filter_norwegian_pronouns(deduplicated_entities)
 
             return filtered_entities
@@ -568,7 +749,7 @@ class GlinerEntityDetector(BaseEntityDetector):
 
     def _process_paragraph(self, paragraph: str, full_text: str, requested_entities: List[str]) -> List[Dict[str, Any]]:
         """
-        Process a single paragraph to extract entities.
+        Process a single paragraph to extract entities with additional error handling.
 
         Args:
             paragraph: Paragraph text to process
@@ -590,11 +771,16 @@ class GlinerEntityDetector(BaseEntityDetector):
         # If paragraph is short enough, process directly
         if len(paragraph.split()) <= max_tokens:
             try:
-                paragraph_entities = self.model.predict_entities(
-                    paragraph,
-                    requested_entities,
-                    threshold=0.5
-                )
+                # Add robust error handling around the predict_entities call
+                try:
+                    paragraph_entities = self.model.predict_entities(
+                        paragraph,
+                        requested_entities,
+                        threshold=0.5
+                    )
+                except Exception as predict_error:
+                    log_warning(f"[WARNING] Error in GLiNER predict_entities: {predict_error}")
+                    return []
 
                 # Add entities with correct offsets
                 for entity in paragraph_entities:
@@ -694,12 +880,17 @@ class GlinerEntityDetector(BaseEntityDetector):
             # Calculate absolute offset in full text
             abs_offset = para_offset + group_offset
 
-            # Process with GLiNER
-            group_entities = self.model.predict_entities(
-                text_group,
-                requested_entities,
-                threshold=0.5
-            )
+            # Add robust error handling around the predict_entities call
+            try:
+                # Process with GLiNER
+                group_entities = self.model.predict_entities(
+                    text_group,
+                    requested_entities,
+                    threshold=0.5
+                )
+            except Exception as predict_error:
+                log_warning(f"[WARNING] Error in GLiNER predict_entities for text group: {predict_error}")
+                return []
 
             # Add entities with correct offsets
             for entity in group_entities:
@@ -716,27 +907,6 @@ class GlinerEntityDetector(BaseEntityDetector):
             log_warning(f"[WARNING] Error processing text group: {e}")
 
         return entities
-
-    def _deduplicate_entities(self, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Deduplicate entities based on type, start, and end positions.
-
-        Args:
-            entities: List of entities to deduplicate
-
-        Returns:
-            Deduplicated list of entities
-        """
-        deduplicated_entities = []
-        seen = set()
-
-        for entity in entities:
-            entity_key = (entity["entity_type"], entity["start"], entity["end"])
-            if entity_key not in seen:
-                seen.add(entity_key)
-                deduplicated_entities.append(entity)
-
-        return deduplicated_entities
 
     def _filter_norwegian_pronouns(self, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -813,7 +983,15 @@ class GlinerEntityDetector(BaseEntityDetector):
             "gliner_package_available": GLINER_AVAILABLE,
             "local_model_path": self.local_model_path,
             "local_files_only": self.local_files_only,
-            "model_file_path": self.model_file_path
+            "model_dir_path": self.model_dir_path,
+            "model_directory_exists": os.path.isdir(self.model_dir_path) if self.model_dir_path else False,
+            "model_files": os.listdir(self.model_dir_path) if self.model_dir_path and os.path.isdir(self.model_dir_path) else [],
+            "config_files": {
+                "config.json": os.path.exists(os.path.join(self.model_dir_path, "config.json")) if self.model_dir_path else False,
+                "gliner_config.json": os.path.exists(os.path.join(self.model_dir_path, "gliner_config.json")) if self.model_dir_path else False
+            },
+            "global_initializing": GlinerEntityDetector._global_initializing,
+            "global_initialization_time": GlinerEntityDetector._global_initialization_time
         }
 
     def detect_sensitive_data(

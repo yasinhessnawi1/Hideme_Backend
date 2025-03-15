@@ -68,11 +68,6 @@ class DocumentProcessingFactory:
         else:
             raise ValueError(f"Unsupported document format: {document_format}")
 
-    """
-    Update to the DocumentProcessingFactory to support pre-downloaded GLiNER models.
-    """
-
-    # Update the create_entity_detector method in DocumentProcessingFactory class
     @staticmethod
     def create_entity_detector(
             engine: EntityDetectionEngine = EntityDetectionEngine.PRESIDIO,
@@ -113,6 +108,8 @@ class DocumentProcessingFactory:
                 local_files_only=local_files_only
             )
         elif engine == EntityDetectionEngine.HYBRID:
+            # Import HybridEntityDetector here to avoid circular imports
+            from backend.app.entity_detection.hybrid import HybridEntityDetector
             return HybridEntityDetector(config or {})
         else:
             raise ValueError(f"Unsupported entity detection engine: {engine}")
@@ -173,114 +170,3 @@ class DocumentProcessingFactory:
             return DocumentFormat.TXT
         else:
             raise ValueError(f"Cannot determine document format for: {document_path}")
-
-
-class HybridEntityDetector(EntityDetector):
-    """
-    A hybrid entity detector that combines results from multiple engines.
-    """
-
-    def __init__(self, config: Dict[str, Any]):
-        """
-        Initialize the hybrid detector with configuration.
-
-        Args:
-            config: Configuration dictionary with settings for each detector
-        """
-        self.detectors = []
-
-        # Create detectors based on configuration
-        if config.get("use_presidio", True):
-            self.detectors.append(PresidioEntityDetector())
-
-        if config.get("use_gemini", False):
-            self.detectors.append(GeminiEntityDetector())
-
-        if config.get("use_gliner", False):
-            model_name = config.get("gliner_model_name")
-            if model_name:
-                self.detectors.append(GlinerEntityDetector(model_name=model_name))
-            else:
-                self.detectors.append(GlinerEntityDetector())
-
-        if not self.detectors:
-            # Default to Presidio if no detectors specified
-            self.detectors.append(PresidioEntityDetector())
-
-        log_info(f"[OK]Created hybrid entity detector with {len(self.detectors)} detection engines")
-
-    def detect_sensitive_data(
-            self,
-            extracted_data: Dict[str, Any],
-            requested_entities: Optional[List[str]] = None
-    ) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any]]:
-        """
-        Detect sensitive entities using multiple detection engines.
-
-        Args:
-            extracted_data: Dictionary containing text and bounding box information
-            requested_entities: List of entity types to detect
-
-        Returns:
-            Tuple of (anonymized_text, results_json, redaction_mapping)
-        """
-        all_entities = []
-        all_redaction_mappings = []
-        anonymized_text = None
-
-        # Run detection with each engine
-        for detector in self.detectors:
-            anon_text, entities, redaction_mapping = detector.detect_sensitive_data(
-                extracted_data, requested_entities
-            )
-
-            # Use the first anonymized text (we'll merge entities, not text)
-            if anonymized_text is None:
-                anonymized_text = anon_text
-
-            all_entities.extend(entities)
-            all_redaction_mappings.append(redaction_mapping)
-
-        # Merge redaction mappings
-        merged_mapping = self._merge_redaction_mappings(all_redaction_mappings)
-
-        return anonymized_text, all_entities, merged_mapping
-
-    def _merge_redaction_mappings(
-            self,
-            redaction_mappings: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """
-        Merge multiple redaction mappings into one.
-
-        Args:
-            redaction_mappings: List of redaction mappings to merge
-
-        Returns:
-            Merged redaction mapping
-        """
-        if not redaction_mappings:
-            return {"pages": []}
-
-        merged = {"pages": []}
-        page_mappings = {}
-
-        # Group mappings by page
-        for mapping in redaction_mappings:
-            for page_info in mapping.get("pages", []):
-                page_num = page_info.get("page")
-                sensitive_items = page_info.get("sensitive", [])
-
-                if page_num not in page_mappings:
-                    page_mappings[page_num] = []
-
-                page_mappings[page_num].extend(sensitive_items)
-
-        # Create merged mapping
-        for page_num, sensitive_items in sorted(page_mappings.items()):
-            merged["pages"].append({
-                "page": page_num,
-                "sensitive": sensitive_items
-            })
-
-        return merged

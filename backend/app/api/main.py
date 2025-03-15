@@ -14,8 +14,11 @@ from backend.app.api.routes import (
     pdf_router,
     gemini_router,
     presidio_router,
-    metadata_router
+    metadata_router,
+    hybrid_router,
+    batch_router,
 )
+from backend.app.api.routes.hybrid_routes import hybrid_detect_sensitive
 
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.logger import log_info, log_error
@@ -49,6 +52,8 @@ def create_app() -> FastAPI:
     app.include_router(gemini_router, prefix="/ai", tags=["AI Detection"])
     app.include_router(presidio_router, prefix="/ml", tags=["Machine Learning Detection"])
     app.include_router(metadata_router, prefix="/help", tags=["System Metadata"])
+    app.include_router(hybrid_router, prefix="/hybrid", tags=["Hybrid Detection"])
+    app.include_router(batch_router, prefix="/batch", tags=["Batch Processing"])
 
     # Customize OpenAPI schema
     def custom_openapi():

@@ -1,25 +1,25 @@
 """
-Presidio and GLiNER entity detection routes with robust async processing support.
+Presidio and GLiNER entity detection routes with robust async processing and output sanitization.
 """
 import json
 import time
 import os
 import asyncio
-from typing import Optional, List
+from typing import Optional
 from tempfile import NamedTemporaryFile
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Form
+from fastapi import APIRouter, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 
-from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_ENTITIES
+from backend.app.configs.gliner_config import  GLINER_ENTITIES
 from backend.app.factory.document_processing import (
     DocumentProcessingFactory,
     DocumentFormat,
-    EntityDetectionEngine
 )
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.helpers.json_helper import validate_requested_entities
 from backend.app.utils.logger import default_logger as logger, log_info, log_warning, log_error
+from backend.app.utils.sanitize_utils import sanitize_detection_output
 
 router = APIRouter()
 
@@ -37,18 +37,24 @@ async def presidio_detect_sensitive(
         requested_entities: JSON string of entity types to detect (optional)
 
     Returns:
-        JSON response with redaction mapping and performance metrics
+        JSON response with sanitized redaction mapping and performance metrics
     """
     start_time = time.time()
+    processing_times = {}
+
     try:
         # Validate requested entities
         entity_list = validate_requested_entities(requested_entities)
         log_info(f"[OK] Requested entities: {entity_list}")
 
         # Read file contents
+        file_read_start = time.time()
         contents = await file.read()
+        file_read_time = time.time() - file_read_start
+        processing_times["file_read_time"] = file_read_time
 
         # Extract text from document
+        extract_start = time.time()
         if file.content_type == "application/pdf":
             with NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(contents)
@@ -78,15 +84,11 @@ async def presidio_detect_sensitive(
                     }
                 ]
             }
-        extract_time = time.time() - start_time
+        extract_time = time.time() - extract_start
+        processing_times["extraction_time"] = extract_time
 
-        # Get the cached Presidio detector
+        # Get the Presidio detector from initialization service
         detector = initialization_service.get_presidio_detector()
-        if not detector:
-            log_warning("[WARNING] No cached Presidio detector found, creating a new one")
-            detector = DocumentProcessingFactory.create_entity_detector(
-                EntityDetectionEngine.PRESIDIO
-            )
 
         # Detect sensitive data
         detection_start = time.time()
@@ -99,50 +101,62 @@ async def presidio_detect_sensitive(
         # Check if detection_result is None
         if detection_result is None:
             log_error("[ERROR] Presidio detection returned None instead of expected results")
-            return JSONResponse(content={
+            error_response = {
                 "redaction_mapping": {"pages": []},
-                "entities_detected": 0,
+                "entities_detected": {"total": 0, "by_type": {}, "by_page": {}},
                 "error": "Detection failed to return results",
                 "performance": {
                     "extraction_time": extract_time,
                     "detection_time": time.time() - detection_start,
                     "total_time": time.time() - start_time,
-                }
-            })
+                },
+                "model_info": {"engine": "presidio"}
+            }
+            return JSONResponse(content=error_response)
 
         # Safely unpack the detection results
         anonymized_text, entities, redaction_mapping = detection_result
         detection_time = time.time() - detection_start
+        processing_times["detection_time"] = detection_time
 
-        # Calculate total time
+        # Calculate total time and additional metrics
         total_time = time.time() - start_time
+        processing_times["total_time"] = total_time
 
-        # Build performance metrics
-        performance = {
-            "extraction_time": extract_time,
-            "detection_time": detection_time,
-            "total_time": total_time,
-        }
+        # Calculate word count and entity density
+        total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
+        processing_times["words_count"] = total_words
+        processing_times["pages_count"] = len(extracted_data.get("pages", []))
+
+        if total_words > 0 and entities:
+            entity_density = (len(entities) / total_words) * 1000  # Entities per 1000 words
+            processing_times["entity_density"] = entity_density
+
+        # Sanitize output for consistent response format
+        sanitized_response = sanitize_detection_output(
+            anonymized_text, entities, redaction_mapping, processing_times
+        )
+
+        # Add model information
+        sanitized_response["model_info"] = {"engine": "presidio"}
 
         log_info(f"[PERF] Presidio detection completed in {total_time:.2f}s " 
-                f"(Extract: {extract_time:.2f}s, Detect: {detection_time:.2f}s)")
+                f"(Extract: {extract_time:.2f}s, Detect: {detection_time:.2f}s), "
+                f"Found {sanitized_response['entities_detected']['total']} entities")
 
-        return JSONResponse(content={
-            "redaction_mapping": redaction_mapping,
-            "entities_detected": len(entities),
-            "performance": performance
-        })
+        return JSONResponse(content=sanitized_response)
 
     except Exception as e:
         log_error(f"[ERROR] Error in presidio_detect_sensitive: {str(e)}")
-        return JSONResponse(status_code=500, content={
+        # Standardized error response
+        error_response = {
             "redaction_mapping": {"pages": []},
-            "entities_detected": 0,
+            "entities_detected": {"total": 0, "by_type": {}, "by_page": {}},
             "error": str(e),
-            "performance": {
-                "total_time": time.time() - start_time
-            }
-        })
+            "performance": {"total_time": time.time() - start_time},
+            "model_info": {"engine": "presidio"}
+        }
+        return JSONResponse(status_code=500, content=error_response)
 
 
 @router.post("/gl_detect")
@@ -158,9 +172,11 @@ async def gliner_detect_sensitive_entities(
         requested_entities: JSON string of entity types to detect (optional)
 
     Returns:
-        JSON response with redaction mapping and performance metrics
+        JSON response with sanitized redaction mapping and performance metrics
     """
     start_time = time.time()
+    processing_times = {}
+
     try:
         # GLiNER supported labels
         labels = GLINER_ENTITIES
@@ -176,9 +192,13 @@ async def gliner_detect_sensitive_entities(
             entity_list = labels
 
         # Read file contents
+        file_read_start = time.time()
         contents = await file.read()
+        file_read_time = time.time() - file_read_start
+        processing_times["file_read_time"] = file_read_time
 
         # Extract text from document
+        extract_start = time.time()
         if file.content_type == "application/pdf":
             with NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(contents)
@@ -207,19 +227,11 @@ async def gliner_detect_sensitive_entities(
                     }
                 ]
             }
-        extract_time = time.time() - start_time
+        extract_time = time.time() - extract_start
+        processing_times["extraction_time"] = extract_time
 
-        # Get or create GLiNER detector with the requested entities
+        # Get GLiNER detector from initialization service with the requested entities
         detector = initialization_service.get_gliner_detector(entity_list)
-        if not detector:
-            log_warning("[WARNING] No cached GLiNER detector found, creating a new one")
-            detector = DocumentProcessingFactory.create_entity_detector(
-                EntityDetectionEngine.GLINER,
-                config={
-                    "model_name": GLINER_MODEL_NAME,
-                    "entities": entity_list
-                }
-            )
 
         # Detect sensitive data
         detection_start = time.time()
@@ -230,47 +242,59 @@ async def gliner_detect_sensitive_entities(
         # Check if detection_result is None
         if detection_result is None:
             log_error("[ERROR] GLiNER detection returned None instead of expected results")
-            return JSONResponse(content={
+            error_response = {
                 "redaction_mapping": {"pages": []},
-                "entities_detected": 0,
+                "entities_detected": {"total": 0, "by_type": {}, "by_page": {}},
                 "error": "Detection failed to return results",
                 "performance": {
                     "extraction_time": extract_time,
                     "detection_time": time.time() - detection_start,
                     "total_time": time.time() - start_time,
-                }
-            })
+                },
+                "model_info": {"engine": "gliner"}
+            }
+            return JSONResponse(content=error_response)
 
         # Safely unpack the detection results
         anonymized_text, entities, redaction_mapping = detection_result
         detection_time = time.time() - detection_start
+        processing_times["detection_time"] = detection_time
 
-        # Calculate total time
+        # Calculate total time and additional metrics
         total_time = time.time() - start_time
+        processing_times["total_time"] = total_time
 
-        # Build performance metrics
-        performance = {
-            "extraction_time": extract_time,
-            "detection_time": detection_time,
-            "total_time": total_time,
-        }
+        # Calculate word count and entity density
+        total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
+        processing_times["words_count"] = total_words
+        processing_times["pages_count"] = len(extracted_data.get("pages", []))
+
+        if total_words > 0 and entities:
+            entity_density = (len(entities) / total_words) * 1000  # Entities per 1000 words
+            processing_times["entity_density"] = entity_density
+
+        # Sanitize output for consistent response format
+        sanitized_response = sanitize_detection_output(
+            anonymized_text, entities, redaction_mapping, processing_times
+        )
+
+        # Add model information
+        sanitized_response["model_info"] = {"engine": "gliner"}
 
         log_info(f"[PERF] GLiNER detection completed in {total_time:.2f}s " 
-                f"(Extract: {extract_time:.2f}s, Detect: {detection_time:.2f}s)")
+                f"(Extract: {extract_time:.2f}s, Detect: {detection_time:.2f}s), "
+                f"Found {sanitized_response['entities_detected']['total']} entities")
 
-        return JSONResponse(content={
-            "redaction_mapping": redaction_mapping,
-            "entities_detected": len(entities),
-            "performance": performance
-        })
+        return JSONResponse(content=sanitized_response)
 
     except Exception as e:
         log_error(f"[ERROR] Error in gliner_detect_sensitive_entities: {str(e)}")
-        return JSONResponse(status_code=500, content={
+        # Standardized error response
+        error_response = {
             "redaction_mapping": {"pages": []},
-            "entities_detected": 0,
+            "entities_detected": {"total": 0, "by_type": {}, "by_page": {}},
             "error": str(e),
-            "performance": {
-                "total_time": time.time() - start_time
-            }
-        })
+            "performance": {"total_time": time.time() - start_time},
+            "model_info": {"engine": "gliner"}
+        }
+        return JSONResponse(status_code=500, content=error_response)

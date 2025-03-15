@@ -1,5 +1,5 @@
 """
- document processing orchestration services.
+Document processing orchestration services.
 
 This module provides high-level services for orchestrating the entire
 document processing workflow with improved parallel processing.
@@ -7,11 +7,10 @@ document processing workflow with improved parallel processing.
 import os
 import time
 import asyncio
-from typing import Dict, Any, List, Optional, Union, Tuple
+from typing import Dict, Any, List, Optional, Union
 
-from backend.app.utils.logger import log_info, log_warning, log_error
+from backend.app.utils.logger import log_info, log_error
 from backend.app.utils.helpers.json_helper import validate_requested_entities
-from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
 from backend.app.factory.document_processing import (
     DocumentProcessingFactory,
     DocumentFormat,
@@ -22,7 +21,7 @@ from backend.app.services.initialization_service import initialization_service
 
 class DocumentProcessingService:
     """
-    High-level service for orchestrating document processing workflows with  performance.
+    High-level service for orchestrating document processing workflows with optimized performance.
 
     Features:
     - Uses cached detector instances from initialization service
@@ -81,15 +80,17 @@ class DocumentProcessingService:
             detector_start = time.time()
             log_info(f"[OK] Getting cached {detection_engine.name} detector")
 
-            if detection_engine == EntityDetectionEngine.PRESIDIO:
-                detector = initialization_service.get_presidio_detector()
-            elif detection_engine == EntityDetectionEngine.GEMINI:
-                detector = initialization_service.get_gemini_detector()
-            elif detection_engine == EntityDetectionEngine.GLINER:
-                detector = initialization_service.get_gliner_detector(entity_list)
-            else:
-                # For any other engine, create a new instance
-                detector = DocumentProcessingFactory.create_entity_detector(detection_engine)
+            # Get appropriate detector from initialization service
+            config = None
+            if detection_engine == EntityDetectionEngine.HYBRID:
+                # Configure hybrid detector options
+                config = {
+                    "use_presidio": True,
+                    "use_gemini": True,
+                    "use_gliner": False
+                }
+
+            detector = initialization_service.get_detector(detection_engine, config=config)
 
             detector_time = time.time() - detector_start
             performance_metrics["detector_init_time"] = detector_time
@@ -269,129 +270,3 @@ class DocumentProcessingService:
             "entities_by_type": entities_by_type,
             "sensitive_by_page": sensitive_by_page
         }
-
-
-class BatchDocumentProcessingService:
-    """
-    Service for processing multiple documents in batch with parallel processing.
-    """
-
-    def __init__(self):
-        """Initialize the service."""
-        self.document_service = DocumentProcessingService()
-
-    async def process_documents_async(
-            self,
-            input_files: List[str],
-            output_dir: str,
-            requested_entities: Optional[Union[str, List[str]]] = None,
-            detection_engine: EntityDetectionEngine = EntityDetectionEngine.PRESIDIO,
-            max_parallel_docs: int = 4
-    ) -> List[Dict[str, Any]]:
-        """
-        Process multiple documents for sensitive information and apply redactions asynchronously.
-
-        Args:
-            input_files: List of paths to input documents
-            output_dir: Directory to save redacted documents
-            requested_entities: JSON string or list of entity types to detect
-            detection_engine: Entity detection engine to use
-            max_parallel_docs: Maximum number of documents to process in parallel
-
-        Returns:
-            List of dictionaries with processing results
-        """
-        start_time = time.time()
-
-        # Ensure output directory exists
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Prepare document processing tasks
-        async def process_doc(input_file):
-            # Generate output path
-            filename = os.path.basename(input_file)
-            base_name, ext = os.path.splitext(filename)
-            output_path = os.path.join(output_dir, f"{base_name}_redacted{ext}")
-
-            # Process document
-            return await self.document_service.process_document_async(
-                input_file,
-                output_path,
-                requested_entities,
-                detection_engine
-            )
-
-        # Process documents in parallel
-        log_info(f"[OK] Starting batch processing of {len(input_files)} documents")
-
-        # Use adaptive concurrency based on number of documents
-        optimal_workers = ParallelProcessingHelper.get_optimal_workers(
-            len(input_files),
-            min_workers=1,
-            max_workers=max_parallel_docs
-        )
-
-        results, stats = await ParallelProcessingHelper.process_items_in_parallel(
-            input_files,
-            process_doc,
-            max_workers=optimal_workers
-        )
-
-        # Collect batch statistics
-        success_count = sum(1 for r in results if r.get("status") == "success")
-        error_count = len(results) - success_count
-
-        batch_time = time.time() - start_time
-        log_info(f"[PERF] Batch processing completed in {batch_time:.2f}s. "
-                f"Successful: {success_count}, Failed: {error_count}")
-
-        # Add batch statistics
-        batch_stats = {
-            "total_documents": len(input_files),
-            "successful": success_count,
-            "failed": error_count,
-            "total_time": batch_time,
-            "avg_time_per_doc": batch_time / len(input_files) if input_files else 0,
-            "parallel_workers": optimal_workers,
-            **stats
-        }
-
-        # Add batch statistics to each result
-        for result in results:
-            result["batch_stats"] = batch_stats
-
-        return results
-
-    def process_documents(
-            self,
-            input_files: List[str],
-            output_dir: str,
-            requested_entities: Optional[Union[str, List[str]]] = None,
-            detection_engine: EntityDetectionEngine = EntityDetectionEngine.PRESIDIO,
-            max_parallel_docs: int = 4
-    ) -> List[Dict[str, Any]]:
-        """
-        Process multiple documents for sensitive information and apply redactions.
-        Synchronous wrapper around the async version.
-
-        Args:
-            input_files: List of paths to input documents
-            output_dir: Directory to save redacted documents
-            requested_entities: JSON string or list of entity types to detect
-            detection_engine: Entity detection engine to use
-            max_parallel_docs: Maximum number of documents to process in parallel
-
-        Returns:
-            List of dictionaries with processing results
-        """
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(
-                self.process_documents_async(
-                    input_files, output_dir, requested_entities,
-                    detection_engine, max_parallel_docs
-                )
-            )
-        finally:
-            loop.close()
