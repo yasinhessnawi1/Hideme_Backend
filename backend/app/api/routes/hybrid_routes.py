@@ -5,18 +5,18 @@ caching and output sanitization.
 import time
 import asyncio
 import os
-from typing import Optional, List
+from typing import Optional
 from tempfile import NamedTemporaryFile
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Form
+from fastapi import APIRouter, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 
 from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_ENTITIES
 from backend.app.factory.document_processing import (
     DocumentProcessingFactory,
     DocumentFormat,
-    EntityDetectionEngine
 )
+from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.helpers.json_helper import validate_requested_entities
 from backend.app.utils.logger import log_info, log_error, log_warning
 from backend.app.utils.sanitize_utils import sanitize_detection_output
@@ -52,6 +52,8 @@ async def hybrid_detect_sensitive(
         # Process and validate requested entities
         entity_list = validate_requested_entities(requested_entities)
         log_info(f"[OK] Requested entities for hybrid detection: {entity_list}")
+        if not entity_list:
+            entity_list = GLINER_ENTITIES
 
         # Record file read time
         file_read_start = time.time()
@@ -92,7 +94,7 @@ async def hybrid_detect_sensitive(
         extract_time = time.time() - extract_start
         processing_times["extraction_time"] = extract_time
 
-        # Configure the hybrid detector
+        # Configure the hybrid detector options
         config = {
             "use_presidio": use_presidio,
             "use_gemini": use_gemini,
@@ -101,12 +103,9 @@ async def hybrid_detect_sensitive(
             "entities": entity_list
         }
 
-        # Create hybrid entity detector
+        # Get hybrid detector from initialization service
         detector_create_start = time.time()
-        detector = DocumentProcessingFactory.create_entity_detector(
-            EntityDetectionEngine.HYBRID,
-            config=config
-        )
+        detector = initialization_service.get_hybrid_detector(config)
         detector_create_time = time.time() - detector_create_start
         processing_times["detector_init_time"] = detector_create_time
 

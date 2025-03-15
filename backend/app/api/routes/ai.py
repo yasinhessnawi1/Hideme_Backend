@@ -5,16 +5,15 @@ import json
 import time
 import os
 import asyncio
-from typing import Optional, List
+from typing import Optional
 from tempfile import NamedTemporaryFile
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Form
+from fastapi import APIRouter, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 
 from backend.app.factory.document_processing import (
     DocumentProcessingFactory,
     DocumentFormat,
-    EntityDetectionEngine
 )
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.logger import default_logger as logger, log_info, log_warning
@@ -91,13 +90,8 @@ async def ai_detect_sensitive(
         extract_time = time.time() - extract_start
         processing_times["extraction_time"] = extract_time
 
-        # Get the cached Gemini detector
+        # Get the Gemini detector from initialization service
         detector = initialization_service.get_gemini_detector()
-        if not detector:
-            log_warning("[WARNING] No cached Gemini detector found, creating a new one")
-            detector = DocumentProcessingFactory.create_entity_detector(
-                EntityDetectionEngine.GEMINI
-            )
 
         # Detect sensitive data using async method
         detection_start = time.time()

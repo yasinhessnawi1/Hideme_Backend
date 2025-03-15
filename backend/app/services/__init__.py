@@ -7,12 +7,13 @@ components of the document processing system.
 from backend.app.services.configuration import config_service
 from backend.app.services.document_processing import (
     DocumentProcessingService,
-    BatchDocumentProcessingService
+
 )
+from backend.app.services.batch_processing_service import BatchProcessingService
 
 # Export classes and instances
 __all__ = [
     "config_service",
     "DocumentProcessingService",
-    "BatchDocumentProcessingService"
+    "BatchProcessingService"
 ]

@@ -1,5 +1,5 @@
 """
-Service for initializing and caching detection engines with simplified GLiNER model handling.
+Service for initializing and caching detection engines with improved resource management.
 
 This module provides a thread-safe singleton service that loads entity detection engines
 once at startup and provides optimized access to them throughout the application.
@@ -14,19 +14,15 @@ from backend.app.factory.document_processing import (
     DocumentProcessingFactory,
     EntityDetectionEngine
 )
-from backend.app.configs.presidio_config import REQUESTED_ENTITIES
 from backend.app.utils.logger import default_logger as logger, log_info, log_warning, log_error
 
 
 class InitializationService:
     """
-    Service for initializing and caching entity detectors with simplified GLiNER model handling.
+    Service for initializing and caching entity detectors with improved resource management.
 
     This service creates and caches instances of entity detectors to avoid
     recreating them on each request, significantly improving performance.
-
-    The GLiNER model is downloaded once at server startup and saved to a local file,
-    then loaded from this local file for all subsequent requests.
     """
 
     _instance = None
@@ -47,21 +43,23 @@ class InitializationService:
                 # Initialize detector caches
                 self._detectors = {}
 
-                # Single GLiNER model instance (we'll only have one)
-                self._gliner_model = None
+                # Cache for hybrid detectors with different configurations
+                self._hybrid_detectors = {}
 
                 # Track initialization status
                 self._initialization_status = {
                     'presidio': False,
                     'gemini': False,
-                    'gliner': False
+                    'gliner': False,
+                    'hybrid': False
                 }
 
                 # Track detector usage
                 self._detector_metrics = {
                     'presidio': {'uses': 0, 'last_used': None},
                     'gemini': {'uses': 0, 'last_used': None},
-                    'gliner': {'uses': 0, 'last_used': None}
+                    'gliner': {'uses': 0, 'last_used': None},
+                    'hybrid': {}  # Will contain metrics for different configurations
                 }
 
                 # Ensure model directory exists
@@ -72,7 +70,7 @@ class InitializationService:
 
     def initialize_detectors(self, force_reload: bool = False):
         """
-        Initialize all detectors at startup, with simplified GLiNER handling.
+        Initialize all detectors at startup.
 
         Args:
             force_reload: Whether to force reloading of already initialized detectors
@@ -99,24 +97,22 @@ class InitializationService:
                     self._detector_metrics['gemini']['last_used'] = time.time()
                     log_info("[INIT] Gemini detector initialized successfully")
 
-                # Initialize GLiNER model - simplified approach
-                if force_reload or self._gliner_model is None:
-                    self._initialize_gliner_model()
+                # Initialize GLiNER detector if needed
+                if force_reload or 'gliner' not in self._detectors:
+                    log_info("[INIT] Initializing GLiNER detector...")
+                    self._initialize_gliner_detector()
 
                 log_info("[INIT] All detectors initialized")
             except Exception as e:
                 log_error(f"[ERROR] Failed to initialize detectors: {e}")
                 raise
 
-    def _initialize_gliner_model(self):
+    def _initialize_gliner_detector(self):
         """
-        Download and initialize the GLiNER model once, saving it to a local file.
-
-        This simplified approach downloads the model if not found locally,
-        then saves it for future use.
+        Initialize the GLiNER detector with the default configuration.
         """
         try:
-            log_info("[INIT] Initializing GLiNER model...")
+            log_info("[INIT] Initializing GLiNER detector...")
             start_time = time.time()
 
             # Check if model file already exists
@@ -136,7 +132,7 @@ class InitializationService:
             }
 
             # Create GLiNER detector which will download or load the model
-            self._gliner_model = DocumentProcessingFactory.create_entity_detector(
+            self._detectors['gliner'] = DocumentProcessingFactory.create_entity_detector(
                 EntityDetectionEngine.GLINER,
                 config=config
             )
@@ -146,36 +142,36 @@ class InitializationService:
             self._detector_metrics['gliner']['last_used'] = time.time()
 
             load_time = time.time() - start_time
-            log_info(f"[INIT] GLiNER model initialized successfully in {load_time:.2f}s")
+            log_info(f"[INIT] GLiNER detector initialized successfully in {load_time:.2f}s")
 
-            # Verify model is working with a simple test
-            self._test_gliner_model()
+            # Test the GLiNER detector
+            self._test_gliner_detector()
 
         except Exception as e:
             self._initialization_status['gliner'] = False
-            log_error(f"[ERROR] Failed to initialize GLiNER model: {e}")
+            log_error(f"[ERROR] Failed to initialize GLiNER detector: {e}")
 
-    def _test_gliner_model(self):
-        """Verify the GLiNER model is working correctly with a simple test."""
+    def _test_gliner_detector(self):
+        """Test the GLiNER detector with a simple prediction."""
         try:
-            if not self._gliner_model or not hasattr(self._gliner_model, 'model'):
-                log_warning("[WARNING] GLiNER model not properly initialized, cannot test")
+            if 'gliner' not in self._detectors or not hasattr(self._detectors['gliner'], 'model'):
+                log_warning("[WARNING] GLiNER detector not properly initialized, cannot test")
                 return
 
-            # Get model status
-            if hasattr(self._gliner_model, 'get_status'):
-                status = self._gliner_model.get_status()
-                log_info(f"[INIT] GLiNER model status: initialized={status.get('initialized', False)}, model_available={status.get('model_available', False)}")
+            # Get detector status
+            if hasattr(self._detectors['gliner'], 'get_status'):
+                status = self._detectors['gliner'].get_status()
+                log_info(f"[INIT] GLiNER detector status: initialized={status.get('initialized', False)}, model_available={status.get('model_available', False)}")
 
             # Run a simple test prediction
-            if hasattr(self._gliner_model, '_process_text_with_gliner'):
+            if hasattr(self._detectors['gliner'], '_process_text_with_gliner'):
                 test_text = "John Smith lives at 123 Main St. and works for Microsoft."
                 test_entities = ["Person", "Organization", "Address"]
-                results = self._gliner_model._process_text_with_gliner(test_text, test_entities)
-                log_info(f"[INIT] GLiNER model test successful. Found {len(results)} entities.")
+                results = self._detectors['gliner']._process_text_with_gliner(test_text, test_entities)
+                log_info(f"[INIT] GLiNER detector test successful. Found {len(results)} entities.")
 
         except Exception as e:
-            log_warning(f"[WARNING] GLiNER model test failed: {e}")
+            log_warning(f"[WARNING] GLiNER detector test failed: {e}")
 
     def get_presidio_detector(self):
         """
@@ -223,44 +219,123 @@ class InitializationService:
         """
         Get the GLiNER detector instance.
 
-        This simplified approach uses a single GLiNER model instance for all entity types.
-
         Args:
-            entities: Entity types to detect (ignored in simplified approach)
+            entities: Entity types to detect (used for configuration)
 
         Returns:
-            GLiNER detector instance or None if not initialized
+            GLiNER detector instance
         """
         with self._lock:
             # Initialize if needed
-            if self._gliner_model is None:
-                log_info("[LAZY] Lazily initializing GLiNER model")
-                self._initialize_gliner_model()
+            if 'gliner' not in self._detectors:
+                log_info("[LAZY] Lazily initializing GLiNER detector")
+                self._initialize_gliner_detector()
 
-            # Update usage metrics if model is available
-            if self._gliner_model is not None:
+            # Update usage metrics
+            if 'gliner' in self._detectors:
                 self._detector_metrics['gliner']['uses'] += 1
                 self._detector_metrics['gliner']['last_used'] = time.time()
 
-            return self._gliner_model
+            return self._detectors.get('gliner')
 
-    def get_detector(self, engine_type: str, entities: Optional[List[str]] = None):
+    def get_hybrid_detector(self, config: Dict[str, Any]):
+        """
+        Get or create a hybrid detector with the given configuration.
+
+        This method creates and caches hybrid detectors with different configurations
+        to avoid recreating them for each request.
+
+        Args:
+            config: Configuration dictionary for the hybrid detector
+
+        Returns:
+            Hybrid detector instance
+        """
+        # Create a configuration key to uniquely identify this configuration
+        config_key = self._create_hybrid_config_key(config)
+
+        # Get component detectors outside the lock to prevent deadlock
+        detectors = []
+        if config.get('use_presidio', True):
+            detectors.append(self.get_presidio_detector())
+        if config.get('use_gemini', False):
+            detectors.append(self.get_gemini_detector())
+        if config.get('use_gliner', False):
+            detectors.append(self.get_gliner_detector(config.get('entities')))
+
+        # Create config with pre-created detectors
+        hybrid_config = config.copy()
+        hybrid_config["detectors"] = detectors
+
+        # Now get or create the hybrid detector
+        with self._lock:
+            if config_key not in self._hybrid_detectors:
+                log_info(f"[LAZY] Creating new hybrid detector with configuration {config_key}")
+
+                # Create hybrid detector with pre-created components
+                from backend.app.entity_detection.hybrid import HybridEntityDetector
+                detector = HybridEntityDetector(hybrid_config)
+
+                self._hybrid_detectors[config_key] = detector
+
+                # Initialize metrics
+                if config_key not in self._detector_metrics['hybrid']:
+                    self._detector_metrics['hybrid'][config_key] = {
+                        'uses': 0, 'last_used': None
+                    }
+
+                self._initialization_status['hybrid'] = True
+
+            # Update metrics
+            self._detector_metrics['hybrid'][config_key]['uses'] += 1
+            self._detector_metrics['hybrid'][config_key]['last_used'] = time.time()
+
+            return self._hybrid_detectors[config_key]
+
+    def _create_hybrid_config_key(self, config: Dict[str, Any]) -> str:
+        """
+        Create a unique key for a hybrid detector configuration.
+
+        Args:
+            config: Configuration dictionary
+
+        Returns:
+            String key uniquely identifying this configuration
+        """
+        # Extract key configuration parameters
+        use_presidio = config.get('use_presidio', True)
+        use_gemini = config.get('use_gemini', False)
+        use_gliner = config.get('use_gliner', False)
+
+        # Create a simple string key
+        return f"presidio={use_presidio}_gemini={use_gemini}_gliner={use_gliner}"
+
+    def get_detector(self, engine_type: EntityDetectionEngine, config: Optional[Dict[str, Any]] = None):
         """
         Get a detector based on engine type.
 
         Args:
-            engine_type: Type of engine (presidio, gemini, gliner)
-            entities: List of entity types for GLiNER
+            engine_type: Type of engine
+            config: Configuration for the detector (for hybrid or specialized detectors)
 
         Returns:
             Detector instance
         """
-        if engine_type.lower() == 'presidio':
+        if engine_type == EntityDetectionEngine.PRESIDIO:
             return self.get_presidio_detector()
-        elif engine_type.lower() == 'gemini':
+        elif engine_type == EntityDetectionEngine.GEMINI:
             return self.get_gemini_detector()
-        elif engine_type.lower() == 'gliner':
+        elif engine_type == EntityDetectionEngine.GLINER:
+            entities = config.get('entities') if config else None
             return self.get_gliner_detector(entities)
+        elif engine_type == EntityDetectionEngine.HYBRID:
+            if not config:
+                config = {
+                    'use_presidio': True,
+                    'use_gemini': True,
+                    'use_gliner': False
+                }
+            return self.get_hybrid_detector(config)
         else:
             raise ValueError(f"Unknown detector type: {engine_type}")
 
@@ -294,10 +369,12 @@ class InitializationService:
             'detectors': {
                 'presidio': self._initialization_status['presidio'],
                 'gemini': self._initialization_status['gemini'],
-                'gliner': self._initialization_status['gliner']
+                'gliner': self._initialization_status['gliner'],
+                'hybrid': self._initialization_status['hybrid']
             },
             'model_dir': GLINER_CONFIG['local_model_path'],
-            'models_available': os.path.exists(GLINER_CONFIG['local_model_path']) and len(os.listdir(GLINER_CONFIG['local_model_path'])) > 0
+            'models_available': os.path.exists(GLINER_CONFIG['local_model_path']) and len(os.listdir(GLINER_CONFIG['local_model_path'])) > 0,
+            'hybrid_configurations': len(self._hybrid_detectors)
         }
 
         # Set overall status

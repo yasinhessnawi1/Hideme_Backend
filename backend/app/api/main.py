@@ -16,6 +16,7 @@ from backend.app.api.routes import (
     presidio_router,
     metadata_router,
     hybrid_router,
+    batch_router,
 )
 from backend.app.api.routes.hybrid_routes import hybrid_detect_sensitive
 
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(presidio_router, prefix="/ml", tags=["Machine Learning Detection"])
     app.include_router(metadata_router, prefix="/help", tags=["System Metadata"])
     app.include_router(hybrid_router, prefix="/hybrid", tags=["Hybrid Detection"])
+    app.include_router(batch_router, prefix="/batch", tags=["Batch Processing"])
 
     # Customize OpenAPI schema
     def custom_openapi():

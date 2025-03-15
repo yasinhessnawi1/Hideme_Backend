@@ -5,17 +5,16 @@ import json
 import time
 import os
 import asyncio
-from typing import Optional, List
+from typing import Optional
 from tempfile import NamedTemporaryFile
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Form
+from fastapi import APIRouter, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 
-from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_ENTITIES
+from backend.app.configs.gliner_config import  GLINER_ENTITIES
 from backend.app.factory.document_processing import (
     DocumentProcessingFactory,
     DocumentFormat,
-    EntityDetectionEngine
 )
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.helpers.json_helper import validate_requested_entities
@@ -88,13 +87,8 @@ async def presidio_detect_sensitive(
         extract_time = time.time() - extract_start
         processing_times["extraction_time"] = extract_time
 
-        # Get the cached Presidio detector
+        # Get the Presidio detector from initialization service
         detector = initialization_service.get_presidio_detector()
-        if not detector:
-            log_warning("[WARNING] No cached Presidio detector found, creating a new one")
-            detector = DocumentProcessingFactory.create_entity_detector(
-                EntityDetectionEngine.PRESIDIO
-            )
 
         # Detect sensitive data
         detection_start = time.time()
@@ -236,17 +230,8 @@ async def gliner_detect_sensitive_entities(
         extract_time = time.time() - extract_start
         processing_times["extraction_time"] = extract_time
 
-        # Get or create GLiNER detector with the requested entities
+        # Get GLiNER detector from initialization service with the requested entities
         detector = initialization_service.get_gliner_detector(entity_list)
-        if not detector:
-            log_warning("[WARNING] No cached GLiNER detector found, creating a new one")
-            detector = DocumentProcessingFactory.create_entity_detector(
-                EntityDetectionEngine.GLINER,
-                config={
-                    "model_name": GLINER_MODEL_NAME,
-                    "entities": entity_list
-                }
-            )
 
         # Detect sensitive data
         detection_start = time.time()

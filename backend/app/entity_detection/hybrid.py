@@ -32,54 +32,35 @@ class HybridEntityDetector(EntityDetector):
         self.detectors = []
         self.config = config
 
-        # Create detectors based on configuration, using cached instances when available
+        # If pre-created detectors are provided, use them directly
+        if "detectors" in config and isinstance(config["detectors"], list):
+            self.detectors = config["detectors"]
+            detector_types = [type(d).__name__ for d in self.detectors]
+            log_info(f"[HYBRID] Using pre-created detectors: {detector_types}")
+            return
+
+        # Create detectors based on configuration, using cached instances from initialization service
         if config.get("use_presidio", True):
-            # Try to get cached Presidio detector
+            # Get cached Presidio detector
             detector = initialization_service.get_presidio_detector()
-            if not detector:
-                log_warning("[WARNING] No cached Presidio detector found, creating a new one")
-                from backend.app.entity_detection.presidio import PresidioEntityDetector
-                detector = PresidioEntityDetector()
             self.detectors.append(detector)
 
         if config.get("use_gemini", False):
-            # Try to get cached Gemini detector
+            # Get cached Gemini detector
             detector = initialization_service.get_gemini_detector()
-            if not detector:
-                log_warning("[WARNING] No cached Gemini detector found, creating a new one")
-                from backend.app.entity_detection.gemini import GeminiEntityDetector
-                detector = GeminiEntityDetector()
             self.detectors.append(detector)
 
         if config.get("use_gliner", False):
             # For GLiNER, get the specific model based on requested entities
-            model_name = config.get("gliner_model_name")
             entity_list = config.get("entities", [])
 
-            # Try to get cached GLiNER detector
+            # Get cached GLiNER detector
             detector = initialization_service.get_gliner_detector(entity_list)
-            if not detector:
-                log_warning("[WARNING] No cached GLiNER detector found, creating a new one")
-
-                # Import GLiNER detector here to avoid circular imports
-                from backend.app.entity_detection.gliner import GlinerEntityDetector
-                from backend.app.configs.gliner_config import GLINER_MODEL_PATH
-
-                detector = GlinerEntityDetector(
-                    model_name=model_name,
-                    entities=entity_list,
-                    local_model_path=config.get("local_model_path", GLINER_MODEL_PATH),
-                    local_files_only=config.get("local_files_only", False)
-                )
             self.detectors.append(detector)
 
         if not self.detectors:
             # Default to Presidio if no detectors specified
             detector = initialization_service.get_presidio_detector()
-            if not detector:
-                log_warning("[WARNING] No cached Presidio detector found, creating a new one")
-                from backend.app.entity_detection.presidio import PresidioEntityDetector
-                detector = PresidioEntityDetector()
             self.detectors.append(detector)
 
         detector_types = [type(d).__name__ for d in self.detectors]
@@ -144,7 +125,8 @@ class HybridEntityDetector(EntityDetector):
             self,
             extracted_data: Dict[str, Any],
             requested_entities: Optional[List[str]] = None
-    ) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any]]:
+    ) -> tuple[str, list[Any], dict[str, list[Any]]] | None | tuple[str, list[Any], dict[str, list[Any]]] | tuple[
+        str, list[Any], dict[str, list[Any]]]:
         """
         Detect sensitive entities using multiple detection engines (sync wrapper).
 

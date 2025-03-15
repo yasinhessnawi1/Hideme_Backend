@@ -125,8 +125,6 @@ def main():
         except Exception as e:
             print(f"Error: {e}")
 
-        # Wait for 5 seconds before the next request
-        time.sleep(5)
 
 if __name__ == "__main__":
     main()
