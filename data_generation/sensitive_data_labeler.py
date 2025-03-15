@@ -10,18 +10,26 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backend', 
 API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=API_KEY)
 
+# Directory setup
 DATA_FOLDER = os.path.join(os.path.dirname(__file__), 'data')
 TRAINING_FOLDER = os.path.join(os.path.dirname(__file__), 'training_data')
 
 if not os.path.exists(TRAINING_FOLDER):
     os.makedirs(TRAINING_FOLDER)
 
+# Track processed files to avoid reprocessing
+processed_files = set()
 
-def get_all_txt_files():
-    """Retrieve all .txt files from DATA_FOLDER, sorted by creation time (oldest first)."""
-    txt_files = [f for f in os.listdir(DATA_FOLDER) if f.endswith('.txt')]
-    txt_files.sort(key=lambda f: os.path.getctime(os.path.join(DATA_FOLDER, f)))  # Sort by creation time
-    return txt_files
+
+def get_next_unprocessed_file():
+    """Get the next unprocessed .txt file from the data folder, sorted by creation time."""
+    txt_files = [f for f in os.listdir(DATA_FOLDER) if f.endswith('.txt') and f not in processed_files]
+    if not txt_files:
+        return None
+
+    # Sort by creation time (oldest first)
+    txt_files.sort(key=lambda f: os.path.getctime(os.path.join(DATA_FOLDER, f)))
+    return txt_files[0]
 
 
 def clean_json_response(response_text):
@@ -84,25 +92,30 @@ def extract_sensitive_data(text):
     )
 
     model = genai.GenerativeModel("gemini-1.5-pro")
-    response = model.generate_content(prompt)
 
-    raw_response = response.text
-    print("Raw API Response:", raw_response)  # Debugging print
+    try:
+        response = model.generate_content(prompt)
+        raw_response = response.text
+        print("Raw API Response:", raw_response)
 
-    return clean_json_response(raw_response)
+        # Attempt to clean up gRPC resources to prevent timeout error
+        if hasattr(model, "_client") and hasattr(model._client, "close"):
+            try:
+                model._client.close()
+            except Exception as e:
+                print(f"Error closing gRPC client: {e}")
+
+        return clean_json_response(raw_response)
+    except Exception as e:
+        print(f"API Error: {e}")
+        return {"error": f"API Error: {str(e)}"}
 
 
-def process_all_reports():
-    """Iterate through all .txt reports, process each, and wait 20 seconds between API calls."""
-    txt_files = get_all_txt_files()
+def process_file(filename):
+    """Process a single file and save the labeled data to training_data.jsonl."""
+    file_path = os.path.join(DATA_FOLDER, filename)
 
-    if not txt_files:
-        print("No report files found!")
-        return
-
-    for txt_file in txt_files:
-        file_path = os.path.join(DATA_FOLDER, txt_file)
-
+    try:
         with open(file_path, 'r', encoding='utf-8') as file:
             report_text = file.read().strip()
 
@@ -110,8 +123,8 @@ def process_all_reports():
         labeled_data = extract_sensitive_data(report_text)
 
         if "error" in labeled_data:
-            print("Error in response:", labeled_data["error"])
-            continue  # Skip this file and move to the next one
+            print(f"Error in response for {filename}: {labeled_data['error']}")
+            return False
 
         # Convert to JSONL format with proper Unicode encoding
         jsonl_entry = json.dumps({
@@ -127,10 +140,43 @@ def process_all_reports():
 
         print(f"Labeled training data saved to {training_file}")
 
+        # Mark file as processed
+        processed_files.add(filename)
+        return True
 
+    except Exception as e:
+        print(f"Error processing file {filename}: {str(e)}")
+        return False
+
+
+def continuous_processing(wait_time=30):
+    """Continuously process files from the data folder."""
+    print(f"Starting continuous processing. Checking for new files every {wait_time} seconds.")
+    print(f"Monitoring folder: {DATA_FOLDER}")
+    print(f"Saving labeled data to: {TRAINING_FOLDER}")
+
+    while True:
+        try:
+            filename = get_next_unprocessed_file()
+
+            if not filename:
+                print(f"No new files to process. Waiting {wait_time} seconds...")
+                time.sleep(wait_time)
+                continue
+
+            success = process_file(filename)
+
+            # Small pause between files to avoid rate limiting
+            time.sleep(2)
+
+        except KeyboardInterrupt:
+            print("Process interrupted by user. Exiting.")
+            break
+        except Exception as e:
+            print(f"Unexpected error in processing loop: {str(e)}")
+            # Continue despite errors to maintain continuous operation
+            time.sleep(5)
 
 
 if __name__ == "__main__":
-    process_all_reports()
-
-#todo: delete the file after processing in data or move to a directory(text data) after processing
+    continuous_processing()

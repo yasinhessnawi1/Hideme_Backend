@@ -130,3 +130,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+#todo: copy this script and make it generate bekjymringsmeldinger
