@@ -7,7 +7,9 @@ import os
 import time
 from typing import Dict, Any, List, Callable, Tuple, TypeVar, Generic, Optional, Awaitable
 
+from backend.app.configs.config_singleton import get_config
 from backend.app.utils.logger import log_info, log_warning, default_logger as logger
+from backend.app.utils.secure_logging import log_sensitive_operation
 
 # Type variables for generic functions
 T = TypeVar('T')
@@ -107,78 +109,65 @@ class ParallelProcessingHelper:
             entities: List[Any],
             page_number: int,
             max_workers: Optional[int] = None,
-            batch_size: int = 10
+            batch_size: Optional[int] = None
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Process entities in parallel for a single page with async support.
+        Externalizes the batch size from the config and adds detailed logging.
 
         Args:
-            detector: Entity detector instance
-            full_text: Full text of the page
-            mapping: Text-to-position mapping
-            entities: List of entities to process
-            page_number: Current page number
-            max_workers: Maximum number of parallel workers (None for auto)
-            batch_size: Number of entities to process in each batch
+            detector: Entity detector instance.
+            full_text: Full text of the page.
+            mapping: Text-to-position mapping.
+            entities: List of entities to process.
+            page_number: Current page number.
+            max_workers: Maximum number of parallel workers (optional).
+            batch_size: Number of entities to process in each batch (optional).
 
         Returns:
-            Tuple of (processed_entities, page_redaction_info)
+            Tuple of (processed_entities, page_redaction_info).
         """
         if not entities:
             return [], {"page": page_number, "sensitive": []}
 
-        # For small numbers of entities, process sequentially
+        # Use the config singleton to load the batch size if not explicitly provided.
+        if batch_size is None:
+            batch_size  = get_config("entity_batch_size", 10)
+
+        log_info(
+            f"[PARALLEL] Starting entity processing for page {page_number} with batch size {batch_size} and {len(entities)} total entities")
+
+        # For small numbers of entities, process sequentially.
         if len(entities) < 5:
-            return detector.process_entities_for_page(
-                page_number, full_text, mapping, entities
-            )
+            result = await detector.process_entities_for_page(page_number, full_text, mapping, entities)
+            log_info(f"[PARALLEL] Processed small batch of {len(entities)} entities sequentially")
+            return result
 
-        # Split entities into batches
+        # Split entities into batches based on the externalized batch size.
         entity_batches = [entities[i:i + batch_size] for i in range(0, len(entities), batch_size)]
+        batch_results = []
+        batch_times = []
 
-        # Process batches of entities
-        async def process_batch(batch):
-            return await asyncio.to_thread(
-                detector.process_entities_for_page,
-                page_number, full_text, mapping, batch
-            )
+        # Process each batch and log performance metrics.
+        for i, batch in enumerate(entity_batches):
+            start_time = time.perf_counter()
+            result = await detector.process_entities_for_page(page_number, full_text, mapping, batch)
+            end_time = time.perf_counter()
+            elapsed = end_time - start_time
+            batch_results.append(result)
+            batch_times.append(elapsed)
+            log_info(
+                f"[PARALLEL] Processed batch {i + 1}/{len(entity_batches)} with {len(batch)} entities in {elapsed:.2f}s")
 
-        # Use semaphore to limit concurrent processing
-        max_workers = max_workers or ParallelProcessingHelper.get_optimal_workers(len(entity_batches))
-        semaphore = asyncio.Semaphore(max_workers)
+        total_time = sum(batch_times)
+        log_sensitive_operation("Entity Batch Processing", len(entities), total_time, page=page_number)
 
-        # Wrapper to handle semaphore
-        async def process_with_semaphore(batch):
-            async with semaphore:
-                return await process_batch(batch)
+        # Combine batch results.
+        processed_entities = []
+        page_redaction_info = {"page": page_number, "sensitive": []}
+        for processed, redaction in batch_results:
+            processed_entities.extend(processed)
+            page_redaction_info["sensitive"].extend(redaction.get("sensitive", []))
 
-        # Process batches
-        batch_results = await asyncio.gather(
-            *[process_with_semaphore(batch) for batch in entity_batches],
-            return_exceptions=True
-        )
-
-        # Combine results, handling potential exceptions
-        all_processed_entities = []
-        all_sensitive_items = []
-        error_count = 0
-
-        for result in batch_results:
-            if isinstance(result, Exception):
-                error_count += 1
-                log_warning(f"[PARALLEL] Error processing entity batch: {result}")
-            else:
-                processed_entities, page_info = result
-                all_processed_entities.extend(processed_entities)
-                all_sensitive_items.extend(page_info.get("sensitive", []))
-
-        # Create combined page redaction info
-        page_redaction_info = {
-            "page": page_number,
-            "sensitive": all_sensitive_items
-        }
-
-        if error_count > 0:
-            log_warning(f"[PARALLEL] {error_count} entity batches failed processing")
-
-        return all_processed_entities, page_redaction_info
+        log_info(f"[PARALLEL] Completed entity processing for page {page_number} in {total_time:.2f}s")
+        return processed_entities, page_redaction_info

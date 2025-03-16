@@ -7,6 +7,7 @@ from typing import List, Optional, Any, Union
 from fastapi import HTTPException
 
 from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
+from backend.app.configs.gliner_config import GLINER_ENTITIES
 from backend.app.configs.presidio_config import REQUESTED_ENTITIES
 from backend.app.utils.logger import log_info, log_warning, log_error
 
@@ -46,7 +47,7 @@ def validate_requested_entities(
                     )
         # Otherwise validate against standard entity lists
         else:
-            available_entities = list(AVAILABLE_ENTITIES.keys()) + REQUESTED_ENTITIES
+            available_entities = list(AVAILABLE_ENTITIES.keys()) + REQUESTED_ENTITIES + GLINER_ENTITIES
             for entity in entity_list:
                 if entity not in available_entities:
                     raise HTTPException(

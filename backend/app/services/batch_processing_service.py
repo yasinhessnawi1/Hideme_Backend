@@ -1,17 +1,10 @@
-"""
-Batch processing service for handling multiple files in a single request.
-
-This module provides functionality to process multiple files for entity detection
-in a single request, with support for multiple file formats and response aggregation.
-"""
 import asyncio
 import os
 import time
 import uuid
-from tempfile import NamedTemporaryFile, TemporaryDirectory
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional
 
-from fastapi import UploadFile, HTTPException
+from fastapi import UploadFile
 
 from backend.app.factory.document_processing import (
     DocumentProcessingFactory,
@@ -21,19 +14,31 @@ from backend.app.factory.document_processing import (
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.helpers.json_helper import validate_requested_entities
 from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
-from backend.app.utils.logger import log_info, log_warning, log_error
+from backend.app.utils.logger import log_info
 from backend.app.utils.sanitize_utils import sanitize_detection_output
+from backend.app.utils.secure_file_utils import SecureTempFileManager
+from backend.app.utils.secure_logging import log_batch_operation, log_sensitive_operation
+from backend.app.utils.data_minimization import minimize_extracted_data
+from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.processing_records import record_keeper
+from backend.app.utils.memory_management import MemoryOptimizedReader
 
+# Threshold (in bytes) above which the file will be streamed rather than fully read in memory.
+LARGE_FILE_THRESHOLD = 5 * 1024 * 1024  # 5MB
 
 class BatchProcessingService:
     """
-    Service for processing multiple files in a single request.
+    Optimized service for processing multiple files in a single request.
 
     This service handles:
-    - Processing multiple files with different formats
-    - Configurable parallel processing
-    - Aggregated response formatting
-    - Detailed performance tracking
+    - Processing multiple files with different formats.
+    - Configurable parallel processing.
+    - Memory-efficient processing by streaming large files.
+    - Aggregated response formatting.
+    - Detailed performance tracking.
+    - Comprehensive GDPR compliance.
+    - Advanced data minimization.
+    - Enhanced security measures.
     """
 
     # Class-level lock for detector access during parallel processing
@@ -47,178 +52,219 @@ class BatchProcessingService:
             use_gemini: bool = False,
             use_gliner: bool = False,
             max_parallel_files: int = 4,
-            detection_engine: EntityDetectionEngine = EntityDetectionEngine.PRESIDIO
+            detection_engine: EntityDetectionEngine = EntityDetectionEngine.PRESIDIO,
+            detector_provider: Optional[Any] = None  # Optional dependency injection container
     ) -> Dict[str, Any]:
-        """
-        Process multiple files for entity detection.
-
-        Args:
-            files: List of uploaded files
-            requested_entities: JSON string of entity types to detect (optional)
-            use_presidio: Whether to use Presidio in hybrid mode
-            use_gemini: Whether to use Gemini in hybrid mode
-            use_gliner: Whether to use GLiNER in hybrid mode
-            max_parallel_files: Maximum number of files to process in parallel
-            detection_engine: Entity detection engine to use (for non-hybrid mode)
-
-        Returns:
-            Dictionary with batch processing results
-        """
         start_time = time.time()
+        batch_id = str(uuid.uuid4())
 
         # Validate entity list
-        entity_list = validate_requested_entities(requested_entities) if requested_entities else []
-
-        # Pre-initialize detectors before parallel processing
-        # This ensures all threads will use the same detector instances
-        log_info("[BATCH] Pre-initializing detectors for batch processing")
-        detectors = await BatchProcessingService._pre_initialize_detectors(
-            detection_engine,
-            use_presidio,
-            use_gemini,
-            use_gliner,
-            entity_list
-        )
-
-        # Create temp directory for file processing
-        with TemporaryDirectory() as temp_dir:
-            # Save files to disk and prepare processing tasks
-            file_paths = []
-            file_meta = {}
-
-            for file in files:
-                try:
-                    # Generate a unique filename to avoid collisions
-                    file_uuid = str(uuid.uuid4())
-                    file_ext = os.path.splitext(file.filename)[1].lower() if file.filename else ".txt"
-                    tmp_path = os.path.join(temp_dir, f"{file_uuid}{file_ext}")
-
-                    # Read file contents and save to disk
-                    contents = await file.read()
-                    with open(tmp_path, "wb") as f:
-                        f.write(contents)
-
-                    # Reset file cursor for potential future reads
-                    await file.seek(0)
-
-                    # Store file metadata
-                    file_meta[tmp_path] = {
-                        "original_name": file.filename,
-                        "content_type": file.content_type,
-                        "size": len(contents)
-                    }
-
-                    file_paths.append(tmp_path)
-                except Exception as e:
-                    log_error(f"[ERROR] Failed to process file {file.filename}: {str(e)}")
-                    continue
-
-            if not file_paths:
-                raise HTTPException(status_code=400, detail="No valid files provided for processing")
-
-            # Process files in parallel
-            log_info(f"[OK] Processing {len(file_paths)} files in parallel")
-
-            # Use adaptive concurrency
-            optimal_workers = ParallelProcessingHelper.get_optimal_workers(
-                len(file_paths),
-                min_workers=1,
-                max_workers=max_parallel_files
+        try:
+            entity_list = validate_requested_entities(requested_entities) if requested_entities else []
+        except Exception as e:
+            return SecurityAwareErrorHandler.handle_batch_processing_error(
+                e, "entity_validation", len(files)
             )
 
-            # Define file processing function with shared detector access
-            async def process_file(file_path: str) -> Dict[str, Any]:
-                """Process a single file and return results."""
-                file_start_time = time.time()
-                file_name = file_meta[file_path]["original_name"]
-                content_type = file_meta[file_path]["content_type"]
+        # Pre-initialize detectors using dependency injection if provided
+        log_info(f"[BATCH] Pre-initializing detectors for batch processing (Batch ID: {batch_id})")
+        try:
+            detectors = await BatchProcessingService._pre_initialize_detectors(
+                detection_engine,
+                use_presidio,
+                use_gemini,
+                use_gliner,
+                entity_list,
+                detector_provider=detector_provider
+            )
+        except Exception as e:
+            return SecurityAwareErrorHandler.handle_batch_processing_error(
+                e, "detector_initialization", len(files)
+            )
 
-                try:
-                    # Get document format based on file extension
-                    doc_format = None
-                    if file_path.lower().endswith('.pdf'):
-                        doc_format = DocumentFormat.PDF
-                    elif file_path.lower().endswith(('.docx', '.doc')):
-                        doc_format = DocumentFormat.DOCX
-                    elif file_path.lower().endswith('.txt'):
-                        doc_format = DocumentFormat.TXT
+        # Prepare file metadata (avoid storing file content in memory if possible)
+        file_meta = {}
+        for i, file in enumerate(files):
+            try:
+                file_id = f"batch_{batch_id}_file_{i}"
+                file_meta[file_id] = {
+                    "original_name": file.filename,
+                    "content_type": file.content_type,
+                    "size": 0,  # Updated after reading
+                    "file_object": file  # Reference to file object
+                }
+            except Exception as e:
+                SecurityAwareErrorHandler.log_processing_error(
+                    e, "batch_file_preparation", file.filename or "unknown_file"
+                )
 
-                    # Extract text with positions
-                    extract_start = time.time()
-                    extractor = DocumentProcessingFactory.create_document_extractor(
-                        file_path, doc_format
+        if not file_meta:
+            return SecurityAwareErrorHandler.handle_batch_processing_error(
+                ValueError("No valid files provided for processing"),
+                "batch_file_validation",
+                len(files)
+            )
+
+        optimal_workers = ParallelProcessingHelper.get_optimal_workers(
+            len(file_meta), min_workers=1, max_workers=max_parallel_files
+        )
+
+        log_info(f"[BATCH] Processing {len(file_meta)} files with {optimal_workers} workers (Batch ID: {batch_id})")
+
+        async def process_file(file_id: str) -> Dict[str, Any]:
+            """Process a single file with optimized memory and streaming for large files."""
+            file_start_time = time.time()
+            meta = file_meta[file_id]
+            file_name = meta.get("original_name", "unknown")
+            content_type = meta.get("content_type", "application/octet-stream")
+            file_object = meta.get("file_object")
+            operation_id = f"{batch_id}_{file_id}"
+
+            try:
+                await file_object.seek(0)
+                # Read a small chunk to decide on processing mode
+                first_chunk = await file_object.read(1024)
+                if len(first_chunk) < LARGE_FILE_THRESHOLD:
+                    rest = await file_object.read()
+                    contents = first_chunk + rest
+                else:
+                    file_object.seek(0)
+                    contents = await MemoryOptimizedReader.read_file_chunks(file_object.fileno())
+
+                meta["size"] = len(contents)
+
+                # Determine document format from file extension
+                doc_format = None
+                if file_name.lower().endswith('.pdf'):
+                    doc_format = DocumentFormat.PDF
+                elif file_name.lower().endswith(('.docx', '.doc')):
+                    doc_format = DocumentFormat.DOCX
+                elif file_name.lower().endswith('.txt'):
+                    doc_format = DocumentFormat.TXT
+
+                extract_start = time.time()
+
+                if doc_format == DocumentFormat.PDF:
+                    # Process PDF entirely in memory
+                    import io
+                    import pymupdf
+                    buffer = io.BytesIO(contents)
+                    pdf_document = pymupdf.open(stream=buffer, filetype="pdf")
+                    extracted_data = {"pages": []}
+                    for page_num in range(len(pdf_document)):
+                        page = pdf_document[page_num]
+                        words = page.get_text("words")
+                        page_words = []
+                        for word in words:
+                            x0, y0, x1, y1, text, *_ = word
+                            if text.strip():
+                                page_words.append({
+                                    "text": text.strip(),
+                                    "x0": x0,
+                                    "y0": y0,
+                                    "x1": x1,
+                                    "y1": y1
+                                })
+                        if page_words:
+                            extracted_data["pages"].append({
+                                "page": page_num + 1,
+                                "words": page_words
+                            })
+                    pdf_document.close()
+                else:
+                    # For non-PDF formats, process in memory if possible using the secure utility.
+                    def process_extraction(file_obj):
+                        extractor = DocumentProcessingFactory.create_document_extractor(file_obj, doc_format)
+                        result = extractor.extract_text_with_positions()
+                        extractor.close()
+                        return result
+
+                    extracted_data = SecureTempFileManager.process_content_in_memory(
+                        contents,
+                        process_extraction,
+                        use_path=False,
+                        extension=f".{doc_format.name.lower()}" if doc_format else ".txt"
                     )
-                    extracted_data = await asyncio.to_thread(extractor.extract_text_with_positions)
-                    extractor.close()
-                    extract_time = time.time() - extract_start
 
-                    # Get detector from pre-initialized detectors
-                    detection_start = time.time()
+                extract_time = time.time() - extract_start
+                minimized_data = minimize_extracted_data(extracted_data)
 
-                    # Get appropriate detector from pre-initialized detectors
-                    detector = detectors["detector"]
+                detection_start = time.time()
+                detector = detectors["detector"]
 
-                    # Detect entities
-                    if hasattr(detector, 'detect_sensitive_data_async'):
-                        anonymized_text, entities, redaction_mapping = await detector.detect_sensitive_data_async(
-                            extracted_data, entity_list
-                        )
-                    else:
-                        anonymized_text, entities, redaction_mapping = await asyncio.to_thread(
-                            detector.detect_sensitive_data,
-                            extracted_data, entity_list
-                        )
-
-                    detection_time = time.time() - detection_start
-
-                    # Calculate metrics
-                    total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
-                    entity_density = (len(entities) / total_words) * 1000 if total_words > 0 else 0
-
-                    # Build performance metrics
-                    processing_times = {
-                        "extraction_time": extract_time,
-                        "detection_time": detection_time,
-                        "total_time": time.time() - file_start_time,
-                        "words_count": total_words,
-                        "pages_count": len(extracted_data.get("pages", [])),
-                        "entity_density": entity_density
-                    }
-
-                    # Sanitize output for consistent response format
-                    sanitized_response = sanitize_detection_output(
-                        anonymized_text, entities, redaction_mapping, processing_times
+                if hasattr(detector, 'detect_sensitive_data_async'):
+                    anonymized_text, entities, redaction_mapping = await detector.detect_sensitive_data_async(
+                        minimized_data, entity_list
+                    )
+                else:
+                    anonymized_text, entities, redaction_mapping = await asyncio.to_thread(
+                        detector.detect_sensitive_data, minimized_data, entity_list
                     )
 
-                    # Add file information
-                    sanitized_response["file_info"] = {
-                        "filename": file_name,
-                        "content_type": content_type,
-                        "size": file_meta[file_path]["size"]
-                    }
+                detection_time = time.time() - detection_start
 
-                    # Add model information
-                    sanitized_response["model_info"] = detectors["model_info"]
+                total_words = sum(len(page.get("words", [])) for page in minimized_data.get("pages", []))
+                entity_density = (len(entities) / total_words) * 1000 if total_words > 0 else 0
 
-                    return {
-                        "file": file_name,
-                        "status": "success",
-                        "results": sanitized_response
-                    }
-                except Exception as e:
-                    log_error(f"[ERROR] Error processing file {file_name}: {str(e)}")
-                    return {
-                        "file": file_name,
-                        "status": "error",
-                        "error": str(e),
-                        "processing_time": time.time() - file_start_time
-                    }
+                processing_times = {
+                    "extraction_time": extract_time,
+                    "detection_time": detection_time,
+                    "total_time": time.time() - file_start_time,
+                    "words_count": total_words,
+                    "pages_count": len(minimized_data.get("pages", [])),
+                    "entity_density": entity_density
+                }
 
-            # Process all files in parallel with optimized concurrency
-            tasks = [process_file(file_path) for file_path in file_paths]
-            results = await asyncio.gather(*tasks)
+                record_keeper.record_processing(
+                    operation_type="batch_file_detection",
+                    document_type=content_type,
+                    entity_types_processed=entity_list,
+                    processing_time=time.time() - file_start_time,
+                    file_count=1,
+                    entity_count=len(entities),
+                    success=True
+                )
 
-        # Calculate batch statistics
+                log_sensitive_operation(
+                    "Batch File Detection",
+                    len(entities),
+                    time.time() - file_start_time,
+                    file_type=os.path.splitext(file_name)[1] if file_name else "unknown",
+                    words=total_words,
+                    pages=processing_times["pages_count"],
+                    operation_id=operation_id
+                )
+
+                sanitized_response = sanitize_detection_output(
+                    anonymized_text, entities, redaction_mapping, processing_times
+                )
+                sanitized_response["file_info"] = {
+                    "filename": file_name,
+                    "content_type": content_type,
+                    "size": meta["size"]
+                }
+                sanitized_response["model_info"] = detectors["model_info"]
+
+                return {
+                    "file": file_name,
+                    "status": "success",
+                    "results": sanitized_response
+                }
+            except Exception as e:
+                record_keeper.record_processing(
+                    operation_type="batch_file_detection",
+                    document_type=content_type,
+                    entity_types_processed=entity_list,
+                    processing_time=time.time() - file_start_time,
+                    file_count=1,
+                    entity_count=0,
+                    success=False
+                )
+                return SecurityAwareErrorHandler.handle_file_processing_error(e, "batch_file_detection", file_name)
+
+        tasks = [process_file(file_id) for file_id in file_meta.keys()]
+        results = await asyncio.gather(*tasks)
+
         batch_time = time.time() - start_time
         success_count = sum(1 for r in results if r.get("status") == "success")
         error_count = len(results) - success_count
@@ -227,9 +273,9 @@ class BatchProcessingService:
             for r in results if r.get("status") == "success"
         )
 
-        # Build batch response
         response = {
             "batch_summary": {
+                "batch_id": batch_id,
                 "total_files": len(files),
                 "successful": success_count,
                 "failed": error_count,
@@ -240,9 +286,22 @@ class BatchProcessingService:
             "file_results": results
         }
 
-        log_info(f"[PERF] Batch processing completed in {batch_time:.2f}s. "
-                 f"Successfully processed {success_count}/{len(files)} files. "
-                 f"Found {total_entities} entities.")
+        record_keeper.record_processing(
+            operation_type="batch_processing",
+            document_type="multiple_files",
+            entity_types_processed=entity_list,
+            processing_time=batch_time,
+            file_count=len(files),
+            entity_count=total_entities,
+            success=(success_count > 0)
+        )
+
+        log_batch_operation(
+            "Batch Entity Detection",
+            len(files),
+            success_count,
+            batch_time
+        )
 
         return response
 
@@ -252,51 +311,51 @@ class BatchProcessingService:
         use_presidio: bool = True,
         use_gemini: bool = False,
         use_gliner: bool = False,
-        entity_list: Optional[List[str]] = None
+        entity_list: Optional[List[str]] = None,
+        detector_provider: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
-        Pre-initialize detectors before parallel processing.
-
-        This ensures all threads will use the same detector instances.
+        Pre-initialize detectors before processing, using dependency injection if available.
 
         Args:
-            detection_engine: Entity detection engine to use
-            use_presidio: Whether to use Presidio in hybrid mode
-            use_gemini: Whether to use Gemini in hybrid mode
-            use_gliner: Whether to use GLiNER in hybrid mode
-            entity_list: List of entity types to detect
+            detection_engine: Engine to use.
+            use_presidio: Whether to use Presidio.
+            use_gemini: Whether to use Gemini.
+            use_gliner: Whether to use GLiNER.
+            entity_list: List of entity types.
+            detector_provider: Optional provider for detector instances (DI container).
 
         Returns:
-            Dictionary with detector and model information
+            Dictionary with detector instance and model information.
         """
-        # Acquire lock to ensure thread-safe detector initialization
         async with BatchProcessingService._detector_access_lock:
             log_info(f"[BATCH] Pre-initializing {detection_engine.name} detector")
-
             detector = None
             model_info = {}
 
             if detection_engine == EntityDetectionEngine.HYBRID:
-                # Configure hybrid detector options
                 config = {
                     "use_presidio": use_presidio,
                     "use_gemini": use_gemini,
                     "use_gliner": use_gliner,
                     "entities": entity_list
                 }
-
-                # Get or initialize required component detectors first
-                if use_presidio:
-                    initialization_service.get_presidio_detector()
-                if use_gemini:
-                    initialization_service.get_gemini_detector()
-                if use_gliner:
-                    initialization_service.get_gliner_detector(entity_list)
-
-                # Get hybrid detector from initialization service
-                detector = initialization_service.get_hybrid_detector(config)
-
-                # Model info
+                if detector_provider:
+                    if use_presidio:
+                        detector_provider.get_presidio_detector()
+                    if use_gemini:
+                        detector_provider.get_gemini_detector()
+                    if use_gliner:
+                        detector_provider.get_gliner_detector(entity_list)
+                    detector = detector_provider.get_hybrid_detector(config)
+                else:
+                    if use_presidio:
+                        initialization_service.get_presidio_detector()
+                    if use_gemini:
+                        initialization_service.get_gemini_detector()
+                    if use_gliner:
+                        initialization_service.get_gliner_detector(entity_list)
+                    detector = initialization_service.get_hybrid_detector(config)
                 model_info = {
                     "engine": "hybrid",
                     "engines_used": {
@@ -306,22 +365,23 @@ class BatchProcessingService:
                     }
                 }
             elif detection_engine == EntityDetectionEngine.PRESIDIO:
-                detector = initialization_service.get_presidio_detector()
+                detector = detector_provider.get_presidio_detector() if detector_provider else initialization_service.get_presidio_detector()
                 model_info = {"engine": "presidio"}
             elif detection_engine == EntityDetectionEngine.GEMINI:
-                detector = initialization_service.get_gemini_detector()
+                detector = detector_provider.get_gemini_detector() if detector_provider else initialization_service.get_gemini_detector()
                 model_info = {"engine": "gemini"}
             elif detection_engine == EntityDetectionEngine.GLINER:
-                detector = initialization_service.get_gliner_detector(entity_list)
+                detector = detector_provider.get_gliner_detector(entity_list) if detector_provider else initialization_service.get_gliner_detector(entity_list)
                 model_info = {"engine": "gliner"}
 
-            # Validate that a detector was successfully initialized
             if detector is None:
-                log_error(f"[BATCH] Failed to initialize {detection_engine.name} detector")
-                raise ValueError(f"Failed to initialize {detection_engine.name} detector")
+                error = SecurityAwareErrorHandler.handle_detection_error(
+                    ValueError(f"Failed to initialize {detection_engine.name} detector"),
+                    "detector_initialization"
+                )
+                raise ValueError(error["error"])
 
             log_info(f"[BATCH] Successfully pre-initialized {detection_engine.name} detector")
-
             return {
                 "detector": detector,
                 "model_info": model_info

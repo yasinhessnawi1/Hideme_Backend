@@ -7,6 +7,7 @@ once at startup and provides optimized access to them throughout the application
 import os
 import threading
 import time
+import asyncio
 from typing import Dict, Any, Optional, List
 
 from backend.app.configs.gliner_config import GLINER_CONFIG, GLINER_ENTITIES, GLINER_MODEL_PATH
@@ -14,6 +15,7 @@ from backend.app.factory.document_processing import (
     DocumentProcessingFactory,
     EntityDetectionEngine
 )
+from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logger import default_logger as logger, log_info, log_warning, log_error
 
 
@@ -68,6 +70,26 @@ class InitializationService:
                 self._initialized = True
                 logger.info("[INIT] Initialization service created")
 
+    async def initialize_detectors_lazy(self, force_reload: bool = False):
+        """
+        Initialize detectors in a lazy manner, deferring actual loading until first use.
+
+        Args:
+            force_reload: Whether to force reloading of already initialized detectors
+        """
+        log_info("[INIT] Setting up lazy initialization of detectors...")
+
+        # Instead of actually loading the models now, just prepare the environment
+        # and ensure directories exist
+        os.makedirs(GLINER_CONFIG['local_model_path'], exist_ok=True)
+
+        # Set initialization status to indicate we're ready for lazy loading
+        self._initialization_status['presidio'] = True
+        self._initialization_status['gemini'] = True
+        self._initialization_status['gliner'] = True
+
+        log_info("[INIT] Lazy initialization setup complete. Detectors will be loaded on first use.")
+
     def initialize_detectors(self, force_reload: bool = False):
         """
         Initialize all detectors at startup.
@@ -107,21 +129,48 @@ class InitializationService:
                 log_error(f"[ERROR] Failed to initialize detectors: {e}")
                 raise
 
+    async def initialize_detectors_async(self, force_reload: bool = False):
+        """
+        Initialize all detectors at startup asynchronously.
+
+        Args:
+            force_reload: Whether to force reloading of already initialized detectors
+        """
+        # Use asyncio.to_thread to run the synchronous initialization in a thread
+        try:
+            log_info("[INIT] Asynchronously initializing detectors...")
+            await asyncio.to_thread(self.initialize_detectors, force_reload)
+            log_info("[INIT] Asynchronous detector initialization complete")
+        except Exception as e:
+            log_error(f"[ERROR] Failed to initialize detectors asynchronously: {e}")
+            raise
+
+    async def shutdown_async(self):
+        """
+        Perform asynchronous cleanup of resources during shutdown.
+        """
+        log_info("[INIT] Performing asynchronous shutdown...")
+        try:
+            # Gracefully shutdown any services that need it
+            # This could include closing connections, stopping threads, etc.
+            pass
+        except Exception as e:
+            log_error(f"[ERROR] Error during async shutdown: {e}")
+
     def _initialize_gliner_detector(self):
         """
-        Initialize the GLiNER detector with the default configuration.
+        Initialize the GLiNER detector with improved error handling.
         """
         try:
             log_info("[INIT] Initializing GLiNER detector...")
             start_time = time.time()
 
-            # Check if model file already exists
-            if os.path.exists(GLINER_MODEL_PATH) and os.path.getsize(GLINER_MODEL_PATH) > 1000000:
+            # Check if model file already exists with simplified logic
+            local_files_only = os.path.exists(GLINER_MODEL_PATH) and os.path.getsize(GLINER_MODEL_PATH) > 1000000
+            if local_files_only:
                 log_info(f"[INIT] Using existing GLiNER model from {GLINER_MODEL_PATH}")
-                local_files_only = True
             else:
                 log_info(f"[INIT] GLiNER model not found locally, will download to {GLINER_MODEL_PATH}")
-                local_files_only = False
 
             # Create configuration for GLiNER detector
             config = {
@@ -131,25 +180,37 @@ class InitializationService:
                 "local_files_only": local_files_only
             }
 
-            # Create GLiNER detector which will download or load the model
-            self._detectors['gliner'] = DocumentProcessingFactory.create_entity_detector(
-                EntityDetectionEngine.GLINER,
-                config=config
+            # Use SecurityAwareErrorHandler to handle initialization in a consistent way
+            success, detector, error_msg = SecurityAwareErrorHandler.safe_execution(
+                func=lambda: DocumentProcessingFactory.create_entity_detector(
+                    EntityDetectionEngine.GLINER, config=config
+                ),
+                error_type="gliner_initialization",
+                default=None
             )
 
-            # Update status tracking
-            self._initialization_status['gliner'] = True
-            self._detector_metrics['gliner']['last_used'] = time.time()
+            if success and detector:
+                self._detectors['gliner'] = detector
+                self._initialization_status['gliner'] = True
+                self._detector_metrics['gliner']['last_used'] = time.time()
 
-            load_time = time.time() - start_time
-            log_info(f"[INIT] GLiNER detector initialized successfully in {load_time:.2f}s")
+                load_time = time.time() - start_time
+                log_info(f"[INIT] GLiNER detector initialized successfully in {load_time:.2f}s")
 
-            # Test the GLiNER detector
-            self._test_gliner_detector()
+                # Test the GLiNER detector
+                self._test_gliner_detector()
+                return True
+            else:
+                log_error(f"[ERROR] Failed to initialize GLiNER detector: {error_msg}")
+                self._initialization_status['gliner'] = False
+                return False
 
         except Exception as e:
             self._initialization_status['gliner'] = False
-            log_error(f"[ERROR] Failed to initialize GLiNER detector: {e}")
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "gliner_initialization", self.model_dir_path
+            )
+            return False
 
     def _test_gliner_detector(self):
         """Test the GLiNER detector with a simple prediction."""

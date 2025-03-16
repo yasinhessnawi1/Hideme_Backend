@@ -1,23 +1,109 @@
 """
-Base implementation for entity detection.
+Enhanced base implementation for entity detection with improved error handling and GDPR compliance.
+
+This module provides a unified base class for entity detection implementations
+with standardized error handling, performance tracking, and data protection features.
 """
-from abc import ABC
-from typing import Dict, Any, List, Tuple, Optional, Union
+from abc import ABC, abstractmethod
+from typing import Dict, Any, List, Tuple, Optional, Callable
+import asyncio
+import time
+import threading
 
 from backend.app.domain.interfaces import EntityDetector
 from backend.app.utils.helpers.text_utils import TextUtils
-from backend.app.utils.logger import default_logger as logger, log_warning, log_info
+from backend.app.utils.logger import default_logger as logger, log_warning
+from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
+from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.data_minimization import minimize_extracted_data
+from backend.app.utils.processing_records import record_keeper
 
 
 class BaseEntityDetector(EntityDetector, ABC):
     """
-    Base class for entity detectors with common functionality.
+    Enhanced base class for entity detectors with common functionality.
 
     This class provides shared functionality for different entity detection
-    implementations and defines the interface they should implement.
+    implementations including standardized error handling, performance tracking,
+    and data protection features compliant with GDPR requirements.
+
+    Features:
+    - Standardized entity processing
+    - Parallel processing capabilities
+    - Performance tracking
+    - GDPR-compliant data handling
+    - Unified error management
     """
 
-    def process_entities_for_page(
+    def __init__(self):
+        """Initialize the base entity detector with tracking metrics."""
+        self._initialization_time = time.time()
+        self._last_used = self._initialization_time
+        self._total_calls = 0
+        self._total_entities_detected = 0
+        self._total_processing_time = 0
+        self._access_lock = threading.RLock()
+
+    async def detect_sensitive_data_async(
+        self,
+        extracted_data: Dict[str, Any],
+        requested_entities: Optional[List[str]] = None
+    ) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any]]:
+        """
+        Asynchronous method to detect sensitive entities in extracted text.
+        Must be implemented by derived classes.
+
+        Args:
+            extracted_data: Dictionary containing text and bounding box information
+            requested_entities: List of entity types to detect
+
+        Returns:
+            Tuple of (anonymized_text, results_json, redaction_mapping)
+        """
+        raise NotImplementedError("Subclasses must implement this method")
+
+    def detect_sensitive_data(
+            self,
+            extracted_data: Dict[str, Any],
+            requested_entities: Optional[List[str]] = None
+    ) -> tuple[str, list[Any], dict[str, list[Any]]] | None:
+        """
+        Synchronous method to detect sensitive entities in extracted text.
+        This is a wrapper around the async version with improved error handling.
+
+        Args:
+            extracted_data: Dictionary containing text and bounding box information
+            requested_entities: List of entity types to detect
+
+        Returns:
+            Tuple of (anonymized_text, results_json, redaction_mapping)
+        """
+        # Apply data minimization before processing
+        minimized_data = minimize_extracted_data(extracted_data)
+
+        # Use SecurityAwareErrorHandler's safe_execution for consistent error handling
+        try:
+            # Create an event loop for the synchronous method
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                success, result, error_msg = SecurityAwareErrorHandler.safe_execution(
+                    func=lambda: loop.run_until_complete(
+                        self.detect_sensitive_data_async(minimized_data, requested_entities)
+                    ),
+                    error_type="entity_detection",
+                    default=("", [], {"pages": []})
+                )
+                return result
+            finally:
+                loop.close()
+        except Exception as e:
+            # Use standardized error handling
+            return SecurityAwareErrorHandler.handle_safe_error(
+                e, "entity_detection", "", default_return=("", [], {"pages": []})
+            )
+
+    async def process_entities_for_page(
             self,
             page_number: int,
             full_text: str,
@@ -38,6 +124,9 @@ class BaseEntityDetector(EntityDetector, ABC):
         """
         processed_entities = []
         page_sensitive = []
+
+        # Track processing for GDPR compliance
+        start_time = time.time()
 
         for entity in entities:
             try:
@@ -90,11 +179,30 @@ class BaseEntityDetector(EntityDetector, ABC):
                 logger.error(f"Error processing entity: {str(e)}")
                 logger.error(f"Entity data: {entity}")
 
+                # Use standardized error handling
+                SecurityAwareErrorHandler.log_processing_error(e, "entity_processing")
+
         # Create page redaction info
         page_redaction_info = {
             "page": page_number,
             "sensitive": page_sensitive
         }
+
+        # Track metrics for GDPR compliance
+        processing_time = time.time() - start_time
+        with self._access_lock:
+            self._total_entities_detected += len(processed_entities)
+            self._total_processing_time += processing_time
+
+        # Record entity processing for GDPR compliance
+        record_keeper.record_processing(
+            operation_type="entity_processing",
+            document_type="page_entity_detection",
+            entity_types_processed=[entity.get("entity_type") for entity in processed_entities],
+            processing_time=processing_time,
+            entity_count=len(processed_entities),
+            success=True
+        )
 
         return processed_entities, page_redaction_info
 
@@ -130,6 +238,7 @@ class BaseEntityDetector(EntityDetector, ABC):
 
         return None
 
+    @abstractmethod
     def _convert_to_entity_dict(self, entity: Any) -> Dict[str, Any]:
         """
         Convert an entity to a standard dictionary format.
@@ -144,3 +253,93 @@ class BaseEntityDetector(EntityDetector, ABC):
             NotImplementedError: Must be implemented by derived classes
         """
         raise NotImplementedError("Subclasses must implement this method")
+
+    async def process_document_pages(
+        self,
+        extracted_data: Dict[str, Any],
+        process_func: Callable[[Dict[str, Any]], Tuple[Dict[str, Any], List[Dict[str, Any]]]],
+        max_workers: Optional[int] = None
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any], List[str]]:
+        """
+        Process all pages in a document with a given processing function.
+
+        Args:
+            extracted_data: Dictionary containing text and position data
+            process_func: Function to process each page
+            max_workers: Maximum number of parallel workers
+
+        Returns:
+            Tuple of (combined_results, redaction_mapping, anonymized_texts)
+        """
+        # Extract all pages
+        pages = extracted_data.get("pages", [])
+        if not pages:
+            return [], {"pages": []}, []
+
+        # Process all pages in parallel
+        page_results = await ParallelProcessingHelper.process_pages_in_parallel(
+            pages,
+            process_func,
+            max_workers=max_workers
+        )
+
+        # Collect results
+        combined_results = []
+        redaction_mapping = {"pages": []}
+        anonymized_texts = []
+
+        # Process results
+        for page_number, (page_redaction_info, processed_entities) in page_results:
+            if page_redaction_info:
+                redaction_mapping["pages"].append(page_redaction_info)
+
+            if processed_entities:
+                combined_results.extend(processed_entities)
+
+            # Get text for this page
+            page_text = next((
+                TextUtils.reconstruct_text_and_mapping(page['words'])[0]
+                for page in pages if page.get('page') == page_number
+            ), "")
+            anonymized_texts.append(page_text)
+
+        # Sort redaction mapping pages by page number
+        redaction_mapping["pages"].sort(key=lambda x: x.get("page", 0))
+
+        return combined_results, redaction_mapping, anonymized_texts
+
+    def get_status(self) -> Dict[str, Any]:
+        """
+        Get the current status of the entity detector.
+
+        Returns:
+            Dictionary with status information
+        """
+        with self._access_lock:
+            return {
+                "initialized": True,
+                "initialization_time": self._initialization_time,
+                "last_used": self._last_used,
+                "idle_time": time.time() - self._last_used if self._last_used else None,
+                "total_calls": self._total_calls,
+                "total_entities_detected": self._total_entities_detected,
+                "total_processing_time": self._total_processing_time,
+                "average_processing_time": (
+                    self._total_processing_time / self._total_calls
+                    if self._total_calls > 0 else None
+                )
+            }
+
+    def update_usage_metrics(self, entities_count: int, processing_time: float) -> None:
+        """
+        Update usage metrics for the entity detector.
+
+        Args:
+            entities_count: Number of entities detected
+            processing_time: Time taken for processing
+        """
+        with self._access_lock:
+            self._last_used = time.time()
+            self._total_calls += 1
+            self._total_entities_detected += entities_count
+            self._total_processing_time += processing_time

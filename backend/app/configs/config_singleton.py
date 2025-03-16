@@ -32,6 +32,9 @@ def _load_config_from_env() -> None:
     _config['default_detection_engine'] = os.getenv("DEFAULT_DETECTION_ENGINE", "PRESIDIO")
     _config['redaction_color'] = _parse_color(os.getenv("REDACTION_COLOR", "0,0,0"))
 
+    # New configuration for entity batch size
+    _config['entity_batch_size'] = int(os.getenv("ENTITY_BATCH_SIZE", "10"))
+
     # API configuration
     _config['api_port'] = int(os.getenv("API_PORT", "8000"))
     _config['api_host'] = os.getenv("API_HOST", "0.0.0.0")
@@ -65,7 +68,6 @@ def get_config(key: str, default: Any = None) -> Any:
     # Make sure config is loaded
     if not _config:
         _load_config_from_env()
-
     return _config.get(key, default)
 
 

@@ -1,98 +1,171 @@
-"""
-Batch processing routes for handling multiple files in a single request.
-"""
-import json
-
-from backend.app.factory.document_processing import EntityDetectionEngine
-from backend.app.services.batch_processing_service import BatchProcessingService
+import asyncio
 import os
 import time
-import asyncio
-import uuid
-from typing import List, Optional, Dict, Any
-from tempfile import NamedTemporaryFile, TemporaryDirectory
-from fastapi import APIRouter, File, UploadFile, Form, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse
-from zipfile import ZipFile, ZIP_DEFLATED
+from typing import List, Optional
 
-from backend.app.factory.document_processing import (
-    DocumentProcessingFactory,
-    DocumentFormat,
+from fastapi import APIRouter, File, UploadFile, Form, HTTPException, BackgroundTasks, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from starlette.responses import JSONResponse
+
+from backend.app.configs.gdpr_config import TEMP_FILE_RETENTION_SECONDS
+from backend.app.factory import DocumentFormat, EntityDetectionEngine, DocumentProcessingFactory
+from backend.app.services.batch_processing_service import BatchProcessingService
+from backend.app.utils.batch_processing_utils import (
+    validate_detection_engine,
+    adjust_parallelism_based_on_memory,
+    validate_redaction_mappings,
+    determine_processing_strategy,
+    process_batch_in_memory,
+    process_batch_with_temp_files
 )
-from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
-from backend.app.utils.logger import log_info, log_error, log_warning
+from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.helpers.batch_processing_helper import validate_batch_files_optimized, BatchProcessingHelper
+from backend.app.utils.memory_management import memory_optimized, memory_monitor
+from backend.app.utils.processing_records import record_keeper
+from backend.app.utils.retention_management import retention_manager
+from backend.app.utils.secure_file_utils import SecureTempFileManager
+from backend.app.utils.secure_logging import log_batch_operation
+
+# Configure rate limiter
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 
 
 @router.post("/detect")
+@limiter.limit("10/minute")
 async def batch_detect_sensitive(
+        request: Request,
         files: List[UploadFile] = File(...),
         requested_entities: Optional[str] = Form(None),
         detection_engine: Optional[str] = Form("presidio"),
         max_parallel_files: Optional[int] = Form(4)
 ):
     """
-    Process multiple files for entity detection using a single engine.
+    Process multiple files for entity detection with enhanced memory efficiency.
 
-    Args:
-        files: List of uploaded files
-        requested_entities: JSON string of entity types to detect (optional)
-        detection_engine: Entity detection engine to use (presidio, gemini, gliner)
-        max_parallel_files: Maximum number of files to process in parallel
-
-    Returns:
-        JSON response with batch processing results
+    This optimized implementation:
+    - Processes files in memory when possible to avoid temp file creation
+    - Uses streaming for large files to reduce memory usage
+    - Implements adaptive parallelism based on memory pressure
+    - Ensures proper cleanup of any temporary resources
     """
     start_time = time.time()
 
     try:
         # Validate detection engine
-        engine_map = {
-            "presidio": EntityDetectionEngine.PRESIDIO,
-            "gemini": EntityDetectionEngine.GEMINI,
-            "gliner": EntityDetectionEngine.GLINER
-        }
+        is_valid, engine_result = await validate_detection_engine(detection_engine)
+        if not is_valid:
+            return JSONResponse(status_code=400, content=engine_result)
 
-        if detection_engine not in engine_map:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid detection engine. Must be one of: {', '.join(engine_map.keys())}"
+        # Adjust parallelism based on memory pressure
+        adjusted_parallel_files = adjust_parallelism_based_on_memory(max_parallel_files)
+
+        # Use the optimized batch validation helper
+        allowed_types = {"application/pdf", "text/plain", "text/csv", "text/markdown", "text/html"}
+        async for valid_files in validate_batch_files_optimized(files, allowed_types):
+            # Process files with optimized parallelization
+            results = await BatchProcessingService.detect_entities_in_files(
+                files=[f[0] for f in valid_files],  # Use original UploadFile objects
+                requested_entities=requested_entities,
+                detection_engine=engine_result,
+                max_parallel_files=adjusted_parallel_files
             )
 
-        # Process files
-        results = await BatchProcessingService.detect_entities_in_files(
-            files=files,
-            requested_entities=requested_entities,
-            detection_engine=engine_map[detection_engine],
-            max_parallel_files=max_parallel_files
-        )
+            # Add processing timing
+            total_time = time.time() - start_time
+            results["batch_summary"]["api_time"] = total_time
 
-        # Add processing timing
-        total_time = time.time() - start_time
-        results["batch_summary"]["api_time"] = total_time
+            # Add engine information
+            results["model_info"] = {
+                "engine": detection_engine,
+                "max_parallel": adjusted_parallel_files,
+                "actual_parallel": results["batch_summary"].get("workers", adjusted_parallel_files)
+            }
 
-        log_info(f"[PERF] Batch detection API call completed in {total_time:.2f}s")
+            # Add memory statistics
+            from backend.app.utils.memory_management import memory_monitor
+            mem_stats = memory_monitor.get_memory_stats()
+            results["_debug"] = {
+                "memory_usage": mem_stats["current_usage"],
+                "peak_memory": mem_stats["peak_usage"]
+            }
 
-        return JSONResponse(content=results)
+            return JSONResponse(content=results)
+
+    except HTTPException as e:
+        # Re-raise HTTP exceptions
+        raise e
+    except Exception as e:
+        error_response = SecurityAwareErrorHandler.handle_detection_error(e, "batch_detection")
+        error_response.update({
+            "batch_summary": {
+                "total_files": len(files),
+                "successful": 0,
+                "failed": len(files),
+                "total_time": time.time() - start_time
+            }
+        })
+        return JSONResponse(status_code=500, content=error_response)
+
+
+@router.post("/redact")
+@limiter.limit("3/minute")
+async def batch_redact_documents(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        files: List[UploadFile] = File(...),
+        redaction_mappings: str = Form(...),
+        max_parallel_files: Optional[int] = Form(4)
+):
+    """
+    Apply redactions to multiple documents and return them as a ZIP file via streaming.
+
+    This optimized implementation:
+    - Avoids temporary directory creation when possible
+    - Processes PDFs entirely in memory
+    - Uses an in-memory ZIP buffer for smaller batches
+    - Falls back to disk-based processing only for large files
+    - Streams the output directly to the client
+    """
+    start_time = time.time()
+
+    # Adjust parallelism based on memory pressure
+    adjusted_parallel_files = adjust_parallelism_based_on_memory(max_parallel_files)
+
+    try:
+        # Validate and parse redaction mappings
+        is_valid, mappings_result = await validate_redaction_mappings(redaction_mappings)
+        if not is_valid:
+            return JSONResponse(status_code=400, content=mappings_result)
+
+        mappings_data = mappings_result
+
+        # Determine processing strategy (in-memory vs. temp files)
+        use_memory_buffer, total_size = await determine_processing_strategy(files)
+
+        # Use appropriate processing strategy
+        if use_memory_buffer:
+            return await process_batch_in_memory(
+                files, mappings_data, adjusted_parallel_files, start_time, background_tasks
+            )
+        else:
+            return await process_batch_with_temp_files(
+                files, mappings_data, adjusted_parallel_files, start_time, background_tasks
+            )
 
     except Exception as e:
-        log_error(f"[ERROR] Error in batch_detect_sensitive: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": str(e),
-                "batch_summary": {
-                    "total_files": len(files),
-                    "successful": 0,
-                    "failed": len(files),
-                    "total_time": time.time() - start_time
-                }
-            }
+        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+            e, "batch_redaction", 500
         )
+        return JSONResponse(status_code=status_code, content=error_response)
 
 
 @router.post("/hybrid_detect")
+@limiter.limit("10/minute")
+@memory_optimized(threshold_mb=200)
 async def batch_hybrid_detect_sensitive(
+        request: Request,
         files: List[UploadFile] = File(...),
         requested_entities: Optional[str] = Form(None),
         use_presidio: bool = Form(True),
@@ -101,22 +174,27 @@ async def batch_hybrid_detect_sensitive(
         max_parallel_files: Optional[int] = Form(4)
 ):
     """
-    Process multiple files for entity detection using hybrid detection.
+    Process multiple files using hybrid detection with enhanced security and memory optimization.
 
-    Args:
-        files: List of uploaded files
-        requested_entities: JSON string of entity types to detect (optional)
-        use_presidio: Whether to use Presidio for detection
-        use_gemini: Whether to use Gemini for detection
-        use_gliner: Whether to use GLiNER for detection
-        max_parallel_files: Maximum number of files to process in parallel
-
-    Returns:
-        JSON response with batch processing results
+    Processes files under GDPR Article 6(1)(f) for legitimate interests of enhancing
+    document security and privacy.
     """
     start_time = time.time()
 
     try:
+        # Validate detection engines are selected
+        if not any([use_presidio, use_gemini, use_gliner]):
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "At least one detection engine must be selected"}
+            )
+
+        # Adjust max parallel files with memory-aware constraint
+        max_parallel_files = BatchProcessingHelper.get_optimal_batch_size(
+            len(files),
+            sum(file.size or 0 for file in files)
+        )
+
         # Process files with hybrid detection
         results = await BatchProcessingService.detect_entities_in_files(
             files=files,
@@ -132,36 +210,91 @@ async def batch_hybrid_detect_sensitive(
         total_time = time.time() - start_time
         results["batch_summary"]["api_time"] = total_time
 
-        log_info(f"[PERF] Batch hybrid detection API call completed in {total_time:.2f}s")
+        # Get total entities found
+        total_entities = results["batch_summary"].get("total_entities", 0)
+
+        # Record the processing operation
+        record_keeper.record_processing(
+            operation_type="batch_hybrid_detection",
+            document_type="multiple",
+            entity_types_processed=[],  # Entity types are handled per file
+            processing_time=total_time,
+            file_count=len(files),
+            entity_count=total_entities,
+        )
+
+        # Log performance without sensitive details
+        log_batch_operation(
+            "Batch Hybrid Detection",
+            len(files),
+            results["batch_summary"]["successful"],
+            total_time
+        )
+
+        # Add model information
+        results["model_info"] = {
+            "engine": "hybrid",
+            "engines_used": {
+                "presidio": use_presidio,
+                "gemini": use_gemini,
+                "gliner": use_gliner
+            },
+            "max_parallel": max_parallel_files,
+            "actual_parallel": results["batch_summary"].get("workers", max_parallel_files)
+        }
+
+        # Add memory statistics
+        mem_stats = memory_monitor.get_memory_stats()
+        results["_debug"] = {
+            "memory_usage": mem_stats["current_usage"],
+            "peak_memory": mem_stats["peak_usage"]
+        }
 
         return JSONResponse(content=results)
 
+    except HTTPException as e:
+        # Re-raise HTTP exceptions
+        raise e
     except Exception as e:
-        log_error(f"[ERROR] Error in batch_hybrid_detect_sensitive: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": str(e),
-                "batch_summary": {
-                    "total_files": len(files),
-                    "successful": 0,
-                    "failed": len(files),
-                    "total_time": time.time() - start_time
+        # Enhanced error handling
+        error_response = SecurityAwareErrorHandler.handle_detection_error(e, "batch_hybrid_detection")
+        error_response.update({
+            "batch_summary": {
+                "total_files": len(files),
+                "successful": 0,
+                "failed": len(files),
+                "total_time": time.time() - start_time
+            },
+            "model_info": {
+                "engine": "hybrid",
+                "engines_used": {
+                    "presidio": use_presidio,
+                    "gemini": use_gemini,
+                    "gliner": use_gliner
                 }
             }
-        )
+        })
+        return JSONResponse(status_code=500, content=error_response)
+
 
 
 @router.post("/extract")
+@limiter.limit("15/minute")
+@memory_optimized(threshold_mb=50)
 async def batch_extract_text(
+        request: Request,
         files: List[UploadFile] = File(...),
         max_parallel_files: Optional[int] = Form(4)
 ):
     """
-    Extract text with positions from multiple PDF files in parallel.
+    Extract text with positions from multiple files in parallel with enhanced security.
+
+    Processes files under GDPR Article 6(1)(f) - legitimate interests of document
+    security and privacy processing.
 
     Args:
-        files: List of uploaded PDF files
+        request: FastAPI request object for rate limiting
+        files: List of uploaded files
         max_parallel_files: Maximum number of files to process in parallel
 
     Returns:
@@ -169,92 +302,69 @@ async def batch_extract_text(
     """
     start_time = time.time()
 
-    if not files:
-        raise HTTPException(status_code=400, detail="No files provided")
+    # Optimize parallel files based on system resources
+    max_parallel_files = BatchProcessingHelper.get_optimal_batch_size(
+        len(files),
+        sum(file.size or 0 for file in files)
+    )
 
-    # Use temporary directory for file processing
-    with TemporaryDirectory() as temp_dir:
-        # Save files to temporary directory
-        file_paths = []
-        file_meta = {}
+    try:
+        # Process files using the optimized batch processing helper
+        valid_files_list = []
+        async for batch in validate_batch_files_optimized(files):
+            valid_files_list.extend(batch)
 
-        for file in files:
-            try:
-                # Generate unique filename
-                file_uuid = str(uuid.uuid4())
-                file_ext = os.path.splitext(file.filename)[1].lower() if file.filename else ".pdf"
-                tmp_path = os.path.join(temp_dir, f"{file_uuid}{file_ext}")
-
-                # Read and save file
-                contents = await file.read()
-                with open(tmp_path, "wb") as f:
-                    f.write(contents)
-
-                # Reset file cursor
-                await file.seek(0)
-
-                # Store metadata
-                file_meta[tmp_path] = {
-                    "original_name": file.filename,
-                    "content_type": file.content_type,
-                    "size": len(contents)
-                }
-
-                file_paths.append(tmp_path)
-            except Exception as e:
-                log_error(f"[ERROR] Failed to process file {file.filename}: {str(e)}")
-                continue
-
-        if not file_paths:
-            raise HTTPException(status_code=400, detail="No valid files provided for processing")
-
-        # Optimize worker count
-        optimal_workers = ParallelProcessingHelper.get_optimal_workers(
-            len(file_paths),
-            min_workers=1,
-            max_workers=max_parallel_files
-        )
-
-        # Define file extraction function
-        async def extract_file(file_path: str) -> Dict[str, Any]:
-            """Extract text from a single file."""
+        # Define text extraction function
+        async def extract_file(file_tuple):
+            """Extract text from a single file with enhanced security."""
             file_start_time = time.time()
-            file_name = file_meta[file_path]["original_name"]
+            file, file_path, content, safe_filename = file_tuple
+            file_name = file.filename or "unnamed_file"
 
             try:
+                # Register with retention manager for automatic cleanup
+                if file_path:
+                    retention_manager.register_processed_file(file_path, TEMP_FILE_RETENTION_SECONDS)
+
                 # Determine document format
                 doc_format = None
-                if file_path.lower().endswith('.pdf'):
+                if file_name.lower().endswith('.pdf'):
                     doc_format = DocumentFormat.PDF
-                elif file_path.lower().endswith(('.docx', '.doc')):
+                elif file_name.lower().endswith(('.docx', '.doc')):
                     doc_format = DocumentFormat.DOCX
-                elif file_path.lower().endswith('.txt'):
+                elif file_name.lower().endswith('.txt'):
                     doc_format = DocumentFormat.TXT
 
                 # Create extractor
                 extractor = DocumentProcessingFactory.create_document_extractor(
-                    file_path, doc_format
+                    file_path if file_path else content,
+                    doc_format
                 )
 
-                # Extract text
+                # Extract text with performance tracking
                 extracted_data = await asyncio.to_thread(extractor.extract_text_with_positions)
                 extractor.close()
+
+                # Apply data minimization
+                from backend.app.utils.data_minimization import minimize_extracted_data
+                extracted_data = minimize_extracted_data(extracted_data)
 
                 # Calculate statistics
                 total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
 
                 # Add performance metrics
+                extraction_time = time.time() - file_start_time
                 extracted_data["performance"] = {
-                    "extraction_time": time.time() - file_start_time,
+                    "extraction_time": extraction_time,
                     "pages_count": len(extracted_data.get("pages", [])),
                     "words_count": total_words
                 }
 
-                # Add file information
+                # Add file information (no sensitive content)
                 extracted_data["file_info"] = {
                     "filename": file_name,
-                    "content_type": file_meta[file_path]["content_type"],
-                    "size": file_meta[file_path]["size"]
+                    "content_type": file.content_type or "application/octet-stream",
+                    "size": len(content)
                 }
 
                 return {
@@ -263,297 +373,89 @@ async def batch_extract_text(
                     "results": extracted_data
                 }
             except Exception as e:
-                log_error(f"[ERROR] Error extracting text from {file_name}: {str(e)}")
-                return {
-                    "file": file_name,
-                    "status": "error",
-                    "error": str(e),
-                    "processing_time": time.time() - file_start_time
-                }
+                return SecurityAwareErrorHandler.handle_file_processing_error(e, "text_extraction", file_name)
+            finally:
+                # Ensure temporary file is cleaned up
+                if file_path and os.path.exists(file_path):
+                    await SecureTempFileManager.secure_delete_file_async(file_path)
 
-        # Process files in parallel
-        log_info(f"[OK] Extracting text from {len(file_paths)} files with {optimal_workers} workers")
-        tasks = [extract_file(file_path) for file_path in file_paths]
-        results = await asyncio.gather(*tasks)
-
-    # Calculate batch statistics
-    batch_time = time.time() - start_time
-    success_count = sum(1 for r in results if r.get("status") == "success")
-    error_count = len(results) - success_count
-    total_words = sum(
-        r.get("results", {}).get("performance", {}).get("words_count", 0)
-        for r in results if r.get("status") == "success"
-    )
-    total_pages = sum(
-        r.get("results", {}).get("performance", {}).get("pages_count", 0)
-        for r in results if r.get("status") == "success"
-    )
-
-    # Build response
-    response = {
-        "batch_summary": {
-            "total_files": len(files),
-            "successful": success_count,
-            "failed": error_count,
-            "total_pages": total_pages,
-            "total_words": total_words,
-            "total_time": batch_time,
-            "workers": optimal_workers
-        },
-        "file_results": results
-    }
-
-    log_info(f"[PERF] Batch extraction completed in {batch_time:.2f}s. "
-             f"Successfully processed {success_count}/{len(files)} files. "
-             f"Extracted {total_pages} pages and {total_words} words.")
-
-    return JSONResponse(content=response)
-
-
-@router.post("/redact")
-async def batch_redact_documents(
-        background_tasks: BackgroundTasks,
-        files: List[UploadFile] = File(...),
-        redaction_mappings: str = Form(...),
-        max_parallel_files: Optional[int] = Form(4)
-):
-    """
-    Apply redactions to multiple documents and return them as a zip file.
-
-    This endpoint accepts the same output format as the batch/detect and
-    batch/hybrid_detect endpoints, making it easy to pipe detection results
-    directly to redaction.
-
-    Args:
-        background_tasks: FastAPI BackgroundTasks for cleanup
-        files: List of uploaded documents
-        redaction_mappings: JSON string with batch detection results
-        max_parallel_files: Maximum number of files to process in parallel
-
-    Returns:
-        ZIP file containing all redacted documents
-    """
-    start_time = time.time()
-
-    # Create temporary directories
-    temp_input_dir = TemporaryDirectory()
-    temp_output_dir = TemporaryDirectory()
-    zip_output_path = NamedTemporaryFile(delete=False, suffix=".zip")
-    zip_output_filename = zip_output_path.name
-
-    try:
-        # Parse redaction mappings from batch detection output
-        try:
-            detection_results = json.loads(redaction_mappings)
-
-            # Extract redaction mappings from detection results
-            mappings_data = {}
-
-            # Handle direct redaction_mapping format
-            if "redaction_mapping" in detection_results:
-                # Single file format - convert to batch format
-                if "file_info" in detection_results and "filename" in detection_results["file_info"]:
-                    filename = detection_results["file_info"]["filename"]
-                    mappings_data[filename] = detection_results["redaction_mapping"]
-            # Handle batch detection output format
-            elif "file_results" in detection_results:
-                for file_result in detection_results["file_results"]:
-                    if file_result["status"] == "success" and "results" in file_result:
-                        filename = file_result["file"]
-                        if "redaction_mapping" in file_result["results"]:
-                            mappings_data[filename] = file_result["results"]["redaction_mapping"]
-
-            if not mappings_data:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Could not extract valid redaction mappings from provided JSON."
-                )
-
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid redaction_mappings JSON format")
-
-        # Register cleanup tasks for temp directories - NOT for the zip file yet
-        background_tasks.add_task(lambda: temp_input_dir.cleanup())
-        background_tasks.add_task(lambda: temp_output_dir.cleanup())
-
-        # Save uploaded files to input directory
-        file_paths = []
-        file_meta = {}
-
-        for file in files:
-            try:
-                # Use original filename for better mapping to redaction data
-                safe_filename = file.filename
-                input_path = os.path.join(temp_input_dir.name, safe_filename)
-
-                # Read and save file
-                contents = await file.read()
-                with open(input_path, "wb") as f:
-                    f.write(contents)
-
-                # Reset file cursor
-                await file.seek(0)
-
-                # Store metadata
-                file_meta[input_path] = {
-                    "original_name": file.filename,
-                    "content_type": file.content_type,
-                    "size": len(contents),
-                    "output_path": os.path.join(
-                        temp_output_dir.name,
-                        f"redacted_{safe_filename}"
-                    )
-                }
-
-                file_paths.append(input_path)
-            except Exception as e:
-                log_error(f"[ERROR] Failed to process file {file.filename}: {str(e)}")
-                continue
-
-        if not file_paths:
-            raise HTTPException(status_code=400, detail="No valid files provided for processing")
-
-        # Optimize worker count
-        optimal_workers = ParallelProcessingHelper.get_optimal_workers(
-            len(file_paths),
-            min_workers=1,
-            max_workers=max_parallel_files
+        # Log batch operation start
+        log_batch_operation(
+            "Batch Text Extraction Started",
+            len(valid_files_list),
+            len(valid_files_list),
+            0
         )
 
-        # Define file redaction function
-        async def redact_file(file_path: str) -> Dict[str, Any]:
-            """Apply redactions to a single file."""
-            file_start_time = time.time()
-            file_name = file_meta[file_path]["original_name"]
-            output_path = file_meta[file_path]["output_path"]
-
-            try:
-                # Get redaction mapping for this file
-                if file_name not in mappings_data:
-                    return {
-                        "file": file_name,
-                        "status": "error",
-                        "error": "No redaction mapping provided for this file"
-                    }
-
-                redaction_mapping = mappings_data[file_name]
-
-                # Determine document format
-                doc_format = None
-                if file_path.lower().endswith('.pdf'):
-                    doc_format = DocumentFormat.PDF
-                elif file_path.lower().endswith(('.docx', '.doc')):
-                    doc_format = DocumentFormat.DOCX
-                elif file_path.lower().endswith('.txt'):
-                    doc_format = DocumentFormat.TXT
-
-                # Create redactor
-                redactor = DocumentProcessingFactory.create_document_redactor(
-                    file_path, doc_format
-                )
-
-                # Apply redactions
-                await asyncio.to_thread(
-                    redactor.apply_redactions,
-                    redaction_mapping,
-                    output_path
-                )
-
-                redact_time = time.time() - file_start_time
-
-                return {
-                    "file": file_name,
-                    "status": "success",
-                    "output_file": os.path.basename(output_path),
-                    "redaction_time": redact_time
-                }
-            except Exception as e:
-                log_error(f"[ERROR] Error redacting {file_name}: {str(e)}")
-                return {
-                    "file": file_name,
-                    "status": "error",
-                    "error": str(e),
-                    "processing_time": time.time() - file_start_time
-                }
-
         # Process files in parallel
-        log_info(f"[OK] Redacting {len(file_paths)} files with {optimal_workers} workers")
-        tasks = [redact_file(file_path) for file_path in file_paths]
+        tasks = [extract_file(file_tuple) for file_tuple in valid_files_list]
         results = await asyncio.gather(*tasks)
-
-        # Create ZIP file with redacted documents
-        with ZipFile(zip_output_filename, 'w', ZIP_DEFLATED) as zipf:
-            for result in results:
-                if result["status"] == "success":
-                    file_name = result["file"]
-                    # Find original input path to get output path from metadata
-                    for input_path, meta in file_meta.items():
-                        if meta["original_name"] == file_name:
-                            zipf.write(
-                                meta["output_path"],
-                                arcname=f"redacted_{os.path.basename(file_name)}"
-                            )
-                            break
 
         # Calculate batch statistics
         batch_time = time.time() - start_time
         success_count = sum(1 for r in results if r.get("status") == "success")
         error_count = len(results) - success_count
+        total_words = sum(
+            r.get("results", {}).get("performance", {}).get("words_count", 0)
+            for r in results if r.get("status") == "success"
+        )
+        total_pages = sum(
+            r.get("results", {}).get("performance", {}).get("pages_count", 0)
+            for r in results if r.get("status") == "success"
+        )
 
-        # Add batch summary to metadata file in ZIP
-        batch_summary = {
-            "total_files": len(files),
-            "successful": success_count,
-            "failed": error_count,
-            "total_time": batch_time,
-            "workers": optimal_workers,
+        # Record the processing operation
+        record_keeper.record_processing(
+            operation_type="batch_text_extraction",
+            document_type="multiple",
+            entity_types_processed=[],
+            processing_time=batch_time,
+            file_count=len(files),
+            entity_count=0,
+        )
+
+        # Build response
+        response = {
+            "batch_summary": {
+                "total_files": len(files),
+                "successful": success_count,
+                "failed": error_count,
+                "total_pages": total_pages,
+                "total_words": total_words,
+                "total_time": batch_time,
+                "workers": max_parallel_files
+            },
             "file_results": results
         }
 
-        summary_file = os.path.join(temp_output_dir.name, "batch_summary.json")
-        with open(summary_file, 'w') as f:
-            json.dump(batch_summary, f, indent=2)
-
-        # Add summary to ZIP
-        with ZipFile(zip_output_filename, 'a', ZIP_DEFLATED) as zipf:
-            zipf.write(summary_file, arcname="batch_summary.json")
-
-        log_info(f"[PERF] Batch redaction completed in {batch_time:.2f}s. "
-                 f"Successfully redacted {success_count}/{len(files)} files.")
-
-        # Create a delayed cleanup function that will execute after the file has been sent
-        def delayed_cleanup():
-            try:
-                # Sleep for a short time to ensure file is no longer in use
-                time.sleep(1)
-                if os.path.exists(zip_output_filename):
-                    os.remove(zip_output_filename)
-                log_info(f"[OK] Temporary zip file removed: {zip_output_filename}")
-            except Exception as e:
-                log_error(f"[ERROR] Failed to remove temporary zip file: {str(e)}")
-
-        # Add delayed cleanup task
-        background_tasks.add_task(delayed_cleanup)
-
-        # Return the ZIP file
-        return FileResponse(
-            zip_output_filename,
-            media_type="application/zip",
-            filename="redacted_documents.zip",
-            headers={
-                "X-Batch-Time": f"{batch_time:.3f}s",
-                "X-Success-Count": str(success_count),
-                "X-Error-Count": str(error_count)
-            }
+        # Log performance
+        log_batch_operation(
+            "Batch Text Extraction Completed",
+            len(files),
+            success_count,
+            batch_time
         )
 
-    except Exception as e:
-        # Clean up the zip file in case of an error
-        try:
-            if os.path.exists(zip_output_filename):
-                os.remove(zip_output_filename)
-        except Exception as cleanup_error:
-            log_error(f"[ERROR] Failed to clean up zip file after error: {str(cleanup_error)}")
+        # Add memory statistics
+        mem_stats = memory_monitor.get_memory_stats()
+        response["_debug"] = {
+            "memory_usage": mem_stats["current_usage"],
+            "peak_memory": mem_stats["peak_usage"]
+        }
 
-        log_error(f"[ERROR] Error in batch_redact_documents: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(content=response)
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        # Enhanced error handling
+        error_response = SecurityAwareErrorHandler.handle_detection_error(e, "batch_extract")
+        error_response.update({
+            "batch_summary": {
+                "total_files": len(files),
+                "successful": 0,
+                "failed": len(files),
+                "total_time": time.time() - start_time
+            }
+        })
+        return JSONResponse(status_code=500, content=error_response)

@@ -209,6 +209,45 @@ class EntityUtils:
                 "end": entity.end,
                 "score": float(entity.score)
             }
+    @staticmethod
+    def merge_redaction_mappings(
+            redaction_mappings: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Merge multiple redaction mappings into one.
+
+        Args:
+            redaction_mappings: List of redaction mappings to merge
+
+        Returns:
+            Merged redaction mapping
+        """
+        if not redaction_mappings:
+            return {"pages": []}
+
+        merged = {"pages": []}
+        page_mappings = {}
+
+        # Group mappings by page
+        for mapping in redaction_mappings:
+            for page_info in mapping.get("pages", []):
+                page_num = page_info.get("page")
+                sensitive_items = page_info.get("sensitive", [])
+
+                if page_num not in page_mappings:
+                    page_mappings[page_num] = []
+
+                page_mappings[page_num].extend(sensitive_items)
+
+        # Create merged mapping
+        for page_num, sensitive_items in sorted(page_mappings.items()):
+            merged["pages"].append({
+                "page": page_num,
+                "sensitive": sensitive_items
+            })
+
+        return merged
+
 
     @staticmethod
     def format_sensitive_entities(

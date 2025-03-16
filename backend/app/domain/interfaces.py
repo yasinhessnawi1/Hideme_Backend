@@ -79,6 +79,11 @@ class DocumentRedactor(ABC):
         """
         pass
 
+    def close(self):
+        """Close the document and free resources."""
+        pass
+
+
 
 class EntityMappingService(ABC):
     """Interface for mapping entity offsets to document positions."""
