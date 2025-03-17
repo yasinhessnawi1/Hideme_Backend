@@ -1,0 +1,26 @@
+nlp_engine_name: spacy
+models:
+  - lang_code: nb
+    model_name: nb_core_news_lg
+ner_model_configuration:
+  model_to_presidio_entity_mapping:
+    PER: PERSON
+    PERSON: PERSON
+    LOC: LOCATION
+    LOCATION: LOCATION
+    GPE: LOCATION
+    GPE_LOC: LOCATION
+    GPE_ORG: ORGANIZATION
+    ORG: ORGANIZATION
+    ORGANIZATION: ORGANIZATION
+    DATE: DATE_TIME
+    TIME: DATE_TIME
+    NORP: NRP
+    DRV: PERSON
+    MISC: MEDICAL_LICENSE
+  low_confidence_score_multiplier: 0.4
+  low_score_entity_names:
+    - ORGANIZATION
+    - ORG
+  default_score: 0.85
+  labels_to_ignore: ["PROD", "EVT"]

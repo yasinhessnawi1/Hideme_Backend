@@ -1,45 +1,59 @@
+"""
+Helper functions for loading and using ML models.
+"""
 import spacy
 from spacy.cli import download as spacy_download
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
+from typing import Optional, Any
 
-from backend.app.configs.presidio_config import LOCAL_HF_MODEL_PATH
-from backend.app.utils.logger import default_logger as logging
+from backend.app.utils.logger import log_info, log_error, log_warning
 
 
-def get_spacy_model(model_name):
+def get_spacy_model(model_name: str) -> Any:
     """
-    Load a spaCy model. If the model is not found, download it automatically.
+    Load a spaCy model, downloading it if not available.
 
-    :param model_name: Name of the spaCy model (e.g. "nb_core_news_lg")
-    :return: Loaded spaCy model.
+    Args:
+        model_name: Name of the spaCy model to load
+
+    Returns:
+        Loaded spaCy model
     """
     try:
         model = spacy.load(model_name)
-        logging.info(f"✅ Loaded spaCy model '{model_name}' successfully.")
+        log_info(f"[OK] Loaded spaCy model '{model_name}' successfully")
     except OSError:
-        logging.info(f"❌ spaCy model '{model_name}' not found. Downloading...")
+        log_warning(f"[OK] spaCy model '{model_name}' not found. Downloading...")
         spacy_download(model_name)
         model = spacy.load(model_name)
-        logging.info(f"❌ Downloaded and loaded spaCy model '{model_name}'.")
+        log_info(f"[OK] Downloaded and loaded spaCy model '{model_name}'")
     return model
 
 
-def get_hf_ner_pipeline(model_path=LOCAL_HF_MODEL_PATH, aggregation_strategy="simple"):
+def get_hf_ner_pipeline(model_path: str, aggregation_strategy: str = "simple") -> Optional[Any]:
     """
-    Load a Hugging Face NER pipeline using the local model with custom code execution enabled.
+    Load a Hugging Face NER pipeline from a local or remote model.
 
-    :param model_path: Path to the local Hugging Face model (from presidio_config.py)
-    :param aggregation_strategy: Aggregation strategy for the pipeline (default "simple").
-    :return: A Hugging Face NER pipeline.
+    Args:
+        model_path: Path or name of the Hugging Face model
+        aggregation_strategy: Token aggregation strategy (default: "simple")
+
+    Returns:
+        NER pipeline or None if loading fails
     """
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
         model = AutoModelForTokenClassification.from_pretrained(model_path, trust_remote_code=True)
 
-        ner_pipe = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy=aggregation_strategy)
+        ner_pipe = pipeline(
+            "ner",
+            model=model,
+            tokenizer=tokenizer,
+            aggregation_strategy=aggregation_strategy
+        )
 
-        logging.info(f"✅ Successfully loaded Hugging Face model from '{model_path}'!")
+        log_info(f"[OK] Successfully loaded Hugging Face model from '{model_path}'")
+        return ner_pipe # Return the pipeline
     except Exception as e:
-        logging.error(f"❌ Failed to load Hugging Face model from '{model_path}': {e}")
-        ner_pipe = None
-    return ner_pipe
+        log_error(f"[ERROR] Failed to load Hugging Face model from '{model_path}': {e}")
+        return None

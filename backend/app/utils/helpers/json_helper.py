@@ -1,91 +1,119 @@
+"""
+JSON handling utilities for document processing.
+"""
 import json
-from typing import List, Optional
+from typing import List, Optional, Any, Union
 
 from fastapi import HTTPException
-from presidio_analyzer import RecognizerResult
 
 from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
+from backend.app.configs.gliner_config import GLINER_ENTITIES
 from backend.app.configs.presidio_config import REQUESTED_ENTITIES
-from backend.app.utils.logger import default_logger as logging
+from backend.app.utils.logger import log_info, log_warning, log_error
 
 
-def presidiotojsonconverter(detected_entities):
+def validate_requested_entities(
+        requested_entities: Optional[str],
+        labels: Optional[List[str]] = None
+) -> List[str]:
     """
-    Custom converter for non-serializable objects.
-    If the object is a RecognizerResult, convert it to a dict.
+    Validate and parse requested entities.
+
+    Args:
+        requested_entities: JSON string of entity types to detect
+        labels: Optional list of valid entity labels for validation
+
+    Returns:
+        List of validated entity types
+
+    Raises:
+        HTTPException: If validation fails
     """
-    # Format entity fisk_data
-    return [
-        {
-            "entity_type": e.entity_type,
-            "start": e.start,
-            "end": e.end,
-            "score": float(e.score)
-        }
-        for e in detected_entities if e.score > 0.5
-    ]
-    # Add more conversions if needed
+    if not requested_entities:
+        log_warning(f"[OK]No specific entities requested, using defaults")
+        return []
+
+    try:
+        entity_list = json.loads(requested_entities)
+
+        # If specific labels are provided, validate against them
+        if labels:
+            available_entities = labels
+            for entity in entity_list:
+                if entity not in available_entities:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid entity type: {entity}. Available entities: {available_entities}"
+                    )
+        # Otherwise validate against standard entity lists
+        else:
+            available_entities = list(AVAILABLE_ENTITIES.keys()) + REQUESTED_ENTITIES + GLINER_ENTITIES
+            for entity in entity_list:
+                if entity not in available_entities:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid entity type: {entity}. Available entities: {available_entities}"
+                    )
+
+        log_info(f"[OK] Validated entity list: {entity_list}")
+        return entity_list
+
+    except json.JSONDecodeError:
+        log_error(f"[OK]Invalid JSON format in requested_entities")
+        raise HTTPException(status_code=400, detail="Invalid JSON format in requested_entities")
 
 
-def convert_to_json(data, indent=2):
+def convert_to_json(data: Any, indent: int = 2) -> str:
     """
-    Convert the provided fisk_data to a JSON string.
+    Convert data to a JSON string with custom converter for non-serializable objects.
 
-    :param data: The fisk_data to convert (typically a dict or list).
-    :param indent: Indentation level for pretty-printing (default is 2).
-    :return: A JSON-formatted string.
-    :raises ValueError: If conversion fails.
+    Args:
+        data: Data to convert
+        indent: Indentation level
+
+    Returns:
+        JSON string
+
+    Raises:
+        ValueError: If conversion fails
     """
     try:
-        json_str = json.dumps(data, indent=indent, ensure_ascii=False, default=presidiotojsonconverter)
+        def custom_converter(obj):
+            """Custom converter for non-serializable objects."""
+            if hasattr(obj, '__dict__'):
+                return obj.__dict__
+            elif hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            raise TypeError(f"Type not serializable: {type(obj)}")
+
+        json_str = json.dumps(
+            data,
+            indent=indent,
+            ensure_ascii=False,
+            default=custom_converter
+        )
         return json_str
+
     except Exception as e:
-        raise ValueError(f"Error converting fisk_data to JSON: {e}")
+        log_error(f"[OK]Error converting data to JSON: {e}")
+        raise ValueError(f"Error converting data to JSON: {e}")
 
 
-# Helper method to print results nicely
-
-
-def print_analyzer_results(results: List[RecognizerResult], text: str):
-    """Print the results in a human-readable way."""
-
-    for i, result in enumerate(results):
-        print(f"Result {i}:")
-        print(f" {result}, text: {text[result.start:result.end]}")
-
-        if result.analysis_explanation is not None:
-            print(f" {result.analysis_explanation.textual_explanation}")
-
-
-def validate_requested_entities(requested_entities: Optional[str], labels: Optional[List[str]] = None):
+def parse_json(json_str: str) -> Any:
     """
-    Validates and filters requested entities.
+    Parse a JSON string safely.
 
-    :param requested_entities: JSON string or Python list containing requested entities.
-    :param labels: List of valid labels to compare against.
-    :return: List of valid requested entities.
-    :raises HTTPException: If none of the requested entities are valid.
+    Args:
+        json_str: JSON string to parse
+
+    Returns:
+        Parsed JSON data
+
+    Raises:
+        ValueError: If parsing fails
     """
-    if requested_entities:
-        logging.info(f"🔍 Validating requested entities: {requested_entities}")
-
-        # ✅ Ensure `requested_entities` is a Python list (handle JSON string case)
-        if isinstance(requested_entities, str):
-            try:
-                requested_entities = json.loads(requested_entities)  # Convert JSON string to list
-            except json.JSONDecodeError:
-                raise HTTPException(status_code=400, detail="Invalid JSON format in requested_entities")
-
-        if not isinstance(requested_entities, list):
-            raise HTTPException(status_code=400, detail="requested_entities must be a list")
-
-        # ✅ Define available entities based on provided labels or default to known entities
-        available_entities = labels if labels else list(AVAILABLE_ENTITIES.keys()) + REQUESTED_ENTITIES
-
-        # ✅ Filter out only valid requested entities
-        valid_entities = [entity for entity in requested_entities if entity in available_entities]
-
-        if not valid_entities:
-            raise HTTPException(status_code=400, detail="No valid entities found in the request.")
-
-        return valid_entities  # ✅ Return filtered valid entities
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        log_error(f"[OK]Invalid JSON format: {e}")
+        raise ValueError(f"Invalid JSON format: {e}")
