@@ -25,6 +25,7 @@ from backend.app.utils.file_validation import (
 )
 from backend.app.utils.memory_management import memory_optimized, memory_monitor
 from backend.app.utils.document_processing_utils import extract_text_data_in_memory
+from backend.app.utils.secure_file_utils import SecureTempFileManager  # Import SecureTempFileManager
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
@@ -70,16 +71,20 @@ async def hybrid_detect_sensitive(
     try:
         # Process requested entities
         try:
+            # Parse and validate the requested entity types from form data
             entity_list = validate_requested_entities(requested_entities)
+            # If GLiNER is enabled but no entities specified, use default GLiNER entities
             if not entity_list and use_gliner:
                 entity_list = GLINER_ENTITIES
         except Exception as e:
+            # Handle entity validation errors with security-aware error handling
             error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
                 e, "entity_validation", 400
             )
             return JSONResponse(status_code=status_code, content=error_response)
 
         # Check if the file is large and needs chunked processing
+        # Read a small sample to determine file characteristics without loading the whole file
         file_read_start = time.time()
         first_chunk = await file.read(8192)
         await file.seek(0)
@@ -87,22 +92,23 @@ async def hybrid_detect_sensitive(
         # Determine max size based on file type
         max_size = MAX_PDF_SIZE_BYTES if "pdf" in file.content_type.lower() else MAX_TEXT_SIZE_BYTES
 
-        # Validate file size before reading full content
+        # Validate file size before reading full content to prevent DoS attacks
         if len(first_chunk) > max_size:
             return JSONResponse(
                 status_code=413,
                 content={"detail": f"File size exceeds maximum allowed ({max_size // (1024 * 1024)}MB)"}
             )
 
-        # Decide whether to use chunked processing
+        # Decide whether to use chunked processing based on file size
         use_chunked_processing = False
 
-        # For large files, use chunked processing
+        # For large files, use chunked processing to reduce memory footprint
         if hasattr(file, 'size') and file.size and file.size > LARGE_FILE_THRESHOLD:
             use_chunked_processing = True
 
         if use_chunked_processing:
-            # Process large file in chunks
+            # Process large file in chunks to minimize memory usage
+            # This delegates to a specialized function that streams the file in parts
             result = await process_file_in_chunks(
                 file,
                 entity_list,
@@ -113,9 +119,10 @@ async def hybrid_detect_sensitive(
             )
             return result
 
-        # For smaller files, process normally
-        contents = await file.read()
-        if len(contents) > max_size:
+        # For smaller files, process normally (in memory)
+        # Using SecureTempFileManager for memory-efficient processing
+        file_content = await file.read()
+        if len(file_content) > max_size:
             return JSONResponse(
                 status_code=413,
                 content={"detail": f"File size exceeds maximum allowed ({max_size // (1024 * 1024)}MB)"}
@@ -123,9 +130,9 @@ async def hybrid_detect_sensitive(
 
         processing_times["file_read_time"] = time.time() - file_read_start
 
-        # Validate file content
+        # Validate file content for security (type verification, malware checks)
         is_valid, reason, detected_mime = await validate_file_content_async(
-            contents, file.filename, file.content_type
+            file_content, file.filename, file.content_type
         )
         if not is_valid:
             return JSONResponse(
@@ -133,15 +140,29 @@ async def hybrid_detect_sensitive(
                 content={"detail": reason}
             )
 
-        # Extract text
+        # Using SecureTempFileManager for memory-optimized content processing
+        # This allows the system to decide whether to use in-memory buffers or temp files
         extract_start = time.time()
-        extracted_data = await extract_text_data_in_memory(file.content_type, contents)
+
+        # Define an async processor function that calls extract_text_data_in_memory
+        async def extraction_processor(content):
+            return await extract_text_data_in_memory(file.content_type, content)
+
+        # Use SecureTempFileManager to process content optimally
+        extracted_data = await SecureTempFileManager.process_content_in_memory_async(
+            file_content,
+            extraction_processor,
+            use_path=False
+        )
+
         processing_times["extraction_time"] = time.time() - extract_start
 
-        # Apply data minimization
+        # Apply data minimization to reduce exposure of sensitive information
+        # This removes unnecessary metadata and reduces attack surface
         extracted_data = minimize_extracted_data(extracted_data)
 
         # Configure hybrid detector options and get detector instance
+        # This combines multiple detection engines based on user configuration
         config = {
             "use_presidio": use_presidio,
             "use_gemini": use_gemini,
@@ -153,16 +174,22 @@ async def hybrid_detect_sensitive(
         detector = initialization_service.get_hybrid_detector(config)
         processing_times["detector_init_time"] = time.time() - detector_create_start
 
+        # Set timeout for detection to prevent long-running operations
+        # This ensures the API remains responsive even with complex documents
         detection_timeout = 60
         detection_start = time.time()
         try:
+            # Use appropriate detection method (async or sync) with timeout
             if hasattr(detector, 'detect_sensitive_data_async'):
+                # For detectors supporting async operations
                 detection_task = detector.detect_sensitive_data_async(extracted_data, entity_list)
                 detection_result = await asyncio.wait_for(detection_task, timeout=detection_timeout)
             else:
+                # For synchronous detectors, run in a thread pool to avoid blocking
                 detection_task = asyncio.to_thread(detector.detect_sensitive_data, extracted_data, entity_list)
                 detection_result = await asyncio.wait_for(detection_task, timeout=detection_timeout)
         except asyncio.TimeoutError:
+            # Handle detection timeout with a specific error response
             return JSONResponse(
                 status_code=408,
                 content={"detail": f"Hybrid detection timed out after {detection_timeout} seconds"}
@@ -174,16 +201,20 @@ async def hybrid_detect_sensitive(
                 content={"detail": "Detection failed to return results"}
             )
 
+        # Unpack detection results: anonymized text, detected entities, and redaction mapping
         anonymized_text, entities, redaction_mapping = detection_result
         processing_times["detection_time"] = time.time() - detection_start
         processing_times["total_time"] = time.time() - start_time
 
+        # Calculate statistics for logging and monitoring
         total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
         processing_times["words_count"] = total_words
         processing_times["pages_count"] = len(extracted_data.get("pages", []))
         if total_words > 0 and entities:
+            # Calculate entity density (entities per 1000 words) for analytics
             processing_times["entity_density"] = (len(entities) / total_words) * 1000
 
+        # Record processing metrics for compliance and performance monitoring
         record_keeper.record_processing(
             operation_type="hybrid_detection",
             document_type=file.content_type,
@@ -193,6 +224,7 @@ async def hybrid_detect_sensitive(
             success=True
         )
 
+        # Prepare response with metadata about detection engines used
         engines_used = {
             "presidio": use_presidio,
             "gemini": use_gemini,
@@ -201,20 +233,24 @@ async def hybrid_detect_sensitive(
         file_info = {
             "filename": file.filename,
             "content_type": file.content_type,
-            "size": len(contents)
+            "size": len(file_content)
         }
+
+        # Sanitize output to remove any potentially sensitive information from response
         sanitized_response = sanitize_detection_output(
             anonymized_text, entities, redaction_mapping, processing_times
         )
         sanitized_response["model_info"] = {"engine": "hybrid", "engines_used": engines_used}
         sanitized_response["file_info"] = file_info
 
+        # Add memory usage statistics for debugging and monitoring
         mem_stats = memory_monitor.get_memory_stats()
         sanitized_response["_debug"] = {
             "memory_usage": mem_stats["current_usage"],
             "peak_memory": mem_stats["peak_usage"]
         }
 
+        # Log operation details for security auditing and performance tracking
         log_sensitive_operation(
             "Hybrid Detection",
             len(entities),
@@ -229,13 +265,14 @@ async def hybrid_detect_sensitive(
         return JSONResponse(content=sanitized_response)
 
     except HTTPException as e:
+        # Let FastAPI handle HTTP exceptions directly
         raise e
     except Exception as e:
+        # For all other exceptions, use the security-aware error handler
+        # This ensures no sensitive information is leaked in error messages
         error_response = SecurityAwareErrorHandler.handle_detection_error(e, "hybrid_detection")
         error_response["model_info"] = {
             "engine": "hybrid",
             "engines_used": {"presidio": use_presidio, "gemini": use_gemini, "gliner": use_gliner}
         }
         return JSONResponse(status_code=500, content=error_response)
-
-

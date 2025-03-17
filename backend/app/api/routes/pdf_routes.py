@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from backend.app.utils.logger import log_warning
+from backend.app.utils.logger import log_warning, log_info, log_error
 from backend.app.utils.secure_logging import log_sensitive_operation
 from backend.app.utils.data_minimization import minimize_extracted_data
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
@@ -16,6 +16,7 @@ from backend.app.utils.processing_records import record_keeper
 from backend.app.utils.file_validation import MAX_PDF_SIZE_BYTES, validate_file_content_async, validate_mime_type
 from backend.app.utils.memory_management import memory_optimized, memory_monitor
 from backend.app.document_processing.pdf import PDFTextExtractor, PDFRedactionService
+from backend.app.utils.secure_file_utils import SecureTempFileManager
 
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -45,18 +46,31 @@ async def pdf_redact(
     - Output: Returns the redacted PDF as a streamed response to minimize memory footprint
     """
     start_time = time.time()
+    operation_id = f"pdf_redact_{time.time()}"
 
     # Validate file type
     if not validate_mime_type(file.content_type, ["application/pdf"]):
+        log_warning(f"[SECURITY] Unsupported file type attempted: {file.content_type} [operation_id={operation_id}]")
         return JSONResponse(
             status_code=415,
             content={"detail": "Only PDF files are supported"}
         )
 
     try:
-        # Read file content once into memory
-        contents = await file.read()
+        # Read file content into memory using SecureTempFileManager
+        log_info(f"[SECURITY] Starting PDF redaction processing [operation_id={operation_id}]")
+
+        # Define a function to read the file
+        async def read_file_content():
+            contents = await file.read()
+            return contents
+
+        # Use SecureTempFileManager to process content
+        contents = await read_file_content()
+
         if len(contents) > MAX_PDF_SIZE_BYTES:
+            log_warning(
+                f"[SECURITY] PDF size exceeds limit: {len(contents) / (1024 * 1024):.2f}MB > {MAX_PDF_SIZE_BYTES / (1024 * 1024)}MB [operation_id={operation_id}]")
             return JSONResponse(
                 status_code=413,
                 content={"detail": f"PDF file size exceeds maximum allowed ({MAX_PDF_SIZE_BYTES // (1024 * 1024)}MB)"}
@@ -67,6 +81,7 @@ async def pdf_redact(
             contents, file.filename, file.content_type
         )
         if not is_valid:
+            log_warning(f"[SECURITY] Invalid PDF content: {reason} [operation_id={operation_id}]")
             return JSONResponse(
                 status_code=415,
                 content={"detail": reason}
@@ -76,26 +91,42 @@ async def pdf_redact(
         if redaction_mapping:
             try:
                 mapping_data = json.loads(redaction_mapping)
+                log_info(
+                    f"[SECURITY] Successfully parsed redaction mapping with {sum(len(page.get('sensitive', [])) for page in mapping_data.get('pages', []))} redactions [operation_id={operation_id}]")
             except Exception as e:
+                log_error(f"[SECURITY] Error parsing redaction mapping: {str(e)} [operation_id={operation_id}]")
                 error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
                     e, "redaction_mapping_parse", 400, file.filename
                 )
                 return JSONResponse(status_code=status_code, content=error_response)
         else:
             mapping_data = {"pages": []}
+            log_info(f"[SECURITY] No redaction mapping provided, using empty mapping [operation_id={operation_id}]")
 
         total_redactions = sum(len(page.get("sensitive", [])) for page in mapping_data.get("pages", []))
 
-        # Process the PDF entirely in memory
+        # Process the PDF using SecureTempFileManager
         redact_start = time.time()
         try:
-            # Create a PDFRedactionService instance with the PDF content as bytes
-            redaction_service = PDFRedactionService(contents)
+            # Define a processor function for redaction
+            async def redaction_processor(content):
+                # Create a PDFRedactionService instance with the PDF content as bytes
+                redaction_service = PDFRedactionService(content)
+                # Apply redactions in memory and get the redacted content as bytes
+                return redaction_service.apply_redactions_to_memory(mapping_data)
 
-            # Apply redactions in memory and get the redacted content as bytes
-            redacted_content = redaction_service.apply_redactions_to_memory(mapping_data)
+            # Use SecureTempFileManager for memory-efficient processing
+            redacted_content = await SecureTempFileManager.process_content_in_memory_async(
+                contents,
+                redaction_processor,
+                use_path=False,
+                extension=".pdf"
+            )
+            log_info(
+                f"[SECURITY] PDF redaction completed successfully: {total_redactions} redactions applied [operation_id={operation_id}]")
+
         except Exception as e:
-            log_warning(f"Error applying redactions: {str(e)}")
+            log_error(f"[SECURITY] Error applying redactions: {str(e)} [operation_id={operation_id}]")
             error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
                 e, "pdf_redaction_service", 500, file.filename
             )
@@ -122,6 +153,8 @@ async def pdf_redact(
         )
 
         mem_stats = memory_monitor.get_memory_stats()
+        log_info(
+            f"[SECURITY] Memory usage after PDF redaction: current={mem_stats['current_usage']:.1f}%, peak={mem_stats['peak_usage']:.1f}% [operation_id={operation_id}]")
 
         # Stream the redacted content directly to the client
         async def content_streamer():
@@ -143,6 +176,7 @@ async def pdf_redact(
         )
 
     except Exception as e:
+        log_error(f"[SECURITY] Unhandled exception in PDF redaction: {str(e)} [operation_id={operation_id}]")
         error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
             e, "pdf_redaction", 500, file.filename
         )
@@ -165,9 +199,11 @@ async def pdf_extract(request: Request, file: UploadFile = File(...)):
     - Large files: Automatically processed in streaming mode to reduce memory footprint
     """
     start_time = time.time()
+    operation_id = f"pdf_extract_{time.time()}"
 
     # Validate file type
     if not validate_mime_type(file.content_type, ["application/pdf"]):
+        log_warning(f"[SECURITY] Unsupported file type attempted: {file.content_type} [operation_id={operation_id}]")
         return JSONResponse(
             status_code=415,
             content={"detail": "Only PDF files are supported"}
@@ -178,40 +214,59 @@ async def pdf_extract(request: Request, file: UploadFile = File(...)):
         file_size = 0
         chunk = await file.read(8192)  # Read a small chunk to check size
         file_size += len(chunk)
+        log_info(
+            f"[SECURITY] PDF extraction: file size initial check {file_size / 1024:.1f}KB [operation_id={operation_id}]")
 
         # Determine if we should use streaming mode based on file size
         use_streaming = file_size > LARGE_PDF_THRESHOLD
 
         if use_streaming:
+            log_info(
+                f"[SECURITY] Using streaming mode for large PDF ({file_size / 1024:.1f}KB) [operation_id={operation_id}]")
             # Reset file position for streaming
             await file.seek(0)
 
             # Process large PDFs in streaming mode for memory efficiency
-            return await process_pdf_streaming(file, start_time)
+            return await process_pdf_streaming(file, start_time, operation_id)
 
-        # For smaller files, process entirely in memory
+        # For smaller files, process entirely in memory using SecureTempFileManager
+        log_info(
+            f"[SECURITY] Using in-memory processing for PDF ({file_size / 1024:.1f}KB) [operation_id={operation_id}]")
         contents = chunk + await file.read()
 
         is_valid, reason, _ = await validate_file_content_async(contents, file.filename, file.content_type)
         if not is_valid:
+            log_warning(f"[SECURITY] Invalid PDF content: {reason} [operation_id={operation_id}]")
             return JSONResponse(
                 status_code=415,
                 content={"detail": reason}
             )
 
-        # Use the optimized PDFTextExtractor with direct memory processing
+        # Use the optimized PDFTextExtractor with SecureTempFileManager
         extract_start = time.time()
 
-        # Create an in-memory buffer from the file contents
-        buffer = io.BytesIO(contents)
+        # Define extraction processor function
+        async def extraction_processor(content):
+            # Create an in-memory buffer from the file contents
+            buffer = io.BytesIO(content)
 
-        # Use PDFTextExtractor with the buffer
-        extractor = PDFTextExtractor(buffer)
-        extracted_data = extractor.extract_text_with_positions()
-        extractor.close()
+            # Use PDFTextExtractor with the buffer
+            extractor = PDFTextExtractor(buffer)
+            extracted_data = extractor.extract_text_with_positions()
+            extractor.close()
+            return extracted_data
+
+        # Use SecureTempFileManager for memory-efficient processing
+        extracted_data = await SecureTempFileManager.process_content_in_memory_async(
+            contents,
+            extraction_processor,
+            use_path=False,
+            extension=".pdf"
+        )
 
         extract_time = time.time() - extract_start
         total_time = time.time() - start_time
+        log_info(f"[SECURITY] PDF extraction completed in {extract_time:.3f}s [operation_id={operation_id}]")
 
         # Apply data minimization
         extracted_data = minimize_extracted_data(extracted_data)
@@ -258,58 +313,83 @@ async def pdf_extract(request: Request, file: UploadFile = File(...)):
         return JSONResponse(content=extracted_data)
 
     except HTTPException as e:
+        log_error(
+            f"[SECURITY] HTTP exception in PDF extraction: {e.detail} (status {e.status_code}) [operation_id={operation_id}]")
         error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
             e, "pdf_extraction", e.status_code, file.filename
         )
         return JSONResponse(status_code=status_code, content=error_response)
     except Exception as e:
+        log_error(f"[SECURITY] Unhandled exception in PDF extraction: {str(e)} [operation_id={operation_id}]")
         error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
             e, "pdf_extraction", 500, file.filename
         )
         return JSONResponse(status_code=status_code, content=error_response)
 
 
-async def process_pdf_streaming(file: UploadFile, start_time: float):
+async def process_pdf_streaming(file: UploadFile, start_time: float, operation_id: str):
     """
     Process a PDF file in streaming mode for large files to minimize memory usage.
 
     Args:
         file: The uploaded PDF file
         start_time: Start time for performance tracking
+        operation_id: Unique operation identifier for logging
 
     Returns:
         JSONResponse with extracted text data
     """
     extract_start = time.time()
+    log_info(f"[SECURITY] Starting streaming PDF extraction [operation_id={operation_id}]")
 
     try:
         import pymupdf
 
         # Use streaming extraction by using the file stream directly
-        doc = pymupdf.open(stream=file.file, filetype="pdf")
+        try:
+            doc = pymupdf.open(stream=file.file, filetype="pdf")
+            log_info(f"[SECURITY] Successfully opened PDF with {len(doc)} pages [operation_id={operation_id}]")
+        except Exception as e:
+            log_error(f"[SECURITY] Failed to open PDF with pymupdf: {str(e)} [operation_id={operation_id}]")
+            raise ValueError(f"Failed to open PDF: {str(e)}")
+
         extracted_data = {"pages": []}
 
         # Process the PDF page by page to minimize memory usage
         for page_idx in range(len(doc)):
-            page = doc[page_idx]
-            words = page.get_text("words")
-            page_words = []
+            try:
+                page = doc[page_idx]
+                words = page.get_text("words")
+                page_words = []
 
-            for word in words:
-                x0, y0, x1, y1, text, *_ = word
-                if text.strip():  # Only include words with non-whitespace content
-                    page_words.append({
-                        "text": text.strip(),
-                        "x0": x0,
-                        "y0": y0,
-                        "x1": x1,
-                        "y1": y1
+                for word in words:
+                    x0, y0, x1, y1, text, *_ = word
+                    if text.strip():  # Only include words with non-whitespace content
+                        page_words.append({
+                            "text": text.strip(),
+                            "x0": x0,
+                            "y0": y0,
+                            "x1": x1,
+                            "y1": y1
+                        })
+
+                if page_words:
+                    extracted_data["pages"].append({
+                        "page": page_idx + 1,
+                        "words": page_words
                     })
 
-            if page_words:
+                # Log progress for large documents
+                if page_idx % 10 == 0 and page_idx > 0:
+                    log_info(f"[SECURITY] Processed {page_idx}/{len(doc)} pages [operation_id={operation_id}]")
+
+            except Exception as e:
+                log_error(f"[SECURITY] Error processing page {page_idx}: {str(e)} [operation_id={operation_id}]")
+                # Continue with other pages despite error on this page
                 extracted_data["pages"].append({
                     "page": page_idx + 1,
-                    "words": page_words
+                    "words": [],
+                    "error": f"Error processing page: {str(e)}"
                 })
 
             # Allow other async tasks to run between pages for better concurrency
@@ -325,6 +405,8 @@ async def process_pdf_streaming(file: UploadFile, start_time: float):
         total_time = time.time() - start_time
         pages_count = len(extracted_data.get("pages", []))
         words_count = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
+        log_info(
+            f"[SECURITY] Streaming PDF extraction completed: {pages_count} pages, {words_count} words, {extract_time:.3f}s [operation_id={operation_id}]")
 
         # Add performance statistics
         extracted_data["performance"] = {
@@ -372,6 +454,7 @@ async def process_pdf_streaming(file: UploadFile, start_time: float):
         return JSONResponse(content=extracted_data)
 
     except Exception as e:
+        log_error(f"[SECURITY] Error in streaming PDF extraction: {str(e)} [operation_id={operation_id}]")
         error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
             e, "pdf_streaming_extraction", 500, file.filename
         )

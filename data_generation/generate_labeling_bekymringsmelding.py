@@ -372,7 +372,7 @@ signal.signal(signal.SIGTERM, signal_handler)
 # Generator functions
 def generate_text(prompt, system_instruction):
     """Generate text using Gemini model with given prompt and system instruction"""
-    model = genai.GenerativeModel("gemini-1.5-pro", system_instruction=system_instruction)
+    model = genai.GenerativeModel("gemini-2.0-pro-exp-02-05", system_instruction=system_instruction)
     response = model.generate_content(prompt)
     return response.text
 
