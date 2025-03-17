@@ -21,7 +21,7 @@ class DocumentFormat(Enum):
     PDF = auto()
     DOCX = auto()
     TXT = auto()
-    # Add more formats as needed
+    # Add more formats later
 
 
 class EntityDetectionEngine(Enum):

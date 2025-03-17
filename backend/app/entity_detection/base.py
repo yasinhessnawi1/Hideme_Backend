@@ -254,60 +254,6 @@ class BaseEntityDetector(EntityDetector, ABC):
         """
         raise NotImplementedError("Subclasses must implement this method")
 
-    async def process_document_pages(
-        self,
-        extracted_data: Dict[str, Any],
-        process_func: Callable[[Dict[str, Any]], Tuple[Dict[str, Any], List[Dict[str, Any]]]],
-        max_workers: Optional[int] = None
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any], List[str]]:
-        """
-        Process all pages in a document with a given processing function.
-
-        Args:
-            extracted_data: Dictionary containing text and position data
-            process_func: Function to process each page
-            max_workers: Maximum number of parallel workers
-
-        Returns:
-            Tuple of (combined_results, redaction_mapping, anonymized_texts)
-        """
-        # Extract all pages
-        pages = extracted_data.get("pages", [])
-        if not pages:
-            return [], {"pages": []}, []
-
-        # Process all pages in parallel
-        page_results = await ParallelProcessingHelper.process_pages_in_parallel(
-            pages,
-            process_func,
-            max_workers=max_workers
-        )
-
-        # Collect results
-        combined_results = []
-        redaction_mapping = {"pages": []}
-        anonymized_texts = []
-
-        # Process results
-        for page_number, (page_redaction_info, processed_entities) in page_results:
-            if page_redaction_info:
-                redaction_mapping["pages"].append(page_redaction_info)
-
-            if processed_entities:
-                combined_results.extend(processed_entities)
-
-            # Get text for this page
-            page_text = next((
-                TextUtils.reconstruct_text_and_mapping(page['words'])[0]
-                for page in pages if page.get('page') == page_number
-            ), "")
-            anonymized_texts.append(page_text)
-
-        # Sort redaction mapping pages by page number
-        redaction_mapping["pages"].sort(key=lambda x: x.get("page", 0))
-
-        return combined_results, redaction_mapping, anonymized_texts
-
     def get_status(self) -> Dict[str, Any]:
         """
         Get the current status of the entity detector.

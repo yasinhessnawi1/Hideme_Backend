@@ -8,7 +8,7 @@ from backend.app.domain.interfaces import (
     DocumentExtractor,
     EntityDetector,
     DocumentRedactor,
-    EntityMappingService
+    PDFEntityMapping
 )
 from backend.app.domain.models import (
     EntityInfo,
@@ -27,7 +27,7 @@ __all__ = [
     "DocumentExtractor",
     "EntityDetector",
     "DocumentRedactor",
-    "EntityMappingService",
+    "PDFEntityMapping",
     "EntityInfo",
     "BoundingBox",
     "SensitiveEntity",

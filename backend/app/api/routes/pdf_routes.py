@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from backend.app.services.document_processing import extraction_processor
 from backend.app.utils.logger import log_warning, log_info, log_error
 from backend.app.utils.secure_logging import log_sensitive_operation
 from backend.app.utils.data_minimization import minimize_extracted_data
@@ -17,7 +18,6 @@ from backend.app.utils.file_validation import MAX_PDF_SIZE_BYTES, validate_file_
 from backend.app.utils.memory_management import memory_optimized, memory_monitor
 from backend.app.document_processing.pdf import PDFTextExtractor, PDFRedactionService
 from backend.app.utils.secure_file_utils import SecureTempFileManager
-
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
@@ -245,16 +245,7 @@ async def pdf_extract(request: Request, file: UploadFile = File(...)):
         # Use the optimized PDFTextExtractor with SecureTempFileManager
         extract_start = time.time()
 
-        # Define extraction processor function
-        async def extraction_processor(content):
-            # Create an in-memory buffer from the file contents
-            buffer = io.BytesIO(content)
 
-            # Use PDFTextExtractor with the buffer
-            extractor = PDFTextExtractor(buffer)
-            extracted_data = extractor.extract_text_with_positions()
-            extractor.close()
-            return extracted_data
 
         # Use SecureTempFileManager for memory-efficient processing
         extracted_data = await SecureTempFileManager.process_content_in_memory_async(

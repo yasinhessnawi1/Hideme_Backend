@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 
 from fastapi import UploadFile
 
-from backend.app.factory.document_processing import (
+from backend.app.factory.document_processing_factory import (
     DocumentProcessingFactory,
     DocumentFormat,
     EntityDetectionEngine
@@ -175,7 +175,7 @@ class BatchProcessingService:
                     # For non-PDF formats, process in memory if possible using the secure utility.
                     def process_extraction(file_obj):
                         extractor = DocumentProcessingFactory.create_document_extractor(file_obj, doc_format)
-                        result = extractor.extract_text_with_positions()
+                        result = extractor.extract_text()
                         extractor.close()
                         return result
 

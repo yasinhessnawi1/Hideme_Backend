@@ -9,7 +9,7 @@ class DocumentExtractor(ABC):
     """Interface for extracting text from various document formats."""
 
     @abstractmethod
-    def extract_text_with_positions(self) -> Dict[str, Any]:
+    def extract_text(self) -> Dict[str, Any]:
         """
         Extract text with positional information from a document.
 
@@ -85,7 +85,7 @@ class DocumentRedactor(ABC):
 
 
 
-class EntityMappingService(ABC):
+class PDFEntityMapping(ABC):
     """Interface for mapping entity offsets to document positions."""
 
     @abstractmethod

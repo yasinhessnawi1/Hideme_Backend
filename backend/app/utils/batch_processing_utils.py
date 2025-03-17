@@ -15,7 +15,7 @@ from typing import List, Dict, Any, Tuple, Union
 from fastapi import UploadFile, BackgroundTasks
 from starlette.responses import JSONResponse, StreamingResponse
 
-from backend.app.factory.document_processing import EntityDetectionEngine
+from backend.app.factory.document_processing_factory import EntityDetectionEngine
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.file_validation import validate_mime_type, sanitize_filename
 from backend.app.utils.helpers.batch_processing_helper import validate_batch_files_optimized, BatchProcessingHelper
@@ -250,7 +250,7 @@ async def process_batch_in_memory(
                             content=content
                     ) as tmp_path:
                         # Determine document format
-                        from backend.app.factory.document_processing import DocumentFormat, DocumentProcessingFactory
+                        from backend.app.factory.document_processing_factory import DocumentFormat, DocumentProcessingFactory
 
                         doc_format = None
                         if filename.lower().endswith('.pdf'):
@@ -451,7 +451,7 @@ async def process_batch_with_temp_files(
                         f.write(redacted_content)
                 else:
                     # For other types, use the DocumentProcessingFactory
-                    from backend.app.factory.document_processing import DocumentFormat, DocumentProcessingFactory
+                    from backend.app.factory.document_processing_factory import DocumentFormat, DocumentProcessingFactory
 
                     # Determine document format
                     doc_format = None

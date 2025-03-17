@@ -5,28 +5,29 @@ This module provides high-level services for orchestrating document processing w
 with improved memory efficiency by minimizing temporary file creation and maximizing
 in-memory processing where possible.
 """
+import asyncio
 import hashlib
+import io
 import os
 import time
-import asyncio
 import uuid
-import io
 from typing import Dict, Any, List, Optional, Union
 
-from backend.app.utils.logger import log_info
-from backend.app.utils.helpers.json_helper import validate_requested_entities
-from backend.app.factory.document_processing import (
+from backend.app.document_processing.pdf import PDFTextExtractor
+from backend.app.factory.document_processing_factory import (
     DocumentProcessingFactory,
     DocumentFormat,
     EntityDetectionEngine
 )
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.data_minimization import minimize_extracted_data
+from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.helpers.json_helper import validate_requested_entities
+from backend.app.utils.logger import log_info
 from backend.app.utils.processing_records import record_keeper
+from backend.app.utils.retention_management import retention_manager
 from backend.app.utils.secure_file_utils import SecureTempFileManager
 from backend.app.utils.secure_logging import log_sensitive_operation
-from backend.app.utils.retention_management import retention_manager
 
 
 class DocumentProcessingService:
@@ -125,7 +126,7 @@ class DocumentProcessingService:
                 extractor = DocumentProcessingFactory.create_document_extractor(
                     document_content, document_format
                 )
-                extracted_data = extractor.extract_text_with_positions()
+                extracted_data = extractor.extract_text()
                 extractor.close()
 
                 extract_time = time.time() - extract_start
@@ -457,7 +458,6 @@ class DocumentProcessingService:
                 success=success
             )
 
-
     async def _collect_processing_stats(
             self,
             extracted_data: Dict[str, Any],
@@ -497,3 +497,19 @@ class DocumentProcessingService:
             "entities_by_type": entities_by_type,
             "sensitive_by_page": sensitive_by_page
         }
+
+
+async def extraction_processor(content):
+    # Check if content is a file-like object or bytes
+    if hasattr(content, 'read'):
+        # It's a file-like object, use it directly
+        extractor = PDFTextExtractor(content)
+        extracted_data = extractor.extract_text()
+        extractor.close()
+    else:
+        # It's bytes, create a buffer
+        buffer = io.BytesIO(content)
+        extractor = PDFTextExtractor(buffer)
+        extracted_data = extractor.extract_text()
+        extractor.close()
+    return extracted_data

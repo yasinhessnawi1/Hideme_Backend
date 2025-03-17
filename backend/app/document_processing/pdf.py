@@ -62,7 +62,7 @@ class PDFTextExtractor(DocumentExtractor):
         else:
             raise ValueError("Invalid input! Expected a file path, PyMuPDF Document, bytes, or file-like object.")
 
-    def extract_text_with_positions(self) -> Dict[str, Any]:
+    def extract_text(self) -> Dict[str, Any]:
         """
         Extract text from the PDF document, page by page, with positional information.
         Automatically filters out empty pages and applies GDPR compliance measures.
@@ -83,7 +83,7 @@ class PDFTextExtractor(DocumentExtractor):
 
         try:
             # Determine if this is a large document and should use paged processing
-            use_paged_processing = total_pages > 20  # Arbitrary threshold for demonstration
+            use_paged_processing = total_pages > 10
 
             if use_paged_processing:
                 # Process pages in batches

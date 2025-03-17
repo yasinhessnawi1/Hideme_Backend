@@ -9,6 +9,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_ENTITIES
+from backend.app.services.document_processing import extraction_processor
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.helpers.json_helper import validate_requested_entities
 from backend.app.utils.helpers.hybrid_detection_helper import process_file_in_chunks
@@ -144,9 +145,7 @@ async def hybrid_detect_sensitive(
         # This allows the system to decide whether to use in-memory buffers or temp files
         extract_start = time.time()
 
-        # Define an async processor function that calls extract_text_data_in_memory
-        async def extraction_processor(content):
-            return await extract_text_data_in_memory(file.content_type, content)
+
 
         # Use SecureTempFileManager to process content optimally
         extracted_data = await SecureTempFileManager.process_content_in_memory_async(

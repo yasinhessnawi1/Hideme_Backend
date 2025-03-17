@@ -13,7 +13,7 @@ import pymupdf
 
 from backend.app.utils.data_minimization import sanitize_document_metadata
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.factory.document_processing import DocumentProcessingFactory, DocumentFormat
+from backend.app.factory.document_processing_factory import DocumentProcessingFactory, DocumentFormat
 from backend.app.utils.logger import log_info, log_warning
 from backend.app.utils.memory_management import memory_monitor
 
@@ -209,7 +209,7 @@ async def extract_docx_in_memory(content: bytes, memory_efficient: bool = False)
                 temp_path, DocumentFormat.DOCX
             )
             # Extract text
-            result = extractor.extract_text_with_positions()
+            result = extractor.extract_text()
             extractor.close()
             return result
 
@@ -541,3 +541,5 @@ async def get_document_structure(content: bytes, content_type: str) -> Dict[str,
         structure["error"] = str(e)
 
     return structure
+
+

@@ -2,13 +2,12 @@
 Enhanced helper functions for parallel processing with improved async support.
 """
 import asyncio
-import concurrent.futures
 import os
 import time
-from typing import Dict, Any, List, Callable, Tuple, TypeVar, Generic, Optional, Awaitable
+from typing import Dict, Any, List, Callable, Tuple, TypeVar, Optional, Awaitable
 
 from backend.app.configs.config_singleton import get_config
-from backend.app.utils.logger import log_info, log_warning, default_logger as logger
+from backend.app.utils.logger import log_info, log_warning
 from backend.app.utils.secure_logging import log_sensitive_operation
 
 # Type variables for generic functions
@@ -40,8 +39,8 @@ class ParallelProcessingHelper:
         """
         cpu_count = os.cpu_count() or 4
 
-        # Start with CPU count minus 1 (leave one for the system)
-        optimal = max(1, cpu_count - 1)
+        # Start with CPU count minus 2 (leave one for the system)
+        optimal = max(1, cpu_count - 2)
 
         # Cap at items count and the specified max
         optimal = min(optimal, items_count, max_workers)
@@ -108,7 +107,6 @@ class ParallelProcessingHelper:
             mapping: List[Tuple[Dict[str, Any], int, int]],
             entities: List[Any],
             page_number: int,
-            max_workers: Optional[int] = None,
             batch_size: Optional[int] = None
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
@@ -121,7 +119,6 @@ class ParallelProcessingHelper:
             mapping: Text-to-position mapping.
             entities: List of entities to process.
             page_number: Current page number.
-            max_workers: Maximum number of parallel workers (optional).
             batch_size: Number of entities to process in each batch (optional).
 
         Returns:
@@ -136,12 +133,6 @@ class ParallelProcessingHelper:
 
         log_info(
             f"[PARALLEL] Starting entity processing for page {page_number} with batch size {batch_size} and {len(entities)} total entities")
-
-        # For small numbers of entities, process sequentially.
-        if len(entities) < 5:
-            result = await detector.process_entities_for_page(page_number, full_text, mapping, entities)
-            log_info(f"[PARALLEL] Processed small batch of {len(entities)} entities sequentially")
-            return result
 
         # Split entities into batches based on the externalized batch size.
         entity_batches = [entities[i:i + batch_size] for i in range(0, len(entities), batch_size)]

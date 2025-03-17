@@ -10,7 +10,7 @@ from slowapi.util import get_remote_address
 from backend.app.configs.gliner_config import GLINER_ENTITIES
 from backend.app.configs.presidio_config import REQUESTED_ENTITIES
 from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
-from backend.app.factory.document_processing import EntityDetectionEngine
+from backend.app.factory.document_processing_factory import EntityDetectionEngine
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.logger import log_error
 from backend.app.utils.caching_middleware import get_cached_response

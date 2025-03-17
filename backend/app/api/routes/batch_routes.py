@@ -342,7 +342,7 @@ async def batch_extract_text(
                 )
 
                 # Extract text with performance tracking
-                extracted_data = await asyncio.to_thread(extractor.extract_text_with_positions)
+                extracted_data = await asyncio.to_thread(extractor.extract_text)
                 extractor.close()
 
                 # Apply data minimization

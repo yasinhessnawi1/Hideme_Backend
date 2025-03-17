@@ -11,7 +11,7 @@ import asyncio
 from typing import Dict, Any, Optional, List
 
 from backend.app.configs.gliner_config import GLINER_CONFIG, GLINER_ENTITIES, GLINER_MODEL_PATH
-from backend.app.factory.document_processing import (
+from backend.app.factory.document_processing_factory import (
     DocumentProcessingFactory,
     EntityDetectionEngine
 )

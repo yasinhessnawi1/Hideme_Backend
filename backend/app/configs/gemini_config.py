@@ -86,7 +86,7 @@ AVAILABLE_ENTITIES = {"PHONE": "- ** NO_PHONE_NUMBER ** → Norwegian Phone Numb
                         "DATE": "- ** DATE_TIME ** → Dates and Timestamps",
                         "GOVID": "- ** GOV_ID ** → Government - Issued Identifiers any identification number",
                         "FINANCIAL": "- ** FINANCIAL_INFO ** → Financial Data (contextually financial fisk_data not just words about money)",
-                        "EMPLOYMENT": "- ** EMPLOYMENT_INFO ** → Employment and Professional Details",
+                        "EMPLOYMENT": "- ** EMPLOYMENT_INFO ** → Employment and Professional Details", #todo: fix this entity and add organization
                         "HEALTH": "- ** HEALTH_INFO ** → Health - Related Information",
                         "SEXUAL": "- ** SEXUAL_ORIENTATION ** → Sexual Relationships and Orientation",
                         "CRIMINAL": "- ** CRIMINAL_RECORD ** → Crime - Related Information",

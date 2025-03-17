@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
 
+from backend.app.configs.config_singleton import get_config
 from backend.app.configs.gliner_config import GLINER_MODEL_NAME
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.data_minimization import minimize_extracted_data
@@ -423,7 +424,7 @@ async def process_large_document_in_batches(
         JSONResponse with combined results
     """
     # Process pages in batches of 10
-    batch_size = 10
+    batch_size  = get_config("entity_batch_size", 10)
     all_entities = []
     all_redaction_pages = []
     detection_start = time.time()

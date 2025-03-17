@@ -21,9 +21,9 @@ class GeminiUsageManager:
 
     def __init__(
         self,
-        max_daily_requests: int = 500,  # Adjust based on Gemini API plan
-        max_concurrent_requests: int = 5,
-        request_delay: float = 0.5,
+        max_daily_requests: int = 100000,  # Adjust based on Gemini API plan
+        max_concurrent_requests: int = 10,
+        request_delay: float = 0.1,  # Minimum delay between API calls
         text_truncation_limit: int = 10000  # Max characters per API call
     ):
         """
