@@ -11,6 +11,7 @@ import threading
 import time
 import shutil
 import torch
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
 from backend.app.utils.helpers import EntityUtils
@@ -63,9 +64,13 @@ class GlinerEntityDetector(BaseEntityDetector):
         self.local_files_only = local_files_only
         self.model_dir_path = GLINER_MODEL_PATH
         self._is_initialized = False
-        self._last_used = time.time()
-        self._initialization_time = None
+        self._initialization_time = time.time()
+        self._last_used = self._initialization_time
+
         self.detectors = [self]  # This allows the hybrid detector to use this class
+
+        self._total_calls = 0
+        self.total_processing_time = 0.0
 
         if not GLINER_AVAILABLE:
             log_error("[ERROR] GLiNER package not installed. Please install with 'pip install gliner'")
@@ -97,7 +102,6 @@ class GlinerEntityDetector(BaseEntityDetector):
         if cache_key in GlinerEntityDetector._model_cache:
             cached = GlinerEntityDetector._model_cache[cache_key]
             self.model = cached["model"]
-            self._initialization_time = cached["init_time"]
             self._is_initialized = True
             self._last_used = time.time()
             log_info(f"[GLINER] Loaded model from cache in {self._initialization_time:.2f}s")
@@ -361,6 +365,7 @@ class GlinerEntityDetector(BaseEntityDetector):
 
                 # Explicitly set the initialized flag to True after successful load
                 self._is_initialized = True
+                self._initialization_time = time.time()
 
                 log_info("[OK] Loaded model using GLiNER's native from_pretrained method")
                 log_info(f"[LOAD] Initialization flag explicitly set to: {self._is_initialized}")
@@ -712,6 +717,7 @@ class GlinerEntityDetector(BaseEntityDetector):
             List of detected entities
         """
         operation_id = f"gliner_process_{hash(text) % 10000}"
+        start_time = time.time()
 
         try:
             if not text or len(text.strip()) < 3:
@@ -758,6 +764,8 @@ class GlinerEntityDetector(BaseEntityDetector):
             deduplicated_entities = deduplicate_entities(all_entities)
             filtered_entities = self._filter_norwegian_pronouns(deduplicated_entities)
 
+            processing_time = time.time() - start_time  # Calculate time spent
+            self.total_processing_time += processing_time
             return filtered_entities
 
         except Exception as e:
@@ -1061,11 +1069,20 @@ class GlinerEntityDetector(BaseEntityDetector):
         """
         return {
             "initialized": self._is_initialized,
+            "initialization_time": self._initialization_time,
+            "initialization_time_readable": datetime.fromtimestamp(self._initialization_time, timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+            "last_used": self._last_used,
+            "last_used_readable": datetime.fromtimestamp(self._last_used, timezone.utc).strftime('%Y-%m-%d %H:%M:%S') if self._last_used else "Never Used",
+            "idle_time": time.time() - self._last_used if self._last_used else None,
+            "idle_time_readable": f"{(time.time() - self._last_used):.2f} seconds" if self._last_used else "N/A",
+            "total_calls": self._total_calls,
+            "total_entities_detected": self._total_entities_detected,
+            "total_processing_time": self.total_processing_time,
+            "average_processing_time": (
+                self.total_processing_time / self._total_calls if self._total_calls > 0 else None  # ✅ Compute average
+            ),
             "model_available": self.model is not None,
             "model_name": self.model_name,
-            "initialization_time": self._initialization_time,
-            "last_used": self._last_used,
-            "idle_time": time.time() - self._last_used if self._last_used else None,
             "gliner_package_available": GLINER_AVAILABLE,
             "local_model_path": self.local_model_path,
             "local_files_only": self.local_files_only,
@@ -1077,9 +1094,7 @@ class GlinerEntityDetector(BaseEntityDetector):
                 "gliner_config.json": os.path.exists(os.path.join(self.model_dir_path, "gliner_config.json")) if self.model_dir_path else False
             },
             "global_initializing": GlinerEntityDetector._global_initializing,
-            "global_initialization_time": GlinerEntityDetector._global_initialization_time,
-            "total_calls": self._total_calls,
-            "total_entities_detected": self._total_entities_detected
+            "global_initialization_time": GlinerEntityDetector._global_initialization_time
         }
 
     def detect_sensitive_data(

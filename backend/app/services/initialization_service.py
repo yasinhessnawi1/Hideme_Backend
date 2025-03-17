@@ -197,8 +197,6 @@ class InitializationService:
                 load_time = time.time() - start_time
                 log_info(f"[INIT] GLiNER detector initialized successfully in {load_time:.2f}s")
 
-                # Test the GLiNER detector
-                self._test_gliner_detector()
                 return True
             else:
                 log_error(f"[ERROR] Failed to initialize GLiNER detector: {error_msg}")
@@ -211,28 +209,6 @@ class InitializationService:
                 e, "gliner_initialization", self.model_dir_path
             )
             return False
-
-    def _test_gliner_detector(self):
-        """Test the GLiNER detector with a simple prediction."""
-        try:
-            if 'gliner' not in self._detectors or not hasattr(self._detectors['gliner'], 'model'):
-                log_warning("[WARNING] GLiNER detector not properly initialized, cannot test")
-                return
-
-            # Get detector status
-            if hasattr(self._detectors['gliner'], 'get_status'):
-                status = self._detectors['gliner'].get_status()
-                log_info(f"[INIT] GLiNER detector status: initialized={status.get('initialized', False)}, model_available={status.get('model_available', False)}")
-
-            # Run a simple test prediction
-            if hasattr(self._detectors['gliner'], '_process_text_with_gliner'):
-                test_text = "John Smith lives at 123 Main St. and works for Microsoft."
-                test_entities = ["Person", "Organization", "Address"]
-                results = self._detectors['gliner']._process_text_with_gliner(test_text, test_entities)
-                log_info(f"[INIT] GLiNER detector test successful. Found {len(results)} entities.")
-
-        except Exception as e:
-            log_warning(f"[WARNING] GLiNER detector test failed: {e}")
 
     def get_presidio_detector(self):
         """

@@ -5,6 +5,7 @@ This module provides a unified base class for entity detection implementations
 with standardized error handling, performance tracking, and data protection features.
 """
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple, Optional, Callable
 import asyncio
 import time
@@ -265,8 +266,11 @@ class BaseEntityDetector(EntityDetector, ABC):
             return {
                 "initialized": True,
                 "initialization_time": self._initialization_time,
+                "initialization_time_readable": datetime.fromtimestamp(self._initialization_time, timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
                 "last_used": self._last_used,
+                "last_used_readable": datetime.fromtimestamp(self._last_used, timezone.utc).strftime('%Y-%m-%d %H:%M:%S') if self._last_used else "Never Used",
                 "idle_time": time.time() - self._last_used if self._last_used else None,
+                "idle_time_readable": f"{(time.time() - self._last_used):.2f} seconds" if self._last_used else "N/A",
                 "total_calls": self._total_calls,
                 "total_entities_detected": self._total_entities_detected,
                 "total_processing_time": self._total_processing_time,

@@ -134,15 +134,11 @@ async def get_detectors_status(request: Request):
         Status information for all detector instances
     """
     try:
-        # This endpoint should not be cached for too long as status changes frequently
-        cache_key = "detectors_status"
         last_updated = time.time()
 
-        # Get status from initialization service
         detector_health = initialization_service.check_health()
         detector_metrics = initialization_service.get_usage_metrics()
 
-        # Try to get detailed status from each detector
         detectors_status = {
             "presidio": {},
             "gemini": {},
@@ -153,56 +149,42 @@ async def get_detectors_status(request: Request):
             }
         }
 
-        # Get Presidio detector status
+        # Presidio
         presidio_detector = initialization_service.get_detector(EntityDetectionEngine.PRESIDIO)
-        if presidio_detector and hasattr(presidio_detector, 'get_status'):
-            detectors_status["presidio"] = presidio_detector.get_status()
-        else:
-            detectors_status["presidio"] = {
+        detectors_status["presidio"] = (
+            presidio_detector.get_status() if hasattr(presidio_detector, 'get_status')
+            else {
                 "initialized": detector_health["detectors"]["presidio"],
                 "uses": detector_metrics.get("presidio", {}).get("uses", 0)
             }
+        )
 
-        # Get Gemini detector status
+        # Gemini
         gemini_detector = initialization_service.get_gemini_detector()
-        if gemini_detector and hasattr(gemini_detector, 'get_status'):
-            detectors_status["gemini"] = gemini_detector.get_status()
-        else:
-            detectors_status["gemini"] = {
+        detectors_status["gemini"] = (
+            gemini_detector.get_status() if hasattr(gemini_detector, 'get_status')
+            else {
                 "initialized": detector_health["detectors"]["gemini"],
                 "uses": detector_metrics.get("gemini", {}).get("uses", 0)
             }
+        )
 
-        # Get GLiNER models status
-        gliner_metrics = detector_metrics.get("gliner", {})
-        detectors_status["gliner"] = {
-            "models_count": len(gliner_metrics),
-            "total_uses": sum(model.get("uses", 0) for model in gliner_metrics.values()),
-            "models": {}
-        }
-
-        # Get detailed GLiNER model information
-        for model_key, model_metrics in gliner_metrics.items():
-            try:
-                gliner_detector = initialization_service.get_gliner_detector(model_key.split("_"))
-                if gliner_detector and hasattr(gliner_detector, 'get_status'):
-                    detectors_status["gliner"]["models"][model_key] = {
-                        **gliner_detector.get_status(),
-                        "uses": model_metrics.get("uses", 0)
-                    }
-                else:
-                    detectors_status["gliner"]["models"][model_key] = {
-                        "initialized": True,
-                        "uses": model_metrics.get("uses", 0)
-                    }
-            except Exception as e:
-                log_error(f"[ERROR] Error getting status for GLiNER model {model_key}: {e}")
+        # GLiNER
+        gliner_detector = initialization_service.get_gliner_detector()
+        detectors_status["gliner"] = (
+            gliner_detector.get_status() if hasattr(gliner_detector, 'get_status')
+            else {
+                "initialized": detector_health["detectors"]["gliner"],
+                "uses": detector_metrics.get("gliner", {}).get("uses", 0)
+            }
+        )
 
         return detectors_status
 
     except Exception as e:
         log_error(f"[ERROR] Error retrieving detector status: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving detector status")
+
 
 
 @router.get("/routes")
