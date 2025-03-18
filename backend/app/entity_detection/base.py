@@ -1,5 +1,5 @@
 """
-Enhanced base implementation for entity detection with improved error handling and GDPR compliance.
+base implementation for entity detection with improved error handling and GDPR compliance.
 
 This module provides a unified base class for entity detection implementations
 with standardized error handling, performance tracking, and data protection features.
@@ -113,7 +113,7 @@ class BaseEntityDetector(EntityDetector, ABC):
             full_text: str,
             mapping: List[Tuple[Dict[str, Any], int, int]],
             entities: List[Any]
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    ) -> tuple[list[dict[str, int | Any]], dict[str, int | list[dict[str, int | str | dict[str, float] | Any]]]] | None:
         """
         Process entities for a single page.
 

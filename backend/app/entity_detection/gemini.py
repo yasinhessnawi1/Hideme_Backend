@@ -4,7 +4,6 @@ Gemini AI-based entity detection implementation with enhanced GDPR compliance, e
 This module provides a robust implementation of entity detection using Google's Gemini API
 with improved security features, GDPR compliance, and standardized error handling.
 """
-import asyncio
 import time
 from typing import Dict, Any, List, Optional, Tuple
 

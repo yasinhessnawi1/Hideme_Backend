@@ -5,21 +5,20 @@ This module provides implementations for PDF text extraction and redaction with
 improved memory efficiency by supporting direct memory buffer processing,
 eliminating unnecessary temporary files, and adding pagination support for large documents.
 """
-import os
 import io
+import os
 import time
-import asyncio
 from typing import Dict, Any, List, Union, BinaryIO, Iterator
 
 import pymupdf
 
 from backend.app.domain.interfaces import DocumentExtractor, DocumentRedactor
-from backend.app.utils.logger import log_info, log_warning, log_error
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.data_minimization import sanitize_document_metadata
+from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.logger import log_info, log_warning, log_error
 from backend.app.utils.processing_records import record_keeper
 from backend.app.utils.secure_logging import log_sensitive_operation
-from backend.app.utils.synchronization_utils import ReadWriteLock, LockPriority, TimeoutLock, AsyncTimeoutLock
+from backend.app.utils.synchronization_utils import ReadWriteLock, LockPriority, TimeoutLock
 
 
 class PDFTextExtractor(DocumentExtractor):
@@ -220,7 +219,7 @@ class PDFTextExtractor(DocumentExtractor):
         for batch_start in range(0, total_pages, self.page_batch_size):
             batch_end = min(batch_start + self.page_batch_size, total_pages)
 
-            log_info(f"[OK] Processing PDF page batch {batch_start}-{batch_end-1} of {total_pages}")
+            log_info(f"[OK] Processing PDF page batch {batch_start}-{batch_end - 1} of {total_pages}")
 
             # Process each page in the current batch with timeout handling
             batch_start_time = time.time()
@@ -228,8 +227,9 @@ class PDFTextExtractor(DocumentExtractor):
                 # Use instance lock with timeout to ensure one batch completes before starting another
                 with self._instance_lock.acquire_timeout(timeout=self.DEFAULT_EXTRACTION_TIMEOUT) as acquired:
                     if not acquired:
-                        log_warning(f"[WARNING] Batch processing lock acquisition timed out for pages {batch_start}-{batch_end-1}")
-                        raise TimeoutError(f"Batch processing timed out for pages {batch_start}-{batch_end-1}")
+                        log_warning(
+                            f"[WARNING] Batch processing lock acquisition timed out for pages {batch_start}-{batch_end - 1}")
+                        raise TimeoutError(f"Batch processing timed out for pages {batch_start}-{batch_end - 1}")
 
                     for page_num in range(batch_start, batch_end):
                         page_start_time = time.time()
@@ -238,7 +238,8 @@ class PDFTextExtractor(DocumentExtractor):
                         # Check if we're spending too much time on this batch
                         elapsed_batch_time = time.time() - batch_start_time
                         if elapsed_batch_time > self.DEFAULT_EXTRACTION_TIMEOUT:
-                            log_warning(f"[WARNING] Batch processing is taking too long ({elapsed_batch_time:.2f}s), skipping remaining pages")
+                            log_warning(
+                                f"[WARNING] Batch processing is taking too long ({elapsed_batch_time:.2f}s), skipping remaining pages")
                             break
 
                         try:
@@ -247,12 +248,13 @@ class PDFTextExtractor(DocumentExtractor):
                             # Check if page processing took too long
                             page_time = time.time() - page_start_time
                             if page_time > max_page_time:
-                                log_warning(f"[WARNING] Page {page_num} processing took {page_time:.2f}s (exceeded {max_page_time}s threshold)")
+                                log_warning(
+                                    f"[WARNING] Page {page_num} processing took {page_time:.2f}s (exceeded {max_page_time}s threshold)")
                         except Exception as e:
                             log_error(f"[ERROR] Error processing page {page_num}: {str(e)}")
                             # Continue with other pages despite error
             except TimeoutError:
-                log_error(f"[ERROR] Timeout during batch processing pages {batch_start}-{batch_end-1}")
+                log_error(f"[ERROR] Timeout during batch processing pages {batch_start}-{batch_end - 1}")
                 # Continue with next batch
 
             # Free memory after processing each batch
@@ -776,7 +778,7 @@ class PDFRedactionService(DocumentRedactor):
             raise
 
     def _process_redaction_pages_batch(self, redaction_mapping: Dict[str, Any],
-                                      page_numbers: List[int], total_pages: int) -> None:
+                                       page_numbers: List[int], total_pages: int) -> None:
         """
         Process a batch of pages for redaction to optimize memory usage.
 
@@ -800,7 +802,8 @@ class PDFRedactionService(DocumentRedactor):
             # Check if we're exceeding batch timeout
             current_batch_time = time.time() - batch_start_time
             if current_batch_time > max_batch_time:
-                log_warning(f"[WARNING] Batch processing timeout reached after {current_batch_time:.2f}s, skipping remaining pages")
+                log_warning(
+                    f"[WARNING] Batch processing timeout reached after {current_batch_time:.2f}s, skipping remaining pages")
                 break
 
             page_info = page_mapping.get(page_num)
@@ -863,7 +866,6 @@ class PDFRedactionService(DocumentRedactor):
                 e, "pdf_process_sensitive_item", f"{self.file_path}:page_{page_num}"
             )
 
-
     @staticmethod
     def _detect_images_on_page(page: pymupdf.Page) -> List[Dict[str, Any]]:
         """
@@ -915,3 +917,19 @@ class PDFRedactionService(DocumentRedactor):
             SecurityAwareErrorHandler.log_processing_error(
                 e, "pdf_document_sanitize", self.file_path
             )
+
+
+async def extraction_processor(content):
+    # Check if content is a file-like object or bytes
+    if hasattr(content, 'read'):
+        # It's a file-like object, use it directly
+        extractor = PDFTextExtractor(content)
+        extracted_data = extractor.extract_text()
+        extractor.close()
+    else:
+        # It's bytes, create a buffer
+        buffer = io.BytesIO(content)
+        extractor = PDFTextExtractor(buffer)
+        extracted_data = extractor.extract_text()
+        extractor.close()
+    return extracted_data

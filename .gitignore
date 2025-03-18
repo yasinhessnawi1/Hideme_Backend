@@ -223,3 +223,5 @@ data_generation/bekymringsmelding/
 data_generation/training_data/
 data_generation/inspeksjonsrapport/
 data_generation/**.jsonl
+
+backend/app/logs/

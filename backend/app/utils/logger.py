@@ -7,13 +7,14 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 # Create logs directory if it doesn't exist
-os.makedirs("logs", exist_ok=True)
+os.makedirs("app/logs/app_log", exist_ok=True)
 
 # Define custom formatter that handles special characters
 class Utf8Formatter(logging.Formatter):
     def formatMessage(self, record):
         # Ensure all log messages are encoded correctly
         return super().formatMessage(record)
+
 
 # Configure logging with UTF-8 encoding
 logging.basicConfig(
@@ -23,8 +24,9 @@ logging.basicConfig(
         # Use sys.stdout with encoding specified
         logging.StreamHandler(stream=sys.stdout),
         # Use UTF-8 encoding for file handler
+        # check if the directory exists otherwise create it
         RotatingFileHandler(
-            "logs/app.log",
+            "app/logs/app_log/app.log",
             maxBytes=10485760,  # 10 MB
             backupCount=5,
             encoding='utf-8'

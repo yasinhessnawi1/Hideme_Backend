@@ -1,35 +1,33 @@
-import time
 import asyncio
+import time
 from typing import Optional
 
 from fastapi import APIRouter, File, UploadFile, Form, Request, HTTPException
 from fastapi.responses import JSONResponse
-
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_ENTITIES
-from backend.app.services.document_processing import extraction_processor
+from backend.app.document_processing.pdf import extraction_processor
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.helpers import gemini_usage_manager
-from backend.app.utils.helpers.json_helper import validate_requested_entities
-from backend.app.utils.helpers.hybrid_detection_helper import process_file_in_chunks
-from backend.app.utils.secure_logging import log_sensitive_operation
 from backend.app.utils.data_minimization import minimize_extracted_data
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.processing_records import record_keeper
-from backend.app.utils.sanitize_utils import sanitize_detection_output
 from backend.app.utils.file_validation import (
     validate_mime_type,
     validate_file_content_async,
     MAX_PDF_SIZE_BYTES,
     MAX_TEXT_SIZE_BYTES
 )
-from backend.app.utils.memory_management import memory_optimized, memory_monitor
-from backend.app.utils.document_processing_utils import extract_text_data_in_memory
-from backend.app.utils.secure_file_utils import SecureTempFileManager
-from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
+from backend.app.utils.helpers import gemini_usage_manager
+from backend.app.utils.helpers.hybrid_detection_helper import process_file_in_chunks
+from backend.app.utils.helpers.json_helper import validate_requested_entities
 from backend.app.utils.logger import log_warning, log_error, log_info
+from backend.app.utils.memory_management import memory_optimized, memory_monitor
+from backend.app.utils.processing_records import record_keeper
+from backend.app.utils.sanitize_utils import sanitize_detection_output
+from backend.app.utils.secure_file_utils import SecureTempFileManager
+from backend.app.utils.secure_logging import log_sensitive_operation
+from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
@@ -625,7 +623,7 @@ async def hybrid_detect_sensitive(
             if 'gemini' in str(e).lower():
                 # Release Gemini API slot if using it
                 try:
-                    await gemini_usage_manager.release_request_slot()
+                    await gemini_usage_manager.gemini_usage_manager.release_request_slot()
                 except:
                     pass
             raise e

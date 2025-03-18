@@ -73,7 +73,7 @@ class SecurityAwareErrorHandler:
     }
 
     # Paths to log detailed error information
-    _ERROR_LOG_PATH = os.environ.get("ERROR_LOG_PATH", "logs/detailed_errors.log")
+    _ERROR_LOG_PATH = os.environ.get("ERROR_LOG_PATH", "app/logs/error_logs/detailed_errors.log")
 
     # JSON logging format for machine readability
     _USE_JSON_LOGGING = os.environ.get("ERROR_JSON_LOGGING", "true").lower() == "true"
@@ -120,7 +120,7 @@ class SecurityAwareErrorHandler:
             trace_id = f"trace_{int(time.time())}_{uuid.uuid4().hex[:8]}"
 
         # Sanitize the error message
-        error_message = SecurityAwareErrorHandler._sanitize_error_message(str(e))
+        e = SecurityAwareErrorHandler._sanitize_error_message(str(e))
 
         # Get error type name
         error_type = type(e).__name__
@@ -186,7 +186,7 @@ class SecurityAwareErrorHandler:
             trace_id = f"trace_{int(time.time())}_{uuid.uuid4().hex[:8]}"
 
         # Sanitize the error message and filename
-        error_message = SecurityAwareErrorHandler._sanitize_error_message(str(e))
+        e = SecurityAwareErrorHandler._sanitize_error_message(str(e))
         safe_filename = "unknown" if not filename else SecurityAwareErrorHandler._sanitize_filename(filename)
 
         # Get error type name
@@ -257,7 +257,7 @@ class SecurityAwareErrorHandler:
             trace_id = f"trace_{int(time.time())}_{uuid.uuid4().hex[:8]}"
 
         # Sanitize the error message
-        error_message = SecurityAwareErrorHandler._sanitize_error_message(str(e))
+        e = SecurityAwareErrorHandler._sanitize_error_message(str(e))
 
         # Get error type name
         error_type = type(e).__name__
@@ -331,7 +331,7 @@ class SecurityAwareErrorHandler:
             trace_id = f"trace_{int(time.time())}_{uuid.uuid4().hex[:8]}"
 
         # Sanitize the error message and endpoint
-        error_message = SecurityAwareErrorHandler._sanitize_error_message(str(e))
+        e = SecurityAwareErrorHandler._sanitize_error_message(str(e))
         safe_endpoint = SecurityAwareErrorHandler._sanitize_url(endpoint)
 
         # Get error type name
@@ -339,7 +339,7 @@ class SecurityAwareErrorHandler:
 
         # Log the unsanitized error for debugging (internal only)
         log_error(
-            f"[ERROR] {operation_type} error on endpoint {endpoint} (ID: {error_id}, Trace: {trace_id}): {str(e)}")
+            f"[ERROR] {operation_type} error on endpoint {safe_endpoint} (ID: {error_id}, Trace: {trace_id}): {str(e)}")
 
         # Log detailed error with stack trace to file for investigation
         SecurityAwareErrorHandler._log_detailed_error(

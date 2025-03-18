@@ -84,7 +84,7 @@ class ProcessingRecordKeeper:
                     "total_records": 0,
                     "records_by_type": {},
                     "records_by_day": {},
-                    "last_record_time": None
+                    "last_record_time": "N/A"
                 }
 
                 # Initialize with existing records stats
@@ -110,8 +110,7 @@ class ProcessingRecordKeeper:
             for file_name in record_files:
                 try:
                     file_path = os.path.join(self.records_dir, file_name)
-                    with open(file_path, 'r') as f:
-                        # Count lines in file
+                    with open(file_path, 'r', encoding='utf-8') as f:
                         for i, _ in enumerate(f):
                             pass
                         count = i + 1
@@ -128,7 +127,6 @@ class ProcessingRecordKeeper:
         except Exception as e:
             log_info("[GDPR] Error initializing record stats")
 
-
     def record_processing(
             self,
             operation_type: str,
@@ -142,27 +140,7 @@ class ProcessingRecordKeeper:
         """
         Record a processing operation without storing personal data.
         Complies with GDPR Article 30 requirements for Records of Processing Activities.
-
-        Each record includes:
-        - Timestamp (when processing occurred)
-        - Operation type and document type (categories of processing)
-        - Entity types processed (purpose description)
-        - Processing statistics (for performance analysis)
-        - Legal basis reference (GDPR Art. 6 basis for processing)
-        - Operation ID (securely hashed to prevent data reconstruction)
-
-        No personal data or document content is stored in these records.
-
-        Args:
-            operation_type: Type of processing operation (GDPR: category of processing)
-            document_type: Type of document processed (GDPR: category of data)
-            entity_types_processed: Types of entities processed (GDPR: purpose description)
-            processing_time: Time taken for processing (performance metric)
-            file_count: Number of files processed (scope of processing)
-            entity_count: Number of entities found (scope of processing)
-            success: Whether the operation was successful (status tracking)
         """
-        # Create GDPR-compliant record
         timestamp = datetime.now()
         record = {
             "timestamp": timestamp.isoformat(),
@@ -174,35 +152,27 @@ class ProcessingRecordKeeper:
             "entity_count": entity_count,
             "success": success,
             "legal_basis": GDPR_DOCUMENTATION.get('legal_basis', 'legitimate_interests'),
-            # Use a hash for the operation ID - no direct correlation to user data
             "operation_id": hashlib.sha256(
                 f"{timestamp.isoformat()}_{operation_type}_{document_type}".encode()).hexdigest()[:16]
-            # No actual personal data stored
         }
 
-        # Log the record creation (without details)
         log_info(f"[GDPR_RECORD] Processing record created for {operation_type}")
 
-        # Write to a daily record file
         record_date = timestamp.strftime("%Y-%m-%d")
         record_file = os.path.join(self.records_dir, f"processing_record_{record_date}.jsonl")
 
         try:
-            # Write in append mode
-            with open(record_file, 'a') as f:
+            with open(record_file, 'a', encoding='utf-8') as f:
                 f.write(json.dumps(record) + '\n')
 
-            # Update stats
             with self._lock:
                 self.stats["total_records"] += 1
                 self.stats["last_record_time"] = timestamp.isoformat()
 
-                # Update type stats
                 if operation_type not in self.stats["records_by_type"]:
                     self.stats["records_by_type"][operation_type] = 0
                 self.stats["records_by_type"][operation_type] += 1
 
-                # Update day stats
                 if record_date not in self.stats["records_by_day"]:
                     self.stats["records_by_day"][record_date] = 0
                 self.stats["records_by_day"][record_date] += 1
@@ -213,10 +183,6 @@ class ProcessingRecordKeeper:
     def get_gdpr_compliance_info(self) -> Dict[str, Any]:
         """
         Get detailed information about GDPR compliance mechanisms implemented in the record keeper.
-        Useful for audits and documentation requirements.
-
-        Returns:
-            Dictionary with GDPR compliance information
         """
         compliance_info = {
             "gdpr_article_30_compliance": {
@@ -254,34 +220,25 @@ class ProcessingRecordKeeper:
     def _cleanup_old_records(self) -> None:
         """
         Clean up processing records older than the retention period.
-
-        This method implements GDPR Article 5(1)(e) storage limitation principle by
-        ensuring data is not kept longer than necessary. Records older than the
-        configured retention period are automatically deleted.
         """
         try:
-            # Calculate cutoff date
             cutoff_date = datetime.now() - timedelta(days=self.record_retention_days)
             cutoff_str = cutoff_date.strftime("%Y-%m-%d")
 
-            # Get list of record files
             record_files = [
                 f for f in os.listdir(self.records_dir)
                 if f.startswith("processing_record_") and f.endswith(".jsonl")
             ]
 
-            # Delete old files
             deleted_count = 0
             for file_name in record_files:
                 try:
-                    # Extract date from filename
                     date_str = file_name.replace("processing_record_", "").replace(".jsonl", "")
                     if date_str < cutoff_str:
                         file_path = os.path.join(self.records_dir, file_name)
                         os.unlink(file_path)
                         deleted_count += 1
 
-                        # Update stats
                         if date_str in self.stats["records_by_day"]:
                             self.stats["total_records"] -= self.stats["records_by_day"][date_str]
                             del self.stats["records_by_day"][date_str]
@@ -297,25 +254,16 @@ class ProcessingRecordKeeper:
     def get_record_stats(self) -> Dict[str, Any]:
         """
         Get statistics about processing records without exposing actual records.
-
-        Returns:
-            Dictionary with record statistics
         """
         with self._lock:
-            # Return a copy to avoid modification
             stats_copy = self.stats.copy()
             stats_copy["records_by_type"] = self.stats["records_by_type"].copy()
             stats_copy["records_by_day"] = self.stats["records_by_day"].copy()
-
-            # Add retention information
             stats_copy["retention_policy"] = {
                 "retention_days": self.record_retention_days,
                 "records_directory": os.path.basename(self.records_dir)
             }
-
-            # Add GDPR documentation
             stats_copy["gdpr_documentation"] = GDPR_DOCUMENTATION
-
             return stats_copy
 
 

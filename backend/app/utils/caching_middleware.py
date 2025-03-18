@@ -5,18 +5,19 @@ This module provides a response caching mechanism with timeout management,
 synchronization using ReadWriteLock, and TTL-based cache expiration to
 improve API performance while ensuring thread safety.
 """
-import time
 import hashlib
 import json
 import logging
+import time
 from typing import Dict, Any, Optional, List, Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from backend.app.utils.logger import log_info, log_warning, log_error
+from backend.app.utils.logger import log_info, log_warning
 from backend.app.utils.synchronization_utils import ReadWriteLock, LockPriority
+
 
 # In-memory cache store with TTL
 class ResponseCache:
@@ -51,31 +52,30 @@ class ResponseCache:
 
     def get(self, key: str) -> Optional[Any]:
         """
-        Get a value from the cache with read-write lock synchronization.
+        Get a value from the cache using a lock-free read for high-traffic paths.
 
         Args:
             key: Cache key to retrieve
 
         Returns:
-            Cached value or None if not found or expired
+            Cached value or None if not found or expired.
         """
-        # Use read lock for cache lookup (allows concurrent reads)
-        try:
-            with self.rwlock.read_locked(timeout=2.0):
-                current_time = time.time()
-
-                # Check if key exists and hasn't expired
-                if key in self.cache and current_time < self.expiration_times.get(key, 0):
-                    # Update access time
+        current_time = time.time()
+        # Directly access the cache dictionaries without locking for performance.
+        value = self.cache.get(key)
+        if value is not None:
+            expiry = self.expiration_times.get(key, 0)
+            if current_time < expiry:
+                # Optionally update access time (this update is lock-free; slight race conditions are acceptable in high-traffic scenarios)
+                try:
                     self.access_times[key] = current_time
-                    return self.cache[key]
-                elif key in self.cache:
-                    # Item exists but has expired - will be cleaned up later
-                    return None
+                except Exception as e:
+                    log_warning(f"Error updating access time for key {key}: {e}")
+                return value
+            else:
+                # Item exists but has expired – cleanup will handle removal later.
                 return None
-        except TimeoutError:
-            log_warning(f"Timeout acquiring read lock for cache key: {key}")
-            return None
+        return None
 
     def set(self, key: str, value: Any, ttl: Optional[int] = None, content_hash: Optional[str] = None) -> bool:
         """

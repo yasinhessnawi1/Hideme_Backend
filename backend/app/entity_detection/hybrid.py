@@ -1,5 +1,5 @@
 """
-Enhanced hybrid entity detection implementation with improved GDPR compliance features.
+hybrid entity detection implementation with improved GDPR compliance features.
 
 This module provides a dedicated implementation of the HybridEntityDetector
 that combines multiple detection engines with comprehensive GDPR compliance,
@@ -92,6 +92,9 @@ class HybridEntityDetector(EntityDetector):
         detector_types = [type(d).__name__ for d in self.detectors]
         log_info(f"[OK] Created hybrid entity detector with {len(self.detectors)} detection engines: {detector_types}")
 
+    # In hybrid.py, update the detect_sensitive_data_async method to properly handle async operations
+    # This is the key fix for "object HybridEntityDetector can't be used in 'await' expression"
+
     async def detect_sensitive_data_async(
             self,
             extracted_data: Dict[str, Any],
@@ -117,9 +120,10 @@ class HybridEntityDetector(EntityDetector):
         minimized_data = minimize_extracted_data(extracted_data)
 
         # Track detector usage - use async lock
-        async with self._detector_lock.acquire_timeout(timeout=5.0):
-            self._total_calls += 1
-            self._last_used = start_time
+        async with self._detector_lock.acquire_timeout(timeout=5.0) as acquired:
+            if acquired:
+                self._total_calls += 1
+                self._last_used = start_time
 
         # Track processing for GDPR compliance
         operation_type = "hybrid_detection"
@@ -135,7 +139,7 @@ class HybridEntityDetector(EntityDetector):
             detector_start = time.time()
 
             try:
-                # Use timeout handling
+                # Use timeout handling with proper async/sync distinction
                 if hasattr(detector, 'detect_sensitive_data_async'):
                     # Use async version with timeout
                     try:
@@ -156,12 +160,9 @@ class HybridEntityDetector(EntityDetector):
                 else:
                     # Fall back to sync version with timeout
                     try:
-                        result = await asyncio.wait_for(
-                            asyncio.to_thread(
-                                detector.detect_sensitive_data,
-                                minimized_data, requested_entities
-                            ),
-                            timeout=60.0  # 60 second timeout for detector
+                        result = await asyncio.to_thread(
+                            detector.detect_sensitive_data,
+                            minimized_data, requested_entities
                         )
                     except asyncio.TimeoutError:
                         log_warning(f"[WARNING] Timeout in {engine_name} detector (sync mode)")
@@ -209,7 +210,9 @@ class HybridEntityDetector(EntityDetector):
                 }
 
         # Create tasks for all detectors
-        tasks = [process_with_detector(detector) for detector in self.detectors]
+        tasks = []
+        for detector in self.detectors:
+            tasks.append(process_with_detector(detector))
 
         # Run all detector tasks concurrently with overall timeout
         try:
@@ -254,9 +257,7 @@ class HybridEntityDetector(EntityDetector):
             # Return empty results to avoid crashing
             return "", [], {"pages": []}
 
-
         merged_mapping = EntityUtils.merge_redaction_mappings(all_redaction_mappings)
-
 
         # Remove duplicate entities
         from backend.app.utils.sanitize_utils import deduplicate_entities
@@ -266,8 +267,9 @@ class HybridEntityDetector(EntityDetector):
         total_time = time.time() - start_time
 
         # Track entity count using async lock
-        async with self._detector_lock.acquire_timeout(timeout=5.0):
-            self._total_entities_detected += len(all_entities)
+        async with self._detector_lock.acquire_timeout(timeout=5.0) as acquired:
+            if acquired:
+                self._total_entities_detected += len(all_entities)
 
         # Record the overall processing operation for GDPR compliance
         record_keeper.record_processing(
@@ -348,7 +350,7 @@ class HybridEntityDetector(EntityDetector):
             return "", [], {"pages": []}
 
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, bool | list[Any] | float | int] | None:
         """
         Get the current status of the hybrid entity detector.
 

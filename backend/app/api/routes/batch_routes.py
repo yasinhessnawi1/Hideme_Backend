@@ -50,6 +50,7 @@ def get_batch_resource_lock():
 
 @router.post("/detect")
 @limiter.limit("10/minute")
+@memory_optimized(threshold_mb=75)
 async def batch_detect_sensitive(
         request: Request,
         files: List[UploadFile] = File(...),
@@ -270,6 +271,7 @@ async def batch_detect_sensitive(
 
 @router.post("/redact")
 @limiter.limit("3/minute")
+@memory_optimized(threshold_mb=200)
 async def batch_redact_documents(
         request: Request,
         background_tasks: BackgroundTasks,

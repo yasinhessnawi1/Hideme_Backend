@@ -1,14 +1,10 @@
 """
 Memory management utilities for document processing with enhanced security and adaptive optimization.
 
-This module provides functions for monitoring and optimizing memory usage
-during document processing operations, ensuring efficient resource utilization
-and preventing memory-related vulnerabilities with adaptive thresholds based on
-system resources.
+This module provides functions for monitoring and optimizing memory usage during document processing operations,
+ensuring efficient resource utilization and preventing memory-related vulnerabilities with adaptive thresholds based on system resources.
 """
-"""
-Memory management utilities with enhanced synchronization for document processing.
-"""
+
 import asyncio
 import gc
 import logging
@@ -32,31 +28,74 @@ logger = logging.getLogger(__name__)
 T = TypeVar('T')
 
 
+# --- Atomic helper classes for stat updates ---
+class AtomicCounter:
+    def __init__(self, initial: int = 0):
+        self.value = initial
+        self._lock = threading.Lock()
+
+    def increment(self, amount: int = 1) -> int:
+        with self._lock:
+            self.value += amount
+            return self.value
+
+    def get(self) -> int:
+        with self._lock:
+            return self.value
+
+    def set(self, new_value: int) -> None:
+        with self._lock:
+            self.value = new_value
+
+
+class AtomicFloat:
+    def __init__(self, initial: float = 0.0):
+        self.value = initial
+        self._lock = threading.Lock()
+
+    def add(self, amount: float) -> float:
+        with self._lock:
+            self.value += amount
+            return self.value
+
+    def get(self) -> float:
+        with self._lock:
+            return self.value
+
+    def set(self, new_value: float) -> None:
+        with self._lock:
+            self.value = new_value
+
+
+class MemoryStats:
+    def __init__(self):
+        self.peak_usage = AtomicFloat(0.0)
+        self.average_usage = AtomicFloat(0.0)
+        self.checks_count = AtomicCounter(0)
+        self.emergency_cleanups = AtomicCounter(0)
+        self.last_check_time = AtomicFloat(0.0)
+        self.current_usage = AtomicFloat(0.0)
+        self.available_memory_mb = AtomicFloat(0.0)
+        self.system_threshold_adjustments = AtomicCounter(0)
+# --- End of atomic helper classes ---
+
+
 class MemoryMonitor:
     """
     Memory usage monitoring and management with enhanced thread safety.
 
-    Uses TimeoutLock for thread-safe operations on memory statistics with deadlock
-    prevention and detailed lock usage monitoring.
+    Uses a TimeoutLock for complex operations and atomic operations for frequent stat updates.
     """
-
     def __init__(
             self,
             memory_threshold: float = 80.0,  # 80% memory threshold
             critical_threshold: float = 90.0,  # 90% critical threshold
-            check_interval: float = 5.0,  # 5 seconds check interval
+            check_interval: float = 5.0,       # 5 seconds check interval
             enable_monitoring: bool = True,
             adaptive_thresholds: bool = True
     ):
         """
         Initialize the memory monitor with configuration parameters.
-
-        Args:
-            memory_threshold: Memory usage threshold as percentage.
-            critical_threshold: Critical memory threshold as percentage.
-            check_interval: Memory check interval in seconds.
-            enable_monitoring: Whether to enable background monitoring.
-            adaptive_thresholds: Whether to adjust thresholds based on system resources.
         """
         self.base_memory_threshold = memory_threshold
         self.base_critical_threshold = critical_threshold
@@ -68,24 +107,15 @@ class MemoryMonitor:
         self._monitor_thread = None
         self._stop_monitor = threading.Event()
 
-        # Replace simple lock with enhanced TimeoutLock
+        # Enhanced TimeoutLock for complex operations
         self._lock = TimeoutLock("memory_monitor_lock", priority=LockPriority.MEDIUM,
-                                 timeout=5.0, reentrant=True)
+                                  timeout=5.0, reentrant=True)
 
         self._last_gc_time = 0
         self._gc_interval = 60  # Minimum seconds between full garbage collections
 
-        # Memory statistics
-        self.memory_stats = {
-            "peak_usage": 0.0,
-            "average_usage": 0.0,
-            "checks_count": 0,
-            "emergency_cleanups": 0,
-            "last_check_time": 0.0,
-            "current_usage": 0.0,
-            "available_memory_mb": 0,
-            "system_threshold_adjustments": 0
-        }
+        # Memory statistics using atomic operations for frequent updates
+        self.memory_stats = MemoryStats()
 
         # Initialize available memory stats
         self._update_available_memory()
@@ -102,29 +132,15 @@ class MemoryMonitor:
         """Update available memory statistics from the system."""
         try:
             system_memory = psutil.virtual_memory()
-
-            # Use timeout lock with context manager
-            with self._lock.acquire_timeout(timeout=1.0):
-                self.memory_stats["available_memory_mb"] = system_memory.available / (1024 * 1024)
-
-        except TimeoutError:
-            logger.warning("Timeout acquiring lock to update available memory - continuing with stale data")
+            # Update available memory atomically without acquiring the global lock
+            self.memory_stats.available_memory_mb.set(system_memory.available / (1024 * 1024))
         except Exception as e:
             logger.error(f"Error updating available memory: {str(e)}")
-
-            # Even if we couldn't acquire the lock, try a fallback update
-            # This won't be thread-safe but is better than no update
-            try:
-                self.memory_stats["available_memory_mb"] = 0
-            except:
-                pass
+            self.memory_stats.available_memory_mb.set(0)
 
     def _adjust_thresholds_based_on_system(self) -> None:
         """
         Adaptively adjust memory thresholds based on system resources.
-
-        For systems with less memory, use more conservative thresholds.
-        For systems with ample memory, use more relaxed thresholds.
         """
         try:
             system_memory = psutil.virtual_memory()
@@ -132,7 +148,6 @@ class MemoryMonitor:
             available_memory_gb = system_memory.available / (1024 * 1024 * 1024)
             usage_percent = system_memory.percent
 
-            # Calculate new thresholds
             new_memory_threshold = self.memory_threshold
             new_critical_threshold = self.critical_threshold
 
@@ -146,18 +161,15 @@ class MemoryMonitor:
                 new_memory_threshold = min(85.0, self.base_memory_threshold + 5)
                 new_critical_threshold = min(95.0, self.base_critical_threshold + 5)
 
-            # Further adjust if system is already under pressure
             if usage_percent > 70:
                 new_memory_threshold = max(60.0, new_memory_threshold - 10)
                 new_critical_threshold = max(75.0, new_critical_threshold - 10)
 
-            # Update thresholds with lock protection
             try:
                 with self._lock.acquire_timeout(timeout=2.0):
                     self.memory_threshold = new_memory_threshold
                     self.critical_threshold = new_critical_threshold
-                    self.memory_stats["system_threshold_adjustments"] += 1
-
+                    self.memory_stats.system_threshold_adjustments.increment(1)
                     logger.info(
                         f"Adjusted memory thresholds: memory_threshold={self.memory_threshold:.1f}%, "
                         f"critical_threshold={self.critical_threshold:.1f}%, total_memory={total_memory_gb:.1f}GB, "
@@ -168,7 +180,6 @@ class MemoryMonitor:
 
         except Exception as e:
             logger.error(f"Error adjusting thresholds: {str(e)}")
-            # If we can't adjust, keep current thresholds
             with self._lock.acquire_timeout(timeout=1.0):
                 self.memory_threshold = self.base_memory_threshold
                 self.critical_threshold = self.base_critical_threshold
@@ -197,62 +208,48 @@ class MemoryMonitor:
         adaptive_counter = 0
 
         while not self._stop_monitor.is_set():
+            current_usage = self.get_memory_usage()
             try:
                 self._update_available_memory()
-                current_usage = self.get_memory_usage()
 
-                # Update memory stats with lock protection
-                lock_acquired = False
+                # Atomically update simple counters and flags
+                self.memory_stats.current_usage.set(current_usage)
+                self.memory_stats.checks_count.increment(1)
+                self.memory_stats.last_check_time.set(time.time())
+                if current_usage > self.memory_stats.peak_usage.get():
+                    self.memory_stats.peak_usage.set(current_usage)
+
+                # Update average usage under lock protection (for read-modify-write cycle)
                 try:
                     with self._lock.acquire_timeout(timeout=1.0):
-                        lock_acquired = True
-                        self.memory_stats["current_usage"] = current_usage
-                        self.memory_stats["checks_count"] += 1
-                        self.memory_stats["last_check_time"] = time.time()
-                        if current_usage > self.memory_stats["peak_usage"]:
-                            self.memory_stats["peak_usage"] = current_usage
-
-                        # Calculate average with protection against division by zero
-                        if self.memory_stats["checks_count"] > 1:
-                            self.memory_stats["average_usage"] = (
-                                    (self.memory_stats["average_usage"] * (
-                                                self.memory_stats["checks_count"] - 1) + current_usage) /
-                                    self.memory_stats["checks_count"]
-                            )
+                        cnt = self.memory_stats.checks_count.get()
+                        if cnt > 1:
+                            prev_avg = self.memory_stats.average_usage.get()
+                            new_avg = (prev_avg * (cnt - 1) + current_usage) / cnt
+                            self.memory_stats.average_usage.set(new_avg)
                         else:
-                            self.memory_stats["average_usage"] = current_usage
+                            self.memory_stats.average_usage.set(current_usage)
                 except TimeoutError:
-                    logger.warning("Timeout acquiring lock to update memory stats")
-
-                # Increment adaptive counter even if we couldn't acquire the lock
-                adaptive_counter += 1
-
-                # Periodically adjust thresholds if enabled
-                if self.adaptive_thresholds and adaptive_counter >= 60:
-                    self._adjust_thresholds_based_on_system()
-                    adaptive_counter = 0
-
-                # Check if we need to perform cleanup
-                # Read thresholds with local variables to avoid lock during check
-                memory_threshold = self.memory_threshold
-                critical_threshold = self.critical_threshold
-
-                if current_usage >= critical_threshold:
-                    self._emergency_cleanup()
-                elif current_usage >= memory_threshold:
-                    self._perform_cleanup()
-
+                    logger.warning("Timeout acquiring lock to update average memory usage")
             except Exception as e:
                 logger.error(f"Error in memory monitor: {str(e)}")
+
+            adaptive_counter += 1
+            if self.adaptive_thresholds and adaptive_counter >= 60:
+                self._adjust_thresholds_based_on_system()
+                adaptive_counter = 0
+
+            # Check if cleanup is needed
+            if current_usage >= self.critical_threshold:
+                self._emergency_cleanup()
+            elif current_usage >= self.memory_threshold:
+                self._perform_cleanup()
 
             self._stop_monitor.wait(self.check_interval)
 
     def get_memory_usage(self) -> float:
         """
         Get the current memory usage as a percentage of total system memory.
-
-        Returns:
-            Current memory usage percentage.
         """
         process = psutil.Process(os.getpid())
         memory_info = process.memory_info()
@@ -262,48 +259,32 @@ class MemoryMonitor:
 
     def get_memory_stats(self) -> Dict[str, Any]:
         """
-        Retrieve the current memory statistics.
-
-        Returns:
-            A copy of the memory statistics dictionary.
+        Retrieve a snapshot of the current memory statistics.
         """
-        self._update_available_memory()
-
-        try:
-            with self._lock.acquire_timeout(timeout=1.0):
-                # Return a copy to avoid threading issues
-                return self.memory_stats.copy()
-        except TimeoutError:
-            logger.warning("Timeout acquiring lock for memory stats - returning best-effort data")
-            # Return best-effort copy even if we can't acquire the lock
-            try:
-                return self.memory_stats.copy()
-            except:
-                # If even that fails, return an empty dict
-                return {}
+        return {
+            "peak_usage": self.memory_stats.peak_usage.get(),
+            "average_usage": self.memory_stats.average_usage.get(),
+            "checks_count": self.memory_stats.checks_count.get(),
+            "emergency_cleanups": self.memory_stats.emergency_cleanups.get(),
+            "last_check_time": self.memory_stats.last_check_time.get(),
+            "current_usage": self.memory_stats.current_usage.get(),
+            "available_memory_mb": self.memory_stats.available_memory_mb.get(),
+            "system_threshold_adjustments": self.memory_stats.system_threshold_adjustments.get()
+        }
 
     def should_use_memory_buffer(self, size_bytes: int) -> bool:
         """
         Decide whether to use an in-memory buffer based on the size and current memory pressure.
-
-        Args:
-            size_bytes: The size of the data in bytes.
-
-        Returns:
-            True if an in-memory buffer should be used, False if disk buffering is preferred.
         """
         current_usage = self.get_memory_usage()
 
-        # Get available memory safely
         try:
-            with self._lock.acquire_timeout(timeout=0.5):  # Short timeout for this non-critical operation
-                available_memory = self.memory_stats["available_memory_mb"] * 1024 * 1024
+            with self._lock.acquire_timeout(timeout=0.5):
+                available_memory = self.memory_stats.available_memory_mb.get() * 1024 * 1024
         except TimeoutError:
-            # Fallback to a more conservative estimate if we can't get the lock
             system_memory = psutil.virtual_memory()
-            available_memory = system_memory.available * 0.5  # Be conservative with the estimate
+            available_memory = system_memory.available * 0.5
 
-        # Calculate max buffer size based on memory pressure
         if current_usage >= self.critical_threshold:
             max_buffer_size = min(1024 * 1024, int(available_memory * 0.01))
         elif current_usage >= self.memory_threshold:
@@ -316,18 +297,9 @@ class MemoryMonitor:
     def _perform_cleanup(self) -> None:
         """
         Perform a regular cleanup when memory usage exceeds the threshold.
-
-        This method uses progressive garbage collection strategies:
-         - If memory usage is significantly high, a full GC (generation 2) is triggered.
-         - Otherwise, a partial GC (generation 1) may be performed.
-         - Finally, application-specific caches are cleared.
-
-        The method logs the estimated memory freed after cleanup.
         """
         current_time = time.time()
-
-        # Get current usage outside the lock to minimize lock time
-        current_usage = self.memory_stats["current_usage"]
+        current_usage = self.memory_stats.current_usage.get()
 
         logger.warning(
             f"Memory usage ({current_usage:.1f}%) exceeded threshold {self.memory_threshold}%. Running cleanup..."
@@ -344,8 +316,6 @@ class MemoryMonitor:
             gc.collect(generation=1)
 
         self._clear_application_caches()
-
-        # Calculate freed memory
         new_usage = self.get_memory_usage()
         freed = current_usage - new_usage
         logger.info(f"Cleanup complete, freed {freed:.1f}% memory")
@@ -353,30 +323,20 @@ class MemoryMonitor:
     def _emergency_cleanup(self) -> None:
         """
         Execute an emergency cleanup when critical memory thresholds are exceeded.
-
-        This aggressive strategy includes full garbage collection, cache clearance,
-        and additional memory freeing measures. It logs the outcome after cleanup.
         """
-        # Get current usage to avoid lock during cleanup initialization
-        current_usage = self.memory_stats["current_usage"]
-
+        current_usage = self.memory_stats.current_usage.get()
         logger.error(
             f"CRITICAL: Memory usage ({current_usage:.1f}%) exceeded critical threshold {self.critical_threshold}%!"
         )
-
-        # Update emergency cleanup count with lock protection
         try:
             with self._lock.acquire_timeout(timeout=1.0):
-                self.memory_stats["emergency_cleanups"] += 1
+                self.memory_stats.emergency_cleanups.increment(1)
         except TimeoutError:
             logger.warning("Timeout acquiring lock to update emergency cleanup count")
 
-        # Perform emergency cleanup operations
         gc.collect(generation=2)
         self._clear_application_caches()
         self._free_additional_memory()
-
-        # Measure results
         new_usage = self.get_memory_usage()
         freed_percent = current_usage - new_usage
         logger.warning(
@@ -398,9 +358,6 @@ class MemoryMonitor:
     def _free_additional_memory(self) -> None:
         """
         Attempt to free extra memory using aggressive strategies.
-
-        This includes clearing Python's internal caches, forcing extra garbage collection,
-        and releasing unused memory back to the operating system if supported.
         """
         try:
             import sys
@@ -416,31 +373,18 @@ class MemoryMonitor:
 # Global memory monitor instance with adaptive thresholds
 memory_monitor = MemoryMonitor(adaptive_thresholds=True)
 
+
 def memory_optimized(threshold_mb: Optional[int] = None, adaptive: bool = True,
                      min_gc_interval: float = 10.0):
     """
     Decorator to optimize memory usage for functions processing large data.
-
-    This improved version adapts garbage collection strategies based on current memory pressure,
-    function characteristics, and recent GC effectiveness to minimize unnecessary GC cycles.
-
-    Args:
-        threshold_mb: Memory threshold in MB to trigger cleanup after function execution.
-                      If None, an adaptive threshold is computed.
-        adaptive: Whether to use adaptive thresholds based on system state.
-        min_gc_interval: Minimum seconds between full GC runs for the same function.
-
-    Returns:
-        The decorated function.
     """
-    # Track GC effectiveness and last GC time per function
     _gc_stats = {}
     _gc_lock = threading.RLock()
 
     def decorator(func):
         func_name = func.__name__
 
-        # Initialize stats for this function
         with _gc_lock:
             if func_name not in _gc_stats:
                 _gc_stats[func_name] = {
@@ -448,7 +392,7 @@ def memory_optimized(threshold_mb: Optional[int] = None, adaptive: bool = True,
                     'last_gc_effectiveness': 0,
                     'total_calls': 0,
                     'gc_calls': 0,
-                    'memory_increases': [],  # Track memory increases to predict future needs
+                    'memory_increases': [],
                 }
 
         @wraps(func)
@@ -459,23 +403,15 @@ def memory_optimized(threshold_mb: Optional[int] = None, adaptive: bool = True,
             initial_memory = memory_monitor.get_memory_usage()
             adaptive_threshold = threshold_mb
 
-            # More intelligent adaptive threshold based on system state and function history
             if adaptive_threshold is None:
-                available_memory_mb = memory_monitor.memory_stats["available_memory_mb"]
-
-                # Consider function history
+                available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
                 with _gc_lock:
                     stats = _gc_stats[func_name]
-                    avg_memory_increase = 0
-                    if stats['memory_increases']:
-                        avg_memory_increase = sum(stats['memory_increases']) / len(stats['memory_increases'])
-
-                # Balance between history and current system state
+                    avg_memory_increase = (sum(stats['memory_increases']) / len(stats['memory_increases'])
+                                           if stats['memory_increases'] else 0)
                 if avg_memory_increase > 0:
-                    # Adjust threshold based on historical memory increase
                     adaptive_threshold = max(5, min(100, avg_memory_increase * 1.5))
                 else:
-                    # Use system-state based logic when no history available
                     if initial_memory < 30:
                         adaptive_threshold = 30 if available_memory_mb > 1000 else 15
                     elif initial_memory < 60:
@@ -484,8 +420,6 @@ def memory_optimized(threshold_mb: Optional[int] = None, adaptive: bool = True,
                         adaptive_threshold = 10 if available_memory_mb > 300 else 5
 
             logger.debug(f"[MEMORY] Running {func_name} with adaptive threshold {adaptive_threshold}MB")
-
-            # Make pre-execution GC decision based on system state and function history
             current_time = time.time()
             run_gc = False
             gc_generation = 0
@@ -493,89 +427,68 @@ def memory_optimized(threshold_mb: Optional[int] = None, adaptive: bool = True,
             with _gc_lock:
                 stats = _gc_stats[func_name]
                 time_since_last_gc = current_time - stats['last_gc_time']
-
-                # Determine if we should run GC based on several factors
                 if initial_memory > 90:
-                    # Critical memory pressure - always run full GC
                     run_gc = True
                     gc_generation = 2
                 elif initial_memory > 70:
-                    # High memory pressure - run GC if not done recently
                     if time_since_last_gc > min_gc_interval / 2:
                         run_gc = True
                         gc_generation = 2
                 elif initial_memory > 50:
-                    # Medium memory pressure - selective GC based on effectiveness
                     if time_since_last_gc > min_gc_interval and stats['last_gc_effectiveness'] > 5:
                         run_gc = True
                         gc_generation = 1
                 elif initial_memory > 30:
-                    # Low memory pressure - only light GC if beneficial
                     if time_since_last_gc > min_gc_interval * 2 and stats['last_gc_effectiveness'] > 10:
                         run_gc = True
                         gc_generation = 0
 
-            # Run pre-execution GC if needed
             if run_gc:
                 gc.collect(generation=gc_generation)
                 with _gc_lock:
                     _gc_stats[func_name]['last_gc_time'] = time.time()
                     _gc_stats[func_name]['gc_calls'] += 1
-
                 logger.debug(
-                    f"[MEMORY] Pre-function GC(gen={gc_generation}) for {func_name} - memory usage {initial_memory:.1f}%")
-
+                    f"[MEMORY] Pre-function GC(gen={gc_generation}) for {func_name} - memory usage {initial_memory:.1f}%"
+                )
             try:
                 result = await func(*args, **kwargs)
                 return result
             finally:
-                # Post-execution GC decision making
                 final_memory = memory_monitor.get_memory_usage()
                 memory_diff = final_memory - initial_memory
-
-                # Record memory difference for future predictions
                 with _gc_lock:
                     _gc_stats[func_name]['memory_increases'].append(memory_diff)
-                    # Keep only the last 10 records to adapt to changing patterns
                     if len(_gc_stats[func_name]['memory_increases']) > 10:
                         _gc_stats[func_name]['memory_increases'].pop(0)
-
-                # Determine threshold for post-execution GC
                 process = psutil.Process(os.getpid())
                 system_memory = psutil.virtual_memory()
                 threshold_percent = (adaptive_threshold * 1024 * 1024 / system_memory.total) * 100.0
-
                 if memory_diff > threshold_percent or final_memory > 80:
                     logger.info(
-                        f"Function {func_name} increased memory by {memory_diff:.1f}%. "
-                        f"Running cleanup with adaptive threshold {adaptive_threshold}MB"
+                        f"Function {func_name} increased memory by {memory_diff:.1f}%. Running cleanup with adaptive threshold {adaptive_threshold}MB"
                     )
-
-                    # Determine GC strategy based on memory pressure
-                    pre_gc_time = time.time()
-
-                    if final_memory > 90:  # Critical
+                    if final_memory > 90:
                         gc.collect(generation=2)
                         logger.debug(
-                            f"[MEMORY] Post-function full GC for {func_name} - critical memory usage {final_memory:.1f}%")
-                    elif final_memory > 70 or memory_diff > threshold_percent * 2:  # High
+                            f"[MEMORY] Post-function full GC for {func_name} - critical memory usage {final_memory:.1f}%"
+                        )
+                    elif final_memory > 70 or memory_diff > threshold_percent * 2:
                         gc.collect(generation=1)
                         logger.debug(
-                            f"[MEMORY] Post-function partial GC for {func_name} - high memory usage {final_memory:.1f}%")
-                    else:  # Moderate
+                            f"[MEMORY] Post-function partial GC for {func_name} - high memory usage {final_memory:.1f}%"
+                        )
+                    else:
                         gc.collect(generation=0)
                         logger.debug(
-                            f"[MEMORY] Post-function light GC for {func_name} - memory usage {final_memory:.1f}%")
-
+                            f"[MEMORY] Post-function light GC for {func_name} - memory usage {final_memory:.1f}%"
+                        )
                     post_gc_memory = memory_monitor.get_memory_usage()
                     gc_effect = final_memory - post_gc_memory
-
-                    # Record GC effectiveness for future decisions
                     with _gc_lock:
                         _gc_stats[func_name]['last_gc_time'] = time.time()
                         _gc_stats[func_name]['last_gc_effectiveness'] = gc_effect
                         _gc_stats[func_name]['gc_calls'] += 1
-
                     if gc_effect > 0:
                         logger.info(f"Garbage collection freed {gc_effect:.1f}% memory")
                     else:
@@ -583,30 +496,21 @@ def memory_optimized(threshold_mb: Optional[int] = None, adaptive: bool = True,
 
         @wraps(func)
         def sync_wrapper(*args, **kwargs):
-            # Same logic as async_wrapper but for synchronous functions
             with _gc_lock:
                 _gc_stats[func_name]['total_calls'] += 1
 
             initial_memory = memory_monitor.get_memory_usage()
             adaptive_threshold = threshold_mb
 
-            # More intelligent adaptive threshold based on system state and function history
             if adaptive_threshold is None:
-                available_memory_mb = memory_monitor.memory_stats["available_memory_mb"]
-
-                # Consider function history
+                available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
                 with _gc_lock:
                     stats = _gc_stats[func_name]
-                    avg_memory_increase = 0
-                    if stats['memory_increases']:
-                        avg_memory_increase = sum(stats['memory_increases']) / len(stats['memory_increases'])
-
-                # Balance between history and current system state
+                    avg_memory_increase = (sum(stats['memory_increases']) / len(stats['memory_increases'])
+                                           if stats['memory_increases'] else 0)
                 if avg_memory_increase > 0:
-                    # Adjust threshold based on historical memory increase
                     adaptive_threshold = max(5, min(100, avg_memory_increase * 1.5))
                 else:
-                    # Use system-state based logic when no history available
                     if initial_memory < 30:
                         adaptive_threshold = 30 if available_memory_mb > 1000 else 15
                     elif initial_memory < 60:
@@ -615,8 +519,6 @@ def memory_optimized(threshold_mb: Optional[int] = None, adaptive: bool = True,
                         adaptive_threshold = 10 if available_memory_mb > 300 else 5
 
             logger.debug(f"[MEMORY] Running {func_name} with adaptive threshold {adaptive_threshold}MB")
-
-            # Make pre-execution GC decision based on system state and function history
             current_time = time.time()
             run_gc = False
             gc_generation = 0
@@ -624,126 +526,91 @@ def memory_optimized(threshold_mb: Optional[int] = None, adaptive: bool = True,
             with _gc_lock:
                 stats = _gc_stats[func_name]
                 time_since_last_gc = current_time - stats['last_gc_time']
-
-                # Determine if we should run GC based on several factors
                 if initial_memory > 90:
-                    # Critical memory pressure - always run full GC
                     run_gc = True
                     gc_generation = 2
                 elif initial_memory > 70:
-                    # High memory pressure - run GC if not done recently
                     if time_since_last_gc > min_gc_interval / 2:
                         run_gc = True
                         gc_generation = 2
                 elif initial_memory > 50:
-                    # Medium memory pressure - selective GC based on effectiveness
                     if time_since_last_gc > min_gc_interval and stats['last_gc_effectiveness'] > 5:
                         run_gc = True
                         gc_generation = 1
                 elif initial_memory > 30:
-                    # Low memory pressure - only light GC if beneficial
                     if time_since_last_gc > min_gc_interval * 2 and stats['last_gc_effectiveness'] > 10:
                         run_gc = True
                         gc_generation = 0
 
-            # Run pre-execution GC if needed
             if run_gc:
                 gc.collect(generation=gc_generation)
                 with _gc_lock:
                     _gc_stats[func_name]['last_gc_time'] = time.time()
                     _gc_stats[func_name]['gc_calls'] += 1
-
                 logger.debug(
-                    f"[MEMORY] Pre-function GC(gen={gc_generation}) for {func_name} - memory usage {initial_memory:.1f}%")
-
+                    f"[MEMORY] Pre-function GC(gen={gc_generation}) for {func_name} - memory usage {initial_memory:.1f}%"
+                )
             try:
                 result = func(*args, **kwargs)
                 return result
             finally:
-                # Post-execution GC decision making
                 final_memory = memory_monitor.get_memory_usage()
                 memory_diff = final_memory - initial_memory
-
-                # Record memory difference for future predictions
                 with _gc_lock:
                     _gc_stats[func_name]['memory_increases'].append(memory_diff)
-                    # Keep only the last 10 records to adapt to changing patterns
                     if len(_gc_stats[func_name]['memory_increases']) > 10:
                         _gc_stats[func_name]['memory_increases'].pop(0)
-
-                # Determine threshold for post-execution GC
                 process = psutil.Process(os.getpid())
                 system_memory = psutil.virtual_memory()
                 threshold_percent = (adaptive_threshold * 1024 * 1024 / system_memory.total) * 100.0
-
                 if memory_diff > threshold_percent or final_memory > 80:
                     logger.info(
-                        f"Function {func_name} increased memory by {memory_diff:.1f}%. "
-                        f"Running cleanup with adaptive threshold {adaptive_threshold}MB"
+                        f"Function {func_name} increased memory by {memory_diff:.1f}%. Running cleanup with adaptive threshold {adaptive_threshold}MB"
                     )
-
-                    # Determine GC strategy based on memory pressure
-                    pre_gc_time = time.time()
-
-                    if final_memory > 90:  # Critical
+                    if final_memory > 90:
                         gc.collect(generation=2)
                         logger.debug(
-                            f"[MEMORY] Post-function full GC for {func_name} - critical memory usage {final_memory:.1f}%")
-                    elif final_memory > 70 or memory_diff > threshold_percent * 2:  # High
+                            f"[MEMORY] Post-function full GC for {func_name} - critical memory usage {final_memory:.1f}%"
+                        )
+                    elif final_memory > 70 or memory_diff > threshold_percent * 2:
                         gc.collect(generation=1)
                         logger.debug(
-                            f"[MEMORY] Post-function partial GC for {func_name} - high memory usage {final_memory:.1f}%")
-                    else:  # Moderate
+                            f"[MEMORY] Post-function partial GC for {func_name} - high memory usage {final_memory:.1f}%"
+                        )
+                    else:
                         gc.collect(generation=0)
                         logger.debug(
-                            f"[MEMORY] Post-function light GC for {func_name} - memory usage {final_memory:.1f}%")
-
+                            f"[MEMORY] Post-function light GC for {func_name} - memory usage {final_memory:.1f}%"
+                        )
                     post_gc_memory = memory_monitor.get_memory_usage()
                     gc_effect = final_memory - post_gc_memory
-
-                    # Record GC effectiveness for future decisions
                     with _gc_lock:
                         _gc_stats[func_name]['last_gc_time'] = time.time()
                         _gc_stats[func_name]['last_gc_effectiveness'] = gc_effect
                         _gc_stats[func_name]['gc_calls'] += 1
-
                     if gc_effect > 0:
                         logger.info(f"Garbage collection freed {gc_effect:.1f}% memory")
                     else:
                         logger.info(f"Garbage collection had minimal effect ({gc_effect:.1f}%)")
-
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
         return sync_wrapper
 
     return decorator
 
+
 class MemoryOptimizedReader:
     """
     Memory-optimized file reader for large document processing.
 
-    This class provides utilities for reading and processing large files
-    in chunks to minimize memory usage, with adaptive buffer sizing based
-    on system resources.
+    This class provides utilities for reading and processing large files in chunks to minimize memory usage,
+    with adaptive buffer sizing based on system resources.
     """
-
     @staticmethod
     async def read_file_chunks(file_path: str, chunk_size: Optional[int] = None) -> bytes:
-        """
-        Read a file in chunks and return the complete content.
-
-        The chunk size is adaptively determined based on available memory if not specified.
-
-        Args:
-            file_path: Path to the file.
-            chunk_size: Size of each chunk in bytes (if None, determined adaptively).
-
-        Returns:
-            The complete file content as bytes.
-        """
         file_size = os.path.getsize(file_path)
         if chunk_size is None:
-            available_memory_mb = memory_monitor.memory_stats["available_memory_mb"]
+            available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
             current_usage = memory_monitor.get_memory_usage()
             if current_usage > 80:
                 chunk_size = min(64 * 1024, max(4 * 1024, int(available_memory_mb * 1024 * 0.001)))
@@ -773,22 +640,9 @@ class MemoryOptimizedReader:
             processor: Callable[[bytes], Any],
             chunk_size: Optional[int] = None
     ) -> List[Any]:
-        """
-        Process a file in streaming mode using the provided processor function.
-
-        The chunk size is adaptively determined based on available memory if not specified.
-
-        Args:
-            file_path: Path to the file.
-            processor: Function to process each chunk.
-            chunk_size: Size of each chunk in bytes (if None, determined adaptively).
-
-        Returns:
-            A list of processing results.
-        """
         file_size = os.path.getsize(file_path)
         if chunk_size is None:
-            available_memory_mb = memory_monitor.memory_stats["available_memory_mb"]
+            available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
             current_usage = memory_monitor.get_memory_usage()
             if current_usage > 80:
                 chunk_size = min(64 * 1024, max(4 * 1024, int(available_memory_mb * 1024 * 0.001)))
@@ -821,20 +675,9 @@ class MemoryOptimizedReader:
             chunk_processor: Callable[[bytes, int], Awaitable[None]],
             chunk_size: Optional[int] = None
     ) -> int:
-        """
-        Stream a large file through an async processor function with optimal memory usage.
-
-        Args:
-            file_path: Path to the file.
-            chunk_processor: Async function to process each chunk along with its position.
-            chunk_size: Size of each chunk in bytes (if None, determined adaptively).
-
-        Returns:
-            The total number of chunks processed.
-        """
         if chunk_size is None:
             file_size = os.path.getsize(file_path)
-            available_memory_mb = memory_monitor.memory_stats["available_memory_mb"]
+            available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
             current_usage = memory_monitor.get_memory_usage()
             if file_size < 1024 * 1024:
                 chunk_size = file_size

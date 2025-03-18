@@ -1,7 +1,6 @@
 """
 Metadata and configuration endpoints with response caching for improved performance.
 """
-import time
 from datetime import datetime
 
 from fastapi import APIRouter, Request, Response, HTTPException

@@ -27,7 +27,7 @@ from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority
 
 class PresidioEntityDetector(BaseEntityDetector):
     """
-    Enhanced service for detecting sensitive information using Microsoft Presidio
+     service for detecting sensitive information using Microsoft Presidio
     with robust async processing support and GDPR compliance features.
     """
 

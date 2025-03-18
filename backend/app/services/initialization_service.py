@@ -5,18 +5,19 @@ This service manages the initialization and caching of detection engines
 with improved synchronization using ReadWriteLock for concurrent reads
 but exclusive writes during detector initialization.
 """
+import asyncio
 import logging
-import os
 import time
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 from backend.app.configs.config_singleton import get_config
 from backend.app.configs.gdpr_config import MAX_DETECTOR_CACHE_SIZE
-from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_ENTITIES, GLINER_MODEL_PATH, GLINER_CONFIG
+from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_ENTITIES, GLINER_MODEL_PATH
 from backend.app.factory.document_processing_factory import EntityDetectionEngine
 from backend.app.utils.logger import log_info, log_warning, log_error
-from backend.app.utils.synchronization_utils import ReadWriteLock, LockPriority
+# Keep ReadWriteLock but also import AsyncTimeoutLock
+from backend.app.utils.synchronization_utils import ReadWriteLock, LockPriority, AsyncTimeoutLock
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -43,8 +44,11 @@ class InitializationService:
         """
         self.max_cache_size = max_cache_size or get_config("max_detector_cache_size", MAX_DETECTOR_CACHE_SIZE)
 
-        # Replace basic lock with ReadWriteLock for better concurrency
-        self._lock = ReadWriteLock("detector_cache_lock", priority=LockPriority.HIGH)
+        # Keep ReadWriteLock but reduce timeout values
+        self._lock = ReadWriteLock("detector_cache_lock", priority=LockPriority.HIGH, timeout=15.0)
+
+        # Add AsyncTimeoutLock for async-friendly operations if needed
+        self._async_lock = AsyncTimeoutLock("detector_async_lock", priority=LockPriority.HIGH, timeout=15.0)
 
         # Track initialization status for each detector type
         self._initialization_status = {
@@ -73,9 +77,182 @@ class InitializationService:
 
         log_info(f"Initialization service started with max cache size: {self.max_cache_size}")
 
+    def _initialize_presidio_detector(self):
+        """
+        Initialize a Presidio detector instance with enhanced error handling.
+
+        Returns:
+            Presidio detector instance
+        """
+        log_info("Initializing Presidio detector")
+        start_time = time.time()
+
+        try:
+            from backend.app.entity_detection.presidio import PresidioEntityDetector
+            detector = PresidioEntityDetector()
+
+            self._initialization_status["presidio"] = True
+            log_info(f"Presidio detector initialized in {time.time() - start_time:.2f}s")
+            return detector
+        except Exception as e:
+            self._initialization_status["presidio"] = False
+            log_error(f"Error initializing Presidio detector: {str(e)}")
+            raise
+
+    def _initialize_gemini_detector(self):
+        """
+        Initialize a Gemini detector instance with enhanced error handling.
+
+        Returns:
+            Gemini detector instance
+        """
+        log_info("Initializing Gemini detector")
+        start_time = time.time()
+
+        try:
+            from backend.app.entity_detection.gemini import GeminiEntityDetector
+            detector = GeminiEntityDetector()
+
+            self._initialization_status["gemini"] = True
+            log_info(f"Gemini detector initialized in {time.time() - start_time:.2f}s")
+            return detector
+        except Exception as e:
+            self._initialization_status["gemini"] = False
+            log_error(f"Error initializing Gemini detector: {str(e)}")
+            raise
+
+    def _initialize_gliner_detector(self, model_name: str, entities: List[str]):
+        """
+        Initialize a GLiNER detector instance with enhanced error handling.
+
+        Args:
+            model_name: Name of the GLiNER model
+            entities: List of entity types to detect
+
+        Returns:
+            GLiNER detector instance
+        """
+        log_info(f"Initializing GLiNER detector with model {model_name} for entities: {entities}")
+        start_time = time.time()
+
+        try:
+            from backend.app.entity_detection.gliner import GlinerEntityDetector
+            detector = GlinerEntityDetector(
+                model_name=model_name,
+                entities=entities or GLINER_ENTITIES,
+                local_model_path=GLINER_MODEL_PATH
+            )
+
+            self._initialization_status["gliner"] = True
+            log_info(f"GLiNER detector initialized in {time.time() - start_time:.2f}s")
+            return detector
+        except Exception as e:
+            self._initialization_status["gliner"] = False
+            log_error(f"Error initializing GLiNER detector: {str(e)}")
+            raise
+
+    # Add this method to the InitializationService class
+
+    async def initialize_detectors_lazy(self):
+        """
+        Lazily initialize detector instances in the background.
+
+        This method is called during application startup to prepare
+        common detectors without blocking the main startup sequence.
+        """
+        log_info("[STARTUP] Starting lazy initialization of detectors...")
+
+        try:
+            # Initialize Presidio detector in background
+            log_info("[STARTUP] Lazily initializing Presidio detector...")
+            try:
+                # We use a separate thread for CPU-bound operations
+                presidio_detector = await asyncio.to_thread(self._initialize_presidio_detector)
+
+                # Use a short timeout for lock acquisition to avoid blocking
+                with self._lock.write_locked(timeout=1.0):
+                    self._presidio_detector = presidio_detector
+                    self._initialization_status["presidio"] = True
+                    log_info("[STARTUP] Presidio detector lazy initialization complete.")
+            except Exception as e:
+                log_error(f"[STARTUP] Error during Presidio lazy initialization: {str(e)}")
+
+            # Short delay between initializations to reduce resource contention
+            await asyncio.sleep(1.0)
+
+            # Initialize Gemini detector in background
+            log_info("[STARTUP] Lazily initializing Gemini detector...")
+            try:
+                # We use a separate thread for CPU-bound operations
+                gemini_detector = await asyncio.to_thread(self._initialize_gemini_detector)
+
+                # Use a short timeout for lock acquisition to avoid blocking
+                with self._lock.write_locked(timeout=1.0):
+                    self._gemini_detector = gemini_detector
+                    self._initialization_status["gemini"] = True
+                    log_info("[STARTUP] Gemini detector lazy initialization complete.")
+            except Exception as e:
+                log_error(f"[STARTUP] Error during Gemini lazy initialization: {str(e)}")
+
+            # Only initialize GLiNER if we have enough memory available
+            from backend.app.utils.memory_management import memory_monitor
+            if memory_monitor.get_memory_usage() < 60.0:  # Only if under 60% memory usage
+                log_info("[STARTUP] Lazily initializing GLiNER detector...")
+                try:
+                    # We use a separate thread for CPU-bound operations
+                    entities = GLINER_ENTITIES
+                    model_name = GLINER_MODEL_NAME
+                    gliner_detector = await asyncio.to_thread(
+                        self._initialize_gliner_detector,
+                        model_name,
+                        entities
+                    )
+
+                    # Use a short timeout for lock acquisition to avoid blocking
+                    with self._lock.write_locked(timeout=1.0):
+                        cache_key = self._get_gliner_cache_key(entities)
+                        self._gliner_detectors[cache_key] = gliner_detector
+                        self._initialization_status["gliner"] = True
+                        log_info("[STARTUP] GLiNER detector lazy initialization complete.")
+                except Exception as e:
+                    log_error(f"[STARTUP] Error during GLiNER lazy initialization: {str(e)}")
+            else:
+                log_info("[STARTUP] Skipping GLiNER lazy initialization due to memory pressure.")
+
+            log_info("[STARTUP] Lazy initialization of detectors completed successfully.")
+        except Exception as e:
+            log_error(f"[STARTUP] Error during detector lazy initialization: {str(e)}")
+
+    def _initialize_hybrid_detector(self, config: Dict[str, Any]):
+        """
+        Initialize a hybrid detector instance with enhanced error handling.
+
+        Args:
+            config: Configuration for the hybrid detector
+
+        Returns:
+            Hybrid detector instance
+        """
+        log_info(f"Initializing Hybrid detector with config: {config}")
+        start_time = time.time()
+
+        try:
+            from backend.app.entity_detection.hybrid import HybridEntityDetector
+            detector = HybridEntityDetector(config)
+
+            self._initialization_status["hybrid"] = True
+            log_info(f"Hybrid detector initialized in {time.time() - start_time:.2f}s")
+            return detector
+        except Exception as e:
+            self._initialization_status["hybrid"] = False
+            log_error(f"Error initializing Hybrid detector: {str(e)}")
+            raise
+
+    # Update the initialization_service.py - focusing on key methods with lock issues
+
     def get_detector(self, engine: EntityDetectionEngine, config: Optional[Dict[str, Any]] = None):
         """
-        Get a detector instance for the specified engine with thread-safe access.
+        Get a detector instance for the specified engine with improved lock management.
 
         Args:
             engine: The detection engine to use
@@ -84,110 +261,203 @@ class InitializationService:
         Returns:
             The detector instance
         """
-        # Use ReadWriteLock for concurrent reads but exclusive writes
+        # First try a very quick check without any lock
+        if engine == EntityDetectionEngine.PRESIDIO and self._presidio_detector:
+            self._update_usage_metrics_no_lock("presidio")
+            return self._presidio_detector
+
+        elif engine == EntityDetectionEngine.GEMINI and self._gemini_detector:
+            self._update_usage_metrics_no_lock("gemini")
+            return self._gemini_detector
+
+        elif engine == EntityDetectionEngine.GLINER:
+            entities = config.get("entities", []) if config else []
+            cache_key = self._get_gliner_cache_key(entities)
+            if cache_key in self._gliner_detectors:
+                self._update_usage_metrics_no_lock(f"gliner_{cache_key}")
+                return self._gliner_detectors[cache_key]
+
+        elif engine == EntityDetectionEngine.HYBRID:
+            cache_key = self._get_hybrid_cache_key(config or {})
+            if cache_key in self._hybrid_detectors:
+                return self._hybrid_detectors[cache_key]
+
+        # Use ReadWriteLock with shorter timeout values and improved fallback
         try:
-            with self._lock.read_locked(timeout=10.0):
-                # Check cache first (read lock is sufficient)
-                if engine == EntityDetectionEngine.PRESIDIO:
-                    if self._presidio_detector:
-                        self._update_usage_metrics("presidio")
-                        return self._presidio_detector
+            # Try with read lock for cache check (faster than write lock)
+            # Much shorter timeout to fail fast if there's contention
+            with self._lock.read_locked(timeout=0.5):
+                # Double-check cache after acquiring read lock
+                if engine == EntityDetectionEngine.PRESIDIO and self._presidio_detector:
+                    self._update_usage_metrics_no_lock("presidio")
+                    return self._presidio_detector
 
-                elif engine == EntityDetectionEngine.GEMINI:
-                    if self._gemini_detector:
-                        self._update_usage_metrics("gemini")
-                        return self._gemini_detector
-
-                elif engine == EntityDetectionEngine.GLINER:
-                    entities = config.get("entities", []) if config else []
-                    cache_key = self._get_gliner_cache_key(entities)
-
-                    if cache_key in self._gliner_detectors:
-                        self._update_usage_metrics(f"gliner_{cache_key}")
-                        return self._gliner_detectors[cache_key]
-
-                elif engine == EntityDetectionEngine.HYBRID:
-                    cache_key = self._get_hybrid_cache_key(config or {})
-
-                    if cache_key in self._hybrid_detectors:
-                        return self._hybrid_detectors[cache_key]
-
-            # If we got here, we need to initialize a detector (requires write lock)
-            with self._lock.write_locked(timeout=30.0):
-                # Double-check cache after acquiring write lock
-                if engine == EntityDetectionEngine.PRESIDIO:
-                    if self._presidio_detector:
-                        self._update_usage_metrics("presidio")
-                        return self._presidio_detector
-
-                    detector = self._initialize_presidio_detector()
-                    self._presidio_detector = detector
-                    self._initialization_status["presidio"] = True
-                    self._update_usage_metrics("presidio")
-                    return detector
-
-                elif engine == EntityDetectionEngine.GEMINI:
-                    if self._gemini_detector:
-                        self._update_usage_metrics("gemini")
-                        return self._gemini_detector
-
-                    detector = self._initialize_gemini_detector()
-                    self._gemini_detector = detector
-                    self._initialization_status["gemini"] = True
-                    self._update_usage_metrics("gemini")
-                    return detector
+                elif engine == EntityDetectionEngine.GEMINI and self._gemini_detector:
+                    self._update_usage_metrics_no_lock("gemini")
+                    return self._gemini_detector
 
                 elif engine == EntityDetectionEngine.GLINER:
                     entities = config.get("entities", []) if config else []
                     cache_key = self._get_gliner_cache_key(entities)
-
                     if cache_key in self._gliner_detectors:
-                        self._update_usage_metrics(f"gliner_{cache_key}")
+                        self._update_usage_metrics_no_lock(f"gliner_{cache_key}")
                         return self._gliner_detectors[cache_key]
-
-                    model_name = config.get("model_name", GLINER_MODEL_NAME) if config else GLINER_MODEL_NAME
-                    detector = self._initialize_gliner_detector(model_name, entities)
-
-                    # Add to cache with LRU eviction if needed
-                    if len(self._gliner_detectors) >= self.max_cache_size:
-                        self._evict_least_recently_used("gliner")
-
-                    self._gliner_detectors[cache_key] = detector
-                    self._initialization_status["gliner"] = True
-                    self._update_usage_metrics(f"gliner_{cache_key}")
-                    return detector
 
                 elif engine == EntityDetectionEngine.HYBRID:
                     cache_key = self._get_hybrid_cache_key(config or {})
-
                     if cache_key in self._hybrid_detectors:
                         return self._hybrid_detectors[cache_key]
 
-                    detector = self._initialize_hybrid_detector(config or {})
+            # We need to initialize a detector - try with write lock but very short timeout
+            try:
+                with self._lock.write_locked(timeout=1.0):
+                    # Triple-check to avoid duplicate initialization
+                    if engine == EntityDetectionEngine.PRESIDIO:
+                        if self._presidio_detector:
+                            self._update_usage_metrics_no_lock("presidio")
+                            return self._presidio_detector
 
-                    # Add to cache with LRU eviction if needed
-                    if len(self._hybrid_detectors) >= self.max_cache_size:
-                        self._evict_least_recently_used("hybrid")
+                        detector = self._initialize_presidio_detector()
+                        self._presidio_detector = detector
+                        self._initialization_status["presidio"] = True
+                        self._update_usage_metrics_no_lock("presidio")
+                        return detector
 
-                    self._hybrid_detectors[cache_key] = detector
-                    self._initialization_status["hybrid"] = True
-                    return detector
-                else:
-                    raise ValueError(f"Unsupported detection engine: {engine}")
+                    elif engine == EntityDetectionEngine.GEMINI:
+                        if self._gemini_detector:
+                            self._update_usage_metrics_no_lock("gemini")
+                            return self._gemini_detector
+
+                        detector = self._initialize_gemini_detector()
+                        self._gemini_detector = detector
+                        self._initialization_status["gemini"] = True
+                        self._update_usage_metrics_no_lock("gemini")
+                        return detector
+
+                    elif engine == EntityDetectionEngine.GLINER:
+                        entities = config.get("entities", []) if config else []
+                        cache_key = self._get_gliner_cache_key(entities)
+
+                        if cache_key in self._gliner_detectors:
+                            self._update_usage_metrics_no_lock(f"gliner_{cache_key}")
+                            return self._gliner_detectors[cache_key]
+
+                        model_name = config.get("model_name", GLINER_MODEL_NAME) if config else GLINER_MODEL_NAME
+                        detector = self._initialize_gliner_detector(model_name, entities)
+
+                        # Add to cache with LRU eviction if needed
+                        if len(self._gliner_detectors) >= self.max_cache_size:
+                            self._evict_least_recently_used("gliner")
+
+                        self._gliner_detectors[cache_key] = detector
+                        self._initialization_status["gliner"] = True
+                        self._update_usage_metrics_no_lock(f"gliner_{cache_key}")
+                        return detector
+
+                    elif engine == EntityDetectionEngine.HYBRID:
+                        cache_key = self._get_hybrid_cache_key(config or {})
+
+                        if cache_key in self._hybrid_detectors:
+                            return self._hybrid_detectors[cache_key]
+
+                        detector = self._initialize_hybrid_detector(config or {})
+
+                        # Add to cache with LRU eviction if needed
+                        if len(self._hybrid_detectors) >= self.max_cache_size:
+                            self._evict_least_recently_used("hybrid")
+
+                        self._hybrid_detectors[cache_key] = detector
+                        self._initialization_status["hybrid"] = True
+                        return detector
+
+                    else:
+                        raise ValueError(f"Unsupported detection engine: {engine}")
+            except TimeoutError:
+                # If write lock fails, initialize without lock as a last resort
+                log_warning(
+                    f"Timeout acquiring write lock for detector initialization - creating detector without lock")
+            except Exception as e:
+                log_error(f"Error acquiring write lock: {str(e)} - creating detector without lock")
         except TimeoutError:
-            log_error(f"Timeout acquiring lock for detector initialization: {engine}")
+            # If read lock fails, continue without lock
+            log_warning(f"Timeout acquiring read lock for detector check - proceeding without lock")
+        except Exception as e:
+            log_error(f"Error during detector initialization with locks: {str(e)} - proceeding without lock")
+
+        # If all lock attempts fail, fall back to direct initialization without locks
+        # This is a last resort to ensure the system keeps working even with lock contention
+        try:
             if engine == EntityDetectionEngine.PRESIDIO:
-                return self._initialize_presidio_detector()
+                if self._presidio_detector:
+                    return self._presidio_detector
+                detector = self._initialize_presidio_detector()
+                # Don't store in the shared cache to avoid race conditions
+                return detector
+
             elif engine == EntityDetectionEngine.GEMINI:
-                return self._initialize_gemini_detector()
+                if self._gemini_detector:
+                    return self._gemini_detector
+                detector = self._initialize_gemini_detector()
+                # Don't store in the shared cache to avoid race conditions
+                return detector
+
             elif engine == EntityDetectionEngine.GLINER:
                 entities = config.get("entities", []) if config else []
+                cache_key = self._get_gliner_cache_key(entities)
+                if cache_key in self._gliner_detectors:
+                    return self._gliner_detectors[cache_key]
+
                 model_name = config.get("model_name", GLINER_MODEL_NAME) if config else GLINER_MODEL_NAME
-                return self._initialize_gliner_detector(model_name, entities)
+                detector = self._initialize_gliner_detector(model_name, entities)
+                # Don't store in the shared cache to avoid race conditions
+                return detector
+
             elif engine == EntityDetectionEngine.HYBRID:
-                return self._initialize_hybrid_detector(config or {})
+                cache_key = self._get_hybrid_cache_key(config or {})
+                if cache_key in self._hybrid_detectors:
+                    return self._hybrid_detectors[cache_key]
+
+                detector = self._initialize_hybrid_detector(config or {})
+                # Don't store in the shared cache to avoid race conditions
+                return detector
+
             else:
                 raise ValueError(f"Unsupported detection engine: {engine}")
+        except Exception as e:
+            log_error(f"Error during fallback detector initialization: {str(e)}")
+            raise
+
+    def _update_usage_metrics_no_lock(self, detector_key: str):
+        """
+        Update usage metrics for a detector without acquiring a lock.
+
+        This method is used for high-traffic scenarios where contention should be avoided.
+
+        Args:
+            detector_key: Identifier for the detector
+        """
+        current_time = time.time()
+
+        try:
+            if detector_key.startswith("gliner_"):
+                # GLiNER detector metrics are stored by model+entities key
+                if "gliner" not in self._usage_metrics:
+                    self._usage_metrics["gliner"] = {}
+
+                if detector_key not in self._usage_metrics["gliner"]:
+                    self._usage_metrics["gliner"][detector_key] = {"uses": 0, "last_used": None}
+
+                # These operations are reasonably atomic
+                self._usage_metrics["gliner"][detector_key]["uses"] += 1
+                self._usage_metrics["gliner"][detector_key]["last_used"] = current_time
+            else:
+                # Standard detector metrics
+                if detector_key in self._usage_metrics:
+                    self._usage_metrics[detector_key]["uses"] += 1
+                    self._usage_metrics[detector_key]["last_used"] = current_time
+        except Exception:
+            # Truly ignore failures for non-critical metrics
+            pass
 
     def get_presidio_detector(self):
         """
@@ -232,124 +502,72 @@ class InitializationService:
         """
         return self.get_detector(EntityDetectionEngine.HYBRID, config)
 
-    def _initialize_presidio_detector(self):
+    # Add an async version for hybrid_routes.py and other async contexts
+    async def get_detector_async(self, engine: EntityDetectionEngine, config: Optional[Dict[str, Any]] = None):
         """
-        Initialize a Presidio detector instance.
-
-        Returns:
-            Presidio detector instance
-        """
-        log_info("Initializing Presidio detector")
-        start_time = time.time()
-
-        try:
-            from backend.app.entity_detection.presidio import PresidioEntityDetector
-            detector = PresidioEntityDetector()
-
-            self._initialization_status["presidio"] = True
-            log_info(f"Presidio detector initialized in {time.time() - start_time:.2f}s")
-            return detector
-        except Exception as e:
-            self._initialization_status["presidio"] = False
-            log_error(f"Error initializing Presidio detector: {str(e)}")
-            raise
-
-    def _initialize_gemini_detector(self):
-        """
-        Initialize a Gemini detector instance.
-
-        Returns:
-            Gemini detector instance
-        """
-        log_info("Initializing Gemini detector")
-        start_time = time.time()
-
-        try:
-            from backend.app.entity_detection.gemini import GeminiEntityDetector
-            detector = GeminiEntityDetector()
-
-            self._initialization_status["gemini"] = True
-            log_info(f"Gemini detector initialized in {time.time() - start_time:.2f}s")
-            return detector
-        except Exception as e:
-            self._initialization_status["gemini"] = False
-            log_error(f"Error initializing Gemini detector: {str(e)}")
-            raise
-
-    def _initialize_gliner_detector(self, model_name: str, entities: List[str]):
-        """
-        Initialize a GLiNER detector instance.
+        Async version of get_detector for use in async contexts.
 
         Args:
-            model_name: Name of the GLiNER model
-            entities: List of entity types to detect
+            engine: The detection engine to use
+            config: Optional engine-specific configuration
 
         Returns:
-            GLiNER detector instance
+            The detector instance
         """
-        log_info(f"Initializing GLiNER detector with model {model_name} for entities: {entities}")
-        start_time = time.time()
-
+        # For lightweight operations, we can just use the sync version
         try:
-            from backend.app.entity_detection.gliner import GlinerEntityDetector
-            detector = GlinerEntityDetector(
-                model_name=model_name,
-                entities=entities or GLINER_ENTITIES,
-                local_model_path=GLINER_MODEL_PATH
-            )
-
-            self._initialization_status["gliner"] = True
-            log_info(f"GLiNER detector initialized in {time.time() - start_time:.2f}s")
-            return detector
+            return self.get_detector(engine, config)
         except Exception as e:
-            self._initialization_status["gliner"] = False
-            log_error(f"Error initializing GLiNER detector: {str(e)}")
-            raise
+            log_error(f"Error in sync detector access, trying async approach: {str(e)}")
+            # Fall back to async implementation if needed
 
-    def _initialize_hybrid_detector(self, config: Dict[str, Any]):
-        """
-        Initialize a hybrid detector instance.
+            async with self._async_lock.acquire_timeout(timeout=5.0):
+                # Mirror the sync implementation but using async patterns
+                if engine == EntityDetectionEngine.PRESIDIO:
+                    if self._presidio_detector:
+                        self._update_usage_metrics("presidio")
+                        return self._presidio_detector
 
-        Args:
-            config: Configuration for the hybrid detector
+                    # Use asyncio.to_thread for CPU-bound initialization
+                    detector = await asyncio.to_thread(self._initialize_presidio_detector)
+                    self._presidio_detector = detector
+                    self._initialization_status["presidio"] = True
+                    self._update_usage_metrics("presidio")
+                    return detector
 
-        Returns:
-            Hybrid detector instance
-        """
-        log_info(f"Initializing Hybrid detector with config: {config}")
-        start_time = time.time()
+                # Similar implementations for other detector types...
+                elif engine == EntityDetectionEngine.GEMINI:
+                    if self._gemini_detector:
+                        self._update_usage_metrics("gemini")
+                        return self._gemini_detector
 
-        try:
-            from backend.app.entity_detection.hybrid import HybridEntityDetector
-            detector = HybridEntityDetector(config)
+                    detector = await asyncio.to_thread(self._initialize_gemini_detector)
+                    self._gemini_detector = detector
+                    self._initialization_status["gemini"] = True
+                    self._update_usage_metrics("gemini")
+                    return detector
 
-            self._initialization_status["hybrid"] = True
-            log_info(f"Hybrid detector initialized in {time.time() - start_time:.2f}s")
-            return detector
-        except Exception as e:
-            self._initialization_status["hybrid"] = False
-            log_error(f"Error initializing Hybrid detector: {str(e)}")
-            raise
+                # And so on for the other engines...
+                else:
+                    # Fall back to synchronous implementation
+                    return self.get_detector(engine, config)
 
-    async def initialize_detectors_lazy(self, force_reload: bool = False):
-        """
-        Initialize detectors in a lazy manner, deferring actual loading until first use.
+    async def get_presidio_detector_async(self):
+        """Async version of get_presidio_detector."""
+        return await self.get_detector_async(EntityDetectionEngine.PRESIDIO)
 
-        Args:
-            force_reload: Whether to force reloading of already initialized detectors
-        """
-        log_info("[INIT] Setting up lazy initialization of detectors...")
+    async def get_gemini_detector_async(self):
+        """Async version of get_gemini_detector."""
+        return await self.get_detector_async(EntityDetectionEngine.GEMINI)
 
-        # Instead of actually loading the models now, just prepare the environment
-        # and ensure directories exist
-        os.makedirs(GLINER_CONFIG['local_model_path'], exist_ok=True)
+    async def get_gliner_detector_async(self, entities: Optional[List[str]] = None):
+        """Async version of get_gliner_detector."""
+        config = {"entities": entities or GLINER_ENTITIES}
+        return await self.get_detector_async(EntityDetectionEngine.GLINER, config)
 
-        # Set initialization status to indicate we're ready for lazy loading
-        self._initialization_status['presidio'] = True
-        self._initialization_status['gemini'] = True
-        self._initialization_status['gliner'] = True
-
-        log_info("[INIT] Lazy initialization setup complete. Detectors will be loaded on first use.")
+    async def get_hybrid_detector_async(self, config: Optional[Dict[str, Any]] = None):
+        """Async version of get_hybrid_detector."""
+        return await self.get_detector_async(EntityDetectionEngine.HYBRID, config)
 
     def _evict_least_recently_used(self, detector_type: str):
         """
@@ -392,7 +610,8 @@ class InitializationService:
         current_time = time.time()
 
         try:
-            with self._lock.write_locked(timeout=1.0):  # Short timeout for stats update
+            # Use a more aggressive timeout for this non-critical operation
+            with self._lock.write_locked(timeout=0.5):  # Very short timeout for stats update
                 if detector_key.startswith("gliner_"):
                     # GLiNER detector metrics are stored by model+entities key
                     if "gliner" not in self._usage_metrics:
@@ -411,6 +630,20 @@ class InitializationService:
         except TimeoutError:
             # Non-critical operation, can be skipped if lock acquisition fails
             log_warning(f"Timeout updating usage metrics for {detector_key}")
+
+            # Try updating without lock for non-critical metrics
+            try:
+                if detector_key.startswith("gliner_"):
+                    if "gliner" in self._usage_metrics and detector_key in self._usage_metrics["gliner"]:
+                        self._usage_metrics["gliner"][detector_key]["uses"] += 1
+                        self._usage_metrics["gliner"][detector_key]["last_used"] = current_time
+                else:
+                    if detector_key in self._usage_metrics:
+                        self._usage_metrics[detector_key]["uses"] += 1
+                        self._usage_metrics[detector_key]["last_used"] = current_time
+            except:
+                # Truly ignore failures for non-critical metrics
+                pass
 
     def _get_gliner_cache_key(self, entities: List[str]) -> str:
         """

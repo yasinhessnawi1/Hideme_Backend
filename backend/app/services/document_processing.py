@@ -13,7 +13,6 @@ import time
 import uuid
 from typing import Dict, Any, List, Optional, Union
 
-from backend.app.document_processing.pdf import PDFTextExtractor
 from backend.app.factory.document_processing_factory import (
     DocumentProcessingFactory,
     DocumentFormat,
@@ -23,11 +22,12 @@ from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.data_minimization import minimize_extracted_data
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers.json_helper import validate_requested_entities
-from backend.app.utils.logger import log_info
+from backend.app.utils.logger import log_info, log_warning, log_error
 from backend.app.utils.processing_records import record_keeper
 from backend.app.utils.retention_management import retention_manager
 from backend.app.utils.secure_file_utils import SecureTempFileManager
 from backend.app.utils.secure_logging import log_sensitive_operation
+from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
 
 class DocumentProcessingService:
@@ -48,7 +48,7 @@ class DocumentProcessingService:
     """
     _pdf_cache = {}  # Cache for PDF extraction results, keyed by content hash
     _pdf_cache_size = 10  # Maximum number of cached results
-    _pdf_cache_lock = asyncio.Lock()  # Lock for thread-safety
+    _pdf_cache_lock = AsyncTimeoutLock("pdf_cache_lock", priority=LockPriority.MEDIUM, timeout=3.0)
 
     async def process_document_async(
             self,
@@ -101,21 +101,72 @@ class DocumentProcessingService:
                 # Calculate content hash for caching
                 content_hash = hashlib.sha256(document_content).hexdigest()
 
-                # Try to get from cache first
-                async with self._pdf_cache_lock:
-                    if content_hash in self._pdf_cache:
-                        extracted_data = self._pdf_cache[content_hash]
-                        log_info(f"[CACHE] Using cached PDF extraction result")
-                    else:
-                        # Use in-memory extraction for PDFs
-                        buffer = io.BytesIO(document_content)
-                        extracted_data = await self._extract_pdf_from_buffer(buffer)
+                # Try to get from cache with exponential backoff
+                max_attempts = 3
+                base_timeout = 1.0
+                extracted_data = None
 
-                        # Update cache with LRU policy
-                        if len(self._pdf_cache) >= self._pdf_cache_size:
-                            # Remove oldest item (first item in the dict)
-                            self._pdf_cache.pop(next(iter(self._pdf_cache)))
-                        self._pdf_cache[content_hash] = extracted_data
+                # First check cache without lock for better performance
+                if content_hash in self._pdf_cache:
+                    extracted_data = self._pdf_cache[content_hash]
+                    log_info(f"[CACHE] Using cached PDF extraction result (no lock required)")
+
+                # If not in cache, try with lock
+                if extracted_data is None:
+                    for attempt in range(max_attempts):
+                        # Exponential backoff for timeout
+                        timeout = base_timeout * (2 ** attempt)
+
+                        try:
+                            # Use lock with timeout
+                            async with self._pdf_cache_lock.acquire_timeout(timeout=timeout) as acquired:
+                                if not acquired:
+                                    # If lock acquisition failed but this is the last attempt,
+                                    # proceed without caching
+                                    if attempt == max_attempts - 1:
+                                        log_warning(f"[CACHE] Final lock acquisition attempt failed, processing without caching")
+                                        buffer = io.BytesIO(document_content)
+                                        extracted_data = await self._extract_pdf_from_buffer(buffer, use_cache=False)
+                                        break
+                                    else:
+                                        log_warning(f"[CACHE] Lock acquisition attempt {attempt+1}/{max_attempts} failed, retrying...")
+                                        if attempt < max_attempts - 1:
+                                            await asyncio.sleep(0.1 * (2 ** attempt))  # Increasing delay before retry
+                                        continue
+
+                                # Double-check if another thread added it to cache while we were waiting
+                                if content_hash in self._pdf_cache:
+                                    extracted_data = self._pdf_cache[content_hash]
+                                    log_info(f"[CACHE] Using cached PDF extraction result (double-checked)")
+                                    break
+
+                                # Not in cache, extract it
+                                buffer = io.BytesIO(document_content)
+                                extracted_data = await self._extract_pdf_from_buffer(buffer, use_cache=True)
+
+                                # Update cache with LRU policy
+                                if len(self._pdf_cache) >= self._pdf_cache_size:
+                                    # Remove oldest item (first item in the dict)
+                                    self._pdf_cache.pop(next(iter(self._pdf_cache)))
+                                self._pdf_cache[content_hash] = extracted_data
+                                log_info(f"[CACHE] Added PDF extraction result to cache")
+                                break
+
+                        except Exception as e:
+                            log_warning(f"[CACHE] Error during attempt {attempt+1}/{max_attempts} to acquire PDF cache lock: {str(e)}")
+                            if attempt == max_attempts - 1:
+                                # Final fallback: process without caching
+                                buffer = io.BytesIO(document_content)
+                                extracted_data = await self._extract_pdf_from_buffer(buffer, use_cache=False)
+                                log_warning(f"[CACHE] Processed without caching after lock error")
+                            elif attempt < max_attempts - 1:
+                                await asyncio.sleep(0.1 * (2 ** attempt))  # Increasing delay before retry
+
+                # If all attempts failed, make sure we have extraction data
+                if extracted_data is None:
+                    log_warning(f"[CACHE] All cache attempts failed, processing without caching as last resort")
+                    buffer = io.BytesIO(document_content)
+                    extracted_data = await self._extract_pdf_from_buffer(buffer, use_cache=False)
 
                 extract_time = time.time() - extract_start
                 performance_metrics["extraction_time"] = extract_time
@@ -148,7 +199,26 @@ class DocumentProcessingService:
                     "use_gliner": False
                 }
 
-            detector = initialization_service.get_detector(detection_engine, config=config)
+            # Use detector with timeout
+            max_detector_attempts = 3
+            base_detector_timeout = 2.0
+            detector = None
+
+            for attempt in range(max_detector_attempts):
+                try:
+                    detector = initialization_service.get_detector(detection_engine, config=config)
+                    if detector:
+                        break
+                except Exception as e:
+                    log_warning(f"[DETECTOR] Error getting detector on attempt {attempt+1}/{max_detector_attempts}: {str(e)}")
+                    if attempt < max_detector_attempts - 1:
+                        # Wait before retry with increasing backoff
+                        await asyncio.sleep(0.2 * (2 ** attempt))
+
+            # If all attempts fail, raise exception
+            if detector is None:
+                raise ValueError(f"Failed to initialize {detection_engine.name} detector after {max_detector_attempts} attempts")
+
             detector_time = time.time() - detector_start
             performance_metrics["detector_init_time"] = detector_time
 
@@ -156,14 +226,28 @@ class DocumentProcessingService:
             detection_start = time.time()
             log_info(f"[OK] Detecting sensitive information using {detection_engine.name}")
 
-            if hasattr(detector, 'detect_sensitive_data_async'):
-                anonymized_text, entities, redaction_mapping = await detector.detect_sensitive_data_async(
-                    minimized_data, entity_list
-                )
-            else:
-                anonymized_text, entities, redaction_mapping = await asyncio.to_thread(
-                    detector.detect_sensitive_data, minimized_data, entity_list
-                )
+            # Use shorter timeout for detection
+            detection_timeout = 40
+            try:
+                if hasattr(detector, 'detect_sensitive_data_async'):
+                    detection_task = detector.detect_sensitive_data_async(minimized_data, entity_list)
+                    anonymized_text, entities, redaction_mapping = await asyncio.wait_for(
+                        detection_task,
+                        timeout=detection_timeout
+                    )
+                else:
+                    detection_future = asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: detector.detect_sensitive_data(minimized_data, entity_list)
+                    )
+                    anonymized_text, entities, redaction_mapping = await asyncio.wait_for(
+                        detection_future,
+                        timeout=detection_timeout
+                    )
+            except asyncio.TimeoutError:
+                log_error(f"[DETECTION] Timed out after {detection_timeout}s")
+                raise TimeoutError(f"Detection operation timed out after {detection_timeout} seconds")
+
             detection_time = time.time() - detection_start
             performance_metrics["detection_time"] = detection_time
             log_info(f"[PERF] Entity detection completed in {detection_time:.2f}s")
@@ -175,23 +259,46 @@ class DocumentProcessingService:
                 if document_format == DocumentFormat.PDF:
                     # Use the PDFRedactionService to apply redactions in memory
                     from backend.app.document_processing.pdf import PDFRedactionService
+
+                    # Use timeout for redaction
+                    redaction_timeout = 60  # Redaction can take longer than detection
                     redaction_service = PDFRedactionService(document_content)
-                    redacted_content = await asyncio.to_thread(
-                        redaction_service.apply_redactions_to_memory, redaction_mapping
+
+                    # Process with timeout
+                    redaction_future = asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: redaction_service.apply_redactions_to_memory(redaction_mapping)
                     )
+                    try:
+                        redacted_content = await asyncio.wait_for(redaction_future, timeout=redaction_timeout)
+                    except asyncio.TimeoutError:
+                        log_error(f"[REDACTION] Timed out after {redaction_timeout}s")
+                        raise TimeoutError(f"Redaction operation timed out after {redaction_timeout} seconds")
+
                     with open(output_path, "wb") as f:
                         f.write(redacted_content)
                     redacted_path = output_path
                 else:
                     # For other formats, use the memory-optimized approach when possible
+                    redaction_timeout = 60  # Redaction can take longer than detection
+
                     redactor = DocumentProcessingFactory.create_document_redactor(
                         document_content if len(
                             document_content) < SecureTempFileManager.IN_MEMORY_THRESHOLD else input_path,
                         document_format
                     )
-                    redacted_path = await asyncio.to_thread(
-                        redactor.apply_redactions, redaction_mapping, output_path
+
+                    # Process with timeout
+                    redaction_future = asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: redactor.apply_redactions(redaction_mapping, output_path)
                     )
+                    try:
+                        redacted_path = await asyncio.wait_for(redaction_future, timeout=redaction_timeout)
+                    except asyncio.TimeoutError:
+                        log_error(f"[REDACTION] Timed out after {redaction_timeout}s")
+                        raise TimeoutError(f"Redaction operation timed out after {redaction_timeout} seconds")
+
             except Exception as e:
                 SecurityAwareErrorHandler.log_processing_error(e, "document_redaction", input_path)
                 raise
@@ -253,12 +360,13 @@ class DocumentProcessingService:
                 success=success
             )
 
-    async def _extract_pdf_from_buffer(self, buffer: io.BytesIO) -> Dict[str, Any]:
+    async def _extract_pdf_from_buffer(self, buffer: io.BytesIO, use_cache: bool = True) -> Dict[str, Any]:
         """
         Extract text and positions from a PDF buffer without creating temporary files.
 
         Args:
             buffer: BytesIO buffer containing PDF data
+            use_cache: Whether to use caching for results
 
         Returns:
             Dictionary with extracted text and position data
@@ -266,31 +374,55 @@ class DocumentProcessingService:
         import pymupdf
         extracted_data = {"pages": []}
         try:
-            pdf_document = pymupdf.open(stream=buffer, filetype="pdf")
-            for page_num in range(len(pdf_document)):
-                page = pdf_document[page_num]
-                words = page.get_text("words")
-                page_words = []
-                for word in words:
-                    x0, y0, x1, y1, text, *_ = word
-                    if text.strip():
-                        page_words.append({
-                            "text": text.strip(),
-                            "x0": x0,
-                            "y0": y0,
-                            "x1": x1,
-                            "y1": y1
+            # Set a timeout for PDF processing to prevent hanging
+            extraction_timeout = 30  # 30 seconds for PDF extraction
+
+            # Define extraction function for timeout
+            def extract_pdf():
+                pdf_document = pymupdf.open(stream=buffer, filetype="pdf")
+                result = {"pages": []}
+
+                for page_num in range(len(pdf_document)):
+                    page = pdf_document[page_num]
+                    words = page.get_text("words")
+                    page_words = []
+                    for word in words:
+                        x0, y0, x1, y1, text, *_ = word
+                        if text.strip():
+                            page_words.append({
+                                "text": text.strip(),
+                                "x0": x0,
+                                "y0": y0,
+                                "x1": x1,
+                                "y1": y1
+                            })
+                    if page_words:
+                        result["pages"].append({
+                            "page": page_num + 1,
+                            "words": page_words
                         })
-                if page_words:
-                    extracted_data["pages"].append({
-                        "page": page_num + 1,
-                        "words": page_words
-                    })
-            metadata = pdf_document.metadata
-            if metadata:
-                from backend.app.utils.data_minimization import sanitize_document_metadata
-                extracted_data["metadata"] = sanitize_document_metadata(metadata)
-            pdf_document.close()
+
+                # Add metadata if available
+                try:
+                    metadata = pdf_document.metadata
+                    if metadata:
+                        from backend.app.utils.data_minimization import sanitize_document_metadata
+                        result["metadata"] = sanitize_document_metadata(metadata)
+                except Exception as meta_error:
+                    log_warning(f"[PDF] Error extracting metadata: {str(meta_error)}")
+
+                pdf_document.close()
+                return result
+
+            # Run extraction with timeout
+            try:
+                # Convert to async task with timeout
+                extraction_future = asyncio.get_event_loop().run_in_executor(None, extract_pdf)
+                extracted_data = await asyncio.wait_for(extraction_future, timeout=extraction_timeout)
+            except asyncio.TimeoutError:
+                log_error(f"[PDF] Extraction timed out after {extraction_timeout}s")
+                raise TimeoutError(f"PDF extraction timed out after {extraction_timeout} seconds")
+
         except Exception as e:
             SecurityAwareErrorHandler.log_processing_error(
                 e, "pdf_buffer_extraction", "memory_buffer"
@@ -337,59 +469,93 @@ class DocumentProcessingService:
                 import pymupdf
                 extract_start = time.time()
                 log_info(f"[OK] Extracting text from memory stream")
-                buffer = io.BytesIO(document_stream)
-                pdf_document = pymupdf.open(stream=buffer, filetype="pdf")
-                extracted_data = {"pages": []}
-                for page_num in range(len(pdf_document)):
-                    page = pdf_document[page_num]
-                    words = page.get_text("words")
-                    page_words = []
-                    for word in words:
-                        x0, y0, x1, y1, text, *_ = word
-                        if text.strip():
-                            page_words.append({
-                                "text": text.strip(),
-                                "x0": x0,
-                                "y0": y0,
-                                "x1": x1,
-                                "y1": y1
-                            })
-                    if page_words:
-                        extracted_data["pages"].append({
-                            "page": page_num + 1,
-                            "words": page_words
-                        })
-                pdf_document.close()
+
+                # Process PDF with timeout
+                extraction_timeout = 30  # 30 seconds for PDF extraction
+
+                try:
+                    buffer = io.BytesIO(document_stream)
+                    extracted_data = await self._extract_pdf_from_buffer(buffer, use_cache=False)
+                except TimeoutError:
+                    log_error(f"[STREAM] PDF extraction timed out after {extraction_timeout}s")
+                    raise
+
                 extract_time = time.time() - extract_start
                 performance_metrics["extraction_time"] = extract_time
 
                 minimized_data = minimize_extracted_data(extracted_data)
+
+                # Get detector with backoff strategy
                 detector_start = time.time()
-                detector = initialization_service.get_detector(detection_engine)
+                max_detector_attempts = 3
+                base_detector_timeout = 2.0
+                detector = None
+
+                for attempt in range(max_detector_attempts):
+                    try:
+                        detector = initialization_service.get_detector(detection_engine)
+                        if detector:
+                            break
+                    except Exception as e:
+                        log_warning(f"[DETECTOR] Error getting detector on attempt {attempt+1}/{max_detector_attempts}: {str(e)}")
+                        if attempt < max_detector_attempts - 1:
+                            # Wait before retry with increasing backoff
+                            await asyncio.sleep(0.2 * (2 ** attempt))
+
+                # If all attempts fail, raise exception
+                if detector is None:
+                    raise ValueError(f"Failed to initialize {detection_engine.name} detector after {max_detector_attempts} attempts")
+
                 detector_time = time.time() - detector_start
                 performance_metrics["detector_init_time"] = detector_time
 
+                # Detection with timeout
                 detection_start = time.time()
-                if hasattr(detector, 'detect_sensitive_data_async'):
-                    anonymized_text, entities, redaction_mapping = await detector.detect_sensitive_data_async(
-                        minimized_data, entity_list
-                    )
-                else:
-                    anonymized_text, entities, redaction_mapping = await asyncio.to_thread(
-                        detector.detect_sensitive_data,
-                        minimized_data, entity_list
-                    )
+                detection_timeout = 40  # 40 seconds timeout for detection
+
+                try:
+                    if hasattr(detector, 'detect_sensitive_data_async'):
+                        detection_task = detector.detect_sensitive_data_async(minimized_data, entity_list)
+                        anonymized_text, entities, redaction_mapping = await asyncio.wait_for(
+                            detection_task,
+                            timeout=detection_timeout
+                        )
+                    else:
+                        detection_future = asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: detector.detect_sensitive_data(minimized_data, entity_list)
+                        )
+                        anonymized_text, entities, redaction_mapping = await asyncio.wait_for(
+                            detection_future,
+                            timeout=detection_timeout
+                        )
+                except asyncio.TimeoutError:
+                    log_error(f"[STREAM] Detection timed out after {detection_timeout}s")
+                    raise TimeoutError(f"Detection operation timed out after {detection_timeout} seconds")
+
                 detection_time = time.time() - detection_start
                 performance_metrics["detection_time"] = detection_time
 
+                # Redaction with timeout
                 redact_start = time.time()
-                from backend.app.document_processing.pdf import PDFRedactionService
-                redaction_service = PDFRedactionService(document_stream)
-                redacted_content = await asyncio.to_thread(
-                    redaction_service.apply_redactions_to_memory, redaction_mapping
-                )
-                with open(output_path, "wb") as f:
-                    f.write(redacted_content)
+                redaction_timeout = 60  # 60 seconds for redaction
+
+                try:
+                    from backend.app.document_processing.pdf import PDFRedactionService
+                    redaction_service = PDFRedactionService(document_stream)
+
+                    redaction_future = asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: redaction_service.apply_redactions_to_memory(redaction_mapping)
+                    )
+                    redacted_content = await asyncio.wait_for(redaction_future, timeout=redaction_timeout)
+
+                    with open(output_path, "wb") as f:
+                        f.write(redacted_content)
+                except asyncio.TimeoutError:
+                    log_error(f"[STREAM] Redaction timed out after {redaction_timeout}s")
+                    raise TimeoutError(f"Redaction operation timed out after {redaction_timeout} seconds")
+
                 output_pdf = output_path
                 redact_time = time.time() - redact_start
                 performance_metrics["redaction_time"] = redact_time
@@ -419,11 +585,15 @@ class DocumentProcessingService:
                 }
             else:
                 import tempfile
+                # Use temp files with shorter retention for non-PDF formats
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f".{document_format.name.lower()}") as temp_file:
                     temp_input_path = temp_file.name
                     temp_file.write(document_stream)
                 try:
-                    retention_manager.register_processed_file(temp_input_path)
+                    # Register for cleanup with shorter retention time
+                    retention_manager.register_processed_file(temp_input_path, retention_seconds=300)  # 5 minutes max
+
+                    # Process using the async method with standard timeouts
                     result = await self.process_document_async(
                         temp_input_path,
                         output_path,
@@ -436,6 +606,7 @@ class DocumentProcessingService:
                         stats = result.get("stats", {"total_entities": 0})
                     return result
                 finally:
+                    # Force immediate cleanup instead of waiting for retention manager
                     retention_manager.immediate_cleanup(temp_input_path)
         except Exception as e:
             SecurityAwareErrorHandler.log_processing_error(
@@ -497,19 +668,3 @@ class DocumentProcessingService:
             "entities_by_type": entities_by_type,
             "sensitive_by_page": sensitive_by_page
         }
-
-
-async def extraction_processor(content):
-    # Check if content is a file-like object or bytes
-    if hasattr(content, 'read'):
-        # It's a file-like object, use it directly
-        extractor = PDFTextExtractor(content)
-        extracted_data = extractor.extract_text()
-        extractor.close()
-    else:
-        # It's bytes, create a buffer
-        buffer = io.BytesIO(content)
-        extractor = PDFTextExtractor(buffer)
-        extracted_data = extractor.extract_text()
-        extractor.close()
-    return extracted_data

@@ -30,7 +30,8 @@ async def process_file_in_chunks(
         use_presidio: bool,
         use_gemini: bool,
         use_gliner: bool,
-        start_time: float
+        start_time: float,
+        operation_id: str = None,
 ) -> JSONResponse:
     """
     Process large files in chunks to minimize memory usage.
@@ -45,13 +46,15 @@ async def process_file_in_chunks(
         use_gemini: Whether to use Gemini detector
         use_gliner: Whether to use GLiNER detector
         start_time: Start time for performance tracking
+        operation_id: Optional identifier for logging and tracking
 
     Returns:
         JSONResponse with processed results
     """
     processing_times = {}
     file_read_start = time.time()
-    operation_id = str(uuid.uuid4())
+    if operation_id is None:
+        operation_id = str(uuid.uuid4())
 
     log_info(f"[SECURITY] Starting chunked file processing [operation_id={operation_id}, file={file.filename}]")
 
@@ -167,7 +170,7 @@ async def process_file_in_chunks(
         try:
             log_info(
                 f"[SECURITY] Initializing hybrid detector with config: presidio={use_presidio}, gemini={use_gemini}, gliner={use_gliner} [operation_id={operation_id}]")
-            detector = initialization_service.get_hybrid_detector(config)
+            detector = await initialization_service.get_hybrid_detector(config)
             processing_times["detector_init_time"] = time.time() - detector_create_start
         except Exception as e:
             log_error(f"[SECURITY] Error initializing detector: {str(e)} [operation_id={operation_id}]")
@@ -473,7 +476,7 @@ async def process_pdf_in_chunks(
         try:
             log_info(
                 f"[SECURITY] Initializing hybrid detector with config: presidio={use_presidio}, gemini={use_gemini}, gliner={use_gliner} [operation_id={operation_id}]")
-            detector = initialization_service.get_hybrid_detector(config)
+            detector = await initialization_service.get_hybrid_detector(config)
             processing_times["detector_init_time"] = time.time() - detector_create_start
         except Exception as e:
             log_error(f"[SECURITY] Error initializing detector: {str(e)} [operation_id={operation_id}]")
@@ -671,7 +674,7 @@ async def process_large_document_in_batches(
 
     # Get detector once for all batches
     try:
-        detector = initialization_service.get_hybrid_detector(config)
+        detector = await initialization_service.get_hybrid_detector(config)
         log_info(
             f"[SECURITY] Successfully initialized hybrid detector for batch processing [operation_id={operation_id}]")
     except Exception as e:
