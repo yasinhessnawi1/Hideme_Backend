@@ -149,67 +149,6 @@ class EntityUtils:
     """Utilities for processing and manipulating entities."""
 
     @staticmethod
-    def merge_overlapping_entities(entities: List[RecognizerResult]) -> List[RecognizerResult]:
-        """
-        Merges overlapping entities by keeping the longest span.
-
-        Args:
-            entities: List of entity results (must have start, end, and score attributes)
-
-        Returns:
-            List of merged entities
-        """
-        if not entities:
-            return []
-
-        # Sort entities by start index
-        entities.sort(key=lambda e: e.start)
-
-        merged_entities = []
-        prev_entity = entities[0]
-
-        for curr_entity in entities[1:]:
-            # Check if entities overlap
-            if curr_entity.start <= prev_entity.end:
-                # Merge by keeping the longest span
-                prev_entity.start = min(prev_entity.start, curr_entity.start)
-                prev_entity.end = max(prev_entity.end, curr_entity.end)
-                prev_entity.score = max(prev_entity.score, curr_entity.score)
-            else:
-                merged_entities.append(prev_entity)
-                prev_entity = curr_entity
-
-        # Add the last entity
-        merged_entities.append(prev_entity)
-
-        return merged_entities
-
-    @staticmethod
-    def convert_entity_to_dict(entity: Union[RecognizerResult, Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Converts an entity to a dictionary format.
-
-        Args:
-            entity: Entity object or dictionary
-
-        Returns:
-            Standardized entity dictionary
-        """
-        if isinstance(entity, dict):
-            return {
-                "entity_type": entity.get("entity_type", "UNKNOWN"),
-                "start": entity.get("start", 0),
-                "end": entity.get("end", 0),
-                "score": float(entity.get("score", 0.0))
-            }
-        else:
-            return {
-                "entity_type": entity.entity_type,
-                "start": entity.start,
-                "end": entity.end,
-                "score": float(entity.score)
-            }
-    @staticmethod
     def merge_redaction_mappings(
             redaction_mappings: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
@@ -286,6 +225,156 @@ class EntityUtils:
                 })
 
         return result
+
+    @staticmethod
+    def merge_overlapping_entities(entities: List[RecognizerResult]) -> List[RecognizerResult]:
+        """
+        Merges overlapping entities by keeping the longest span.
+
+        Note: This method is specific to Presidio RecognizerResult objects.
+        For generic entity dictionaries, use merge_overlapping_entity_dicts().
+
+        Args:
+            entities: List of entity results (must have start, end, and score attributes)
+
+        Returns:
+            List of merged entities
+        """
+        if not entities:
+            return []
+
+        # Sort entities by start index
+        entities.sort(key=lambda e: e.start)
+
+        merged_entities = []
+        prev_entity = entities[0]
+
+        for curr_entity in entities[1:]:
+            # Check if entities overlap
+            if curr_entity.start <= prev_entity.end:
+                # Merge by keeping the longest span
+                prev_entity.start = min(prev_entity.start, curr_entity.start)
+                prev_entity.end = max(prev_entity.end, curr_entity.end)
+                prev_entity.score = max(prev_entity.score, curr_entity.score)
+            else:
+                merged_entities.append(prev_entity)
+                prev_entity = curr_entity
+
+        # Add the last entity
+        merged_entities.append(prev_entity)
+
+        return merged_entities
+
+    @staticmethod
+    def merge_overlapping_entity_dicts(entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Merges overlapping entities by keeping the longest span.
+        Works with generic entity dictionaries rather than specific object types.
+
+        Args:
+            entities: List of entity dictionaries (must have start, end, and score fields)
+
+        Returns:
+            List of merged entity dictionaries
+        """
+        if not entities:
+            return []
+
+        # Filter out entities with invalid start/end values
+        valid_entities = []
+        for entity in entities:
+            if isinstance(entity.get("start"), (int, float)) and isinstance(entity.get("end"), (int, float)):
+                valid_entities.append(entity)
+            else:
+                log_warning(f"[WARNING] Skipping entity with invalid position values: {entity}")
+
+        if not valid_entities:
+            return []
+
+        # Sort entities by start index
+        sorted_entities = sorted(valid_entities, key=lambda e: e.get("start", 0))
+
+        merged_entities = []
+        prev_entity = dict(sorted_entities[0])  # Create a copy to avoid modifying the original
+
+        for curr_entity in sorted_entities[1:]:
+            # Check if entities overlap
+            if curr_entity.get("start", 0) <= prev_entity.get("end", 0):
+                # Merge by keeping the longest span
+                prev_entity["start"] = min(prev_entity.get("start", 0), curr_entity.get("start", 0))
+                prev_entity["end"] = max(prev_entity.get("end", 0), curr_entity.get("end", 0))
+                prev_entity["score"] = max(prev_entity.get("score", 0.0), curr_entity.get("score", 0.0))
+
+                # For entity type, we generally keep the type of the entity with the higher score
+                if curr_entity.get("score", 0.0) > prev_entity.get("score", 0.0):
+                    prev_entity["entity_type"] = curr_entity.get("entity_type",
+                                                                 prev_entity.get("entity_type", "UNKNOWN"))
+            else:
+                merged_entities.append(prev_entity)
+                prev_entity = dict(curr_entity)  # Create a copy to avoid modifying the original
+
+        # Add the last entity
+        merged_entities.append(prev_entity)
+
+        return merged_entities
+
+    @staticmethod
+    def remove_duplicate_entities(entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Removes duplicate entities with the same start and end indices.
+        When duplicates are found, keeps the entity with the highest confidence score.
+
+        Args:
+            entities: List of entity dictionaries with start, end, and score fields
+
+        Returns:
+            List of deduplicated entities
+        """
+        if not entities:
+            return []
+
+        # Create a dictionary to track the highest score entity for each position
+        position_map = {}  # Format: (start, end) -> entity_dict
+
+        for entity in entities:
+            position_key = (entity.get("start"), entity.get("end"))
+
+            # Skip invalid positions
+            if None in position_key:
+                continue
+
+            # If we haven't seen this position before, or this entity has a higher score
+            if position_key not in position_map or entity.get("score", 0) > position_map[position_key].get("score", 0):
+                position_map[position_key] = entity
+
+        # Return the deduplicated entities
+        return list(position_map.values())
+
+    @staticmethod
+    def convert_entity_to_dict(entity: Union[RecognizerResult, Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Converts an entity to a dictionary format.
+
+        Args:
+            entity: Entity object or dictionary
+
+        Returns:
+            Standardized entity dictionary
+        """
+        if isinstance(entity, dict):
+            return {
+                "entity_type": entity.get("entity_type", "UNKNOWN"),
+                "start": entity.get("start", 0),
+                "end": entity.get("end", 0),
+                "score": float(entity.get("score", 0.0))
+            }
+        else:
+            return {
+                "entity_type": entity.entity_type,
+                "start": entity.start,
+                "end": entity.end,
+                "score": float(entity.score)
+            }
 
 
 class JsonUtils:

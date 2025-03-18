@@ -1,6 +1,6 @@
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import Response, JSONResponse
 import time
 import logging
 import redis
@@ -206,10 +206,9 @@ class RateLimitingMiddleware(BaseHTTPMiddleware):
         # Check if rate limited
         if self.rate_limiter.is_rate_limited(rate_limit_key, max_requests):
             logger.warning(f"Rate limit exceeded for {client_ip} on {request.url.path}")
-            return Response(
-                content={"error": "Rate limit exceeded. Please try again later."},
+            return JSONResponse(
                 status_code=429,
-                media_type="application/json"
+                content={"detail": "Rate limit exceeded. Please try again later."}
             )
         
         # Process the request if not rate limited

@@ -21,6 +21,7 @@ DATA_MINIMIZATION_RULES = {
     "strip_timestamp": True,  # Whether to strip creation/modification timestamps
     "required_fields_only": True,  # Whether to keep only required fields for processing
 }
+MAX_DETECTOR_CACHE_SIZE = 1000  # Maximum number of cached detector results
 
 # Anonymization configuration
 ANONYMIZATION_CONFIG = {

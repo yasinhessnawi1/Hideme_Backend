@@ -6,7 +6,6 @@ with improved security features, GDPR compliance, and standardized error handlin
 """
 import asyncio
 import os
-import threading
 import time
 from typing import Dict, Any, List, Optional, Tuple, Union
 
@@ -23,6 +22,7 @@ from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.data_minimization import minimize_extracted_data
 from backend.app.utils.secure_logging import log_sensitive_operation
 from backend.app.utils.processing_records import record_keeper
+from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority
 
 
 class PresidioEntityDetector(BaseEntityDetector):
@@ -35,8 +35,12 @@ class PresidioEntityDetector(BaseEntityDetector):
         """Initialize the Presidio entity detector using YAML configuration."""
         super().__init__()
 
-        # Thread safety lock for analyzer
-        self.analyzer_lock = threading.RLock()
+        # Replace threading.RLock with TimeoutLock with appropriate priority
+        self.analyzer_lock = TimeoutLock(
+            name="presidio_analyzer_lock",
+            priority=LockPriority.HIGH,
+            timeout=30.0
+        )
 
         # Get the base directory for configuration files
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -53,7 +57,16 @@ class PresidioEntityDetector(BaseEntityDetector):
             if not os.path.exists(file_path):
                 missing_files.append(file_path)
 
-        with self.analyzer_lock:
+        # Use lock acquisition with timeout handling
+        acquired = self.analyzer_lock.acquire(timeout=60.0)  # Longer timeout for initialization
+        if not acquired:
+            log_error("[ERROR] Failed to acquire lock for Presidio analyzer initialization")
+            # Initialize with default configuration as a fallback
+            self.analyzer = AnalyzerEngine(supported_languages=[DEFAULT_LANGUAGE])
+            self.anonymizer = AnonymizerEngine()
+            return
+
+        try:
             if missing_files:
                 log_warning(f"[WARNING] Missing configuration files: {', '.join(missing_files)}")
                 log_warning("[WARNING] Using default configuration")
@@ -71,6 +84,8 @@ class PresidioEntityDetector(BaseEntityDetector):
 
             # Initialize anonymizer
             self.anonymizer = AnonymizerEngine()
+        finally:
+            self.analyzer_lock.release()
 
     async def detect_sensitive_data_async(
         self,
@@ -129,16 +144,23 @@ class PresidioEntityDetector(BaseEntityDetector):
                     log_info(f"[OK] Processing page {page_number} with {len(words)} words")
 
                     # Detect entities using Presidio (run in thread)
-                    page_results = await asyncio.to_thread(
-                        self._analyze_text,
-                        full_text,
-                        DEFAULT_LANGUAGE,
-                        requested_entities
-                    )
+                    # Add timeout for analyze operation
+                    try:
+                        page_results = await asyncio.wait_for(
+                            asyncio.to_thread(
+                                self._analyze_text,
+                                full_text,
+                                DEFAULT_LANGUAGE,
+                                requested_entities
+                            ),
+                            timeout=30.0  # 30-second timeout for text analysis
+                        )
+                    except asyncio.TimeoutError:
+                        log_warning(f"[WARNING] Timeout analyzing text on page {page_number}")
+                        return {"page": page_number, "sensitive": []}, []
 
                     # Merge overlapping entities
                     filtered_results = EntityUtils.merge_overlapping_entities(page_results)
-
                     if not filtered_results:
                         return {"page": page_number, "sensitive": []}, []
 
@@ -162,8 +184,16 @@ class PresidioEntityDetector(BaseEntityDetector):
                     )
                     return {"page": page.get('page', 0), "sensitive": []}, []
 
-            # Process pages in parallel
-            page_results = await ParallelProcessingHelper.process_pages_in_parallel(pages, process_page)
+            # Process pages in parallel with a global timeout
+            try:
+                page_results = await asyncio.wait_for(
+                    ParallelProcessingHelper.process_pages_in_parallel(pages, process_page),
+                    timeout=120.0  # 2-minute timeout for all pages
+                )
+            except asyncio.TimeoutError:
+                log_error("[ERROR] Global timeout processing pages with Presidio")
+                # Return empty results on timeout
+                return "", [], {"pages": []}
 
             # Collect results from parallel processing
             combined_results = []
@@ -183,16 +213,23 @@ class PresidioEntityDetector(BaseEntityDetector):
 
                 if processed_entities:
                     combined_results.extend(processed_entities)
-
+            combined_results = self.sanitize_entities(combined_results)
             # Sort redaction mapping pages by page number
             redaction_mapping["pages"].sort(key=lambda x: x.get("page", 0))
 
             # Perform anonymization on the full text
-            anonymized_text = await asyncio.to_thread(
-                self._anonymize_text,
-                "\n".join(anonymized_texts),
-                combined_results
-            )
+            try:
+                anonymized_text = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self._anonymize_text,
+                        "\n".join(anonymized_texts),
+                        combined_results
+                    ),
+                    timeout=30.0  # 30-second timeout for anonymization
+                )
+            except asyncio.TimeoutError:
+                log_warning("[WARNING] Timeout during text anonymization")
+                anonymized_text = "\n".join(anonymized_texts)  # Use original text as fallback
 
             # Calculate processing time and track metrics
             total_time = time.time() - start_time
@@ -239,9 +276,9 @@ class PresidioEntityDetector(BaseEntityDetector):
             # Return empty results to avoid crashing
             return "", [], {"pages": []}
 
-    def _analyze_text(self, text: str, language: str, entities: List[str]) -> List[RecognizerResult]:
+    def _analyze_text(self, text: str, language: str, entities: List[str]) -> list[Any] | None:
         """
-        Thread-safe wrapper for the Presidio analyzer's analyze method.
+        Thread-safe wrapper for the Presidio analyzer's analyze method with improved timeout handling.
 
         Args:
             text: Text to analyze
@@ -251,17 +288,24 @@ class PresidioEntityDetector(BaseEntityDetector):
         Returns:
             List of recognized entities
         """
-        with self.analyzer_lock:
-            try:
-                return self.analyzer.analyze(text=text, language=language, entities=entities)
-            except Exception as e:
-                # Use standardized error handling
-                SecurityAwareErrorHandler.log_processing_error(e, "presidio_analysis")
-                return []
+        # Use lock acquisition with timeout
+        acquired = self.analyzer_lock.acquire(timeout=30.0)
+        if not acquired:
+            log_warning("[WARNING] Failed to acquire lock for Presidio analysis")
+            return []  # Return empty list if lock acquisition failed
 
-    def _anonymize_text(self, text: str, entities: List[Dict[str, Any]]) -> str:
+        try:
+            return self.analyzer.analyze(text=text, language=language, entities=entities)
+        except Exception as e:
+            # Use standardized error handling
+            SecurityAwareErrorHandler.log_processing_error(e, "presidio_analysis")
+            return []
+        finally:
+            self.analyzer_lock.release()
+
+    def _anonymize_text(self, text: str, entities: List[Dict[str, Any]]) -> str | None:
         """
-        Anonymize text using Presidio Anonymizer.
+        Anonymize text using Presidio Anonymizer with improved timeout handling.
 
         Args:
             text: Text to anonymize
@@ -287,9 +331,17 @@ class PresidioEntityDetector(BaseEntityDetector):
 
         # Apply anonymization
         try:
-            with self.analyzer_lock:  # Use lock for thread safety
+            # Use lock acquisition with timeout
+            acquired = self.analyzer_lock.acquire(timeout=30.0)
+            if not acquired:
+                log_warning("[WARNING] Failed to acquire lock for Presidio anonymization")
+                return text  # Return original text if lock acquisition failed
+
+            try:
                 anonymized = self.anonymizer.anonymize(text, recognizer_results)
                 return anonymized.text
+            finally:
+                self.analyzer_lock.release()
         except Exception as e:
             # Use standardized error handling
             SecurityAwareErrorHandler.log_processing_error(e, "presidio_anonymization")

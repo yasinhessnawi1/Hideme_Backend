@@ -4,20 +4,19 @@ Enhanced base implementation for entity detection with improved error handling a
 This module provides a unified base class for entity detection implementations
 with standardized error handling, performance tracking, and data protection features.
 """
-from abc import ABC, abstractmethod
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Tuple, Optional, Callable
 import asyncio
 import time
-import threading
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+from typing import Dict, Any, List, Tuple, Optional
 
 from backend.app.domain.interfaces import EntityDetector
+from backend.app.utils.data_minimization import minimize_extracted_data
+from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers.text_utils import TextUtils
 from backend.app.utils.logger import default_logger as logger, log_warning
-from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.data_minimization import minimize_extracted_data
 from backend.app.utils.processing_records import record_keeper
+from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority
 
 
 class BaseEntityDetector(EntityDetector, ABC):
@@ -34,6 +33,7 @@ class BaseEntityDetector(EntityDetector, ABC):
     - Performance tracking
     - GDPR-compliant data handling
     - Unified error management
+    - Enhanced synchronization with deadlock prevention
     """
 
     def __init__(self):
@@ -43,7 +43,10 @@ class BaseEntityDetector(EntityDetector, ABC):
         self._total_calls = 0
         self._total_entities_detected = 0
         self._total_processing_time = 0
-        self._access_lock = threading.RLock()
+        # Replace RLock with TimeoutLock with appropriate priority
+        self._access_lock = TimeoutLock(name="entity_detector_lock",
+                                        priority=LockPriority.MEDIUM,
+                                        timeout=10.0)
 
     async def detect_sensitive_data_async(
         self,
@@ -129,6 +132,8 @@ class BaseEntityDetector(EntityDetector, ABC):
         # Track processing for GDPR compliance
         start_time = time.time()
 
+        # Convert entities to standard format for sanitization
+        standardized_entities = []
         for entity in entities:
             try:
                 # Convert entity to standard dictionary format
@@ -137,8 +142,25 @@ class BaseEntityDetector(EntityDetector, ABC):
                 # Get entity text - try different approaches based on entity type
                 entity_text = self._get_entity_text(entity_dict, full_text)
 
-                if not entity_text:
+                if entity_text:
+                    standardized_entities.append(entity_dict)
+                else:
                     log_warning(f"[WARNING] Could not determine entity text, skipping entity")
+            except Exception as e:
+                logger.error(f"Error processing entity: {str(e)}")
+                logger.error(f"Entity data: {entity}")
+                SecurityAwareErrorHandler.log_processing_error(e, "entity_processing")
+
+        # Sanitize entities (merge overlapping and remove duplicates)
+        sanitized_entities = self.sanitize_entities(standardized_entities)
+
+        for entity_dict in sanitized_entities:
+            try:
+                # Get entity text again after sanitization
+                entity_text = self._get_entity_text(entity_dict, full_text)
+
+                if not entity_text:
+                    log_warning(f"[WARNING] Could not determine entity text after sanitization, skipping entity")
                     continue
 
                 # Find all occurrences in case of multiple matches
@@ -178,7 +200,7 @@ class BaseEntityDetector(EntityDetector, ABC):
                     })
             except Exception as e:
                 logger.error(f"Error processing entity: {str(e)}")
-                logger.error(f"Entity data: {entity}")
+                logger.error(f"Entity data: {entity_dict}")
 
                 # Use standardized error handling
                 SecurityAwareErrorHandler.log_processing_error(e, "entity_processing")
@@ -189,11 +211,20 @@ class BaseEntityDetector(EntityDetector, ABC):
             "sensitive": page_sensitive
         }
 
-        # Track metrics for GDPR compliance
+        # Track metrics for GDPR compliance - Use timeout lock
         processing_time = time.time() - start_time
-        with self._access_lock:
-            self._total_entities_detected += len(processed_entities)
-            self._total_processing_time += processing_time
+
+        # Use the timeout lock instead of directly accessing
+        acquired = self._access_lock.acquire(timeout=2.0)  # 2 second timeout
+        if acquired:
+            try:
+                self._total_entities_detected += len(processed_entities)
+                self._total_processing_time += processing_time
+            finally:
+                self._access_lock.release()
+        else:
+            # Log warning if lock acquisition failed
+            log_warning("Failed to acquire lock for updating entity statistics")
 
         # Record entity processing for GDPR compliance
         record_keeper.record_processing(
@@ -262,8 +293,11 @@ class BaseEntityDetector(EntityDetector, ABC):
         Returns:
             Dictionary with status information
         """
-        with self._access_lock:
-            return {
+        # Use timeout lock with a short timeout to avoid blocking for status check
+        acquired = self._access_lock.acquire(timeout=1.0)
+        try:
+            if acquired:
+                status = {
                 "initialized": True,
                 "initialization_time": self._initialization_time,
                 "initialization_time_readable": datetime.fromtimestamp(self._initialization_time, timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
@@ -279,6 +313,17 @@ class BaseEntityDetector(EntityDetector, ABC):
                     if self._total_calls > 0 else None
                 )
             }
+                return status
+            else:
+                # Return limited info if lock acquisition fails
+                return {
+                    "initialized": True,
+                    "initialization_time": self._initialization_time,
+                    "lock_acquisition_failed": True
+                }
+        finally:
+            if acquired:
+                self._access_lock.release()
 
     def update_usage_metrics(self, entities_count: int, processing_time: float) -> None:
         """
@@ -288,8 +333,53 @@ class BaseEntityDetector(EntityDetector, ABC):
             entities_count: Number of entities detected
             processing_time: Time taken for processing
         """
-        with self._access_lock:
-            self._last_used = time.time()
-            self._total_calls += 1
-            self._total_entities_detected += entities_count
-            self._total_processing_time += processing_time
+        # Use timeout lock with a short timeout to avoid blocking for metrics update
+        acquired = self._access_lock.acquire(timeout=1.0)
+        try:
+            if acquired:
+                self._last_used = time.time()
+                self._total_calls += 1
+                self._total_entities_detected += entities_count
+                self._total_processing_time += processing_time
+            else:
+                # Log warning if lock acquisition failed
+                log_warning("Failed to acquire lock for updating entity metrics")
+        finally:
+            if acquired:
+                self._access_lock.release()
+
+    def sanitize_entities(self, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Sanitizes the detected entities by:
+        1. Merging overlapping entities
+        2. Removing duplicates with the same start and end indices
+
+        This method ensures that the entity detection results are clean and
+        without redundancy before further processing.
+
+        Args:
+            entities: List of entity dictionaries
+
+        Returns:
+            Sanitized list of entities
+        """
+        # Convert all entities to a standard dictionary format if they're not already
+        entity_dicts = []
+        for entity in entities:
+            # Check if entity is already a dictionary
+            if isinstance(entity, dict):
+                entity_dicts.append(entity)
+            else:
+                # Convert to dictionary using the conversion method
+                entity_dicts.append(self._convert_to_entity_dict(entity))
+
+        # Import here to avoid circular imports
+        from backend.app.utils.helpers.text_utils import EntityUtils
+
+        # First, merge overlapping entities
+        merged_entities = EntityUtils.merge_overlapping_entity_dicts(entity_dicts)
+
+        # Then, remove duplicates (entities with the same start and end positions)
+        deduplicated_entities = EntityUtils.remove_duplicate_entities(merged_entities)
+
+        return deduplicated_entities

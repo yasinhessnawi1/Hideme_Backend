@@ -7,16 +7,19 @@ eliminating unnecessary temporary files, and adding pagination support for large
 """
 import os
 import io
+import time
+import asyncio
 from typing import Dict, Any, List, Union, BinaryIO, Iterator
 
 import pymupdf
 
 from backend.app.domain.interfaces import DocumentExtractor, DocumentRedactor
-from backend.app.utils.logger import log_info, log_warning
+from backend.app.utils.logger import log_info, log_warning, log_error
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.data_minimization import sanitize_document_metadata
 from backend.app.utils.processing_records import record_keeper
 from backend.app.utils.secure_logging import log_sensitive_operation
+from backend.app.utils.synchronization_utils import ReadWriteLock, LockPriority, TimeoutLock, AsyncTimeoutLock
 
 
 class PDFTextExtractor(DocumentExtractor):
@@ -25,6 +28,10 @@ class PDFTextExtractor(DocumentExtractor):
     with support for in-memory processing to eliminate unnecessary file operations and
     pagination support for large documents.
     """
+    # Class-level lock for thread-safe operations with timeout capability
+    _extraction_lock = ReadWriteLock("pdf_extraction_lock", priority=LockPriority.MEDIUM)
+    # Timeouts
+    DEFAULT_EXTRACTION_TIMEOUT = 120.0  # 60 seconds for extraction operations
 
     def __init__(self, pdf_input: Union[str, pymupdf.Document, bytes, BinaryIO],
                  page_batch_size: int = 5):
@@ -41,26 +48,34 @@ class PDFTextExtractor(DocumentExtractor):
         """
         self.file_path = None
         self.page_batch_size = page_batch_size
+        self._instance_lock = TimeoutLock("pdf_extractor_instance_lock", priority=LockPriority.MEDIUM)
 
-        if isinstance(pdf_input, str):
-            # Input is a file path
-            self.pdf_document = pymupdf.open(pdf_input)
-            self.file_path = pdf_input
-        elif isinstance(pdf_input, pymupdf.Document):
-            # Input is already a PyMuPDF Document
-            self.pdf_document = pdf_input
-            self.file_path = "memory_document"
-        elif isinstance(pdf_input, bytes):
-            # Input is PDF content as bytes
-            buffer = io.BytesIO(pdf_input)
-            self.pdf_document = pymupdf.open(stream=buffer, filetype="pdf")
-            self.file_path = "memory_buffer"
-        elif hasattr(pdf_input, 'read') and callable(pdf_input.read):
-            # Input is a file-like object
-            self.pdf_document = pymupdf.open(stream=pdf_input, filetype="pdf")
-            self.file_path = getattr(pdf_input, 'name', "file_object")
-        else:
-            raise ValueError("Invalid input! Expected a file path, PyMuPDF Document, bytes, or file-like object.")
+        try:
+            if isinstance(pdf_input, str):
+                # Input is a file path
+                self.pdf_document = pymupdf.open(pdf_input)
+                self.file_path = pdf_input
+            elif isinstance(pdf_input, pymupdf.Document):
+                # Input is already a PyMuPDF Document
+                self.pdf_document = pdf_input
+                self.file_path = "memory_document"
+            elif isinstance(pdf_input, bytes):
+                # Input is PDF content as bytes
+                buffer = io.BytesIO(pdf_input)
+                self.pdf_document = pymupdf.open(stream=buffer, filetype="pdf")
+                self.file_path = "memory_buffer"
+            elif hasattr(pdf_input, 'read') and callable(pdf_input.read):
+                # Input is a file-like object
+                self.pdf_document = pymupdf.open(stream=pdf_input, filetype="pdf")
+                self.file_path = getattr(pdf_input, 'name', "file_object")
+            else:
+                raise ValueError("Invalid input! Expected a file path, PyMuPDF Document, bytes, or file-like object.")
+        except Exception as e:
+            # Use standardized error handling
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "pdf_extractor_init", str(pdf_input) if isinstance(pdf_input, str) else "memory_buffer"
+            )
+            raise
 
     def extract_text(self) -> Dict[str, Any]:
         """
@@ -78,71 +93,94 @@ class PDFTextExtractor(DocumentExtractor):
         operation_id = os.path.basename(self.file_path) if isinstance(self.file_path, str) else "memory_document"
 
         # Track start time for performance metrics and GDPR compliance
-        import time
         start_time = time.time()
 
         try:
-            # Determine if this is a large document and should use paged processing
-            use_paged_processing = total_pages > 10
-
-            if use_paged_processing:
-                # Process pages in batches
-                self._extract_pages_in_batches(extracted_data, empty_pages)
-            else:
-                # Process all pages at once for smaller documents
-                for page_num in range(total_pages):
-                    self._process_page(page_num, extracted_data, empty_pages)
-
-            # Log summary of empty pages using secure logging
-            if empty_pages:
-                log_info(f"[OK] Skipped {len(empty_pages)} empty pages")
-                log_sensitive_operation(
-                    "PDF Empty Page Detection",
-                    len(empty_pages),
-                    0.0,
-                    total_pages=total_pages,
-                    operation_id=operation_id
-                )
-
-            # Add metadata about empty pages and document statistics
-            extracted_data["total_document_pages"] = total_pages
-            extracted_data["empty_pages"] = empty_pages
-            extracted_data["content_pages"] = total_pages - len(empty_pages)
-
-            # Add document metadata (with sanitization)
+            # Using ReadWriteLock with timeout to allow multiple readers but exclusive writers
+            # This helps when multiple threads are extracting from different documents (read lock)
+            # but prevents conflict if a document needs to be modified (write lock)
             try:
-                metadata = self.pdf_document.metadata
-                if metadata:
-                    extracted_data["metadata"] = sanitize_document_metadata(metadata)
-            except Exception as meta_error:
-                # Use standardized error handling
-                SecurityAwareErrorHandler.log_processing_error(
-                    meta_error, "pdf_metadata_extraction", self.file_path
+                # Modified lock acquisition pattern to ensure proper timeout handling
+                with self._extraction_lock.read_locked():
+                    log_info(f"[OK] Acquired read lock for PDF extraction (operation_id: {operation_id})")
+
+                    # Determine if this is a large document and should use paged processing
+                    use_paged_processing = total_pages > 10
+
+                    if use_paged_processing:
+                        # Process pages in batches
+                        self._extract_pages_in_batches(extracted_data, empty_pages)
+                    else:
+                        # Process all pages at once for smaller documents
+                        for page_num in range(total_pages):
+                            self._process_page(page_num, extracted_data, empty_pages)
+
+                    # Log summary of empty pages using secure logging
+                    if empty_pages:
+                        log_info(f"[OK] Skipped {len(empty_pages)} empty pages")
+                        log_sensitive_operation(
+                            "PDF Empty Page Detection",
+                            len(empty_pages),
+                            0.0,
+                            total_pages=total_pages,
+                            operation_id=operation_id
+                        )
+
+                    # Add metadata about empty pages and document statistics
+                    extracted_data["total_document_pages"] = total_pages
+                    extracted_data["empty_pages"] = empty_pages
+                    extracted_data["content_pages"] = total_pages - len(empty_pages)
+
+                    # Add document metadata (with sanitization)
+                    try:
+                        metadata = self.pdf_document.metadata
+                        if metadata:
+                            extracted_data["metadata"] = sanitize_document_metadata(metadata)
+                    except Exception as meta_error:
+                        # Use standardized error handling
+                        SecurityAwareErrorHandler.log_processing_error(
+                            meta_error, "pdf_metadata_extraction", self.file_path
+                        )
+
+                    # Calculate process time for GDPR compliance
+                    processing_time = time.time() - start_time
+
+                    # Record processing for GDPR compliance
+                    record_keeper.record_processing(
+                        operation_type="pdf_text_extraction",
+                        document_type="PDF",
+                        entity_types_processed=[],
+                        processing_time=processing_time,
+                        file_count=1,
+                        entity_count=0,
+                        success=True
+                    )
+
+                    # Log performance metrics without sensitive information
+                    log_sensitive_operation(
+                        "PDF Text Extraction",
+                        0,  # No entities for extraction
+                        processing_time,
+                        pages=len(extracted_data["pages"]),
+                        total_pages=total_pages,
+                        operation_id=operation_id
+                    )
+
+            except TimeoutError as te:
+                # Record failed processing for GDPR compliance
+                processing_time = time.time() - start_time
+                record_keeper.record_processing(
+                    operation_type="pdf_text_extraction",
+                    document_type="PDF",
+                    entity_types_processed=[],
+                    processing_time=processing_time,
+                    file_count=1,
+                    entity_count=0,
+                    success=False
                 )
 
-            # Calculate process time for GDPR compliance
-            processing_time = time.time() - start_time
-
-            # Record processing for GDPR compliance
-            record_keeper.record_processing(
-                operation_type="pdf_text_extraction",
-                document_type="PDF",
-                entity_types_processed=[],
-                processing_time=processing_time,
-                file_count=1,
-                entity_count=0,
-                success=True
-            )
-
-            # Log performance metrics without sensitive information
-            log_sensitive_operation(
-                "PDF Text Extraction",
-                0,  # No entities for extraction
-                processing_time,
-                pages=len(extracted_data["pages"]),
-                total_pages=total_pages,
-                operation_id=operation_id
-            )
+                log_error(f"[ERROR] Timeout during PDF extraction: {str(te)}")
+                return {"pages": [], "error": "PDF extraction timed out", "timeout": True}
 
         except Exception as e:
             # Record failed processing for GDPR compliance
@@ -184,9 +222,38 @@ class PDFTextExtractor(DocumentExtractor):
 
             log_info(f"[OK] Processing PDF page batch {batch_start}-{batch_end-1} of {total_pages}")
 
-            # Process each page in the current batch
-            for page_num in range(batch_start, batch_end):
-                self._process_page(page_num, extracted_data, empty_pages)
+            # Process each page in the current batch with timeout handling
+            batch_start_time = time.time()
+            try:
+                # Use instance lock with timeout to ensure one batch completes before starting another
+                with self._instance_lock.acquire_timeout(timeout=self.DEFAULT_EXTRACTION_TIMEOUT) as acquired:
+                    if not acquired:
+                        log_warning(f"[WARNING] Batch processing lock acquisition timed out for pages {batch_start}-{batch_end-1}")
+                        raise TimeoutError(f"Batch processing timed out for pages {batch_start}-{batch_end-1}")
+
+                    for page_num in range(batch_start, batch_end):
+                        page_start_time = time.time()
+                        max_page_time = 10.0  # 10 seconds timeout per page
+
+                        # Check if we're spending too much time on this batch
+                        elapsed_batch_time = time.time() - batch_start_time
+                        if elapsed_batch_time > self.DEFAULT_EXTRACTION_TIMEOUT:
+                            log_warning(f"[WARNING] Batch processing is taking too long ({elapsed_batch_time:.2f}s), skipping remaining pages")
+                            break
+
+                        try:
+                            self._process_page(page_num, extracted_data, empty_pages)
+
+                            # Check if page processing took too long
+                            page_time = time.time() - page_start_time
+                            if page_time > max_page_time:
+                                log_warning(f"[WARNING] Page {page_num} processing took {page_time:.2f}s (exceeded {max_page_time}s threshold)")
+                        except Exception as e:
+                            log_error(f"[ERROR] Error processing page {page_num}: {str(e)}")
+                            # Continue with other pages despite error
+            except TimeoutError:
+                log_error(f"[ERROR] Timeout during batch processing pages {batch_start}-{batch_end-1}")
+                # Continue with next batch
 
             # Free memory after processing each batch
             import gc
@@ -201,23 +268,32 @@ class PDFTextExtractor(DocumentExtractor):
             extracted_data: Dictionary to populate with extracted data
             empty_pages: List to populate with empty page numbers
         """
-        page = self.pdf_document[page_num]
-        log_info(f"[OK] Processing page {page_num + 1}")
+        try:
+            page = self.pdf_document[page_num]
+            log_info(f"[OK] Processing page {page_num + 1}")
 
-        # Extract words with positions
-        page_words = self._extract_page_words(page)
+            # Extract words with positions
+            page_words = self._extract_page_words(page)
 
-        # Check if page is empty (no words with content)
-        if not page_words:
-            empty_pages.append(page_num + 1)
-            log_info(f"[OK] Skipping empty page {page_num + 1}")
-            return
+            # Check if page is empty (no words with content)
+            if not page_words:
+                empty_pages.append(page_num + 1)
+                log_info(f"[OK] Skipping empty page {page_num + 1}")
+                return
 
-        # Add page data to result
-        extracted_data["pages"].append({
-            "page": page_num + 1,
-            "words": page_words
-        })
+            # Add page data to result
+            extracted_data["pages"].append({
+                "page": page_num + 1,
+                "words": page_words
+            })
+        except Exception as e:
+            log_error(f"[ERROR] Error in page {page_num} processing: {str(e)}")
+            # Add empty page data to indicate error
+            extracted_data["pages"].append({
+                "page": page_num + 1,
+                "words": [],
+                "error": f"Error processing page: {str(e)}"
+            })
 
     @staticmethod
     def _extract_page_words(page: pymupdf.Page) -> List[Dict[str, Any]]:
@@ -266,13 +342,29 @@ class PDFTextExtractor(DocumentExtractor):
         total_pages = len(self.pdf_document)
 
         for page_num in range(total_pages):
-            page = self.pdf_document[page_num]
-            page_words = self._extract_page_words(page)
+            # Use timeout for each page extraction
+            try:
+                with self._instance_lock.acquire_timeout(timeout=10.0) as acquired:
+                    if not acquired:
+                        log_warning(f"[WARNING] Page iterator lock acquisition timed out for page {page_num}")
+                        # Skip this page on timeout
+                        continue
 
-            if page_words:
+                    page = self.pdf_document[page_num]
+                    page_words = self._extract_page_words(page)
+
+                    if page_words:
+                        yield {
+                            "page": page_num + 1,
+                            "words": page_words
+                        }
+            except Exception as e:
+                log_error(f"[ERROR] Error in page iterator for page {page_num}: {str(e)}")
+                # Yield empty page data to indicate error
                 yield {
                     "page": page_num + 1,
-                    "words": page_words
+                    "words": [],
+                    "error": f"Error processing page: {str(e)}"
                 }
 
     def extract_metadata(self) -> Dict[str, Any]:
@@ -283,22 +375,28 @@ class PDFTextExtractor(DocumentExtractor):
             Dictionary with sanitized document metadata
         """
         try:
-            metadata = self.pdf_document.metadata
-            if metadata:
-                # Apply sanitization to remove potentially sensitive information
-                sanitized = sanitize_document_metadata(metadata)
+            # Use read lock for metadata extraction to allow concurrent readers
+            with self._extraction_lock.read_locked(timeout=10.0) as acquired:
+                if not acquired:
+                    log_warning("[WARNING] Metadata extraction lock acquisition timed out")
+                    return {"error": "Metadata extraction timed out"}
 
-                # Add additional safe metadata
-                sanitized.update({
-                    "page_count": len(self.pdf_document),
-                    "version": self.pdf_document.pdf_version,
-                    "is_encrypted": self.pdf_document.is_encrypted,
-                    "is_form": self.pdf_document.is_form,
-                    "has_xml_metadata": self.pdf_document.has_xml_metadata(),
-                })
+                metadata = self.pdf_document.metadata
+                if metadata:
+                    # Apply sanitization to remove potentially sensitive information
+                    sanitized = sanitize_document_metadata(metadata)
 
-                return sanitized
-            return {}
+                    # Add additional safe metadata
+                    sanitized.update({
+                        "page_count": len(self.pdf_document),
+                        "version": self.pdf_document.pdf_version,
+                        "is_encrypted": self.pdf_document.is_encrypted,
+                        "is_form": self.pdf_document.is_form,
+                        "has_xml_metadata": self.pdf_document.has_xml_metadata(),
+                    })
+
+                    return sanitized
+                return {}
         except Exception as e:
             # Use standardized error handling
             SecurityAwareErrorHandler.log_processing_error(
@@ -322,6 +420,14 @@ class PDFRedactionService(DocumentRedactor):
     Optimized service for applying redactions to PDF documents with support
     for in-memory processing to eliminate unnecessary file operations.
     """
+    # Class-level lock for thread-safe operations with timeout capability
+    _redaction_lock = ReadWriteLock("pdf_redaction_lock", priority=LockPriority.MEDIUM)
+
+    # Enhanced timeout configuration
+    DEFAULT_REDACTION_TIMEOUT = 300.0  # 5 minutes total timeout
+    DEFAULT_LOCK_TIMEOUT = 120.0  # 2 minutes for lock acquisition
+    MAX_LOCK_RETRIES = 3  # Number of times to retry lock acquisition
+    LOCK_RETRY_DELAY = 5.0  # Seconds to wait between lock retry attempts
 
     def __init__(self, pdf_input: Union[str, pymupdf.Document, bytes, BinaryIO],
                  page_batch_size: int = 5):
@@ -340,6 +446,14 @@ class PDFRedactionService(DocumentRedactor):
             self.file_path = None
             self.page_batch_size = page_batch_size
 
+            # More specific instance-level lock for timeout management
+            self._instance_lock = TimeoutLock(
+                "pdf_redactor_instance_lock",
+                priority=LockPriority.MEDIUM,
+                timeout=self.DEFAULT_LOCK_TIMEOUT
+            )
+
+            # Enhanced input type handling (same as in previous implementation)
             if isinstance(pdf_input, str):
                 # Input is a file path
                 self.doc = pymupdf.open(pdf_input)
@@ -353,51 +467,91 @@ class PDFRedactionService(DocumentRedactor):
                 buffer = io.BytesIO(pdf_input)
                 self.doc = pymupdf.open(stream=buffer, filetype="pdf")
                 self.file_path = "memory_buffer"
+            elif isinstance(pdf_input, io.BufferedReader):
+                content = pdf_input.read()
+                pdf_input.close()
+                buffer = io.BytesIO(content)
+                self.doc = pymupdf.open(stream=buffer, filetype="pdf")
+                self.file_path = getattr(pdf_input, 'name', "buffered_reader")
             elif hasattr(pdf_input, 'read') and callable(pdf_input.read):
                 # Input is a file-like object
                 self.doc = pymupdf.open(stream=pdf_input, filetype="pdf")
                 self.file_path = getattr(pdf_input, 'name', "file_object")
             else:
-                raise ValueError("Invalid input! Expected a file path, PyMuPDF Document, bytes, or file-like object.")
+                raise ValueError(
+                    "Invalid input! Expected a file path, PyMuPDF Document, bytes, BufferedReader, or file-like object."
+                )
 
             log_info(f"[OK] Opened PDF file: {self.file_path}")
         except Exception as e:
-            # Use standardized error handling
             SecurityAwareErrorHandler.log_processing_error(
                 e, "pdf_redaction_init", str(pdf_input) if isinstance(pdf_input, str) else "memory_buffer"
             )
             raise
 
-    def _apply_redactions_common(self, redaction_mapping: Dict[str, Any], save_callback, start_time: float) -> (Any, int, float):
+    def _apply_redactions_common(self, redaction_mapping: Dict[str, Any], save_callback, start_time: float) -> (
+            Any, int, float):
         """
-        Common redaction logic that applies redaction boxes and security sanitization,
-        then saves the document via the provided callback.
-
-        Args:
-            redaction_mapping: Dictionary containing sensitive spans with bounding boxes.
-            save_callback: A callback function that handles saving the document and returns the result.
-            start_time: The starting time of the operation for processing time calculation.
-
-        Returns:
-            A tuple of (result, sensitive_items_count, processing_time).
+        Enhanced common redaction logic with proper context manager pattern for lock handling.
         """
-        import time
-        # Apply redactions by drawing redaction boxes and additional security measures
-        self._draw_redaction_boxes(redaction_mapping)
-        self._sanitize_document()
-
-        # Save the document using the provided callback (could be to file or memory)
-        result = save_callback()
-        self.doc.close()
-
-        # Count sensitive items based on the mapping provided
         sensitive_items_count = sum(
             len(page.get("sensitive", []))
             for page in redaction_mapping.get("pages", [])
         )
+        operation_id = os.path.basename(self.file_path) if isinstance(self.file_path, str) else f"memory_doc_{id(self)}"
+
+        # Enhanced lock acquisition with retries and detailed logging
+        last_error = None
+        for attempt in range(self.MAX_LOCK_RETRIES):
+            try:
+                # Use the context manager properly with 'with' statement
+                with self._redaction_lock.write_locked(timeout=self.DEFAULT_LOCK_TIMEOUT):
+                    log_info(
+                        f"[OK] Acquired write lock for PDF redaction (operation_id: {operation_id}, attempt: {attempt + 1})")
+
+                    # Apply redactions and save
+                    self._draw_redaction_boxes(redaction_mapping)
+                    self._sanitize_document()
+                    result = save_callback()
+                    self.doc.close()
+                    processing_time = time.time() - start_time
+
+                    return result, sensitive_items_count, processing_time
+
+            except TimeoutError as te:
+                log_warning(f"[WARNING] Failed to acquire write lock on attempt {attempt + 1}: {str(te)}")
+                last_error = te
+
+                # Delay before next retry
+                time.sleep(self.LOCK_RETRY_DELAY)
+
+            except Exception as e:
+                log_error(f"[ERROR] Error during redaction on attempt {attempt + 1}: {str(e)}")
+                last_error = e
+
+                # Delay before next retry
+                time.sleep(self.LOCK_RETRY_DELAY)
+
+        # If all retries fail
+        log_error(f"[ERROR] Failed to acquire lock after {self.MAX_LOCK_RETRIES} attempts")
         processing_time = time.time() - start_time
 
-        return result, sensitive_items_count, processing_time
+        # Record processing failure
+        record_keeper.record_processing(
+            operation_type="pdf_redaction_timeout",
+            document_type="PDF",
+            entity_types_processed=[],
+            processing_time=processing_time,
+            file_count=1,
+            entity_count=sensitive_items_count,
+            success=False
+        )
+
+        # Raise the last encountered error
+        if last_error:
+            raise last_error
+        else:
+            raise TimeoutError(f"PDF redaction timed out after {processing_time:.2f}s")
 
     def apply_redactions(self, redaction_mapping: Dict[str, Any], output_path: str) -> str:
         """
@@ -410,7 +564,6 @@ class PDFRedactionService(DocumentRedactor):
         Returns:
             Path to the redacted document.
         """
-        import time
         start_time = time.time()
         operation_id = os.path.basename(self.file_path) if isinstance(self.file_path, str) else "memory_document"
 
@@ -443,7 +596,9 @@ class PDFRedactionService(DocumentRedactor):
 
             log_info(f"[OK] Redacted PDF saved as {output_path}")
             return result
-
+        except TimeoutError as te:
+            # Timeout is already handled in _apply_redactions_common
+            raise
         except Exception as e:
             processing_time = time.time() - start_time
             record_keeper.record_processing(
@@ -486,7 +641,6 @@ class PDFRedactionService(DocumentRedactor):
         Returns:
             Redacted PDF content as bytes.
         """
-        import time
         start_time = time.time()
         operation_id = f"memory_redaction_{time.time()}"
 
@@ -519,7 +673,9 @@ class PDFRedactionService(DocumentRedactor):
             )
 
             return result
-
+        except TimeoutError as te:
+            # Timeout is already handled in _apply_redactions_common
+            raise
         except Exception as e:
             processing_time = time.time() - start_time
             record_keeper.record_processing(
@@ -539,10 +695,10 @@ class PDFRedactionService(DocumentRedactor):
     def _draw_redaction_boxes(self, redaction_mapping: Dict[str, Any]) -> None:
         """
         Draw redaction boxes on the PDF document based on the provided mapping.
-        Includes **both text and image redaction**.
+        For large documents, processes in batches to reduce memory usage.
 
         Args:
-            redaction_mapping: Dictionary containing sensitive text spans and images.
+            redaction_mapping: Dictionary containing sensitive spans with bounding boxes.
         """
         total_pages = len(self.doc)
 
@@ -557,43 +713,67 @@ class PDFRedactionService(DocumentRedactor):
         page_numbers = sorted(list(page_numbers))
 
         # Determine if this is a large document and should use batched processing
-        use_batched_processing = len(page_numbers) > 10
+        use_batched_processing = len(page_numbers) > 10  # Arbitrary threshold
 
-        if use_batched_processing:
-            for batch_start in range(0, len(page_numbers), self.page_batch_size):
-                batch_end = min(batch_start + self.page_batch_size, len(page_numbers))
-                batch_page_numbers = page_numbers[batch_start:batch_end]
+        # Process the mapping directly without additional locks
+        try:
+            if use_batched_processing:
+                # Process pages in batches
+                for batch_start in range(0, len(page_numbers), self.page_batch_size):
+                    batch_end = min(batch_start + self.page_batch_size, len(page_numbers))
+                    batch_page_numbers = page_numbers[batch_start:batch_end]
 
-                self._process_redaction_pages_batch(redaction_mapping, batch_page_numbers, total_pages)
-                import gc
-                gc.collect()
-        else:
-            for page_info in redaction_mapping.get("pages", []):
-                page_num = page_info.get("page")
-                sensitive_items = page_info.get("sensitive", [])
+                    log_info(f"[OK] Processing redaction batch for pages {batch_page_numbers}")
 
-                try:
-                    page = self.doc[page_num - 1]
+                    # Process each page in the current batch
+                    self._process_redaction_pages_batch(redaction_mapping, batch_page_numbers, total_pages)
 
-                    # 🔹 Redact text entities
-                    for item in sensitive_items:
-                        self._process_sensitive_item(page, item, page_num)
+                    # Free memory after processing each batch
+                    import gc
+                    gc.collect()
+            else:
+                # Process all pages at once
+                for page_info in redaction_mapping.get("pages", []):
+                    page_num = page_info.get("page")
+                    sensitive_items = page_info.get("sensitive", [])
 
-                    # 🔹 Detect and redact images
-                    image_boxes = self._detect_images_on_page(page)
+                    if not sensitive_items:
+                        log_info(f"[OK] No sensitive items found on page {page_num}.")
+                        continue
 
-                    if image_boxes:
-                        for img in image_boxes:
-                            rect = pymupdf.Rect(img["x0"], img["y0"], img["x1"], img["y1"])
-                            page.add_redact_annot(rect, fill=(0, 0, 0))  # Black box over image
+                    # Check that the page number exists in the document
+                    if page_num < 1 or page_num > total_pages:
+                        log_warning(
+                            f"[WARNING] Page number {page_num} is out of range for document with {total_pages} pages. Skipping."
+                        )
+                        continue
 
-                    # Apply redactions (both text and images)
-                    page.apply_redactions()
+                    try:
+                        # PyMuPDF pages are 0-indexed
+                        page = self.doc[page_num - 1]
 
-                except Exception as e:
-                    SecurityAwareErrorHandler.log_processing_error(e, "pdf_redaction_page",
-                                                                   f"{self.file_path}:page_{page_num}")
+                        for item in sensitive_items:
+                            self._process_sensitive_item(page, item, page_num)
 
+                        # 🔹 Detect and redact images
+                        image_boxes = self._detect_images_on_page(page)
+
+                        if image_boxes:
+                            for img in image_boxes:
+                                rect = pymupdf.Rect(img["x0"], img["y0"], img["x1"], img["y1"])
+                                page.add_redact_annot(rect, fill=(0, 0, 0))  # Black box over image
+
+                        # Apply redactions (both text and images)
+                        page.apply_redactions()
+
+                    except Exception as e:
+                        SecurityAwareErrorHandler.log_processing_error(
+                            e, "pdf_redaction_page", f"{self.file_path}:page_{page_num}"
+                        )
+                        continue
+        except Exception as e:
+            log_error(f"[ERROR] Error while drawing redaction boxes: {str(e)}")
+            raise
 
     def _process_redaction_pages_batch(self, redaction_mapping: Dict[str, Any],
                                       page_numbers: List[int], total_pages: int) -> None:
@@ -613,7 +793,16 @@ class PDFRedactionService(DocumentRedactor):
                 page_mapping[page_num] = page_info
 
         # Process each page in the batch
+        batch_start_time = time.time()
+        max_batch_time = 60.0  # 60 seconds max per batch
+
         for page_num in page_numbers:
+            # Check if we're exceeding batch timeout
+            current_batch_time = time.time() - batch_start_time
+            if current_batch_time > max_batch_time:
+                log_warning(f"[WARNING] Batch processing timeout reached after {current_batch_time:.2f}s, skipping remaining pages")
+                break
+
             page_info = page_mapping.get(page_num)
             if page_info is None:
                 continue

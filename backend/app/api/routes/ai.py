@@ -17,10 +17,15 @@ from backend.app.utils.processing_records import record_keeper
 from backend.app.utils.file_validation import validate_mime_type, validate_file_content_async
 from backend.app.utils.memory_management import memory_optimized, memory_monitor
 from backend.app.utils.document_processing_utils import extract_text_data_in_memory
+from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
+from backend.app.utils.logger import log_info, log_warning, log_error
 
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
+
+# Create shared lock for AI detection resources
+_ai_resource_lock = AsyncTimeoutLock("ai_detection_lock", priority=LockPriority.HIGH)
 
 
 @router.post("/detect")
@@ -37,9 +42,12 @@ async def ai_detect_sensitive(
     The entire file is read once into memory and processed using in-memory buffers,
     avoiding unnecessary temporary files. Common validation and extraction logic is
     centralized in a shared helper function.
+
+    Enhanced with timeout lock handling to prevent deadlocks and ensure proper resource management.
     """
     start_time = time.time()
     processing_times = {}
+    operation_id = f"gemini_detect_{int(time.time())}"
 
     try:
         # Validate allowed MIME types
@@ -84,8 +92,29 @@ async def ai_detect_sensitive(
         # Apply data minimization
         extracted_data = minimize_extracted_data(extracted_data)
 
-        # Get the Gemini detector instance
-        detector = initialization_service.get_gemini_detector()
+        # Try to get Gemini detector with lock
+        detector_start = time.time()
+        log_info(f"[AI] Attempting to acquire AI resource lock for Gemini detection [operation_id={operation_id}]")
+
+        try:
+            # Use lock with timeout to prevent deadlocks
+            async with _ai_resource_lock.acquire_timeout(timeout=15.0) as acquired:
+                if not acquired:
+                    log_warning(f"[AI] Failed to acquire AI resource lock [operation_id={operation_id}]")
+                    # Continue with direct detector initialization as fallback
+                    detector = initialization_service.get_gemini_detector()
+                    log_info(f"[AI] Using Gemini detector without lock acquisition [operation_id={operation_id}]")
+                else:
+                    # Normal path with lock acquired
+                    detector = initialization_service.get_gemini_detector()
+                    log_info(f"[AI] Successfully acquired AI resource lock [operation_id={operation_id}]")
+
+                processing_times["detector_init_time"] = time.time() - detector_start
+        except Exception as lock_error:
+            log_error(f"[AI] Error acquiring AI resource lock: {str(lock_error)} [operation_id={operation_id}]")
+            # Still try to get detector without lock as last resort
+            detector = initialization_service.get_gemini_detector()
+            processing_times["detector_init_time"] = time.time() - detector_start
 
         # Set detection timeout and run detection
         detection_timeout = 40
@@ -94,15 +123,24 @@ async def ai_detect_sensitive(
             detection_task = detector.detect_sensitive_data_async(extracted_data, entity_list)
             detection_result = await asyncio.wait_for(detection_task, timeout=detection_timeout)
         except asyncio.TimeoutError:
+            log_error(
+                f"[AI] Gemini detection timed out after {detection_timeout} seconds [operation_id={operation_id}]")
             return JSONResponse(
                 status_code=408,
-                content={"detail": f"Gemini detection timed out after {detection_timeout} seconds"}
+                content={
+                    "detail": f"Gemini detection timed out after {detection_timeout} seconds",
+                    "operation_id": operation_id
+                }
             )
 
         if detection_result is None:
+            log_error(f"[AI] Gemini detection failed to return results [operation_id={operation_id}]")
             return JSONResponse(
                 status_code=500,
-                content={"detail": "Detection failed to return results"}
+                content={
+                    "detail": "Detection failed to return results",
+                    "operation_id": operation_id
+                }
             )
 
         anonymized_text, entities, redaction_mapping = detection_result
@@ -138,7 +176,8 @@ async def ai_detect_sensitive(
         mem_stats = memory_monitor.get_memory_stats()
         sanitized_response["_debug"] = {
             "memory_usage": mem_stats["current_usage"],
-            "peak_memory": mem_stats["peak_usage"]
+            "peak_memory": mem_stats["peak_usage"],
+            "operation_id": operation_id
         }
 
         log_sensitive_operation(
@@ -156,6 +195,7 @@ async def ai_detect_sensitive(
     except HTTPException as e:
         raise e
     except Exception as e:
+        log_error(f"[AI] Unhandled exception in Gemini detection: {str(e)} [operation_id={operation_id}]")
         error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
             e, "gemini_detection", 500
         )

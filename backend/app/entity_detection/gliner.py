@@ -4,17 +4,15 @@ Enhanced GLiNER entity detection implementation with GDPR compliance and error h
 This module provides a robust implementation of GLiNER entity detection with
 improved initialization, GDPR compliance, and standardized error handling.
 """
-import os
 import asyncio
+import os
 import re
-import threading
-import time
 import shutil
-import torch
+import time
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
-from backend.app.utils.helpers import EntityUtils
+import torch
 
 # Import GLiNER with error handling
 try:
@@ -32,6 +30,7 @@ from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.data_minimization import minimize_extracted_data
 from backend.app.utils.processing_records import record_keeper
 from backend.app.utils.secure_logging import log_sensitive_operation
+from backend.app.utils.synchronization_utils import ReadWriteLock, LockPriority
 
 
 class GlinerEntityDetector(BaseEntityDetector):
@@ -39,8 +38,8 @@ class GlinerEntityDetector(BaseEntityDetector):
     Enhanced service for detecting sensitive information using GLiNER with GDPR compliance and standardized error handling.
     """
 
-    # Class-level lock and cache for model initialization
-    _model_lock = threading.RLock()
+    # Class-level lock with enhanced synchronization and deadlock prevention
+    _model_lock = ReadWriteLock(name="gliner_model_lock", priority=LockPriority.HIGH)
     _global_initializing = False
     _global_initialization_time = None
     _model_cache = {}  # Cache key -> {"model": loaded_model, "init_time": initialization_time}
@@ -99,73 +98,115 @@ class GlinerEntityDetector(BaseEntityDetector):
 
         # Create a cache key based on configuration
         cache_key = (self.model_name, self.local_files_only, tuple(sorted(self.default_entities)))
-        if cache_key in GlinerEntityDetector._model_cache:
-            cached = GlinerEntityDetector._model_cache[cache_key]
-            self.model = cached["model"]
-            self._is_initialized = True
-            self._last_used = time.time()
-            log_info(f"[GLINER] Loaded model from cache in {self._initialization_time:.2f}s")
-            return True
+
+        # First check with read lock if model exists in cache
+        try:
+            with self._model_lock.read_locked(timeout=5.0):
+                if cache_key in GlinerEntityDetector._model_cache:
+                    cached = GlinerEntityDetector._model_cache[cache_key]
+                    self.model = cached["model"]
+                    self._is_initialized = True
+                    self._last_used = time.time()
+                    log_info(f"[GLINER] Loaded model from cache in {self._initialization_time:.2f}s")
+                    return True
+        except TimeoutError:
+            log_warning("[GLINER] Timeout acquiring read lock for model cache check")
 
         start_time = time.time()
 
-        # Ensure only one thread initializes at a time
-        with self._model_lock:
-            if GlinerEntityDetector._global_initializing:
-                log_info("[GLINER] Waiting for another thread to complete model initialization...")
-                while GlinerEntityDetector._global_initializing:
-                    time.sleep(1)
-            else:
+        # Acquire write lock for initialization with timeout
+        try:
+            with self._model_lock.write_locked(timeout=60.0):  # Longer timeout for model loading
+                # Double-check if another thread loaded the model
+                if cache_key in GlinerEntityDetector._model_cache:
+                    cached = GlinerEntityDetector._model_cache[cache_key]
+                    self.model = cached["model"]
+                    self._initialization_time = cached["init_time"]
+                    self._is_initialized = True
+                    self._last_used = time.time()
+                    log_info(
+                        f"[GLINER] Loaded model from cache (after double-check) in {self._initialization_time:.2f}s")
+                    return True
+
+                if GlinerEntityDetector._global_initializing:
+                    log_info("[GLINER] Another thread is already initializing the model")
+                    # Even with write lock, wait for the other initialization to complete
+                    wait_until = time.time() + 60.0  # 60 seconds max wait
+                    while GlinerEntityDetector._global_initializing and time.time() < wait_until:
+                        time.sleep(1)
+
+                    # Check if the model is now in cache
+                    if cache_key in GlinerEntityDetector._model_cache:
+                        cached = GlinerEntityDetector._model_cache[cache_key]
+                        self.model = cached["model"]
+                        self._initialization_time = cached["init_time"]
+                        self._is_initialized = True
+                        self._last_used = time.time()
+                        log_info(f"[GLINER] Loaded model from cache after waiting in {self._initialization_time:.2f}s")
+                        return True
+
+                # Set global initializing flag
                 GlinerEntityDetector._global_initializing = True
 
-            try:
-                local_model_exists = self._check_local_model_exists()
-                log_info(f"[GLINER] Local model exists: {local_model_exists}")
+                try:
+                    local_model_exists = self._check_local_model_exists()
+                    log_info(f"[GLINER] Local model exists: {local_model_exists}")
 
-                # Attempt initialization with retries
-                for attempt in range(max_retries):
-                    try:
-                        if local_model_exists:
-                            log_info(f"[OK] Attempting to load model from local directory: {self.model_dir_path}")
-                            if self._load_local_model(self.model_dir_path):
-                                break
-                            else:
-                                local_model_exists = False
-                                log_warning("[WARNING] Failed to load model from local directory, attempting download")
-                                self.local_files_only = False
-                        if not local_model_exists:
-                            log_info(f"[OK] Downloading GLiNER model: {self.model_name}")
-                            self.model = GLiNER.from_pretrained(self.model_name)
-                            if self.local_model_path:
-                                self._save_model_to_directory(self.model_dir_path)
-                        if self.model is not None:
-                            self._is_initialized = True
-                            self._initialization_time = time.time() - start_time
-                            self._last_used = time.time()
-                            log_info(f"[OK] Model initialized in {self._initialization_time:.2f}s")
-                            # Cache the model instance for future use
-                            GlinerEntityDetector._model_cache[cache_key] = {
-                                "model": self.model,
-                                "init_time": self._initialization_time
-                            }
-                            return True
-                    except Exception as e:
-                        SecurityAwareErrorHandler.log_processing_error(e, f"gliner_initialization_attempt_{attempt}",
-                                                                       self.model_name)
-                    if attempt < max_retries - 1:
-                        time.sleep(2)
-                return self._is_initialized
-            finally:
-                with self._model_lock:
+                    # Attempt initialization with retries
+                    for attempt in range(max_retries):
+                        try:
+                            if local_model_exists:
+                                log_info(f"[OK] Attempting to load model from local directory: {self.model_dir_path}")
+                                if self._load_local_model(self.model_dir_path):
+                                    break
+                                else:
+                                    local_model_exists = False
+                                    log_warning(
+                                        "[WARNING] Failed to load model from local directory, attempting download")
+                                    self.local_files_only = False
+                            if not local_model_exists:
+                                log_info(f"[OK] Downloading GLiNER model: {self.model_name}")
+                                self.model = GLiNER.from_pretrained(self.model_name)
+                                if self.local_model_path:
+                                    self._save_model_to_directory(self.model_dir_path)
+                            if self.model is not None:
+                                self._is_initialized = True
+                                self._initialization_time = time.time() - start_time
+                                self._last_used = time.time()
+                                log_info(f"[OK] Model initialized in {self._initialization_time:.2f}s")
+
+                                # Cache the model instance for future use
+                                GlinerEntityDetector._model_cache[cache_key] = {
+                                    "model": self.model,
+                                    "init_time": self._initialization_time
+                                }
+                                GlinerEntityDetector._global_initialization_time = self._initialization_time
+                                return True
+                        except Exception as e:
+                            SecurityAwareErrorHandler.log_processing_error(e,
+                                                                           f"gliner_initialization_attempt_{attempt}",
+                                                                           self.model_name)
+                        if attempt < max_retries - 1:
+                            time.sleep(2)
+                    return self._is_initialized
+                finally:
+                    # Always clear the global initializing flag
                     GlinerEntityDetector._global_initializing = False
-                record_keeper.record_processing(
-                    operation_type="gliner_model_initialization",
-                    document_type="model",
-                    entity_types_processed=self.default_entities,
-                    processing_time=time.time() - start_time,
-                    entity_count=0,
-                    success=self._is_initialized
-                )
+
+        except TimeoutError:
+            log_error("[GLINER] Timeout acquiring write lock for model initialization")
+            return False
+
+        finally:
+            # Record processing for GDPR compliance regardless of success/failure
+            record_keeper.record_processing(
+                operation_type="gliner_model_initialization",
+                document_type="model",
+                entity_types_processed=self.default_entities,
+                processing_time=time.time() - start_time,
+                entity_count=0,
+                success=self._is_initialized
+            )
 
     def _init_norwegian_pronouns(self) -> set:
         """
@@ -467,7 +508,20 @@ class GlinerEntityDetector(BaseEntityDetector):
             from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
 
             async def process_page(page):
-                return await self._process_page_async(page, page_texts_and_mappings, entity_list)
+                # Add timeout handling
+                try:
+                    # Wrap the page processing in asyncio.wait_for to add timeout
+                    return await asyncio.wait_for(
+                        self._process_page_async(page, page_texts_and_mappings, entity_list),
+                        timeout=20.0  # 20 second timeout per page
+                    )
+                except asyncio.TimeoutError:
+                    log_warning(f"[WARNING] Timeout processing page {page.get('page', 'unknown')} with GLiNER")
+                    return {"page": page.get('page'), "sensitive": []}, []
+                except Exception as e:
+                    SecurityAwareErrorHandler.log_processing_error(
+                        e, "gliner_page_processing_timeout", f"page_{page.get('page', 'unknown')}")
+                    return {"page": page.get('page'), "sensitive": []}, []
 
             page_results = await ParallelProcessingHelper.process_pages_in_parallel(pages, process_page)
 
@@ -478,6 +532,9 @@ class GlinerEntityDetector(BaseEntityDetector):
                     redaction_mapping["pages"].append(page_redaction_info)
                 if processed_entities:
                     combined_results.extend(processed_entities)
+
+            # Remove duplicates
+            combined_results = self.sanitize_entities(combined_results)
 
             # Sort redaction mapping pages by page number
             redaction_mapping["pages"].sort(key=lambda x: x.get("page", 0))

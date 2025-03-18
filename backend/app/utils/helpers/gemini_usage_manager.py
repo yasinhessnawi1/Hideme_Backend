@@ -141,12 +141,6 @@ class GeminiUsageManager:
 
         return truncated_text[:last_space] if last_space != -1 else truncated_text
 
-    async def release_request_slot(self):
-        """
-        Release a Gemini API request slot.
-        """
-        async with self._request_lock:
-            self.concurrent_requests = max(0, self.concurrent_requests - 1)
 
     def get_usage_summary(self) -> Dict[str, Any]:
         """
@@ -164,6 +158,18 @@ class GeminiUsageManager:
             "last_reset_time": self.last_reset_time
         }
 
+    async def release_request_slot(self):
+        """
+        Release a Gemini API request slot with better error handling.
+        """
+        try:
+            async with self._request_lock:
+                self.concurrent_requests = max(0, self.concurrent_requests - 1)
+        except Exception as e:
+            # Log but don't propagate errors from cleanup operations
+            log_warning(f"[GEMINI] Error releasing request slot: {e}")
+            # Force reset counter in case of persistent issues
+            self.concurrent_requests = 0
 
 # Global usage manager with default configuration
 gemini_usage_manager = GeminiUsageManager()

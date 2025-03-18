@@ -104,7 +104,7 @@ signal.signal(signal.SIGTERM, signal_handler)
 # Generator functions
 def generate_text(prompt, system_instruction):
     """Generate text using Gemini model with given prompt and system instruction"""
-    model = genai.GenerativeModel("gemini-1.5-pro", system_instruction=system_instruction)
+    model = genai.GenerativeModel("gemini-2.0-flash", system_instruction=system_instruction)
     response = model.generate_content(prompt)
     return response.text
 
@@ -285,7 +285,6 @@ def labeler_worker():
             print(f"Moved processed file to {PROCESSED_FOLDER}")
 
             # Wait between API calls to avoid rate limiting
-            time.sleep(5)
 
         except Exception as e:
             print(f"Error in labeler: {e}")

@@ -1,6 +1,7 @@
 """
 Helper functions for interacting with the Google Gemini API.
 """
+import asyncio
 import os
 import json
 import time
@@ -46,7 +47,7 @@ class GeminiHelper:
         genai.configure(api_key=self.api_key)
 
         # Set model name from configuration or use default
-        self.model_name = get_config("gemini_model_name") or "gemini-1.5-flash"
+        self.model_name = get_config("gemini_model_name") or "gemini-2.0-flash"
 
         logger.info(f"✅ GeminiHelper initialized with model '{self.model_name}'")
 
@@ -81,7 +82,7 @@ class GeminiHelper:
 
         return f"{GEMINI_PROMPT_HEADER}{entities_str}\n\n### **Text to Analyze:**\n{text}\n{GEMINI_PROMPT_FOOTER}"
 
-    def send_request(self, text: str, requested_entities: Optional[List[str]] = None, max_retries: int = 3) -> Optional[str]:
+    async def send_request(self, text: str, requested_entities: Optional[List[str]] = None, max_retries: int = 3) -> Optional[str]:
         """
         Send a request to the Gemini API with retry logic and exponential backoff.
 
@@ -102,7 +103,7 @@ class GeminiHelper:
                     self.model_name,
                     system_instruction=SYSTEM_INSTRUCTION
                 )
-                response = model.generate_content(prompt)
+                response = await asyncio.to_thread(model.generate_content, prompt)
                 if response and response.text.strip():
                     logger.info("✅ Successfully received response from Gemini API")
                     return response.text.strip("`").strip()
@@ -198,7 +199,7 @@ class GeminiHelper:
 
         return json_candidates
 
-    def process_text(self, text: str, requested_entities: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+    async def process_text(self, text: str, requested_entities: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
         """
         Process text through Gemini API and return parsed results.
         Uses caching to avoid redundant API calls for similar text content.
@@ -215,7 +216,7 @@ class GeminiHelper:
             logger.info("✅ Using cached response for Gemini API request")
             return self.cache[key]
 
-        response = self.send_request(text, requested_entities)
+        response = await self.send_request(text, requested_entities)
         result = self.parse_response(response) if response else None
 
         # Cache the result if successful

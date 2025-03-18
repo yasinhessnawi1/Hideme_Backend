@@ -1,26 +1,25 @@
 """
-Gemini AI-based entity detection implementation with enhanced GDPR compliance and error handling.
+Gemini AI-based entity detection implementation with enhanced GDPR compliance, error handling, and improved synchronization.
 
 This module provides a robust implementation of entity detection using Google's Gemini API
 with improved security features, GDPR compliance, and standardized error handling.
 """
 import asyncio
-import threading
 import time
 from typing import Dict, Any, List, Optional, Tuple
 
 from backend.app.entity_detection.base import BaseEntityDetector
-from backend.app.utils.helpers.gemini_helper import GeminiHelper
-from backend.app.utils.helpers.text_utils import TextUtils
-from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
-from backend.app.utils.logger import  log_info, log_warning, log_error
 from backend.app.utils.data_minimization import minimize_extracted_data
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.secure_logging import log_sensitive_operation
-from backend.app.utils.processing_records import record_keeper
-
+from backend.app.utils.helpers.gemini_helper import GeminiHelper
 # Import the usage manager
 from backend.app.utils.helpers.gemini_usage_manager import gemini_usage_manager
+from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
+from backend.app.utils.helpers.text_utils import TextUtils
+from backend.app.utils.logger import log_info, log_warning, log_error
+from backend.app.utils.processing_records import record_keeper
+from backend.app.utils.secure_logging import log_sensitive_operation
+from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
 
 class GeminiEntityDetector(BaseEntityDetector):
@@ -33,7 +32,10 @@ class GeminiEntityDetector(BaseEntityDetector):
         """Initialize the Gemini entity detector."""
         super().__init__()
         self.gemini_helper = GeminiHelper()
-        self.api_lock = threading.RLock()
+        # Replace basic asyncio.Lock with AsyncTimeoutLock for better timeout handling
+        self.api_lock = AsyncTimeoutLock("gemini_api_lock",
+                                        priority=LockPriority.HIGH,
+                                        timeout=30.0)
 
     async def detect_sensitive_data_async(
         self,
@@ -107,13 +109,12 @@ class GeminiEntityDetector(BaseEntityDetector):
                         log_warning(f"[WARNING] Page {page_number} processing blocked by usage manager")
                         return {"page": page_number, "sensitive": []}, []
 
-                    # Call Gemini API with processed text
+                    # Call Gemini API with processed text - now with proper timeout lock
                     log_info(f"[OK] Processing text with Gemini API on page {page_number}")
-                    response = await asyncio.to_thread(
-                        self.gemini_helper.process_text,
-                        processed_text,
-                        requested_entities
-                    )
+
+                    # Use the AsyncTimeoutLock with proper timeout handling
+                    async with self.api_lock.acquire_timeout(timeout=45.0):
+                        response = await self.gemini_helper.process_text(processed_text, requested_entities)
 
                     # Release API request slot
                     try:
@@ -259,7 +260,7 @@ class GeminiEntityDetector(BaseEntityDetector):
 
                         entities.append(entity)
 
-            return entities
+            return self.sanitize_entities(entities)
         except Exception as e:
             # Use standardized error handling
             SecurityAwareErrorHandler.log_processing_error(e, "gemini_response_extraction")

@@ -2,18 +2,22 @@
 Metadata and configuration endpoints with response caching for improved performance.
 """
 import time
-from fastapi import APIRouter, HTTPException, Request, Response
+from datetime import datetime
+
+from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
 from backend.app.configs.gliner_config import GLINER_ENTITIES
 from backend.app.configs.presidio_config import REQUESTED_ENTITIES
-from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
 from backend.app.factory.document_processing_factory import EntityDetectionEngine
 from backend.app.services.initialization_service import initialization_service
+from backend.app.utils.caching_middleware import get_cached_response, response_cache
+from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logger import log_error
-from backend.app.utils.caching_middleware import get_cached_response
+from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -28,12 +32,15 @@ CACHE_TTL = {
 
 router = APIRouter()
 
+# Keep only the AsyncTimeoutLock for detector status as it accesses active instances
+_status_lock = AsyncTimeoutLock("detector_status_lock", priority=LockPriority.MEDIUM)
+
 
 @router.get("/engines")
 @limiter.limit("30/minute")
 async def get_available_engines(request: Request, response: Response):
     """
-    Get list of available entity detection engines.
+    Get list of available entity detection engines with improved response time.
 
     Returns:
         List of available entity detection engines
@@ -47,9 +54,13 @@ async def get_available_engines(request: Request, response: Response):
     if cached:
         return JSONResponse(content=cached)
 
+    # No need for locks with static data
     engines_data = {
         "engines": [e.name for e in EntityDetectionEngine]
     }
+
+    # Cache the result
+    response_cache.set(cache_key, engines_data, CACHE_TTL["engines"])
 
     return engines_data
 
@@ -58,7 +69,7 @@ async def get_available_engines(request: Request, response: Response):
 @limiter.limit("20/minute")
 async def get_available_entities(request: Request, response: Response):
     """
-    Get list of available entity types for detection.
+    Get list of available entity types for detection with improved response time.
 
     Returns:
         Dictionary of available entity types by detection engine
@@ -73,6 +84,7 @@ async def get_available_entities(request: Request, response: Response):
         if cached:
             return JSONResponse(content=cached)
 
+        # No need for locks with static configuration data
         # Get GLiNER entities
         gliner_entities = GLINER_ENTITIES
 
@@ -82,18 +94,25 @@ async def get_available_entities(request: Request, response: Response):
             "gliner_entities": gliner_entities
         }
 
+        # Cache the result
+        response_cache.set(cache_key, entities_data, CACHE_TTL["entities"])
+
         return entities_data
 
     except Exception as e:
-        log_error(f"[ERROR] Error retrieving available entities: {e}")
-        raise HTTPException(status_code=500, detail="Error retrieving entity information")
+        # Use security-aware error handling
+        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+            e, "metadata_retrieval", 500
+        )
+        log_error(f"[ERROR] Error retrieving available entities: {str(e)}")
+        return JSONResponse(status_code=status_code, content=error_response)
 
 
 @router.get("/entity-examples")
 @limiter.limit("30/minute")
 async def get_entity_examples(request: Request, response: Response):
     """
-    Get examples for different entity types.
+    Get examples for different entity types with improved response time.
 
     Returns:
         Dictionary of example text for each entity type
@@ -107,6 +126,7 @@ async def get_entity_examples(request: Request, response: Response):
     if cached:
         return JSONResponse(content=cached)
 
+    # No need for locks with static example data
     examples_data = {
         "examples": {
             "PERSON": ["John Doe", "Jane Smith", "Dr. Robert Johnson"],
@@ -121,6 +141,9 @@ async def get_entity_examples(request: Request, response: Response):
         }
     }
 
+    # Cache the result
+    response_cache.set(cache_key, examples_data, CACHE_TTL["entity_examples"])
+
     return examples_data
 
 
@@ -134,11 +157,15 @@ async def get_detectors_status(request: Request):
         Status information for all detector instances
     """
     try:
-        last_updated = time.time()
+        # This endpoint should not be cached for too long as status changes frequently
+        cache_key = "detectors_status"
+        last_updated = datetime.isoformat(datetime.now())
 
+        # Get status from initialization service
         detector_health = initialization_service.check_health()
         detector_metrics = initialization_service.get_usage_metrics()
 
+        # Try to get detailed status from each detector
         detectors_status = {
             "presidio": {},
             "gemini": {},
@@ -149,42 +176,43 @@ async def get_detectors_status(request: Request):
             }
         }
 
-        # Presidio
-        presidio_detector = initialization_service.get_detector(EntityDetectionEngine.PRESIDIO)
-        detectors_status["presidio"] = (
-            presidio_detector.get_status() if hasattr(presidio_detector, 'get_status')
-            else {
-                "initialized": detector_health["detectors"]["presidio"],
-                "uses": detector_metrics.get("presidio", {}).get("uses", 0)
-            }
-        )
+        # Keep the AsyncTimeoutLock for detector status as it accesses active instances
+        async with _status_lock.acquire_timeout(timeout=2.0):
+            # Presidio
+            presidio_detector = initialization_service.get_detector(EntityDetectionEngine.PRESIDIO)
+            detectors_status["presidio"] = (
+                presidio_detector.get_status() if hasattr(presidio_detector, 'get_status')
+                else {
+                    "initialized": detector_health["detectors"]["presidio"],
+                    "uses": detector_metrics.get("presidio", {}).get("uses", 0)
+                }
+            )
 
-        # Gemini
-        gemini_detector = initialization_service.get_gemini_detector()
-        detectors_status["gemini"] = (
-            gemini_detector.get_status() if hasattr(gemini_detector, 'get_status')
-            else {
-                "initialized": detector_health["detectors"]["gemini"],
-                "uses": detector_metrics.get("gemini", {}).get("uses", 0)
-            }
-        )
+            # Gemini
+            gemini_detector = initialization_service.get_gemini_detector()
+            detectors_status["gemini"] = (
+                gemini_detector.get_status() if hasattr(gemini_detector, 'get_status')
+                else {
+                    "initialized": detector_health["detectors"]["gemini"],
+                    "uses": detector_metrics.get("gemini", {}).get("uses", 0)
+                }
+            )
 
-        # GLiNER
-        gliner_detector = initialization_service.get_gliner_detector()
-        detectors_status["gliner"] = (
-            gliner_detector.get_status() if hasattr(gliner_detector, 'get_status')
-            else {
-                "initialized": detector_health["detectors"]["gliner"],
-                "uses": detector_metrics.get("gliner", {}).get("uses", 0)
-            }
-        )
+            # GLiNER
+            gliner_detector = initialization_service.get_gliner_detector()
+            detectors_status["gliner"] = (
+                gliner_detector.get_status() if hasattr(gliner_detector, 'get_status')
+                else {
+                    "initialized": detector_health["detectors"]["gliner"],
+                    "uses": detector_metrics.get("gliner", {}).get("uses", 0)
+                }
+            )
 
         return detectors_status
 
     except Exception as e:
         log_error(f"[ERROR] Error retrieving detector status: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving detector status")
-
 
 
 @router.get("/routes")
@@ -195,6 +223,7 @@ async def get_api_routes() -> JSONResponse:
     Returns:
         JSON response with detailed route information
     """
+    # No need for locks with static route information
     routes_info = {
         "entity_detection": [
             {
@@ -306,5 +335,9 @@ async def get_api_routes() -> JSONResponse:
             }
         ]
     }
+
+    # Cache the result - static content can be cached longer
+    cache_key = "api_routes"
+    response_cache.set(cache_key, routes_info, CACHE_TTL["engines"])
 
     return JSONResponse(content=routes_info)

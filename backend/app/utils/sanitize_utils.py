@@ -29,7 +29,6 @@ def sanitize_detection_output(
     5. Formats the response consistently
 
     Args:
-        anonymized_text: The anonymized text output from detection
         entities: List of detected entities
         redaction_mapping: Mapping of sensitive items with their positions
         processing_times: Optional dictionary of processing time metrics
