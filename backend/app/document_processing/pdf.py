@@ -219,7 +219,8 @@ class PDFTextExtractor(DocumentExtractor):
             "words": page_words
         })
 
-    def _extract_page_words(self, page: pymupdf.Page) -> List[Dict[str, Any]]:
+    @staticmethod
+    def _extract_page_words(page: pymupdf.Page) -> List[Dict[str, Any]]:
         """
         Extract words with their positions from a PDF page.
         Filters out words that contain only whitespace.
@@ -538,10 +539,10 @@ class PDFRedactionService(DocumentRedactor):
     def _draw_redaction_boxes(self, redaction_mapping: Dict[str, Any]) -> None:
         """
         Draw redaction boxes on the PDF document based on the provided mapping.
-        For large documents, processes in batches to reduce memory usage.
+        Includes **both text and image redaction**.
 
         Args:
-            redaction_mapping: Dictionary containing sensitive spans with bounding boxes.
+            redaction_mapping: Dictionary containing sensitive text spans and images.
         """
         total_pages = len(self.doc)
 
@@ -556,54 +557,43 @@ class PDFRedactionService(DocumentRedactor):
         page_numbers = sorted(list(page_numbers))
 
         # Determine if this is a large document and should use batched processing
-        use_batched_processing = len(page_numbers) > 10  # Arbitrary threshold for demonstration
+        use_batched_processing = len(page_numbers) > 10
 
         if use_batched_processing:
-            # Process pages in batches
             for batch_start in range(0, len(page_numbers), self.page_batch_size):
                 batch_end = min(batch_start + self.page_batch_size, len(page_numbers))
                 batch_page_numbers = page_numbers[batch_start:batch_end]
 
-                log_info(f"[OK] Processing redaction batch for pages {batch_page_numbers}")
-
-                # Process each page in the current batch
                 self._process_redaction_pages_batch(redaction_mapping, batch_page_numbers, total_pages)
-
-                # Free memory after processing each batch
                 import gc
                 gc.collect()
         else:
-            # Process all pages at once
             for page_info in redaction_mapping.get("pages", []):
                 page_num = page_info.get("page")
                 sensitive_items = page_info.get("sensitive", [])
 
-                if not sensitive_items:
-                    log_info(f"[OK] No sensitive items found on page {page_num}.")
-                    continue
-
-                # Check that the page number exists in the document
-                if page_num < 1 or page_num > total_pages:
-                    log_warning(
-                        f"[WARNING] Page number {page_num} is out of range for document with {total_pages} pages. Skipping."
-                    )
-                    continue
-
                 try:
-                    # PyMuPDF pages are 0-indexed
                     page = self.doc[page_num - 1]
 
+                    # 🔹 Redact text entities
                     for item in sensitive_items:
                         self._process_sensitive_item(page, item, page_num)
 
-                    # Apply redactions on the page
+                    # 🔹 Detect and redact images
+                    image_boxes = self._detect_images_on_page(page)
+
+                    if image_boxes:
+                        for img in image_boxes:
+                            rect = pymupdf.Rect(img["x0"], img["y0"], img["x1"], img["y1"])
+                            page.add_redact_annot(rect, fill=(0, 0, 0))  # Black box over image
+
+                    # Apply redactions (both text and images)
                     page.apply_redactions()
 
                 except Exception as e:
-                    SecurityAwareErrorHandler.log_processing_error(
-                        e, "pdf_redaction_page", f"{self.file_path}:page_{page_num}"
-                    )
-                    continue
+                    SecurityAwareErrorHandler.log_processing_error(e, "pdf_redaction_page",
+                                                                   f"{self.file_path}:page_{page_num}")
+
 
     def _process_redaction_pages_batch(self, redaction_mapping: Dict[str, Any],
                                       page_numbers: List[int], total_pages: int) -> None:
@@ -683,6 +673,34 @@ class PDFRedactionService(DocumentRedactor):
             SecurityAwareErrorHandler.log_processing_error(
                 e, "pdf_process_sensitive_item", f"{self.file_path}:page_{page_num}"
             )
+
+
+    @staticmethod
+    def _detect_images_on_page(page: pymupdf.Page) -> List[Dict[str, Any]]:
+        """
+        Detects images in a given PDF page and returns their bounding boxes.
+
+        Returns:
+            A list of dictionaries containing image bounding boxes.
+        """
+        image_boxes = []
+        try:
+            images = page.get_images(full=True)
+            for img in images:
+                xref = img[0]  # Image reference index
+                rects = page.get_image_rects(xref)  # Get image bounding boxes
+
+                for rect in rects:
+                    image_boxes.append({
+                        "x0": rect.x0,
+                        "y0": rect.y0,
+                        "x1": rect.x1,
+                        "y1": rect.y1,
+                        "xref": xref
+                    })
+        except Exception as e:
+            SecurityAwareErrorHandler.log_processing_error(e, "pdf_image_extraction", f"page_{page.number}")
+        return image_boxes
 
     def _sanitize_document(self) -> None:
         """
