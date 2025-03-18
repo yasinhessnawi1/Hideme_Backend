@@ -1,444 +1,495 @@
 """
-Optimized batch processing utilities for document processing operations.
+Enhanced batch processing helper with improved synchronization and resource management.
 
-This module provides helpers for efficiently processing multiple files in batch operations,
-optimizing for memory usage, security, and performance with enhanced in-memory processing.
+This module provides optimized utilities for parallel batch processing with enhanced
+error handling, timeout management, and dynamic resource allocation to prevent
+memory pressure and system congestion.
 """
 import asyncio
 import os
-from typing import List, Dict, Any, Tuple, Optional, Callable, Set, AsyncGenerator, Union
+import time
+import uuid
+import logging
+import psutil
+from typing import List, Dict, Any, Callable, TypeVar, Coroutine, Tuple, Optional, Iterable, AsyncGenerator, Set
 
 from fastapi import UploadFile
-
-from backend.app.utils.document_processing_utils import extract_text_data_in_memory
+from backend.app.utils.logger import log_info, log_warning, log_error
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.file_validation import (
-    validate_mime_type, validate_file_content_async,
-    sanitize_filename, is_valid_file_size, MAX_BATCH_SIZE_BYTES
-)
-from backend.app.utils.logger import log_info, log_warning
+from backend.app.utils.file_validation import validate_mime_type, sanitize_filename
 from backend.app.utils.memory_management import memory_monitor
 from backend.app.utils.secure_file_utils import SecureTempFileManager
+from backend.app.utils.synchronization_utils import AsyncTimeoutSemaphore, LockPriority, AsyncTimeoutLock
 
+T = TypeVar('T')
+U = TypeVar('U')
+
+logger = logging.getLogger(__name__)
 
 class BatchProcessingHelper:
     """
-    Helper for optimized batch document processing.
+    Enhanced helper for batch processing with improved synchronization and resource management.
 
-    Provides utilities for efficiently processing multiple files with:
-    - Memory optimization
-    - Parallel processing
-    - In-memory operations when possible
-    - Security validation
+    Features:
+    - Dynamic task scheduling based on system resources
+    - Timeout handling for long-running operations
+    - Thread-safe and deadlock-resistant design
+    - Automatic resource constraint management
+    - Graceful failure handling with partial results
     """
+    # Class-level semaphore for controlling global parallel processing
+    _global_semaphore: Optional[AsyncTimeoutSemaphore] = None
+    _access_lock = AsyncTimeoutLock("batch_helper_access_lock", priority=LockPriority.MEDIUM)
 
-    @staticmethod
-    async def process_batch_files(
-            files: List[UploadFile],
-            max_parallel: int = 4,
-            allowed_mime_types: Optional[Set[str]] = None,
-            max_batch_size_bytes: int = MAX_BATCH_SIZE_BYTES
-    ) -> AsyncGenerator[Tuple[UploadFile, Dict[str, Any], bytes, str, bool], None]:
+    # Constants for resource management
+    MAX_PARALLELISM = 12  # Hard limit on parallelism regardless of cores
+    DEFAULT_TIMEOUT = 300.0  # Default timeout for batch processing (5 minutes)
+    MIN_MEMORY_PER_WORKER = 250 * 1024 * 1024  # 250 MB per worker minimum
+    MAX_MEMORY_PERCENTAGE = 80  # Maximum percentage of memory to use
+
+    @classmethod
+    async def _init_global_semaphore(cls, max_workers: int) -> AsyncTimeoutSemaphore:
         """
-        Process multiple files in parallel with optimized memory usage.
+        Initialize or update the global semaphore with the appropriate number of workers.
 
         Args:
-            files: List of uploaded files
-            max_parallel: Maximum number of files to process concurrently
-            allowed_mime_types: Set of allowed MIME types (if None, all types are allowed)
-            max_batch_size_bytes: Maximum total batch size in bytes
-
-        Yields:
-            Tuples of (file, extracted_data, file_content, safe_filename, is_valid)
-        """
-        # Create a semaphore to limit concurrent processing
-        semaphore = asyncio.Semaphore(max_parallel)
-
-        # Track total batch size
-        total_batch_size = 0
-
-        async def process_single_file(file: UploadFile) -> Tuple[UploadFile, Dict[str, Any], bytes, str, bool]:
-            """Process a single file in the batch."""
-            nonlocal total_batch_size
-
-            async with semaphore:
-                try:
-                    # Read file content
-                    await file.seek(0)
-                    content = await file.read()
-
-                    # Update total batch size and check limit
-                    file_size = len(content)
-                    if total_batch_size + file_size > max_batch_size_bytes:
-                        return file, {}, b"", sanitize_filename(file.filename or ""), False
-
-                    total_batch_size += file_size
-
-                    # Validate MIME type
-                    content_type = file.content_type or "application/octet-stream"
-                    if allowed_mime_types and not validate_mime_type(content_type, allowed_mime_types):
-                        log_warning(f"Invalid MIME type: {content_type} for file {file.filename}")
-                        return file, {}, content, sanitize_filename(file.filename or ""), False
-
-                    # Get safe filename
-                    safe_filename = sanitize_filename(file.filename) if file.filename else f"unnamed_file"
-
-                    # Validate file content
-                    is_valid, reason, detected_mime = await validate_file_content_async(
-                        content, safe_filename, content_type
-                    )
-
-                    if not is_valid:
-                        log_warning(f"Invalid file content: {reason} for file {safe_filename}")
-                        return file, {}, content, safe_filename, False
-
-                    # Check if we can process this file
-                    file_type = "text"
-                    if "pdf" in content_type:
-                        file_type = "pdf"
-                    elif "word" in content_type or "doc" in content_type:
-                        file_type = "docx"
-
-                    if not is_valid_file_size(file_size, file_type):
-                        log_warning(f"File too large: {file_size} bytes for {file_type} file {safe_filename}")
-                        return file, {}, content, safe_filename, False
-
-                    # Extract text data in memory using centralized utility
-                    extracted_data = await extract_text_data_in_memory(content_type, content)
-
-                    # Log file processing
-                    log_info(f"Processed file: {safe_filename} ({file_size / 1024:.1f}KB)")
-
-                    return file, extracted_data, content, safe_filename, True
-                except Exception as e:
-                    # Handle errors but continue processing other files
-                    SecurityAwareErrorHandler.log_processing_error(
-                        e, "batch_file_processing", file.filename or "unknown_file"
-                    )
-                    return file, {"pages": []}, b"", sanitize_filename(file.filename or ""), False
-
-        # Process files concurrently with semaphore control
-        tasks = [process_single_file(file) for file in files]
-
-        for future in asyncio.as_completed(tasks):
-            result = await future
-            yield result
-
-    @staticmethod
-    async def process_batch_content(
-            file_contents: List[Tuple[bytes, str, str]],  # content, filename, content_type
-            processor: Callable[[bytes, str, str], Union[Dict[str, Any], bytes, str]],
-            max_parallel: int = 4,
-            in_memory_threshold: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Process batch file content without creating temporary files when possible.
-        Uses memory buffers for content under threshold size and only creates temporary
-        files when necessary based on memory pressure and content size.
-
-        Args:
-            file_contents: List of tuples (content, filename, content_type)
-            processor: Function to process each file's content
-            max_parallel: Maximum number of parallel processing tasks
-            in_memory_threshold: Optional custom threshold for in-memory processing
+            max_workers: Maximum number of parallel workers
 
         Returns:
-            List of processing results
+            AsyncTimeoutSemaphore configured for the current system
         """
-        # Adjust based on current memory pressure if threshold not specified
-        if in_memory_threshold is None:
-            current_memory_usage = memory_monitor.get_memory_usage()
-            available_memory_mb = memory_monitor.memory_stats["available_memory_mb"]
+        async with cls._access_lock.acquire_timeout(timeout=5.0):
+            if cls._global_semaphore is None:
+                cls._global_semaphore = AsyncTimeoutSemaphore(
+                    name="global_batch_semaphore",
+                    value=max_workers,
+                    priority=LockPriority.MEDIUM,
+                    timeout=cls.DEFAULT_TIMEOUT
+                )
+                log_info(f"[BATCH] Initialized global semaphore with {max_workers} workers")
+            elif cls._global_semaphore.current_value != max_workers:
+                # Need to create a new semaphore with the updated value
+                old_semaphore = cls._global_semaphore
+                cls._global_semaphore = AsyncTimeoutSemaphore(
+                    name="global_batch_semaphore",
+                    value=max_workers,
+                    priority=LockPriority.MEDIUM,
+                    timeout=cls.DEFAULT_TIMEOUT
+                )
+                log_info(f"[BATCH] Updated global semaphore from {old_semaphore.current_value} to {max_workers} workers")
 
-            # Adaptive threshold based on memory pressure
-            if current_memory_usage > 80:  # High memory pressure
-                in_memory_threshold = min(1024 * 1024, int(available_memory_mb * 1024 * 0.01))  # 1% of available or 1MB
-            elif current_memory_usage > 60:  # Medium memory pressure
-                in_memory_threshold = min(5 * 1024 * 1024, int(available_memory_mb * 1024 * 0.05))  # 5% or 5MB
-            else:  # Low memory pressure
-                in_memory_threshold = min(20 * 1024 * 1024, int(available_memory_mb * 1024 * 0.1))  # 10% or 20MB
+            return cls._global_semaphore
 
-        # Create semaphore for parallel processing
-        semaphore = asyncio.Semaphore(max_parallel)
-        results = []
-
-        async def process_content_item(content: bytes, filename: str, content_type: str) -> Dict[str, Any]:
-            """Process a single content item with appropriate memory strategy"""
-            async with semaphore:
-                try:
-                    safe_filename = sanitize_filename(filename)
-                    file_size = len(content)
-
-                    # Decide if we should process in memory
-                    use_memory = file_size <= in_memory_threshold
-
-                    if use_memory:
-                        # Process entirely in memory
-                        log_info(f"Processing {safe_filename} ({file_size/1024:.1f}KB) in memory")
-                        processed_result = await asyncio.to_thread(processor, content, safe_filename, content_type)
-
-                        if isinstance(processed_result, dict):
-                            return {
-                                "file": filename,
-                                "status": "success",
-                                "result": processed_result,
-                                "safe_filename": safe_filename,
-                                "size": file_size,
-                                "processed_in_memory": True
-                            }
-                        elif isinstance(processed_result, (bytes, str)):
-                            return {
-                                "file": filename,
-                                "status": "success",
-                                "content": processed_result,
-                                "safe_filename": safe_filename,
-                                "size": file_size,
-                                "processed_in_memory": True
-                            }
-                        else:
-                            return {
-                                "file": filename,
-                                "status": "success",
-                                "safe_filename": safe_filename,
-                                "size": file_size,
-                                "processed_in_memory": True
-                            }
-                    else:
-                        # Fall back to temporary file for larger content
-                        log_info(f"Processing {safe_filename} ({file_size/1024:.1f}KB) using temporary file")
-                        tmp_path = await SecureTempFileManager.create_secure_temp_file_async(
-                            suffix=os.path.splitext(safe_filename)[1] or ".tmp",
-                            content=content
-                        )
-
-                        try:
-                            # Process with temporary file
-                            processed_result = await asyncio.to_thread(processor, tmp_path, safe_filename, content_type)
-
-                            # Build result
-                            if isinstance(processed_result, dict):
-                                return {
-                                    "file": filename,
-                                    "status": "success",
-                                    "result": processed_result,
-                                    "safe_filename": safe_filename,
-                                    "size": file_size,
-                                    "processed_in_memory": False,
-                                    "temp_path": tmp_path
-                                }
-                            elif isinstance(processed_result, (bytes, str)):
-                                return {
-                                    "file": filename,
-                                    "status": "success",
-                                    "content": processed_result,
-                                    "safe_filename": safe_filename,
-                                    "size": file_size,
-                                    "processed_in_memory": False,
-                                    "temp_path": tmp_path
-                                }
-                            else:
-                                return {
-                                    "file": filename,
-                                    "status": "success",
-                                    "safe_filename": safe_filename,
-                                    "size": file_size,
-                                    "processed_in_memory": False,
-                                    "temp_path": tmp_path
-                                }
-                        finally:
-                            # Clean up temporary file
-                            await SecureTempFileManager.secure_delete_file_async(tmp_path)
-
-                except Exception as e:
-                    error_msg = str(e)
-                    SecurityAwareErrorHandler.log_processing_error(e, "batch_content_processing", filename)
-                    return {
-                        "file": filename,
-                        "status": "error",
-                        "error": error_msg,
-                        "safe_filename": sanitize_filename(filename)
-                    }
-
-        # Process all content items in parallel
-        tasks = [
-            process_content_item(content, filename, content_type)
-            for content, filename, content_type in file_contents
-        ]
-
-        return await asyncio.gather(*tasks)
-
-    @staticmethod
-    async def write_batch_results(
-            results: List[Dict[str, Any]],
-            output_dir: Optional[str] = None,
-            cleanup_temp_files: bool = True
-    ) -> Dict[str, Any]:
+    @classmethod
+    def get_optimal_batch_size(cls, file_count: int, total_bytes: int = 0) -> int:
         """
-        Write batch processing results to files with optimized resource handling.
-        Improved version that minimizes file creation by using the existing temporary
-        files when available and only creating new files when necessary.
-
-        Args:
-            results: List of processing results
-            output_dir: Optional directory to write output files (created if needed)
-            cleanup_temp_files: Whether to clean up temporary files after processing
-
-        Returns:
-            Summary of write operations
-        """
-        # Create output directory if needed and specified
-        if output_dir and not os.path.exists(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
-            created_dir = True
-        else:
-            created_dir = False
-
-        summary = {
-            "total": len(results),
-            "success": 0,
-            "error": 0,
-            "output_files": [],
-            "created_output_dir": created_dir and bool(output_dir)
-        }
-
-        for result in results:
-            status = result.get("status", "error")
-            filename = result.get("safe_filename", "unknown_file")
-
-            if status == "success":
-                summary["success"] += 1
-
-                # If we're writing to a directory
-                if output_dir:
-                    output_path = os.path.join(output_dir, f"processed_{filename}")
-
-                    # Check if we have content to write
-                    if "content" in result:
-                        content = result["content"]
-                        if isinstance(content, str):
-                            content = content.encode('utf-8')
-
-                        # Write content to output file
-                        with open(output_path, "wb") as f:
-                            f.write(content)
-
-                        summary["output_files"].append(output_path)
-
-                    # Or if we already have a temp file, just move/copy it
-                    elif "temp_path" in result and os.path.exists(result["temp_path"]):
-                        import shutil
-
-                        # Copy the file (move would delete original which might be needed)
-                        shutil.copy2(result["temp_path"], output_path)
-                        summary["output_files"].append(output_path)
-
-                        # Cleanup temp file if requested
-                        if cleanup_temp_files:
-                            await SecureTempFileManager.secure_delete_file_async(result["temp_path"])
-            else:
-                summary["error"] += 1
-
-        return summary
-
-    @staticmethod
-    def get_optimal_batch_size(file_count: int, total_size: int) -> int:
-        """
-        Determine optimal batch size based on system resources and input size.
+        Calculate the optimal batch size based on system resources and file characteristics.
 
         Args:
             file_count: Number of files to process
-            total_size: Total size of all files in bytes
+            total_bytes: Total size of all files in bytes
 
         Returns:
-            Optimal batch size (number of files per batch)
+            Optimal number of parallel workers
         """
-        # Get available memory
-        available_memory = memory_monitor.memory_stats["available_memory_mb"] * 1024 * 1024
-        current_usage = memory_monitor.get_memory_usage()
+        # Get system information
+        try:
+            cpu_count = os.cpu_count() or 4
+            available_memory = psutil.virtual_memory().available
+            current_memory_percent = psutil.virtual_memory().percent
+        except Exception:
+            # Fallback values if psutil fails
+            cpu_count = 4
+            available_memory = 4 * 1024 * 1024 * 1024  # Assume 4GB
+            current_memory_percent = 50
 
-        # Base batch size on resource constraints
-        if current_usage > 80:  # High memory pressure
-            per_file_limit = min(available_memory * 0.1 / file_count, 10 * 1024 * 1024)  # 10MB max per file
-            return max(1, min(int(per_file_limit * file_count / total_size), file_count // 4 or 1))
-        elif current_usage > 60:  # Moderate memory pressure
-            per_file_limit = min(available_memory * 0.2 / file_count, 20 * 1024 * 1024)  # 20MB max per file
-            return max(2, min(int(per_file_limit * file_count / total_size), file_count // 3 or 2))
-        else:  # Low memory pressure
-            per_file_limit = min(available_memory * 0.3 / file_count, 30 * 1024 * 1024)  # 30MB max per file
-            return max(4, min(int(per_file_limit * file_count / total_size), file_count // 2 or 4))
+        # Base calculations on CPU cores, but adjust based on memory pressure
+        cpu_based_workers = max(1, min(cpu_count - 1, file_count, cls.MAX_PARALLELISM))
+
+        # Calculate memory constraints
+        if total_bytes > 0:
+            # Estimate memory needed per file
+            avg_bytes_per_file = total_bytes / file_count
+            estimated_memory_per_worker = avg_bytes_per_file * 5  # Assume 5x file size for processing
+            memory_based_workers = max(1, int(available_memory / estimated_memory_per_worker))
+        else:
+            # Use a more conservative approach when file sizes are unknown
+            memory_based_workers = max(1, int(available_memory / cls.MIN_MEMORY_PER_WORKER))
+
+        # Further reduce workers based on current memory pressure
+        if current_memory_percent > cls.MAX_MEMORY_PERCENTAGE:
+            memory_pressure_factor = 0.5  # Reduce workers by half under high memory pressure
+            log_warning(f"[BATCH] High memory pressure detected ({current_memory_percent}%), reducing parallelism")
+        elif current_memory_percent > 70:
+            memory_pressure_factor = 0.7  # Reduce workers by 30% under moderate memory pressure
+            log_info(f"[BATCH] Moderate memory pressure detected ({current_memory_percent}%), adjusting parallelism")
+        else:
+            memory_pressure_factor = 1.0  # No reduction under normal memory pressure
+
+        # Calculate final worker count based on all constraints
+        optimal_workers = min(
+            cpu_based_workers,
+            memory_based_workers,
+            max(1, int(cpu_based_workers * memory_pressure_factor)),
+            file_count
+        )
+
+        log_info(f"[BATCH] Optimal batch size: {optimal_workers} workers (CPU: {cpu_count}, "
+                f"Memory: {available_memory/1024/1024:.1f}MB, Files: {file_count}, "
+                f"Memory pressure: {current_memory_percent}%)")
+
+        return optimal_workers
+
+    @classmethod
+    async def process_in_parallel(
+        cls,
+        items: List[T],
+        processor: Callable[[T], Coroutine[Any, Any, U]],
+        max_workers: Optional[int] = None,
+        timeout: Optional[float] = None,
+        item_timeout: Optional[float] = None
+    ) -> List[Tuple[int, U]]:
+        """
+        Process a list of items in parallel with enhanced error handling and resource management.
+
+        Args:
+            items: List of items to process
+            processor: Async function to process each item
+            max_workers: Maximum number of parallel workers (calculated automatically if None)
+            timeout: Overall timeout for the entire batch in seconds
+            item_timeout: Timeout for individual item processing in seconds
+
+        Returns:
+            List of tuples (index, result) where index is the original item index
+        """
+        if not items:
+            return []
+
+        # Calculate optimal worker count if not provided
+        if max_workers is None:
+            max_workers = cls.get_optimal_batch_size(len(items))
+
+        # Set timeouts
+        batch_timeout = timeout or cls.DEFAULT_TIMEOUT
+        single_item_timeout = item_timeout or (batch_timeout / 2)
+
+        # Initialize the global semaphore with the correct worker count
+        semaphore = await cls._init_global_semaphore(max_workers)
+        operation_id = str(uuid.uuid4())[:8]
+        log_info(f"[BATCH] Starting parallel processing of {len(items)} items with {max_workers} workers (operation: {operation_id})")
+
+        # Track task statistics
+        start_time = time.time()
+        completed = 0
+        failed = 0
+        total = len(items)
+
+        # Create async task processor with timeout handling
+        async def process_item(index: int, item: T) -> Tuple[int, U]:
+            nonlocal completed, failed
+
+            # Acquire semaphore with timeout to limit concurrent tasks
+            try:
+                async with semaphore.acquire_timeout(timeout=30.0):  # 30s timeout for semaphore acquisition
+                    item_start = time.time()
+                    try:
+                        # Process item with timeout
+                        result = await asyncio.wait_for(processor(item), timeout=single_item_timeout)
+                        item_duration = time.time() - item_start
+
+                        # Track completion
+                        completed += 1
+
+                        # Log progress periodically
+                        if completed % 10 == 0 or completed == total:
+                            elapsed = time.time() - start_time
+                            remaining = (elapsed / completed) * (total - completed) if completed > 0 else 0
+                            mem_stats = memory_monitor.get_memory_stats()
+                            log_info(f"[BATCH] Progress: {completed}/{total} completed, {failed} failed, "
+                                    f"~{remaining:.1f}s remaining, memory: {mem_stats['current_usage']:.1f}% "
+                                    f"(operation: {operation_id})")
+
+                        return index, result
+                    except asyncio.TimeoutError:
+                        failed += 1
+                        log_warning(f"[BATCH] Item {index} processing timed out after {single_item_timeout}s (operation: {operation_id})")
+                        return index, None
+                    except Exception as e:
+                        failed += 1
+                        error_id = SecurityAwareErrorHandler.log_processing_error(
+                            e, "batch_item_processing", f"item_{index}"
+                        )
+                        log_error(f"[BATCH] Error processing item {index}: {str(e)} (error_id: {error_id}, operation: {operation_id})")
+                        return index, None
+            except TimeoutError:
+                failed += 1
+                log_error(f"[BATCH] Failed to acquire semaphore for item {index} - system may be overloaded (operation: {operation_id})")
+                return index, None
+            except Exception as e:
+                failed += 1
+                error_id = SecurityAwareErrorHandler.log_processing_error(
+                    e, "batch_item_semaphore", f"item_{index}"
+                )
+                log_error(f"[BATCH] Unexpected error for item {index}: {str(e)} (error_id: {error_id}, operation: {operation_id})")
+                return index, None
+
+        # Create all tasks but don't execute them yet
+        tasks = [process_item(i, item) for i, item in enumerate(items)]
+
+        # Execute all tasks with overall timeout
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=False),
+                timeout=batch_timeout
+            )
+
+            # Log completion
+            duration = time.time() - start_time
+            log_info(f"[BATCH] Completed processing {len(items)} items in {duration:.2f}s: "
+                    f"{completed} completed, {failed} failed (operation: {operation_id})")
+
+            return results
+        except asyncio.TimeoutError:
+            # Handle overall timeout gracefully
+            log_error(f"[BATCH] Overall batch processing timed out after {batch_timeout}s (operation: {operation_id})")
+            # Return whatever results we have
+            return []
+
+    @classmethod
+    async def process_pages_in_parallel(
+        cls,
+        pages: List[Dict[str, Any]],
+        processor: Callable[[Dict[str, Any]], Coroutine[Any, Any, Tuple[Dict[str, Any], List[Dict[str, Any]]]]],
+        max_workers: Optional[int] = None
+    ) -> List[Tuple[int, Tuple[Dict[str, Any], List[Dict[str, Any]]]]]:
+        """
+        Process document pages in parallel with enhanced error handling.
+
+        Args:
+            pages: List of page dictionaries
+            processor: Async function to process each page
+            max_workers: Maximum number of parallel workers (calculated automatically if None)
+
+        Returns:
+            List of tuples (page_number, (page_info, entities))
+        """
+        # Calculate optimal worker count if not provided
+        if max_workers is None:
+            max_workers = cls.get_optimal_batch_size(len(pages))
+
+        # Assign page numbers if not already present
+        for i, page in enumerate(pages):
+            if "page" not in page:
+                page["page"] = i + 1
+
+        # Process pages in parallel
+        results = await cls.process_in_parallel(
+            items=pages,
+            processor=processor,
+            max_workers=max_workers,
+            # Page processing can take longer, especially for large documents
+            timeout=600.0,  # 10 minutes overall timeout
+            item_timeout=120.0  # 2 minutes per page timeout
+        )
+
+        # Convert to page_number -> result mapping for better usability
+        page_results = []
+        for idx, result in results:
+            if result is not None:
+                page_number = pages[idx].get("page", idx + 1)
+                page_results.append((page_number, result))
+
+        return page_results
+
+    @classmethod
+    async def process_entities_in_parallel(
+        cls,
+        processor: Any,
+        full_text: str,
+        mapping: List[Tuple[Dict[str, Any], int, int]],
+        entity_dicts: List[Dict[str, Any]],
+        page_number: int
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """
+        Process entities in parallel for a single page.
+
+        Args:
+            processor: Entity processor object with process_entities_for_page method
+            full_text: Full text of the page
+            mapping: Text position mapping
+            entity_dicts: List of entity dictionaries
+            page_number: Page number
+
+        Returns:
+            Tuple of (processed_entities, page_redaction_info)
+        """
+        # For small entity counts, process directly
+        if len(entity_dicts) <= 5:
+            return await processor.process_entities_for_page(
+                page_number, full_text, mapping, entity_dicts
+            )
+
+        # For larger entity counts, use parallel processing
+        max_workers = min(10, len(entity_dicts))
+
+        # Simplified entity processor for parallelization
+        async def process_entity(entity_dict):
+            try:
+                # This simplified method only processes a single entity
+                processed, info = await processor.process_entities_for_page(
+                    page_number, full_text, mapping, [entity_dict]
+                )
+                return processed, info
+            except Exception as e:
+                error_id = SecurityAwareErrorHandler.log_processing_error(
+                    e, "entity_parallel_processing", f"page_{page_number}"
+                )
+                log_error(f"[BATCH] Error processing entity: {str(e)} (error_id: {error_id})")
+                return [], {"page": page_number, "sensitive": []}
+
+        # Process entities in parallel
+        tasks = [process_entity(entity) for entity in entity_dicts]
+        results = await asyncio.gather(*tasks, return_exceptions=False)
+
+        # Combine results
+        all_processed = []
+        all_sensitive = []
+
+        for processed_entities, page_info in results:
+            all_processed.extend(processed_entities)
+            all_sensitive.extend(page_info.get("sensitive", []))
+
+        # Create combined page redaction info
+        page_redaction_info = {
+            "page": page_number,
+            "sensitive": all_sensitive
+        }
+
+        return all_processed, page_redaction_info
+
+    @classmethod
+    async def validate_batch_files_optimized(
+        cls,
+        files: List[UploadFile],
+        allowed_types: Optional[Set[str]] = None,
+        max_size_mb: int = 25,
+        max_batch_size: int = 10
+    ) -> AsyncGenerator[List[Tuple[UploadFile, str, bytes, str]], None]:
+        """
+        Validate and process batch files with optimized resource management.
+
+        This generator validates files in batches to prevent memory pressure,
+        creates temporary files for large content, and yields batches of validated files.
+
+        Args:
+            files: List of uploaded files to validate
+            allowed_types: Set of allowed MIME types
+            max_size_mb: Maximum file size in MB
+            max_batch_size: Maximum number of files to process in each batch
+
+        Yields:
+            Batches of tuples (file, tmp_path or None, content, safe_filename)
+        """
+        if not files:
+            return
+
+        # Set default allowed types
+        if allowed_types is None:
+            allowed_types = {
+                "application/pdf",
+                "text/plain",
+                "text/csv",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            }
+
+        max_size_bytes = max_size_mb * 1024 * 1024
+
+        # Process files in batches for memory efficiency
+        for batch_start in range(0, len(files), max_batch_size):
+            batch_end = min(batch_start + max_batch_size, len(files))
+            current_batch = files[batch_start:batch_end]
+            valid_files = []
+
+            log_info(f"[BATCH] Validating file batch {batch_start+1}-{batch_end} of {len(files)}")
+
+            for file in current_batch:
+                try:
+                    # Validate content type
+                    content_type = file.content_type or "application/octet-stream"
+                    if not validate_mime_type(content_type, allowed_types):
+                        log_warning(f"[BATCH] Skipping file with unsupported type: {file.filename} ({content_type})")
+                        continue
+
+                    # Check file size and determine processing approach
+                    await file.seek(0)
+                    content = await file.read()
+
+                    if len(content) > max_size_bytes:
+                        log_warning(f"[BATCH] File too large: {file.filename} ({len(content)/1024/1024:.1f} MB > {max_size_mb} MB)")
+                        continue
+
+                    # Get sanitized filename
+                    safe_filename = sanitize_filename(file.filename or "unnamed_file")
+
+                    # For large files, use temporary file storage
+                    tmp_path = None
+                    if len(content) > 5 * 1024 * 1024:  # 5MB threshold
+                        # Create a temporary file
+                        tmp_path = await SecureTempFileManager.create_secure_temp_file_async(
+                            content=content,
+                            prefix="batch_",
+                            suffix=os.path.splitext(safe_filename)[1]
+                        )
+                        valid_files.append((file, tmp_path, content, safe_filename))
+                    else:
+                        # Keep small files in memory
+                        valid_files.append((file, None, content, safe_filename))
+
+                except Exception as e:
+                    error_id = SecurityAwareErrorHandler.log_processing_error(
+                        e, "batch_file_validation", file.filename or "unnamed_file"
+                    )
+                    log_error(f"[BATCH] Error validating file {file.filename}: {str(e)} (error_id: {error_id})")
+
+            if valid_files:
+                yield valid_files
+
+            # Force garbage collection after each batch
+            import gc
+            gc.collect()
 
 
 async def validate_batch_files_optimized(
-        files: List[UploadFile],
-        allowed_types: Optional[Set[str]] = None,
-        max_batch_size: int = MAX_BATCH_SIZE_BYTES
-) -> AsyncGenerator[List[Tuple[UploadFile, Optional[str], bytes, str]], None]:
+    files: List[UploadFile],
+    allowed_types: Optional[Set[str]] = None,
+    max_size_mb: int = 25
+) -> AsyncGenerator[List[Tuple[UploadFile, str, bytes, str]], None]:
     """
-    Validate batch files and yield a list of valid files along with their content and safe filename.
-    Uses in-memory processing where possible for improved security and performance.
+    Backward-compatible wrapper for BatchProcessingHelper.validate_batch_files_optimized.
 
     Args:
-        files: List of uploaded files
-        allowed_types: Set of allowed MIME types (if None, all types are allowed)
-        max_batch_size: Maximum total batch size in bytes
+        files: List of uploaded files to validate
+        allowed_types: Set of allowed MIME types
+        max_size_mb: Maximum file size in MB
 
     Yields:
-        List of tuples: (file, tmp_path_or_None, file_content, safe_filename)
+        Batches of tuples (file, tmp_path or None, content, safe_filename)
     """
-    if not files:
-        raise ValueError("No files provided")
+    async for batch in BatchProcessingHelper.validate_batch_files_optimized(
+        files, allowed_types, max_size_mb
+    ):
+        yield batch
 
-    total_size = 0
-    valid_files = []
 
-    try:
-        for file in files:
-            try:
-                # Read file content
-                await file.seek(0)
-                content = await file.read()
+def get_optimal_batch_size(file_count: int, total_bytes: int = 0) -> int:
+    """
+    Backward-compatible wrapper for BatchProcessingHelper.get_optimal_batch_size.
 
-                # Update total size and check limit
-                file_size = len(content)
-                total_size += file_size
-                if total_size > max_batch_size:
-                    raise ValueError(f"Total batch size exceeds limit of {max_batch_size // (1024 * 1024)}MB")
+    Args:
+        file_count: Number of files to process
+        total_bytes: Total size of all files in bytes
 
-                # Validate MIME type
-                content_type = file.content_type or "application/octet-stream"
-                if allowed_types and not validate_mime_type(content_type, allowed_types):
-                    continue
-
-                # Get safe filename
-                safe_filename = sanitize_filename(file.filename) if file.filename else f"unnamed_file"
-
-                # Determine if we should use in-memory processing or temporary file
-                tmp_path = None
-                if "pdf" not in content_type.lower():
-                    # For non-PDFs, create a temporary file
-                    tmp_path = await SecureTempFileManager.create_secure_temp_file_async(
-                        suffix=os.path.splitext(safe_filename)[1] or ".tmp",
-                        content=content
-                    )
-
-                valid_files.append((file, tmp_path, content, safe_filename))
-
-                # Reset file position for potential reuse
-                await file.seek(0)
-            except Exception as e:
-                SecurityAwareErrorHandler.log_processing_error(
-                    e, "file_validation", file.filename or "unknown_file"
-                )
-
-        if not valid_files:
-            raise ValueError("No valid files provided for processing")
-
-        yield valid_files
-    finally:
-        # Clean up temporary files
-        for _, tmp_path, _, _ in valid_files:
-            if tmp_path and os.path.exists(tmp_path):
-                try:
-                    await SecureTempFileManager.secure_delete_file_async(tmp_path)
-                except Exception:
-                    pass
+    Returns:
+        Optimal number of parallel workers
+    """
+    return BatchProcessingHelper.get_optimal_batch_size(file_count, total_bytes)

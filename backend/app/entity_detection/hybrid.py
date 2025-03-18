@@ -10,13 +10,14 @@ import time
 from typing import Dict, Any, List, Optional, Tuple
 
 from backend.app.domain.interfaces import EntityDetector
+from backend.app.services.initialization_service import initialization_service
+from backend.app.utils.data_minimization import minimize_extracted_data
+from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers import EntityUtils
 from backend.app.utils.logger import log_info, log_warning, log_error
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.data_minimization import minimize_extracted_data
-from backend.app.utils.secure_logging import log_sensitive_operation
 from backend.app.utils.processing_records import record_keeper
-from backend.app.services.initialization_service import initialization_service
+from backend.app.utils.secure_logging import log_sensitive_operation
+from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
 
 class HybridEntityDetector(EntityDetector):
@@ -33,6 +34,7 @@ class HybridEntityDetector(EntityDetector):
     - Maintains GDPR compliance records
     - Provides enhanced security features
     - Robust error handling
+    - Improved synchronization to prevent deadlocks
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -48,6 +50,13 @@ class HybridEntityDetector(EntityDetector):
         self._last_used = self._initialization_time
         self._total_calls = 0
         self._total_entities_detected = 0
+
+        # Add AsyncTimeoutLock with appropriate priority
+        self._detector_lock = AsyncTimeoutLock(
+            name="hybrid_detector_lock",
+            priority=LockPriority.MEDIUM,
+            timeout=30.0
+        )
 
         # If pre-created detectors are provided, use them directly
         if "detectors" in config and isinstance(config["detectors"], list):
@@ -107,16 +116,16 @@ class HybridEntityDetector(EntityDetector):
         # Apply data minimization principles
         minimized_data = minimize_extracted_data(extracted_data)
 
-        # Track detector usage
-        self._total_calls += 1
-        self._last_used = start_time
+        # Track detector usage - use async lock
+        async with self._detector_lock.acquire_timeout(timeout=5.0):
+            self._total_calls += 1
+            self._last_used = start_time
 
         # Track processing for GDPR compliance
         operation_type = "hybrid_detection"
         document_type = "document"
 
         # For storing results from each engine
-        detector_results = []
         success_count = 0
         failure_count = 0
 
@@ -126,17 +135,42 @@ class HybridEntityDetector(EntityDetector):
             detector_start = time.time()
 
             try:
+                # Use timeout handling
                 if hasattr(detector, 'detect_sensitive_data_async'):
-                    # Use async version if available
-                    result = await detector.detect_sensitive_data_async(
-                        minimized_data, requested_entities
-                    )
+                    # Use async version with timeout
+                    try:
+                        result = await asyncio.wait_for(
+                            detector.detect_sensitive_data_async(
+                                minimized_data, requested_entities
+                            ),
+                            timeout=60.0  # 60 second timeout for detector
+                        )
+                    except asyncio.TimeoutError:
+                        log_warning(f"[WARNING] Timeout in {engine_name} detector")
+                        return {
+                            "success": False,
+                            "engine": engine_name,
+                            "error": "Detection timeout",
+                            "processing_time": time.time() - detector_start
+                        }
                 else:
-                    # Fall back to sync version if needed
-                    result = await asyncio.to_thread(
-                        detector.detect_sensitive_data,
-                        minimized_data, requested_entities
-                    )
+                    # Fall back to sync version with timeout
+                    try:
+                        result = await asyncio.wait_for(
+                            asyncio.to_thread(
+                                detector.detect_sensitive_data,
+                                minimized_data, requested_entities
+                            ),
+                            timeout=60.0  # 60 second timeout for detector
+                        )
+                    except asyncio.TimeoutError:
+                        log_warning(f"[WARNING] Timeout in {engine_name} detector (sync mode)")
+                        return {
+                            "success": False,
+                            "engine": engine_name,
+                            "error": "Detection timeout in sync mode",
+                            "processing_time": time.time() - detector_start
+                        }
 
                 # Calculate detector time
                 detector_time = time.time() - detector_start
@@ -177,8 +211,16 @@ class HybridEntityDetector(EntityDetector):
         # Create tasks for all detectors
         tasks = [process_with_detector(detector) for detector in self.detectors]
 
-        # Run all detector tasks concurrently
-        results = await asyncio.gather(*tasks)
+        # Run all detector tasks concurrently with overall timeout
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=False),
+                timeout=120.0  # Overall 2-minute timeout for all detectors
+            )
+        except asyncio.TimeoutError:
+            log_error("[ERROR] Global timeout for all detection engines")
+            # Return empty results to avoid crashing
+            return "", [], {"pages": []}
 
         # Process results
         for result in results:
@@ -212,8 +254,9 @@ class HybridEntityDetector(EntityDetector):
             # Return empty results to avoid crashing
             return "", [], {"pages": []}
 
-        # Merge redaction mappings
+
         merged_mapping = EntityUtils.merge_redaction_mappings(all_redaction_mappings)
+
 
         # Remove duplicate entities
         from backend.app.utils.sanitize_utils import deduplicate_entities
@@ -222,8 +265,9 @@ class HybridEntityDetector(EntityDetector):
         # Calculate total processing time
         total_time = time.time() - start_time
 
-        # Track entity count
-        self._total_entities_detected += len(all_entities)
+        # Track entity count using async lock
+        async with self._detector_lock.acquire_timeout(timeout=5.0):
+            self._total_entities_detected += len(all_entities)
 
         # Record the overall processing operation for GDPR compliance
         record_keeper.record_processing(
@@ -276,11 +320,19 @@ class HybridEntityDetector(EntityDetector):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                return loop.run_until_complete(
-                    self.detect_sensitive_data_async(minimized_data, requested_entities)
-                )
+                # Add timeout for overall sync detection
+                async def run_with_timeout():
+                    return await asyncio.wait_for(
+                        self.detect_sensitive_data_async(minimized_data, requested_entities),
+                        timeout=180.0  # 3-minute timeout for overall sync detection
+                    )
+
+                return loop.run_until_complete(run_with_timeout())
             finally:
                 loop.close()
+        except asyncio.TimeoutError:
+            log_error("[ERROR] Global timeout in hybrid entity detection (sync wrapper)")
+            return "", [], {"pages": []}
         except RuntimeError as e:
             if "cannot schedule new futures after interpreter shutdown" in str(e):
                 # Handle the case where we're shutting down
@@ -303,14 +355,37 @@ class HybridEntityDetector(EntityDetector):
         Returns:
             Dictionary with status information
         """
-        return {
-            "initialized": True,
-            "initialization_time": self._initialization_time,
-            "last_used": self._last_used,
-            "idle_time": time.time() - self._last_used if self._last_used else None,
-            "total_calls": self._total_calls,
-            "total_entities_detected": self._total_entities_detected,
-            "detectors": [type(d).__name__ for d in self.detectors],
-            "detector_count": len(self.detectors),
-            "config": {k: v for k, v in self.config.items() if k != "detectors"}
-        }
+        # Create async function to get status with lock
+        async def get_status_async():
+            async with self._detector_lock.acquire_timeout(timeout=1.0):
+                return {
+                    "initialized": True,
+                    "initialization_time": self._initialization_time,
+                    "last_used": self._last_used,
+                    "idle_time": time.time() - self._last_used if self._last_used else None,
+                    "total_calls": self._total_calls,
+                    "total_entities_detected": self._total_entities_detected,
+                    "detectors": [type(d).__name__ for d in self.detectors],
+                    "detector_count": len(self.detectors),
+                    "config": {k: v for k, v in self.config.items() if k != "detectors"}
+                }
+
+        # Run the async function in a new event loop
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(
+                    asyncio.wait_for(get_status_async(), timeout=2.0)
+                )
+            finally:
+                loop.close()
+        except (asyncio.TimeoutError, Exception):
+            # Return limited information if lock acquisition fails
+            return {
+                "initialized": True,
+                "initialization_time": self._initialization_time,
+                "detectors": [type(d).__name__ for d in self.detectors],
+                "detector_count": len(self.detectors),
+                "lock_acquisition_failed": True
+            }

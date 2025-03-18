@@ -24,6 +24,7 @@ from backend.app.utils.file_validation import calculate_file_hash, sanitize_file
 from backend.app.utils.logger import log_info, log_warning
 from backend.app.utils.memory_management import memory_monitor
 from backend.app.utils.retention_management import retention_manager
+from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority, AsyncTimeoutLock
 
 _logger = logging.getLogger("secure_file_utils")
 T = TypeVar('T')
@@ -54,14 +55,14 @@ class SecureTempFileManager:
 
     # Enable buffer pooling (true/false via env)
     _use_buffer_pool = os.environ.get("USE_BUFFER_POOL", "true").lower() == "true"
-    _buffer_pool_lock = asyncio.Lock()  # Async lock for buffer pool operations
+    _buffer_pool_lock = AsyncTimeoutLock("buffer_pool_lock", LockPriority.MEDIUM, 5.0)  # Async lock with timeout for buffer pool
 
     # Initialize buffer pool using BufferPool class from buffer_pool.py
     _buffer_pool_instance = None
 
     # Registry of all created temporary files for cleanup tracking
     _temp_files_registry = set()
-    _registry_lock = asyncio.Lock()
+    _registry_lock = TimeoutLock("temp_files_registry_lock", LockPriority.MEDIUM, 3.0)  # Timeout lock for registry operations
 
     @staticmethod
     async def _get_buffer_pool():
@@ -101,15 +102,20 @@ class SecureTempFileManager:
             return io.BytesIO()
 
         try:
-            # Get buffer from pool
-            buffer_pool = await SecureTempFileManager._get_buffer_pool()
-            memview = await buffer_pool.get_buffer(size)
+            # Acquire lock with timeout - no more blocking forever
+            async with SecureTempFileManager._buffer_pool_lock.acquire_timeout(timeout=5.0):
+                # Get buffer from pool
+                buffer_pool = await SecureTempFileManager._get_buffer_pool()
+                memview = await buffer_pool.get_buffer(size)
 
-            # Convert memoryview to BytesIO
-            buffer = io.BytesIO()
-            buffer.write(bytes(memview))
-            buffer.seek(0)
-            return buffer
+                # Convert memoryview to BytesIO
+                buffer = io.BytesIO()
+                buffer.write(bytes(memview))
+                buffer.seek(0)
+                return buffer
+        except TimeoutError:
+            log_warning("[SECURITY] Timeout acquiring buffer pool lock, creating new buffer")
+            return io.BytesIO()
         except Exception as e:
             # Fall back to creating a new buffer
             log_warning(f"[SECURITY] Buffer pool error: {e}, creating new buffer")
@@ -136,10 +142,15 @@ class SecureTempFileManager:
                 buffer.close()
                 return
 
-            # Return to pool
-            buffer_pool = await SecureTempFileManager._get_buffer_pool()
-            buffer.seek(0)
-            await buffer_pool.return_buffer(memoryview(buffer.getbuffer()))
+            # Acquire lock with timeout
+            async with SecureTempFileManager._buffer_pool_lock.acquire_timeout(timeout=2.0):
+                # Return to pool
+                buffer_pool = await SecureTempFileManager._get_buffer_pool()
+                buffer.seek(0)
+                await buffer_pool.return_buffer(memoryview(buffer.getbuffer()))
+        except TimeoutError:
+            log_warning("[SECURITY] Timeout acquiring buffer pool lock, closing buffer")
+            buffer.close()
         except Exception as e:
             # Just close if there's an error
             buffer.close()
@@ -154,8 +165,15 @@ class SecureTempFileManager:
             file_path: Path to the temporary file
             retention_seconds: Optional retention period in seconds
         """
-        async with SecureTempFileManager._registry_lock:
-            SecureTempFileManager._temp_files_registry.add(file_path)
+        try:
+            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=3.0):
+                SecureTempFileManager._temp_files_registry.add(file_path)
+        except TimeoutError:
+            log_warning(f"[SECURITY] Timeout registering temp file {os.path.basename(file_path)}, "
+                       "continuing without registry tracking")
+            # Even if registry tracking fails, still register with retention manager
+        except Exception as e:
+            log_warning(f"[SECURITY] Error registering temp file: {e}")
 
         # Register with retention manager if retention period specified
         if retention_seconds is not None:
@@ -171,11 +189,16 @@ class SecureTempFileManager:
         Args:
             file_path: Path to the temporary file
         """
-        async with SecureTempFileManager._registry_lock:
-            if file_path in SecureTempFileManager._temp_files_registry:
-                SecureTempFileManager._temp_files_registry.remove(file_path)
+        try:
+            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=2.0):
+                if file_path in SecureTempFileManager._temp_files_registry:
+                    SecureTempFileManager._temp_files_registry.remove(file_path)
+        except TimeoutError:
+            log_warning(f"[SECURITY] Timeout unregistering temp file {os.path.basename(file_path)}")
+        except Exception as e:
+            log_warning(f"[SECURITY] Error unregistering temp file: {e}")
 
-        # Unregister from retention manager
+        # Always unregister from retention manager
         retention_manager.unregister_file(file_path)
 
     @staticmethod
@@ -215,6 +238,13 @@ class SecureTempFileManager:
                     temp_file.name,
                     retention_seconds or TEMP_FILE_RETENTION_SECONDS
                 )
+                # Try to also register in our tracking system
+                try:
+                    with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0):
+                        SecureTempFileManager._temp_files_registry.add(temp_file.name)
+                except TimeoutError:
+                    # Non-critical if this fails
+                    pass
 
             trace_id = f"temp_file_{time.time()}_{hashlib.md5(temp_file.name.encode()).hexdigest()[:6]}"
             file_size = os.path.getsize(temp_file.name) if os.path.exists(temp_file.name) else 0
@@ -230,6 +260,14 @@ class SecureTempFileManager:
                     asyncio.create_task(SecureTempFileManager._unregister_temp_file(temp_file.name))
                 else:
                     retention_manager.unregister_file(temp_file.name)
+                    # Also try to unregister from our tracking
+                    try:
+                        with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0):
+                            if temp_file.name in SecureTempFileManager._temp_files_registry:
+                                SecureTempFileManager._temp_files_registry.remove(temp_file.name)
+                    except TimeoutError:
+                        # Non-critical if this fails
+                        pass
 
                 log_info(f"[SECURITY] Removed temporary file: {os.path.basename(temp_file.name)}")
 
@@ -354,15 +392,12 @@ class SecureTempFileManager:
             )
 
             # Also register in our tracking
-            if loop and loop.is_running():
-                asyncio.create_task(SecureTempFileManager._register_temp_file(
-                    temp_file.name, retention_seconds
-                ))
-            else:
-                with asyncio.Runner() as runner:
-                    runner.run(SecureTempFileManager._register_temp_file(
-                        temp_file.name, retention_seconds
-                    ))
+            try:
+                with SecureTempFileManager._registry_lock.acquire_timeout(timeout=2.0):
+                    SecureTempFileManager._temp_files_registry.add(temp_file.name)
+            except TimeoutError:
+                log_warning(f"[SECURITY] Timeout registering temp file {os.path.basename(temp_file.name)}, "
+                           "continuing without registry tracking")
 
             log_info(f"[SECURITY] Created secure temporary file: {os.path.basename(temp_file.name)} "
                      f"({len(content) / 1024 if content else 0:.1f}KB) [trace_id={trace_id}]")
@@ -417,17 +452,12 @@ class SecureTempFileManager:
         )
 
         # Also register in our tracking
-        loop = asyncio.get_event_loop() if asyncio.get_event_loop_policy().get_event_loop().is_running() else None
-        if loop and loop.is_running():
-            asyncio.create_task(SecureTempFileManager._register_temp_file(
-                temp_dir, retention_seconds
-            ))
-        else:
-            # Use the Runner API to avoid "no running event loop" errors
-            with asyncio.Runner() as runner:
-                runner.run(SecureTempFileManager._register_temp_file(
-                    temp_dir, retention_seconds
-                ))
+        try:
+            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=2.0):
+                SecureTempFileManager._temp_files_registry.add(temp_dir)
+        except TimeoutError:
+            log_warning(f"[SECURITY] Timeout registering temp dir {os.path.basename(temp_dir)}, "
+                       "continuing without registry tracking")
 
         log_info(f"[SECURITY] Created secure temporary directory: {os.path.basename(temp_dir)}")
         return temp_dir
@@ -460,17 +490,16 @@ class SecureTempFileManager:
             os.unlink(file_path)
 
             # Unregister from our tracking and retention manager
-            loop = asyncio.get_event_loop() if asyncio.get_event_loop_policy().get_event_loop().is_running() else None
-            if loop and loop.is_running():
-                asyncio.create_task(SecureTempFileManager._unregister_temp_file(file_path))
-            else:
-                retention_manager.unregister_file(file_path)
-                # Attempt to unregister from our tracking as well
-                try:
-                    with asyncio.Runner() as runner:
-                        runner.run(SecureTempFileManager._unregister_temp_file(file_path))
-                except Exception:
-                    pass
+            try:
+                with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0):
+                    if file_path in SecureTempFileManager._temp_files_registry:
+                        SecureTempFileManager._temp_files_registry.remove(file_path)
+            except TimeoutError:
+                # Continue even if unregistering fails
+                pass
+
+            # Always unregister from retention manager
+            retention_manager.unregister_file(file_path)
 
             _logger.debug(f"Securely deleted file: {os.path.basename(file_path)}")
             return True
@@ -522,17 +551,16 @@ class SecureTempFileManager:
             shutil.rmtree(dir_path, ignore_errors=True)
 
             # Unregister from our tracking and retention manager
-            loop = asyncio.get_event_loop() if asyncio.get_event_loop_policy().get_event_loop().is_running() else None
-            if loop and loop.is_running():
-                asyncio.create_task(SecureTempFileManager._unregister_temp_file(dir_path))
-            else:
-                retention_manager.unregister_file(dir_path)
-                # Attempt to unregister from our tracking as well
-                try:
-                    with asyncio.Runner() as runner:
-                        runner.run(SecureTempFileManager._unregister_temp_file(dir_path))
-                except Exception:
-                    pass
+            try:
+                with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0):
+                    if dir_path in SecureTempFileManager._temp_files_registry:
+                        SecureTempFileManager._temp_files_registry.remove(dir_path)
+            except TimeoutError:
+                # Continue even if unregistering fails
+                pass
+
+            # Always unregister from retention manager
+            retention_manager.unregister_file(dir_path)
 
             log_info(f"[SECURITY] Securely deleted directory: {os.path.basename(dir_path)}")
             return True
@@ -858,9 +886,13 @@ class SecureTempFileManager:
         """
         cleaned_count = 0
 
-        async with SecureTempFileManager._registry_lock:
-            # Make a copy of the set to avoid modification during iteration
-            files_to_clean = set(SecureTempFileManager._temp_files_registry)
+        try:
+            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=10.0):
+                # Make a copy of the set to avoid modification during iteration
+                files_to_clean = set(SecureTempFileManager._temp_files_registry)
+        except TimeoutError:
+            log_warning("[SECURITY] Timeout acquiring registry lock for cleanup, using empty set")
+            files_to_clean = set()
 
         for file_path in files_to_clean:
             if os.path.exists(file_path):
@@ -875,4 +907,3 @@ class SecureTempFileManager:
                     cleaned_count += 1
 
         log_info(f"[SECURITY] Cleaned up {cleaned_count} temporary files/directories")
-        return cleaned_count

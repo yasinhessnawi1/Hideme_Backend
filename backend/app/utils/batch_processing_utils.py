@@ -293,9 +293,20 @@ async def process_batch_in_memory(
     tasks = [process_file(file) for file in files]
     results = await asyncio.gather(*tasks)
 
-    # Update batch summary
-    batch_summary["successful"] = sum(1 for r in results if r.get("status") == "success")
-    batch_summary["failed"] = len(results) - batch_summary["successful"]
+    # Extract result dictionaries, handling both tuple and dictionary cases
+    result_dicts = []
+    for r in results:
+        if isinstance(r, tuple) and len(r) >= 2 and isinstance(r[1], dict):
+            # If r is a tuple (index, dict), extract the dict
+            result_dicts.append(r[1])
+        elif isinstance(r, dict):
+            # If r is already a dict, use it directly
+            result_dicts.append(r)
+        # Skip any other types
+
+    # Update batch summary using the extracted dictionaries
+    batch_summary["successful"] = sum(1 for r in result_dicts if r.get("status") == "success")
+    batch_summary["failed"] = len(result_dicts) - batch_summary["successful"]
     batch_summary["total_time"] = time.time() - start_time
     batch_summary["file_results"] = [
         {
@@ -304,7 +315,7 @@ async def process_batch_in_memory(
             "output_file": r.get("output_file") if r.get("status") == "success" else None,
             "error": r.get("error") if r.get("status") == "error" else None
         }
-        for r in results
+        for r in result_dicts
     ]
 
     # Add batch summary to ZIP
@@ -491,6 +502,17 @@ async def process_batch_with_temp_files(
     tasks = [redact_file(file_tuple, i) for i, file_tuple in enumerate(valid_files)]
     results = await asyncio.gather(*tasks)
 
+    # Extract result dictionaries, handling both tuple and dictionary cases
+    result_dicts = []
+    for r in results:
+        if isinstance(r, tuple) and len(r) >= 2 and isinstance(r[1], dict):
+            # If r is a tuple (index, dict), extract the dict
+            result_dicts.append(r[1])
+        elif isinstance(r, dict):
+            # If r is already a dict, use it directly
+            result_dicts.append(r)
+        # Skip any other types
+
     # Create ZIP file with results
     zip_tmp_path = await SecureTempFileManager.create_secure_temp_file_async(
         suffix=".zip",
@@ -500,8 +522,8 @@ async def process_batch_with_temp_files(
     # Create summary of processing results
     batch_summary = {
         "total_files": len(files),
-        "successful": sum(1 for r in results if r.get("status") == "success"),
-        "failed": sum(1 for r in results if r.get("status") != "success"),
+        "successful": sum(1 for r in result_dicts if r.get("status") == "success"),
+        "failed": sum(1 for r in result_dicts if r.get("status") != "success"),
         "total_time": time.time() - start_time,
         "workers": optimal_workers,
         "file_results": [
@@ -511,13 +533,13 @@ async def process_batch_with_temp_files(
                 "output_file": r.get("output_file") if r.get("status") == "success" else None,
                 "error": r.get("error") if r.get("status") == "error" else None
             }
-            for r in results
+            for r in result_dicts
         ]
     }
 
     # Write ZIP file to disk including the batch summary
     with zipfile.ZipFile(zip_tmp_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for result, file_meta in zip(results, file_metas):
+        for result, file_meta in zip(result_dicts, file_metas):
             if result.get("status") == "success":
                 output_path = file_meta["output_path"]
                 if os.path.exists(output_path):

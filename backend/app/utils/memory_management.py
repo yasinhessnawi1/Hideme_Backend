@@ -6,15 +6,24 @@ during document processing operations, ensuring efficient resource utilization
 and preventing memory-related vulnerabilities with adaptive thresholds based on
 system resources.
 """
+"""
+Memory management utilities with enhanced synchronization for document processing.
+"""
 import asyncio
-import os
 import gc
-import psutil
 import logging
+import os
 import threading
 import time
-from typing import Optional, Dict, Any, Callable, List, TypeVar, Awaitable
 from functools import wraps
+from typing import Optional, Dict, Any, Callable, List, TypeVar, Awaitable
+
+import psutil
+
+# Import enhanced synchronization utilities
+from backend.app.utils.synchronization_utils import (
+    TimeoutLock, LockPriority
+)
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -25,19 +34,17 @@ T = TypeVar('T')
 
 class MemoryMonitor:
     """
-    Memory usage monitoring and management for high-throughput document processing.
+    Memory usage monitoring and management with enhanced thread safety.
 
-    This class provides tools to monitor memory usage, enforce memory limits,
-    and trigger cleanup when memory usage exceeds configured thresholds.
-    Features include adaptive thresholds based on system resources and
-    progressive cleanup strategies.
+    Uses TimeoutLock for thread-safe operations on memory statistics with deadlock
+    prevention and detailed lock usage monitoring.
     """
 
     def __init__(
             self,
             memory_threshold: float = 80.0,  # 80% memory threshold
             critical_threshold: float = 90.0,  # 90% critical threshold
-            check_interval: float = 5.0,       # 5 seconds check interval
+            check_interval: float = 5.0,  # 5 seconds check interval
             enable_monitoring: bool = True,
             adaptive_thresholds: bool = True
     ):
@@ -60,7 +67,11 @@ class MemoryMonitor:
         self.adaptive_thresholds = adaptive_thresholds
         self._monitor_thread = None
         self._stop_monitor = threading.Event()
-        self._lock = threading.Lock()
+
+        # Replace simple lock with enhanced TimeoutLock
+        self._lock = TimeoutLock("memory_monitor_lock", priority=LockPriority.MEDIUM,
+                                 timeout=5.0, reentrant=True)
+
         self._last_gc_time = 0
         self._gc_interval = 60  # Minimum seconds between full garbage collections
 
@@ -91,10 +102,22 @@ class MemoryMonitor:
         """Update available memory statistics from the system."""
         try:
             system_memory = psutil.virtual_memory()
-            self.memory_stats["available_memory_mb"] = system_memory.available / (1024 * 1024)
+
+            # Use timeout lock with context manager
+            with self._lock.acquire_timeout(timeout=1.0):
+                self.memory_stats["available_memory_mb"] = system_memory.available / (1024 * 1024)
+
+        except TimeoutError:
+            logger.warning("Timeout acquiring lock to update available memory - continuing with stale data")
         except Exception as e:
             logger.error(f"Error updating available memory: {str(e)}")
-            self.memory_stats["available_memory_mb"] = 0
+
+            # Even if we couldn't acquire the lock, try a fallback update
+            # This won't be thread-safe but is better than no update
+            try:
+                self.memory_stats["available_memory_mb"] = 0
+            except:
+                pass
 
     def _adjust_thresholds_based_on_system(self) -> None:
         """
@@ -109,32 +132,46 @@ class MemoryMonitor:
             available_memory_gb = system_memory.available / (1024 * 1024 * 1024)
             usage_percent = system_memory.percent
 
+            # Calculate new thresholds
+            new_memory_threshold = self.memory_threshold
+            new_critical_threshold = self.critical_threshold
+
             if total_memory_gb < 4:  # Low memory system (<4GB)
-                self.memory_threshold = max(60.0, self.base_memory_threshold - 20)
-                self.critical_threshold = max(75.0, self.base_critical_threshold - 15)
+                new_memory_threshold = max(60.0, self.base_memory_threshold - 20)
+                new_critical_threshold = max(75.0, self.base_critical_threshold - 15)
             elif total_memory_gb < 8:  # Medium memory system (4-8GB)
-                self.memory_threshold = max(70.0, self.base_memory_threshold - 10)
-                self.critical_threshold = max(85.0, self.base_critical_threshold - 5)
+                new_memory_threshold = max(70.0, self.base_memory_threshold - 10)
+                new_critical_threshold = max(85.0, self.base_critical_threshold - 5)
             elif total_memory_gb > 16:  # High memory system (>16GB)
-                self.memory_threshold = min(85.0, self.base_memory_threshold + 5)
-                self.critical_threshold = min(95.0, self.base_critical_threshold + 5)
+                new_memory_threshold = min(85.0, self.base_memory_threshold + 5)
+                new_critical_threshold = min(95.0, self.base_critical_threshold + 5)
 
             # Further adjust if system is already under pressure
             if usage_percent > 70:
-                self.memory_threshold = max(60.0, self.memory_threshold - 10)
-                self.critical_threshold = max(75.0, self.critical_threshold - 10)
+                new_memory_threshold = max(60.0, new_memory_threshold - 10)
+                new_critical_threshold = max(75.0, new_critical_threshold - 10)
 
-            logger.info(
-                f"Adjusted memory thresholds: memory_threshold={self.memory_threshold:.1f}%, "
-                f"critical_threshold={self.critical_threshold:.1f}%, total_memory={total_memory_gb:.1f}GB, "
-                f"available_memory={available_memory_gb:.1f}GB"
-            )
-            self.memory_stats["system_threshold_adjustments"] += 1
+            # Update thresholds with lock protection
+            try:
+                with self._lock.acquire_timeout(timeout=2.0):
+                    self.memory_threshold = new_memory_threshold
+                    self.critical_threshold = new_critical_threshold
+                    self.memory_stats["system_threshold_adjustments"] += 1
+
+                    logger.info(
+                        f"Adjusted memory thresholds: memory_threshold={self.memory_threshold:.1f}%, "
+                        f"critical_threshold={self.critical_threshold:.1f}%, total_memory={total_memory_gb:.1f}GB, "
+                        f"available_memory={available_memory_gb:.1f}GB"
+                    )
+            except TimeoutError:
+                logger.warning("Timeout acquiring lock to adjust thresholds - will retry later")
 
         except Exception as e:
             logger.error(f"Error adjusting thresholds: {str(e)}")
-            self.memory_threshold = self.base_memory_threshold
-            self.critical_threshold = self.base_critical_threshold
+            # If we can't adjust, keep current thresholds
+            with self._lock.acquire_timeout(timeout=1.0):
+                self.memory_threshold = self.base_memory_threshold
+                self.critical_threshold = self.base_critical_threshold
 
     def start_monitoring(self) -> None:
         """Start the background memory monitoring thread."""
@@ -164,25 +201,45 @@ class MemoryMonitor:
                 self._update_available_memory()
                 current_usage = self.get_memory_usage()
 
-                with self._lock:
-                    self.memory_stats["current_usage"] = current_usage
-                    self.memory_stats["checks_count"] += 1
-                    self.memory_stats["last_check_time"] = time.time()
-                    if current_usage > self.memory_stats["peak_usage"]:
-                        self.memory_stats["peak_usage"] = current_usage
-                    self.memory_stats["average_usage"] = (
-                        (self.memory_stats["average_usage"] * (self.memory_stats["checks_count"] - 1) + current_usage) /
-                        self.memory_stats["checks_count"]
-                    )
+                # Update memory stats with lock protection
+                lock_acquired = False
+                try:
+                    with self._lock.acquire_timeout(timeout=1.0):
+                        lock_acquired = True
+                        self.memory_stats["current_usage"] = current_usage
+                        self.memory_stats["checks_count"] += 1
+                        self.memory_stats["last_check_time"] = time.time()
+                        if current_usage > self.memory_stats["peak_usage"]:
+                            self.memory_stats["peak_usage"] = current_usage
 
+                        # Calculate average with protection against division by zero
+                        if self.memory_stats["checks_count"] > 1:
+                            self.memory_stats["average_usage"] = (
+                                    (self.memory_stats["average_usage"] * (
+                                                self.memory_stats["checks_count"] - 1) + current_usage) /
+                                    self.memory_stats["checks_count"]
+                            )
+                        else:
+                            self.memory_stats["average_usage"] = current_usage
+                except TimeoutError:
+                    logger.warning("Timeout acquiring lock to update memory stats")
+
+                # Increment adaptive counter even if we couldn't acquire the lock
                 adaptive_counter += 1
+
+                # Periodically adjust thresholds if enabled
                 if self.adaptive_thresholds and adaptive_counter >= 60:
                     self._adjust_thresholds_based_on_system()
                     adaptive_counter = 0
 
-                if current_usage >= self.critical_threshold:
+                # Check if we need to perform cleanup
+                # Read thresholds with local variables to avoid lock during check
+                memory_threshold = self.memory_threshold
+                critical_threshold = self.critical_threshold
+
+                if current_usage >= critical_threshold:
                     self._emergency_cleanup()
-                elif current_usage >= self.memory_threshold:
+                elif current_usage >= memory_threshold:
                     self._perform_cleanup()
 
             except Exception as e:
@@ -211,8 +268,19 @@ class MemoryMonitor:
             A copy of the memory statistics dictionary.
         """
         self._update_available_memory()
-        with self._lock:
-            return self.memory_stats.copy()
+
+        try:
+            with self._lock.acquire_timeout(timeout=1.0):
+                # Return a copy to avoid threading issues
+                return self.memory_stats.copy()
+        except TimeoutError:
+            logger.warning("Timeout acquiring lock for memory stats - returning best-effort data")
+            # Return best-effort copy even if we can't acquire the lock
+            try:
+                return self.memory_stats.copy()
+            except:
+                # If even that fails, return an empty dict
+                return {}
 
     def should_use_memory_buffer(self, size_bytes: int) -> bool:
         """
@@ -225,8 +293,17 @@ class MemoryMonitor:
             True if an in-memory buffer should be used, False if disk buffering is preferred.
         """
         current_usage = self.get_memory_usage()
-        available_memory = self.memory_stats["available_memory_mb"] * 1024 * 1024
 
+        # Get available memory safely
+        try:
+            with self._lock.acquire_timeout(timeout=0.5):  # Short timeout for this non-critical operation
+                available_memory = self.memory_stats["available_memory_mb"] * 1024 * 1024
+        except TimeoutError:
+            # Fallback to a more conservative estimate if we can't get the lock
+            system_memory = psutil.virtual_memory()
+            available_memory = system_memory.available * 0.5  # Be conservative with the estimate
+
+        # Calculate max buffer size based on memory pressure
         if current_usage >= self.critical_threshold:
             max_buffer_size = min(1024 * 1024, int(available_memory * 0.01))
         elif current_usage >= self.memory_threshold:
@@ -248,6 +325,8 @@ class MemoryMonitor:
         The method logs the estimated memory freed after cleanup.
         """
         current_time = time.time()
+
+        # Get current usage outside the lock to minimize lock time
         current_usage = self.memory_stats["current_usage"]
 
         logger.warning(
@@ -265,7 +344,10 @@ class MemoryMonitor:
             gc.collect(generation=1)
 
         self._clear_application_caches()
-        freed = self.memory_stats["current_usage"] - self.get_memory_usage()
+
+        # Calculate freed memory
+        new_usage = self.get_memory_usage()
+        freed = current_usage - new_usage
         logger.info(f"Cleanup complete, freed {freed:.1f}% memory")
 
     def _emergency_cleanup(self) -> None:
@@ -275,16 +357,28 @@ class MemoryMonitor:
         This aggressive strategy includes full garbage collection, cache clearance,
         and additional memory freeing measures. It logs the outcome after cleanup.
         """
+        # Get current usage to avoid lock during cleanup initialization
+        current_usage = self.memory_stats["current_usage"]
+
         logger.error(
-            f"CRITICAL: Memory usage ({self.memory_stats['current_usage']:.1f}%) exceeded critical threshold {self.critical_threshold}%!"
+            f"CRITICAL: Memory usage ({current_usage:.1f}%) exceeded critical threshold {self.critical_threshold}%!"
         )
-        with self._lock:
-            self.memory_stats["emergency_cleanups"] += 1
+
+        # Update emergency cleanup count with lock protection
+        try:
+            with self._lock.acquire_timeout(timeout=1.0):
+                self.memory_stats["emergency_cleanups"] += 1
+        except TimeoutError:
+            logger.warning("Timeout acquiring lock to update emergency cleanup count")
+
+        # Perform emergency cleanup operations
         gc.collect(generation=2)
         self._clear_application_caches()
         self._free_additional_memory()
+
+        # Measure results
         new_usage = self.get_memory_usage()
-        freed_percent = self.memory_stats["current_usage"] - new_usage
+        freed_percent = current_usage - new_usage
         logger.warning(
             f"Emergency cleanup completed: freed {freed_percent:.1f}% memory. New usage: {new_usage:.1f}%"
         )
@@ -321,7 +415,6 @@ class MemoryMonitor:
 
 # Global memory monitor instance with adaptive thresholds
 memory_monitor = MemoryMonitor(adaptive_thresholds=True)
-
 
 def memory_optimized(threshold_mb: Optional[int] = None, adaptive: bool = True,
                      min_gc_interval: float = 10.0):

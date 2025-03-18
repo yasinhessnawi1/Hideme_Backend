@@ -18,6 +18,8 @@ from backend.app.utils.file_validation import MAX_PDF_SIZE_BYTES, validate_file_
 from backend.app.utils.memory_management import memory_optimized, memory_monitor
 from backend.app.document_processing.pdf import PDFTextExtractor, PDFRedactionService
 from backend.app.utils.secure_file_utils import SecureTempFileManager
+from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
+
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
@@ -26,6 +28,22 @@ router = APIRouter()
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 CHUNK_SIZE = 64 * 1024  # 64KB for streaming
 LARGE_PDF_THRESHOLD = 5 * 1024 * 1024  # 5MB threshold for streaming extraction
+
+# Create shared lock for PDF processing to prevent resource contention
+# Using class variable to ensure a single instance across the application
+_pdf_processing_lock = None
+
+
+def get_pdf_processing_lock():
+    """
+    Get the PDF processing lock, initializing it if needed.
+    This ensures a single lock instance is used across the application.
+    """
+    global _pdf_processing_lock
+    if _pdf_processing_lock is None:
+        _pdf_processing_lock = AsyncTimeoutLock("pdf_processing_lock", priority=LockPriority.MEDIUM)
+        log_info("[SYSTEM] PDF processing lock initialized")
+    return _pdf_processing_lock
 
 
 @router.post("/redact")
@@ -57,16 +75,11 @@ async def pdf_redact(
         )
 
     try:
-        # Read file content into memory using SecureTempFileManager
+        # Read file content into memory
         log_info(f"[SECURITY] Starting PDF redaction processing [operation_id={operation_id}]")
 
-        # Define a function to read the file
-        async def read_file_content():
-            contents = await file.read()
-            return contents
-
-        # Use SecureTempFileManager to process content
-        contents = await read_file_content()
+        # Read the file content
+        contents = await file.read()
 
         if len(contents) > MAX_PDF_SIZE_BYTES:
             log_warning(
@@ -105,32 +118,97 @@ async def pdf_redact(
 
         total_redactions = sum(len(page.get("sensitive", [])) for page in mapping_data.get("pages", []))
 
-        # Process the PDF using SecureTempFileManager
+        # Process the PDF - Get and use the shared lock instance
         redact_start = time.time()
-        try:
-            # Define a processor function for redaction
-            async def redaction_processor(content):
-                # Create a PDFRedactionService instance with the PDF content as bytes
-                redaction_service = PDFRedactionService(content)
-                # Apply redactions in memory and get the redacted content as bytes
-                return redaction_service.apply_redactions_to_memory(mapping_data)
+        pdf_lock = get_pdf_processing_lock()
 
-            # Use SecureTempFileManager for memory-efficient processing
-            redacted_content = await SecureTempFileManager.process_content_in_memory_async(
-                contents,
-                redaction_processor,
-                use_path=False,
-                extension=".pdf"
-            )
-            log_info(
-                f"[SECURITY] PDF redaction completed successfully: {total_redactions} redactions applied [operation_id={operation_id}]")
+        # Initialize redaction service outside the lock to minimize lock time
+        redaction_service = PDFRedactionService(contents)
 
-        except Exception as e:
-            log_error(f"[SECURITY] Error applying redactions: {str(e)} [operation_id={operation_id}]")
-            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-                e, "pdf_redaction_service", 500, file.filename
-            )
-            return JSONResponse(status_code=status_code, content=error_response)
+        # First try with no lock for small PDFs with few redactions
+        if len(contents) < 1024 * 1024 and total_redactions < 10:  # Less than 1MB and few redactions
+            try:
+                redacted_content = redaction_service.apply_redactions_to_memory(mapping_data)
+                log_info(
+                    f"[SECURITY] PDF redaction completed without lock (small file): {total_redactions} redactions applied [operation_id={operation_id}]")
+            except Exception as e:
+                # Fall back to using lock if direct processing fails
+                log_warning(
+                    f"[SECURITY] Direct PDF redaction failed, trying with lock: {str(e)} [operation_id={operation_id}]")
+                redacted_content = None
+        else:
+            # For larger PDFs, start with lock approach
+            redacted_content = None
+
+        # If direct processing failed or wasn't attempted, use lock
+        if redacted_content is None:
+            try:
+                # Try to acquire lock with generous timeout (30 seconds for redaction)
+                async with pdf_lock.acquire_timeout(timeout=30.0) as acquired:
+                    if not acquired:
+                        log_warning(
+                            f"[SECURITY] Failed to acquire PDF processing lock - system may be overloaded [operation_id={operation_id}]")
+
+                        # Instead of failing immediately, try processing without the lock
+                        # This is a fallback mechanism that might work if the system isn't truly overloaded
+                        try:
+                            log_warning(
+                                f"[SECURITY] Attempting emergency processing without lock [operation_id={operation_id}]")
+                            redacted_content = redaction_service.apply_redactions_to_memory(mapping_data)
+                            log_info(
+                                f"[SECURITY] Emergency PDF redaction succeeded without lock: {total_redactions} redactions [operation_id={operation_id}]")
+                        except Exception as fallback_error:
+                            log_error(
+                                f"[SECURITY] Emergency processing failed: {str(fallback_error)} [operation_id={operation_id}]")
+                            return JSONResponse(
+                                status_code=503,
+                                content={
+                                    "detail": "PDF processing service is currently overloaded. Please try again later.",
+                                    "retry_after": 30  # Suggest retry after 30 seconds
+                                }
+                            )
+                    else:
+                        # We have the lock, process normally
+                        try:
+                            redacted_content = redaction_service.apply_redactions_to_memory(mapping_data)
+                            log_info(
+                                f"[SECURITY] PDF redaction completed successfully with lock: {total_redactions} redactions applied [operation_id={operation_id}]")
+                        except TimeoutError:
+                            log_warning(
+                                f"[SECURITY] PDF redaction timed out, trying with increased timeout [operation_id={operation_id}]")
+                            # Try again with a longer timeout
+                            redaction_service = PDFRedactionService(contents)
+                            redaction_service.DEFAULT_REDACTION_TIMEOUT = 600.0  # 10 minute timeout
+                            redaction_service.DEFAULT_LOCK_TIMEOUT = 300.0  # 5 minute lock timeout
+                            redaction_service.LOCK_RETRY_DELAY = 10.0  # 10 second retry delay
+                            redacted_content = redaction_service.apply_redactions_to_memory(mapping_data)
+                            log_info(
+                                f"[SECURITY] PDF redaction completed with extended timeout: {total_redactions} redactions [operation_id={operation_id}]")
+            except TimeoutError:
+                log_error(f"[SECURITY] Timeout waiting for PDF processing resources [operation_id={operation_id}]")
+
+                # Final emergency fallback - try one last time without lock
+                try:
+                    log_warning(
+                        f"[SECURITY] Final emergency attempt without lock after timeout [operation_id={operation_id}]")
+                    redacted_content = redaction_service.apply_redactions_to_memory(mapping_data)
+                    log_info(
+                        f"[SECURITY] Final emergency PDF redaction succeeded: {total_redactions} redactions [operation_id={operation_id}]")
+                except Exception as e:
+                    log_error(f"[SECURITY] Final emergency attempt failed: {str(e)} [operation_id={operation_id}]")
+                    return JSONResponse(
+                        status_code=503,
+                        content={
+                            "detail": "Service timeout waiting for PDF processing resources. System is under heavy load.",
+                            "retry_after": 60
+                        }
+                    )
+            except Exception as e:
+                log_error(f"[SECURITY] Error applying redactions: {str(e)} [operation_id={operation_id}]")
+                error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+                    e, "pdf_redaction_service", 500, file.filename
+                )
+                return JSONResponse(status_code=status_code, content=error_response)
 
         redact_time = time.time() - redact_start
         total_time = time.time() - start_time
@@ -171,7 +249,8 @@ async def pdf_redact(
                 "X-Total-Time": f"{total_time:.3f}s",
                 "X-Redactions-Applied": str(total_redactions),
                 "X-Memory-Usage": f"{mem_stats['current_usage']:.1f}%",
-                "X-Peak-Memory": f"{mem_stats['peak_usage']:.1f}%"
+                "X-Peak-Memory": f"{mem_stats['peak_usage']:.1f}%",
+                "X-Operation-ID": operation_id
             }
         )
 
@@ -220,16 +299,35 @@ async def pdf_extract(request: Request, file: UploadFile = File(...)):
         # Determine if we should use streaming mode based on file size
         use_streaming = file_size > LARGE_PDF_THRESHOLD
 
+        # Get the shared lock instance
+        pdf_lock = get_pdf_processing_lock()
+
         if use_streaming:
             log_info(
                 f"[SECURITY] Using streaming mode for large PDF ({file_size / 1024:.1f}KB) [operation_id={operation_id}]")
             # Reset file position for streaming
             await file.seek(0)
 
-            # Process large PDFs in streaming mode for memory efficiency
-            return await process_pdf_streaming(file, start_time, operation_id)
+            # Try processing with lock first, but have fallback
+            try:
+                # Try to acquire lock with reasonable timeout
+                async with pdf_lock.acquire_timeout(timeout=10.0) as acquired:
+                    if not acquired:
+                        log_warning(
+                            f"[SECURITY] Failed to acquire PDF processing lock for streaming extraction - proceeding without lock [operation_id={operation_id}]")
+                        # For streaming extraction, we can proceed without lock as it's less resource-intensive
+                        return await process_pdf_streaming(file, start_time, operation_id)
+                    else:
+                        # Process with lock acquired
+                        result = await process_pdf_streaming(file, start_time, operation_id)
+                        return result
+            except TimeoutError:
+                log_warning(
+                    f"[SECURITY] Timeout acquiring lock for streaming extraction - proceeding without lock [operation_id={operation_id}]")
+                # Proceed without lock as fallback
+                return await process_pdf_streaming(file, start_time, operation_id)
 
-        # For smaller files, process entirely in memory using SecureTempFileManager
+        # For smaller files, process entirely in memory
         log_info(
             f"[SECURITY] Using in-memory processing for PDF ({file_size / 1024:.1f}KB) [operation_id={operation_id}]")
         contents = chunk + await file.read()
@@ -242,22 +340,93 @@ async def pdf_extract(request: Request, file: UploadFile = File(...)):
                 content={"detail": reason}
             )
 
-        # Use the optimized PDFTextExtractor with SecureTempFileManager
+        # Small files can be processed outside the lock first as a fast path
         extract_start = time.time()
 
+        # First try direct processing without lock for small files
+        if file_size < 512 * 1024:  # Less than 512KB
+            try:
+                extracted_data = await SecureTempFileManager.process_content_in_memory_async(
+                    contents,
+                    extraction_processor,
+                    use_path=False,
+                    extension=".pdf"
+                )
+                log_info(
+                    f"[SECURITY] Small PDF extraction completed without lock in {time.time() - extract_start:.3f}s [operation_id={operation_id}]")
+            except Exception as e:
+                log_warning(
+                    f"[SECURITY] Direct extraction failed, falling back to lock: {str(e)} [operation_id={operation_id}]")
+                extracted_data = None
+        else:
+            # For medium files, use the lock approach first
+            extracted_data = None
 
+        # If direct processing failed or wasn't attempted, try with lock
+        if extracted_data is None:
+            try:
+                # Try to acquire lock with timeout
+                async with pdf_lock.acquire_timeout(timeout=10.0) as acquired:
+                    if not acquired:
+                        log_warning(
+                            f"[SECURITY] Failed to acquire PDF processing lock for extraction - attempting emergency processing [operation_id={operation_id}]")
 
-        # Use SecureTempFileManager for memory-efficient processing
-        extracted_data = await SecureTempFileManager.process_content_in_memory_async(
-            contents,
-            extraction_processor,
-            use_path=False,
-            extension=".pdf"
-        )
+                        # Try processing without lock as emergency fallback
+                        try:
+                            extracted_data = await SecureTempFileManager.process_content_in_memory_async(
+                                contents,
+                                extraction_processor,
+                                use_path=False,
+                                extension=".pdf"
+                            )
+                            log_info(
+                                f"[SECURITY] Emergency PDF extraction completed without lock in {time.time() - extract_start:.3f}s [operation_id={operation_id}]")
+                        except Exception as fallback_error:
+                            log_error(
+                                f"[SECURITY] Emergency extraction failed: {str(fallback_error)} [operation_id={operation_id}]")
+                            return JSONResponse(
+                                status_code=503,
+                                content={
+                                    "detail": "PDF processing service is currently overloaded. Please try again later.",
+                                    "retry_after": 15
+                                }
+                            )
+                    else:
+                        # Normal processing with lock
+                        extracted_data = await SecureTempFileManager.process_content_in_memory_async(
+                            contents,
+                            extraction_processor,
+                            use_path=False,
+                            extension=".pdf"
+                        )
+                        log_info(
+                            f"[SECURITY] PDF extraction completed with lock in {time.time() - extract_start:.3f}s [operation_id={operation_id}]")
+            except TimeoutError:
+                log_error(
+                    f"[SECURITY] Timeout waiting for PDF processing lock - attempting emergency processing [operation_id={operation_id}]")
+
+                # Final emergency attempt without lock
+                try:
+                    extracted_data = await SecureTempFileManager.process_content_in_memory_async(
+                        contents,
+                        extraction_processor,
+                        use_path=False,
+                        extension=".pdf"
+                    )
+                    log_info(
+                        f"[SECURITY] Final emergency PDF extraction completed in {time.time() - extract_start:.3f}s [operation_id={operation_id}]")
+                except Exception as e:
+                    log_error(f"[SECURITY] Final extraction attempt failed: {str(e)} [operation_id={operation_id}]")
+                    return JSONResponse(
+                        status_code=503,
+                        content={
+                            "detail": "Service timeout. System is under heavy load.",
+                            "retry_after": 30
+                        }
+                    )
 
         extract_time = time.time() - extract_start
         total_time = time.time() - start_time
-        log_info(f"[SECURITY] PDF extraction completed in {extract_time:.3f}s [operation_id={operation_id}]")
 
         # Apply data minimization
         extracted_data = minimize_extracted_data(extracted_data)
@@ -269,7 +438,8 @@ async def pdf_extract(request: Request, file: UploadFile = File(...)):
             "extraction_time": extract_time,
             "total_time": total_time,
             "pages_count": pages_count,
-            "words_count": words_count
+            "words_count": words_count,
+            "operation_id": operation_id
         }
         extracted_data["file_info"] = {
             "filename": file.filename,
@@ -405,7 +575,8 @@ async def process_pdf_streaming(file: UploadFile, start_time: float, operation_i
             "total_time": total_time,
             "pages_count": pages_count,
             "words_count": words_count,
-            "streaming_mode": True
+            "streaming_mode": True,
+            "operation_id": operation_id
         }
 
         # Add file information
