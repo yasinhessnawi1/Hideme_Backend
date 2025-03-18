@@ -46,7 +46,7 @@ class GeminiHelper:
         genai.configure(api_key=self.api_key)
 
         # Set model name from configuration or use default
-        self.model_name = get_config("gemini_model_name") or "gemini-1.5-flash"
+        self.model_name = get_config("gemini_model_name") or "gemini-2.0-flash"
 
         logger.info(f"✅ GeminiHelper initialized with model '{self.model_name}'")
 
