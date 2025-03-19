@@ -2,10 +2,10 @@
 Enhanced Gemini API Usage Management for Entity Detection
 """
 import asyncio
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from datetime import datetime
+from typing import Dict, Any, Optional
 
-from backend.app.utils.logger import log_warning, log_error, log_info
+from backend.app.utils.logger import log_warning
 
 
 class GeminiUsageManager:
@@ -52,7 +52,6 @@ class GeminiUsageManager:
     async def manage_page_processing(
         self,
         full_text: str,
-        requested_entities: Optional[List[str]] = None,
         page_number: Optional[int] = None
     ) -> Optional[str]:
         """
@@ -60,12 +59,16 @@ class GeminiUsageManager:
 
         Args:
             full_text: Complete text of the page
-            requested_entities: Optional list of specific entity types to detect
             page_number: Page number for logging and tracking
 
         Returns:
             Truncated text for API processing or None if processing not possible
         """
+        if full_text is None:  # Handle None input
+            return None
+        if not full_text:  # Handle empty input text
+            return ""
+
         try:
             # Acquire request slot with rate limiting
             await self._check_and_acquire_request_slot(page_number)
@@ -87,6 +90,9 @@ class GeminiUsageManager:
         Args:
             page_number: Page number for detailed logging
         """
+        if page_number is None:
+            raise ValueError("Invalid request")
+
         async with self._request_lock:
             current_time = datetime.now()
 
@@ -122,7 +128,7 @@ class GeminiUsageManager:
             }
             self.request_history.append(request_entry)
 
-    def _truncate_text(self, text: str) -> str:
+    def _truncate_text(self, text: str) -> str | None:
         """
         Intelligently truncate text for API processing.
 
@@ -132,6 +138,8 @@ class GeminiUsageManager:
         Returns:
             Truncated text suitable for API processing
         """
+        if text is None:  # Handle None input
+            return None
         if len(text) <= self.text_truncation_limit:
             return text
 
