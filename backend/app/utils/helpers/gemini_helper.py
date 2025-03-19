@@ -34,6 +34,7 @@ class GeminiHelper:
     - Caches responses to avoid redundant API calls for similar text content
     - Parses JSON responses
     """
+
     def __init__(self):
         """Initialize the Gemini helper with API key and model configuration."""
         # Get API key from configuration
@@ -54,13 +55,29 @@ class GeminiHelper:
         # Initialize cache for storing responses for similar text content
         self.cache = {}
 
-    def _cache_key(self, text: str, requested_entities: Optional[List[str]] = None) -> str:
+    @staticmethod
+    def _cache_key(text: str, requested_entities: Optional[List[str]] = None) -> str:
         """
-        Generate a cache key based on text and requested entities.
+        Generate a unique cache key based on the input text and requested entities.
+
+        This method creates a unique MD5 hash to identify requests with the same input text
+        and entity filters. It helps avoid redundant API calls by retrieving results from
+        the cache when the same request is made again.
+
+        Args:
+            text (str): The input text for which the cache key is generated.
+            requested_entities (Optional[List[str]]): A list of entity types that should be
+                                                     considered in the request. If None,
+                                                     all available entities are included.
+
+        Returns:
+            str: A unique MD5 hash string that serves as a cache key.
         """
         key_data = text
+
         if requested_entities:
             key_data += '|' + ','.join(sorted(requested_entities))
+
         return hashlib.md5(key_data.encode('utf-8')).hexdigest()
 
     @staticmethod
@@ -82,13 +99,16 @@ class GeminiHelper:
 
         return f"{GEMINI_PROMPT_HEADER}{entities_str}\n\n### **Text to Analyze:**\n{text}\n{GEMINI_PROMPT_FOOTER}"
 
-    async def send_request(self, text: str, requested_entities: Optional[List[str]] = None, max_retries: int = 3) -> Optional[str]:
+    async def send_request(self, text: str, requested_entities: Optional[List[str]] = None, max_retries: int = 3) -> \
+    Optional[str]:
         """
         Send a request to the Gemini API with retry logic and exponential backoff.
 
         Args:
             text: Text to analyze
             requested_entities: List of entity types to detect
+            max_retries (int): The maximum number of retry attempts in case of failures.
+                              Defaults to 3.
 
         Returns:
             Raw response text or None if request failed
