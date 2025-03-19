@@ -175,7 +175,7 @@ class GeminiHelper:
         return None
 
     @staticmethod
-    def _try_json_parse(text: str) -> Optional[Dict[str, Any]]:
+    def _try_json_parse(text: Optional[str]) -> Optional[Dict[str, Any]]:
         """
         Attempt to parse a JSON string safely.
 
@@ -185,39 +185,89 @@ class GeminiHelper:
         Returns:
             Parsed JSON object or None if parsing failed
         """
+        if not isinstance(text, str):  # Ensure input is a valid string
+            return None
+
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             return None
 
     @staticmethod
-    def _extract_json_candidates(text: str) -> List[str]:
+    def _process_json_character(char: str, index: int, stack: List[str], start: Optional[int]) -> Optional[int]:
         """
-        Extract possible JSON substrings from text.
+        Process a single character in text to identify JSON structures.
+
+        Args:
+            char: The character being processed
+            index: The index of the character in the text
+            stack: Stack tracking opening and closing brackets
+            start: Start index of a JSON block
+
+        Returns:
+            Updated start index or None if unchanged
+        """
+        if char == '{':
+            if start is None:
+                start = index  # Mark the start of a JSON candidate
+            stack.append('{')
+        elif char == '}' and stack:
+            stack.pop()
+            if not stack:
+                return start  # Return start index when JSON block closes
+
+        return start
+
+    @staticmethod
+    def _find_potential_json_candidates(text: Optional[str]) -> List[str]:
+        """
+        Identify potential JSON substrings from text without validation.
 
         Args:
             text: Text that might contain JSON
 
         Returns:
-            List of potential JSON strings
+            List of potential JSON substrings
         """
+        if not text:  # Handle None or empty input
+            return []
+
         json_candidates = []
         stack = []
         start = None
 
-        # Loop through each character
+        # Loop through text to find JSON-like structures
         for i, char in enumerate(text):
-            if char == '{':
-                if start is None:
-                    start = i
-                stack.append('{')
-            elif char == '}' and stack:
-                stack.pop()
-                if not stack and start is not None:
-                    json_candidates.append(text[start:i + 1])
-                    start = None
+            start = GeminiHelper._process_json_character(char, i, stack, start)
+
+            # If a valid JSON candidate is found
+            if start is not None and not stack:
+                candidate = text[start:i + 1]
+
+                # Ensure `{}` is detected correctly
+                if candidate == "{}" or len(candidate) > 2:
+                    json_candidates.append(candidate)
+
+                start = None  # Reset for next JSON
 
         return json_candidates
+
+    @staticmethod
+    def _extract_json_candidates(text: Optional[str]) -> List[str]:
+        """
+        Extract only valid JSON substrings from text.
+
+        Args:
+            text: Text that might contain JSON
+
+        Returns:
+            List of valid JSON strings
+        """
+        potential_jsons = GeminiHelper._find_potential_json_candidates(text)
+
+        # Allow `{}` as a valid JSON
+        return [candidate for candidate in potential_jsons if
+                candidate == "{}" or GeminiHelper._try_json_parse(candidate)]
 
     async def process_text(self, text: str, requested_entities: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
         """
