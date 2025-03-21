@@ -3,7 +3,7 @@ Enhanced Gemini API Usage Management for Entity Detection
 """
 import asyncio
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from backend.app.utils.logger import log_warning
 
@@ -52,6 +52,7 @@ class GeminiUsageManager:
     async def manage_page_processing(
         self,
         full_text: str,
+        requested_entities: Optional[List[str]] = None,
         page_number: Optional[int] = None
     ) -> Optional[str]:
         """

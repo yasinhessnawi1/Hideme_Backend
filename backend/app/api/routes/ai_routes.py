@@ -152,7 +152,7 @@ async def ai_detect_sensitive(
             processing_times["detector_init_time"] = time.time() - detector_start
 
         # Set detection timeout and run detection
-        detection_timeout = 40
+        detection_timeout = 200
         detection_start = time.time()
         log_info(
             f"[SECURITY] Starting Gemini AI detection with timeout {detection_timeout}s [operation_id={operation_id}]")

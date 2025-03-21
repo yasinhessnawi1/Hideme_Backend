@@ -148,12 +148,12 @@ async def process_common_detection(
             if hasattr(detector, 'detect_sensitive_data_async'):
                 detection_result = await asyncio.wait_for(
                     detector.detect_sensitive_data_async(minimized_data, entity_list),
-                    timeout=60.0  # 1 minute timeout for detection
+                    timeout=200.0  # 2 minute timeout for detection
                 )
             else:
                 detection_result = await asyncio.wait_for(
                     asyncio.to_thread(detector.detect_sensitive_data, minimized_data, entity_list),
-                    timeout=60.0  # 1 minute timeout for detection
+                    timeout=200.0  # 2 minute timeout for detection
                 )
         except asyncio.TimeoutError:
             log_error(f"[DETECTION] Detection operation timed out for {detector_type} [operation_id={operation_id}]")
