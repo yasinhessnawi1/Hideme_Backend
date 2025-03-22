@@ -14,10 +14,6 @@ variable "region" {
   type        = string
 }
 
-variable "zone" {
-  description = "The GCP zone for zonal resources"
-  type        = string
-}
 
 variable "zones" {
   description = "List of zones for regional instance group"

@@ -38,7 +38,7 @@ resource "google_dns_record_set" "apex_a_record" {
 
 # Create an A record for the API subdomain
 resource "google_dns_record_set" "api_a_record" {
-  name         = "api.${var.domain_name}."
+  name         = "${var.domain_name}."
   project      = var.project
   managed_zone = google_dns_managed_zone.main_zone.name
   type         = "A"

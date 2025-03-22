@@ -14,11 +14,6 @@ variable "region" {
   type        = string
 }
 
-variable "zone" {
-  description = "The GCP zone for zonal resources"
-  type        = string
-}
-
 variable "environment" {
   description = "Environment name (e.g., dev, staging, prod)"
   type        = string
@@ -26,11 +21,6 @@ variable "environment" {
 
 variable "network_id" {
   description = "The ID of the VPC network"
-  type        = string
-}
-
-variable "private_subnet_id" {
-  description = "The ID of the private subnet"
   type        = string
 }
 
