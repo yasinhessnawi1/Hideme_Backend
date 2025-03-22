@@ -1,76 +1,161 @@
+/**
+ * # Compute Module Variables
+ *
+ * Variables for the compute module of the Hide Me application.
+ */
+
 variable "project" {
   description = "The GCP project ID"
   type        = string
 }
 
 variable "region" {
-  description = "The GCP region"
+  description = "The GCP region where resources will be created"
   type        = string
-  default     = "europe-west4"
 }
 
 variable "zone" {
-  description = "The GCP zone"
+  description = "The GCP zone for zonal resources"
   type        = string
-  default     = "europe-west4-c"
 }
 
+variable "zones" {
+  description = "List of zones for regional instance group"
+  type        = list(string)
+  default     = []
+}
+
+variable "environment" {
+  description = "Environment name (e.g., dev, staging, prod)"
+  type        = string
+}
 
 variable "instance_name" {
-  description = "The name of the compute instance"
+  description = "Base name for compute instances"
   type        = string
-  default     = "llm-vm-instance"
 }
 
 variable "machine_type" {
-  description = "The machine type for the compute instance. Allowed values: g2-standard-8, g2-standard-12, g2-standard-16, g2-standard-24, g2-standard-32"
+  description = "Machine type for compute instances"
   type        = string
-  default     = "g2-standard-4"
-  validation {
-    condition     = contains(["c2-standard-8","g2-standard-4", "g2-standard-8", "g2-standard-12", "g2-standard-16", "g2-standard-32"], var.machine_type)
-    error_message = "machine_type must be one of: g2-standard-8, g2-standard-12, g2-standard-16, g2-standard-24, or g2-standard-32."
-  }
 }
-/*
-variable "gpu_type" {
-  description = "The GPU type to attach to the instance (set to NVIDIA L4)."
-  type        = string
-  default     = "nvidia-l4"
-}
-*/
+
 variable "disk_size" {
-    description = "The size of the boot disk in GB"
-    type        = number
-    default     = 100
-}
-
-variable "gpu_count" {
-  description = "The number of GPUs to attach"
+  description = "Boot disk size in GB"
   type        = number
-  default     = 0
 }
 
-variable "subnetwork" {
-  description = "The subnetwork to attach the instance"
+variable "network_id" {
+  description = "The ID of the VPC network"
   type        = string
 }
 
-# New variables for SSH key–based access
-
-variable "use_ssh_keys" {
-  description = "Whether to inject SSH keys via metadata (true) or use OS Login (false)"
-  type        = bool
-  default     = true
+variable "subnet_id" {
+  description = "The ID of the subnet"
+  type        = string
 }
 
-variable "ssh_user" {
-  description = "The username for SSH access"
+variable "service_account_email" {
+  description = "Email address of the service account"
   type        = string
-  default     = "ubuntu"  # Adjust this as needed
 }
 
-variable "ssh_public_key_file" {
-  description = "Path to the SSH public key file"
+variable "min_instances" {
+  description = "Minimum number of instances in the instance group"
+  type        = number
+  default     = 2
+}
+
+variable "max_instances" {
+  description = "Maximum number of instances in the instance group"
+  type        = number
+  default     = 5
+}
+
+variable "app_port" {
+  description = "Port on which the application serves traffic"
+  type        = number
+  default     = 8000
+}
+
+variable "target_pools" {
+  description = "List of target pool URLs to which instances in the group should be added"
+  type        = list(string)
+  default     = []
+}
+
+variable "db_connection_name" {
+  description = "The connection name of the Cloud SQL instance"
   type        = string
-  default     = "~/.ssh/id_rsa.pub"  # Adjust the path as needed
+}
+
+variable "db_name" {
+  description = "Name of the database"
+  type        = string
+}
+
+variable "db_user" {
+  description = "Database user name"
+  type        = string
+}
+
+variable "db_password" {
+  description = "Database user password"
+  type        = string
+  sensitive   = true
+}
+
+variable "github_ssh_key" {
+  description = "SSH private key for GitHub repository access"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "github_token" {
+  description = "GitHub Personal Access Token for repository access (as fallback)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "gemini_api_key" {
+  description = "API key for Gemini AI services"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "github_repo" {
+  description = "GitHub repository URL for the backend code"
+  type        = string
+  default     = "git@github.com:yasinhessnawi1/Hideme_Backend.git"
+}
+
+variable "github_branch" {
+  description = "GitHub branch to deploy"
+  type        = string
+  default     = "main"
+}
+
+variable "repo_name" {
+    description = "Name of the GitHub repository"
+    type        = string
+    default     = "Hideme_Backend"
+}
+
+variable "repo_owner" {
+    description = "Owner of the GitHub repository"
+    type        = string
+    default     = "yasinhessnawi1"
+}
+
+variable "domain" {
+    description = "Domain name for the application"
+    type        = string
+}
+
+variable "ssl_email" {
+    description = "Email address for SSL certificate notifications"
+    type        = string
 }
