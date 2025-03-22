@@ -79,11 +79,6 @@ variable "enable_ssl" {
   default     = false
 }
 
-variable "ssl_certificate_ids" {
-  description = "List of SSL certificate IDs to use with the HTTPS proxy"
-  type        = list(string)
-  default     = []
-}
 
 variable "db_instance_name" {
   description = "Name for the database instance"

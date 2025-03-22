@@ -33,7 +33,7 @@ output "db_user" {
   description = "The name of the database user"
   value       = google_sql_user.user.name
 }
-/*
+
 output "read_replica_instance_name" {
   description = "The name of the read replica instance (if created)"
   value       = var.environment == "prod" ? google_sql_database_instance.read_replica[0].name : null
@@ -48,6 +48,3 @@ output "read_replica_private_ip_address" {
   description = "The private IP address of the read replica instance (if created)"
   value       = var.environment == "prod" ? google_sql_database_instance.read_replica[0].private_ip_address : null
 }
-
-
- */

@@ -50,7 +50,6 @@ resource "google_compute_instance_template" "app_template" {
       dbname       = var.db_name
       dbconn       = var.db_connection_name
       gemini_api_key = var.gemini_api_key
-      # Add any missing variables that might be referenced in the script
       GITHUB_TOKEN = var.github_token
       REPO_PATH    = var.github_repo
       REPO_OWNER  = var.repo_owner

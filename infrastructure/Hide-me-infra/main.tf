@@ -69,10 +69,8 @@ module "database" {
   source                 = "./modules/database"
   project                = var.project
   region                 = var.region
-  zone                   = var.zone
   environment            = var.environment
   network_id             = module.vpc.network_id
-  private_subnet_id      = module.vpc.private_subnet_id
   private_subnet_cidr    = module.vpc.private_subnet_cidr
   db_instance_name       = var.db_instance_name
   db_version             = var.db_version
@@ -90,7 +88,6 @@ module "compute" {
   source                = "./modules/compute"
   project               = var.project
   region                = var.region
-  zone                  = var.zone
   environment           = var.environment
   instance_name         = var.instance_name
   machine_type          = var.machine_type
@@ -122,15 +119,11 @@ module "compute" {
 module "load_balancer" {
   source               = "./modules/load_balancer"
   project              = var.project
-  region               = var.region
   environment          = var.environment
-  network_id           = module.vpc.network_id
   instance_group       = module.compute.instance_group
-  backend_port         = var.backend_port
   health_check_port    = var.health_check_port
   static_ip_name       = var.static_ip_name
   domain_name          = var.domain  # Using root domain variable
-  enable_ssl           = true  # Always enable SSL
   security_policy_name = module.security.security_policy_name
   depends_on           = [module.vpc, module.compute]
 }

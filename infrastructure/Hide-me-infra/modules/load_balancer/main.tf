@@ -28,7 +28,7 @@ resource "google_compute_managed_ssl_certificate" "api_certificate" {
   project = var.project
 
   managed {
-    domains = ["api.${var.domain_name}"]
+    domains = ["${var.domain_name}"]
   }
 }
 

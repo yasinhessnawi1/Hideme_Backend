@@ -99,7 +99,5 @@ output "lb_urls" {
     https_root = "https://${var.domain_name}"
     http_www = "http://www.${var.domain_name}"
     https_www = "https://www.${var.domain_name}"
-    http_api = "http://api.${var.domain_name}"
-    https_api = "https://api.${var.domain_name}"
   }
 }

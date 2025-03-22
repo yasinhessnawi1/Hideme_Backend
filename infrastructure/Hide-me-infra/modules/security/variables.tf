@@ -58,3 +58,46 @@ variable "db_name" {
   description = "Name of the database"
   type        = string
 }
+
+# New variables for CIDR ranges to address security concerns
+
+variable "health_check_ip_ranges" {
+  description = "Google Cloud's health check IP ranges"
+  type        = list(string)
+  default     = [
+    "35.191.0.0/16",
+    "130.211.0.0/22",
+    "209.85.152.0/22",
+    "209.85.204.0/22"
+  ]
+}
+
+variable "iap_ip_ranges" {
+  description = "Google's Identity-Aware Proxy IP ranges"
+  type        = list(string)
+  default     = ["35.235.240.0/20"]
+}
+
+variable "load_balancer_ip_ranges" {
+  description = "Google Cloud's load balancer IP ranges"
+  type        = list(string)
+  default     = [
+    "130.211.0.0/22",
+    "35.191.0.0/16"
+  ]
+}
+
+variable "google_api_ranges" {
+  description = "Google API IP ranges"
+  type        = list(string)
+  default     = [
+    "199.36.153.8/30", # Restricted Google APIs
+    "199.36.153.4/30"  # Private Google Access
+  ]
+}
+
+variable "allowed_ip_ranges" {
+  description = "IP ranges allowed to access the application (empty means all)"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}

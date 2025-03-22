@@ -139,7 +139,7 @@ resource "google_sql_user" "user" {
   instance = google_sql_database_instance.postgres.name
   password = var.db_password
 }
-/*
+
 # Create a read replica for production environment
 resource "google_sql_database_instance" "read_replica" {
   count                = var.environment == "prod" ? 1 : 0
@@ -182,4 +182,3 @@ resource "google_sql_database_instance" "read_replica" {
     prevent_destroy = false #todo: change to true
   }
 }
-*/
