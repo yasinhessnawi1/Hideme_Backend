@@ -10,6 +10,8 @@ import glob
 import traceback
 import time
 import datetime
+import gc
+import numpy as np
 from gliner import GLiNER
 from gliner.training import Trainer, TrainingArguments
 from gliner.data_processing.collator import DataCollator
@@ -17,6 +19,7 @@ import jsonlines
 from tqdm import tqdm
 import logging
 import sys
+import re
 
 # Configure logging for better visibility
 logging.basicConfig(
@@ -33,11 +36,112 @@ logger = logging.getLogger(__name__)
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
 # Define paths to data files
-inspeksjonsrapport_path = r"C:\Users\anwar\PycharmProjects\Hideme_Backend\data_generation\inspeksjonsrapport\labeling_inspeksjonsrapport\inspeksjonsrapport.jsonl"
-bekymringsmelding_path = r"C:\Users\anwar\PycharmProjects\Hideme_Backend\data_generation\bekymringsmelding\labeling_bekymringsmelding\bekymringsmelding.jsonl"
+data_path = r"C:\Users\yasin\Hideme_Backend\data_generation\Data-jsonl"
+
+# Path for combined JSONL file
+combined_data_path = os.path.join(os.path.dirname(data_path), "combined_data.jsonl")
 
 # Maximum sequence length supported by the model
 MAX_SEQ_LENGTH = 384  # Using the model's hard-coded limit
+
+
+def sanitize_and_combine_jsonl_files(directory_path, output_path):
+    """
+    Process all JSONL files in a directory:
+    1. Read all JSONL files
+    2. Sanitize text by removing escape characters
+    3. Combine into a single JSONL file
+
+    Args:
+        directory_path: Path to directory containing JSONL files
+        output_path: Path to save the combined JSONL file
+
+    Returns:
+        Path to the combined file
+    """
+    logger.info(f"Sanitizing and combining JSONL files from {directory_path}")
+
+    # Find all JSONL files in the directory
+    jsonl_files = glob.glob(os.path.join(directory_path, "*.jsonl"))
+    if not jsonl_files:
+        raise ValueError(f"No JSONL files found in {directory_path}")
+
+    logger.info(f"Found {len(jsonl_files)} JSONL files to process")
+
+    # Process and combine all files
+    combined_data = []
+    total_items = 0
+    error_count = 0
+
+    for file_path in tqdm(jsonl_files, desc="Processing JSONL files"):
+        try:
+            with jsonlines.open(file_path) as reader:
+                for item in reader:
+                    try:
+                        # Sanitize the text input
+                        if "text_input" in item:
+                            # Replace escape sequences with their actual characters
+                            text = item["text_input"]
+
+                            # Keep actual newlines but normalize them
+                            text = text.replace('\\n', '\n')
+
+                            # Remove other common escape characters
+                            text = re.sub(r'\\[rft]', ' ', text)
+
+                            # Normalize multiple spaces and newlines
+                            text = re.sub(r'\s+', ' ', text)
+                            text = text.strip()
+
+                            # Update the item with sanitized text
+                            item["text_input"] = text
+
+                            # Sanitize output values
+                            if "output" in item:
+                                for entity_type, values in item["output"].items():
+                                    # Handle None values by converting to empty list
+                                    if values is None:
+                                        item["output"][entity_type] = []
+                                    # Handle string values by converting to list
+                                    elif isinstance(values, str):
+                                        item["output"][entity_type] = [values]
+                                    # Ensure all values in list are strings
+                                    elif isinstance(values, list):
+                                        sanitized_values = []
+                                        for value in values:
+                                            if value is not None:
+                                                if isinstance(value, str):
+                                                    sanitized_values.append(value)
+                                                else:
+                                                    try:
+                                                        sanitized_values.append(str(value))
+                                                    except:
+                                                        pass  # Skip values that can't be converted to string
+                                        item["output"][entity_type] = sanitized_values
+
+                            # Add to combined data
+                            combined_data.append(item)
+                            total_items += 1
+                    except Exception as e:
+                        error_count += 1
+                        if error_count <= 5:
+                            logger.error(f"Error processing item in file {os.path.basename(file_path)}: {e}")
+                            if error_count == 5:
+                                logger.error("Too many errors, suppressing further error messages")
+        except Exception as e:
+            logger.error(f"Error processing file {file_path}: {e}")
+
+    # Write combined data to output file
+    logger.info(f"Writing {total_items} combined items to {output_path}")
+    with jsonlines.open(output_path, mode='w') as writer:
+        for item in combined_data:
+            writer.write(item)
+
+    if error_count > 0:
+        logger.warning(f"Encountered {error_count} errors during data sanitization")
+
+    logger.info(f"Successfully combined data into {output_path}")
+    return output_path
 
 
 class CustomGLiNERDataset(torch.utils.data.Dataset):
@@ -68,38 +172,77 @@ def load_jsonl_data(file_path):
     Load data from JSONL file and prepare it for NER.
     """
     data = []
+    error_count = 0
     with jsonlines.open(file_path) as reader:
         for item in tqdm(reader, desc=f"Processing {os.path.basename(file_path)}"):
-            text_input = item.get('text_input', '')
-            outputs = item.get('output', {})
+            try:
+                text_input = item.get('text_input', '')
+                outputs = item.get('output', {})
 
-            # Create a dictionary with the proper format
-            transformed_item = {
-                "text": text_input,
-                "ner": []
-            }
+                # Create a dictionary with the proper format
+                transformed_item = {
+                    "text": text_input,
+                    "ner": []
+                }
 
-            # Process each entity type and its values
-            for entity_type, entity_values in outputs.items():
-                for entity_value in entity_values:
-                    # Find all occurrences of this entity in the text
-                    start_pos = 0
-                    while True:
-                        # Find the entity starting from start_pos
-                        start_idx = text_input.find(entity_value, start_pos)
-                        if start_idx == -1:  # No more occurrences
-                            break
+                # Process each entity type and its values
+                for entity_type, entity_values in outputs.items():
+                    # Skip if entity_values is None or not iterable
+                    if entity_values is None:
+                        logger.warning(f"Found None value for entity type {entity_type}, skipping")
+                        continue
 
-                        end_idx = start_idx + len(entity_value)
-                        # Add entity with character positions
-                        transformed_item["ner"].append((start_idx, end_idx, entity_type))
+                    # Handle case where entity_values might be a string instead of a list
+                    if isinstance(entity_values, str):
+                        entity_values = [entity_values]
 
-                        # Move past this occurrence
-                        start_pos = start_idx + 1
+                    # Ensure entity_values is iterable
+                    if not hasattr(entity_values, '__iter__'):
+                        logger.warning(
+                            f"Entity values for {entity_type} is not iterable: {type(entity_values)}, skipping")
+                        continue
 
-            # Only add items that have at least one entity
-            if transformed_item["ner"]:
-                data.append(transformed_item)
+                    for entity_value in entity_values:
+                        # Skip if entity_value is None or empty
+                        if entity_value is None or entity_value == '':
+                            continue
+
+                        # Ensure entity_value is a string
+                        if not isinstance(entity_value, str):
+                            try:
+                                entity_value = str(entity_value)
+                            except:
+                                logger.warning(f"Could not convert entity_value to string: {entity_value}, skipping")
+                                continue
+
+                        # Find all occurrences of this entity in the text
+                        start_pos = 0
+                        while True:
+                            # Find the entity starting from start_pos
+                            start_idx = text_input.find(entity_value, start_pos)
+                            if start_idx == -1:  # No more occurrences
+                                break
+
+                            end_idx = start_idx + len(entity_value)
+                            # Add entity with character positions
+                            transformed_item["ner"].append((start_idx, end_idx, entity_type))
+
+                            # Move past this occurrence
+                            start_pos = start_idx + 1
+
+                # Only add items that have at least one entity
+                if transformed_item["ner"]:
+                    data.append(transformed_item)
+            except Exception as e:
+                error_count += 1
+                if error_count <= 10:  # Limit the number of error logs to avoid flooding
+                    logger.error(f"Error processing item: {e}")
+                    if error_count == 10:
+                        logger.error("Too many errors, suppressing further error messages")
+
+    logger.info(f"Loaded {len(data)} valid data items with entities")
+    if error_count > 0:
+        logger.warning(f"Encountered {error_count} errors during data loading")
 
     return data
 
@@ -223,6 +366,22 @@ def main():
     start_time = time.time()
     logger.info("Starting GLiNER training process")
 
+    # Check CUDA availability first
+    if torch.cuda.is_available():
+        logger.info("CUDA is available!")
+        logger.info(f"CUDA Version: {torch.version.cuda}")
+        logger.info(f"Device count: {torch.cuda.device_count()}")
+        for i in range(torch.cuda.device_count()):
+            logger.info(f"Device {i}: {torch.cuda.get_device_name(i)}")
+    else:
+        logger.warning("CUDA is not available. Training will run on CPU which will be much slower.")
+        logger.warning("To enable CUDA, ensure PyTorch is installed with CUDA support.")
+        logger.warning("Please install the CUDA-enabled version of PyTorch using:")
+        logger.warning("pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121")
+
+    # Process and combine all JSONL files from the data_path
+    combined_data_file = sanitize_and_combine_jsonl_files(data_path, combined_data_path)
+
     # Load the pre-trained model
     model_name = "urchade/gliner_multi_pii-v1"
     logger.info(f"Loading model from {model_name}...")
@@ -231,18 +390,9 @@ def main():
     # Get tokenizer from model
     tokenizer = model.data_processor.transformer_tokenizer
 
-    # Load datasets
-    logger.info("Loading inspeksjonsrapport data...")
-    inspeksjonsrapport_data = load_jsonl_data(inspeksjonsrapport_path)
-    logger.info(f"Loaded {len(inspeksjonsrapport_data)} inspeksjonsrapport records")
-
-    logger.info("Loading bekymringsmelding data...")
-    bekymringsmelding_data = load_jsonl_data(bekymringsmelding_path)
-    logger.info(f"Loaded {len(bekymringsmelding_data)} bekymringsmelding records")
-
-    # Combine datasets
-    all_data = inspeksjonsrapport_data + bekymringsmelding_data
-    logger.info(f"Total dataset size: {len(all_data)}")
+    # Load datasets from the combined file
+    logger.info(f"Loading data from combined file: {combined_data_file}...")
+    all_data = load_jsonl_data(combined_data_file)
 
     # Shuffle the combined dataset
     random.shuffle(all_data)
@@ -258,7 +408,7 @@ def main():
     logger.info(f"Found {len(entity_labels)} unique entity types: {entity_labels}")
 
     # Set up device (GPU or CPU)
-    device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     logger.info(f"Using device: {device}")
 
     # Split into train and test datasets
@@ -271,15 +421,16 @@ def main():
     train_data_processed = segment_long_texts(train_data, tokenizer)
     test_data_processed = segment_long_texts(test_data, tokenizer)
 
-    # Sample a subset for faster training
-    MAX_TRAIN_SAMPLES = 2000
-    if len(train_data_processed) > MAX_TRAIN_SAMPLES:
-        logger.info(f"Sampling {MAX_TRAIN_SAMPLES} examples from {len(train_data_processed)} for faster training")
-        train_data_processed = random.sample(train_data_processed, MAX_TRAIN_SAMPLES)
+    # Use full dataset for training (no subsampling)
+    logger.info(f"Using full training dataset with {len(train_data_processed)} examples")
 
-    MAX_TEST_SAMPLES = 200
+    # Limit test set size if it's extremely large to save memory during evaluation
+    MAX_TEST_SAMPLES = 2000 if torch.cuda.is_available() else 500
     if len(test_data_processed) > MAX_TEST_SAMPLES:
+        logger.info(f"Limiting test set to {MAX_TEST_SAMPLES} samples to conserve memory during evaluation")
         test_data_processed = random.sample(test_data_processed, MAX_TEST_SAMPLES)
+    else:
+        logger.info(f"Using all {len(test_data_processed)} examples for testing")
 
     # Create custom datasets with proper classes_to_id mapping
     train_dataset = CustomGLiNERDataset(train_data_processed, entity_labels)
@@ -304,28 +455,63 @@ def main():
         prepare_labels=True,
     )
 
+    # Set random seeds for reproducibility
+    seed = 42
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    # Clear GPU cache if using CUDA
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        gc.collect()
+
     # Move model to device
     model.to(device)
     logger.info("Model moved to device...")
 
-    # Setup training arguments with low resource requirements
+    # Determine optimal batch size based on available VRAM
+    if torch.cuda.is_available():
+        try:
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)  # Convert to GB
+            logger.info(f"Total GPU memory: {gpu_memory:.2f} GB")
+
+            # Conservative batch size estimation based on available VRAM
+            if gpu_memory > 10:  # High-end GPU (>10GB VRAM)
+                batch_size = 16
+            elif gpu_memory > 6:  # Mid-range GPU (6-10GB VRAM)
+                batch_size = 8
+            else:  # Lower-end GPU (<6GB VRAM)
+                batch_size = 4
+        except:
+            # Default batch size if we can't determine GPU memory
+            batch_size = 8
+    else:
+        # CPU batch size
+        batch_size = 4
+
+    logger.info(f"Using batch size of {batch_size} for training")
+
+    # Setup training arguments for full training
     training_args = TrainingArguments(
         output_dir=output_dir,
         learning_rate=2e-5,
         weight_decay=0.01,
-        per_device_train_batch_size=4,  # Increased batch size for smaller segments
-        per_device_eval_batch_size=4,
-        gradient_accumulation_steps=2,  # Reduced accumulation for faster steps
-        num_train_epochs=3,  # Train for more epochs on reduced dataset
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
+        gradient_accumulation_steps=2,  # Accumulate gradients to simulate larger batch size
+        num_train_epochs=3,
         save_steps=100,
         eval_steps=100,
         save_total_limit=2,  # Keep only 2 checkpoints to save space
         logging_steps=10,
         logging_dir=f"{output_dir}/logs",
-        dataloader_num_workers=0,
+        dataloader_num_workers=4 if torch.cuda.is_available() else 0,  # Use multiprocessing with GPU
         use_cpu=device.type == 'cpu',
-        report_to="none",
-        fp16=False,
+        fp16=torch.cuda.is_available(),  # Enable mixed precision training with GPU
+        fp16_opt_level="O1" if torch.cuda.is_available() else None,  # Mixed precision optimization level
         max_grad_norm=1.0,  # Gradient clipping
     )
 

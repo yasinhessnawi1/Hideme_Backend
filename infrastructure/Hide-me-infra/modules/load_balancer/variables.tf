@@ -1,32 +1,48 @@
+/**
+ * # Load Balancer Module Variables
+ *
+ * Variables for the load balancer module of the Hide Me application.
+ */
+
 variable "project" {
   description = "The GCP project ID"
   type        = string
 }
 
-variable "region" {
-  description = "The GCP region"
-  type        = string
-  default     = "europe-west4"
-}
 
 
-variable "instance_zone" {
-  description = "The zone where the backend instance is located"
+variable "environment" {
+  description = "Environment name (e.g., dev, staging, prod)"
   type        = string
 }
 
-variable "instance_self_link" {
-  description = "The self link of the compute instance to add to the backend"
+
+
+variable "instance_group" {
+  description = "The instance group to be used as backend for the load balancer"
   type        = string
 }
 
-variable "instance_name" {
-  description = "The name of the compute instance"
-  type        = string
-}
 
-variable "backend_port" {
-  description = "The port on which the backend instance is serving HTTP traffic"
+variable "health_check_port" {
+  description = "Port for health checks"
   type        = number
-  default     = 80
+  default     = 8000
+}
+
+variable "static_ip_name" {
+  description = "Name for the static IP address resource"
+  type        = string
+}
+
+variable "domain_name" {
+  description = "Root domain name without trailing dot (e.g., hidemeai.com)"
+  type        = string
+}
+
+
+variable "security_policy_name" {
+  description = "Name of the Cloud Armor security policy to attach to the load balancer"
+  type        = string
+  default     = ""
 }
