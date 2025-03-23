@@ -2,7 +2,7 @@
 JSON handling utilities for document processing.
 """
 import json
-from typing import List, Optional, Any, Union
+from typing import List, Optional, Any
 
 from fastapi import HTTPException
 
@@ -30,7 +30,7 @@ def validate_requested_entities(
         HTTPException: If validation fails
     """
     if not requested_entities:
-        log_warning(f"[OK]No specific entities requested, using defaults")
+        log_warning("[OK]No specific entities requested, using defaults")
         return []
 
     try:
@@ -59,7 +59,7 @@ def validate_requested_entities(
         return entity_list
 
     except json.JSONDecodeError:
-        log_error(f"[OK]Invalid JSON format in requested_entities")
+        log_error("[OK]Invalid JSON format in requested_entities")
         raise HTTPException(status_code=400, detail="Invalid JSON format in requested_entities")
 
 

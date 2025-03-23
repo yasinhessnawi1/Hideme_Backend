@@ -192,7 +192,7 @@ class SecurityAwareErrorHandler:
         # Get error type name
         error_type = type(e).__name__
 
-        # Log the unsanitized error for debugging (internal only)
+        # Log the uninitialized error for debugging (internal only)
         log_error(
             f"[ERROR] {operation_type} error on {filename or 'unknown file'} (ID: {error_id}, Trace: {trace_id}): {str(e)}")
 
@@ -262,7 +262,7 @@ class SecurityAwareErrorHandler:
         # Get error type name
         error_type = type(e).__name__
 
-        # Log the unsanitized error for debugging (internal only)
+        # Log the uninitialized error for debugging (internal only)
         log_error(
             f"[ERROR] {operation_type} batch error on {files_count} files (ID: {error_id}, Trace: {trace_id}): {str(e)}")
 
@@ -337,7 +337,7 @@ class SecurityAwareErrorHandler:
         # Get error type name
         error_type = type(e).__name__
 
-        # Log the unsanitized error for debugging (internal only)
+        # Log the uninitialized error for debugging (internal only)
         log_error(
             f"[ERROR] {operation_type} error on endpoint {safe_endpoint} (ID: {error_id}, Trace: {trace_id}): {str(e)}")
 

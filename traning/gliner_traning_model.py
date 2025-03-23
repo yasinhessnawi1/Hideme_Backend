@@ -12,6 +12,7 @@ import time
 import datetime
 import gc
 import numpy as np
+import argparse  # Added for command line arguments
 from gliner import GLiNER
 from gliner.training import Trainer, TrainingArguments
 from gliner.data_processing.collator import DataCollator
@@ -361,10 +362,30 @@ def segment_long_texts(data_items, tokenizer, max_length=MAX_SEQ_LENGTH):
     return segmented_items
 
 
-def main():
+def find_latest_checkpoint(output_dir):
+    """
+    Find the latest checkpoint in the output directory.
+    Returns the path to the latest checkpoint or None if not found.
+    """
+    checkpoints = glob.glob(os.path.join(output_dir, "checkpoint-*"))
+
+    if not checkpoints:
+        logger.info("No checkpoints found.")
+        return None
+
+    # Sort by creation time (newest first)
+    latest_checkpoint = max(checkpoints, key=os.path.getctime)
+    logger.info(f"Found latest checkpoint: {latest_checkpoint}")
+    return latest_checkpoint
+
+
+def main(resume_training=False, checkpoint_path=None, output_dir="models/trained_gliner"):
     # Start timer
     start_time = time.time()
     logger.info("Starting GLiNER training process")
+
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
 
     # Check CUDA availability first
     if torch.cuda.is_available():
@@ -382,10 +403,29 @@ def main():
     # Process and combine all JSONL files from the data_path
     combined_data_file = sanitize_and_combine_jsonl_files(data_path, combined_data_path)
 
-    # Load the pre-trained model
-    model_name = "urchade/gliner_multi_pii-v1"
-    logger.info(f"Loading model from {model_name}...")
-    model = GLiNER.from_pretrained(model_name)
+    # Find the latest checkpoint if resuming and no specific checkpoint is provided
+    if resume_training and checkpoint_path is None:
+        checkpoint_path = find_latest_checkpoint(output_dir)
+        if checkpoint_path is None:
+            logger.warning("Resume training requested but no checkpoint found. Starting from scratch.")
+            resume_training = False
+
+    # Load the model (either from checkpoint or pre-trained)
+    if resume_training and checkpoint_path:
+        logger.info(f"Resuming training from checkpoint: {checkpoint_path}")
+        try:
+            model = GLiNER.from_pretrained(checkpoint_path)
+            logger.info("Successfully loaded model from checkpoint")
+        except Exception as e:
+            logger.error(f"Error loading model from checkpoint: {e}")
+            logger.info("Falling back to pre-trained model")
+            model_name = "urchade/gliner_multi_pii-v1"
+            logger.info(f"Loading model from {model_name}...")
+            model = GLiNER.from_pretrained(model_name)
+    else:
+        model_name = "urchade/gliner_multi_pii-v1"
+        logger.info(f"Loading model from {model_name}...")
+        model = GLiNER.from_pretrained(model_name)
 
     # Get tokenizer from model
     tokenizer = model.data_processor.transformer_tokenizer
@@ -444,10 +484,6 @@ def main():
     logger.info(
         f"Train sequence length stats - Min: {min(train_lengths)}, Max: {max(train_lengths)}, Avg: {sum(train_lengths) / len(train_lengths):.2f}")
 
-    # Output directory
-    output_dir = "models/trained_gliner"
-    os.makedirs(output_dir, exist_ok=True)
-
     # Set up the data collator
     data_collator = DataCollator(
         model.config,
@@ -494,7 +530,7 @@ def main():
 
     logger.info(f"Using batch size of {batch_size} for training")
 
-    # Setup training arguments for full training
+    # Setup training arguments
     training_args = TrainingArguments(
         output_dir=output_dir,
         learning_rate=2e-5,
@@ -543,7 +579,15 @@ def main():
         # Run training with progress tracking
         logger.info(f"Training model with {len(train_dataset)} examples...")
         start_train_time = time.time()
-        trainer.train()
+
+        # Resume from checkpoint if applicable
+        if resume_training and checkpoint_path:
+            trainer.train(resume_from_checkpoint=checkpoint_path)
+            logger.info(f"Resumed training from checkpoint: {checkpoint_path}")
+        else:
+            trainer.train()
+            logger.info("Started training from scratch")
+
         train_duration = time.time() - start_train_time
         logger.info(f"Training completed successfully in {train_duration:.2f} seconds!")
     except KeyboardInterrupt:
@@ -613,4 +657,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Train the GLiNER model with resumable training')
+    parser.add_argument('--resume', action='store_true', help='Resume training from the latest checkpoint')
+    parser.add_argument('--checkpoint', type=str, help='Specific checkpoint to resume from', default=None)
+    parser.add_argument('--output_dir', type=str, default="models/trained_gliner",
+                        help='Directory to save model and checkpoints')
+
+    args = parser.parse_args()
+
+    # Run training with parsed arguments
+    main(resume_training=args.resume, checkpoint_path=args.checkpoint, output_dir=args.output_dir)

@@ -281,6 +281,7 @@ class InitializationService:
             cache_key = self._get_hybrid_cache_key(config or {})
             if cache_key in self._hybrid_detectors:
                 return self._hybrid_detectors[cache_key]
+        log_info(f"Creating hybrid detector with config: {config}")
 
         # Use ReadWriteLock with shorter timeout values and improved fallback
         try:
