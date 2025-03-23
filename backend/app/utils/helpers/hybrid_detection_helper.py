@@ -76,13 +76,13 @@ async def process_file_in_chunks(
 
 
 async def process_pdf_in_chunks(
-        file: UploadFile,
-        entity_list: List[str],
-        use_presidio: bool,
-        use_gemini: bool,
-        use_gliner: bool,
-        start_time: float,
-        operation_id: Optional[str] = None
+    file: UploadFile,
+    entity_list: List[str],
+    use_presidio: bool,
+    use_gemini: bool,
+    use_gliner: bool,
+    start_time: float,
+    operation_id: Optional[str] = None
 ) -> JSONResponse:
     operation_id = operation_id or str(uuid.uuid4())
     processing_times = {}
@@ -93,7 +93,8 @@ async def process_pdf_in_chunks(
         processing_times["extraction_time"] = time.time() - start_time
 
         config = create_detector_config(use_presidio, use_gemini, use_gliner, entity_list)
-        detector = await initialize_hybrid_detector(config, operation_id)
+        # Wrap the synchronous detector initialization in asyncio.to_thread
+        detector = await asyncio.to_thread(initialize_hybrid_detector, config, operation_id)
 
         pages = extracted_data.get("pages", [])
         if len(pages) > 20:
@@ -110,8 +111,7 @@ async def process_pdf_in_chunks(
         anonymized_text, entities, redaction_mapping = process_detection_results(
             detection_result, processing_times, start_time, operation_id
         )
-        record_processing_metrics("hybrid_detection_pdf_chunked", "application/pdf", entity_list, processing_times,
-                                  entities)
+        record_processing_metrics("hybrid_detection_pdf_chunked", "application/pdf", entity_list, processing_times, entities)
 
         return construct_final_response(
             anonymized_text, entities, redaction_mapping, processing_times, file, "streamed",
@@ -120,6 +120,7 @@ async def process_pdf_in_chunks(
 
     except Exception as e:
         return handle_processing_error(e, "pdf_chunked", use_presidio, use_gemini, use_gliner, operation_id)
+
 
 
 async def process_large_document_in_batches(
@@ -135,7 +136,7 @@ async def process_large_document_in_batches(
     log_info(f"[SECURITY] Starting batch processing [operation_id={operation_id}, pages={len(pages)}]")
 
     try:
-        detector = await initialize_hybrid_detector(config, operation_id)
+        detector = await asyncio.to_thread(initialize_hybrid_detector, config, operation_id)
         batch_size = 10
         all_entities, all_redaction = await process_batches(
             pages, detector, entity_list, batch_size, operation_id
@@ -231,10 +232,10 @@ def create_detector_config(use_presidio: bool, use_gemini: bool, use_gliner: boo
     }
 
 
-async def initialize_hybrid_detector(config: Dict, operation_id: str):
+def initialize_hybrid_detector(config: Dict, operation_id: str):
     try:
         log_info(f"[SECURITY] Initializing detector [operation_id={operation_id}]")
-        return await initialization_service.get_hybrid_detector(config)
+        return initialization_service.get_hybrid_detector(config)
     except Exception as e:
         log_error(f"[SECURITY] Detector init failed: {e} [operation_id={operation_id}]")
         raise
@@ -243,19 +244,30 @@ async def initialize_hybrid_detector(config: Dict, operation_id: str):
 async def execute_detection(detector, extracted_data, entity_list, processing_times, operation_id: str):
     try:
         start = time.time()
-        if hasattr(detector, 'detect_sensitive_data_async'):
+
+        # If async method exists, use it
+        if hasattr(detector, 'detect_sensitive_data_async') and callable(getattr(detector, 'detect_sensitive_data_async')):
             task = detector.detect_sensitive_data_async(extracted_data, entity_list)
+            if asyncio.iscoroutine(task):
+                result = await asyncio.wait_for(task, timeout=60)
+            else:
+                # Just in case someone mislabels a sync method with async name
+                result = await asyncio.to_thread(detector.detect_sensitive_data, extracted_data, entity_list)
         else:
-            task = asyncio.to_thread(detector.detect_sensitive_data, extracted_data, entity_list)
-        result = await asyncio.wait_for(task, timeout=60)
+            # Run sync detection on a separate thread
+            result = await asyncio.to_thread(detector.detect_sensitive_data, extracted_data, entity_list)
+
         processing_times["detection_time"] = time.time() - start
         return result
+
     except asyncio.TimeoutError:
         log_error(f"[SECURITY] Detection timeout [operation_id={operation_id}]")
         return JSONResponse(status_code=408, content={"detail": "Detection timeout"})
+
     except Exception as e:
         log_error(f"[SECURITY] Detection error: {e} [operation_id={operation_id}]")
         raise
+
 
 
 def process_detection_results(detection_result, processing_times, start_time, operation_id: str):
@@ -336,8 +348,10 @@ def log_operation_details(op_name: str, entity_count: int, processing_times: Dic
 
 async def extract_pdf_text(file: UploadFile, operation_id: str) -> Dict:
     try:
-        import pymupdf
-        doc = pymupdf.open(stream=file.file, filetype="pdf")
+        content = await file.read()
+        await file.seek(0)
+        import fitz  # pymupdf
+        doc = fitz.open(stream=content, filetype="pdf")
         extracted = {"pages": []}
         for page_idx in range(len(doc)):
             page = doc[page_idx]
@@ -357,7 +371,7 @@ async def process_batches(
         entity_list: List[str],
         batch_size: int,
         operation_id: str
-) -> Tuple[List[Dict], List[Dict]]:  # Fixed return type annotation
+) -> Tuple[List[Dict], List[Dict]]:
     all_entities: List[Dict] = []
     all_redaction_pages: List[Dict] = []  # Changed variable name for clarity
 
@@ -368,11 +382,17 @@ async def process_batches(
                 {"pages": batch},
                 entity_list
             )
+            # Assume result is a tuple: (anonymized_text, entities, redaction_mapping)
             all_entities.extend(result[1])
-
-            # Extract pages from redaction mapping and extend list
             redaction_mapping = result[2]
-            all_redaction_pages.extend(redaction_mapping.get("pages", []))
+
+            # If redaction_mapping is a dict, try to get "pages"; if it's a list, use it directly.
+            if isinstance(redaction_mapping, dict):
+                pages_list = redaction_mapping.get("pages", [])
+            else:
+                pages_list = redaction_mapping
+
+            all_redaction_pages.extend(pages_list)
 
         except Exception as e:
             log_warning(f"[SECURITY] Batch {i // batch_size} failed: {e} [operation_id={operation_id}]")
@@ -380,29 +400,61 @@ async def process_batches(
     return all_entities, all_redaction_pages
 
 
-def construct_batch_response(entities, redaction, processing_times, file: UploadFile,
-                             config: Dict, operation_id: str, batch_size: int) -> JSONResponse:
+def construct_batch_response(
+    entities,
+    redaction,
+    processing_times,
+    file: UploadFile,
+    config: Dict,
+    operation_id: str,
+    batch_size: int
+) -> JSONResponse:
+    """
+    Build and return the batched detection response with the same structure as the standard file branch.
+    """
+    # Ensure redaction is a dict with a "pages" key
+    if isinstance(redaction, list):
+        redaction = {"pages": redaction}
+
+    # Create a base response using the sanitize helper; here we pass a message indicating batched processing.
     response = sanitize_detection_output(
         "Batched processing complete", entities, redaction, processing_times
     )
-    response.update({
-        "model_info": {
-            "engine": "hybrid",
-            "engines_used": {
-                "presidio": config["use_presidio"],
-                "gemini": config["use_gemini"],
-                "gliner": config["use_gliner"]
-            },
-            "batched": True
+
+    # Update model info similar to the standard branch.
+    response["model_info"] = {
+        "engine": "hybrid",
+        "engines_used": {
+            "presidio": config.get("use_presidio", False),
+            "gemini": config.get("use_gemini", False),
+            "gliner": config.get("use_gliner", False)
         },
-        "file_info": {
-            "filename": file.filename,
-            "content_type": file.content_type,
-            "batch_size": batch_size,
-            "operation_id": operation_id
+        "requested_engines": {
+            "presidio": config.get("use_presidio", False),
+            "gemini": config.get("use_gemini", False),
+            "gliner": config.get("use_gliner", False)
         },
-        "_debug": get_memory_stats(operation_id)
-    })
+        # For batched processing, you might not be in fallback/emergency mode.
+        "emergency_mode": False,
+        "batched": True
+    }
+
+    # Update file info; note that in the standard branch, file_info contains the file size.
+    # For batched processing, we include the batch_size as additional information.
+    response["file_info"] = {
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "batch_size": batch_size,
+        # If available, you could also include file size (e.g., len(file_content)) here.
+        "operation_id": operation_id
+    }
+
+    # Update debug information; mimic the debug keys from the standard branch.
+    response["_debug"] = {
+        "operation_id": operation_id,
+        "lock_used": False
+    }
+
     return JSONResponse(content=response)
 
 
