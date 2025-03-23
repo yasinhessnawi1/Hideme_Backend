@@ -70,7 +70,7 @@ class ParallelProcessingHelper:
         if not pages:
             return []
 
-        # Auto-configure max_workers if not specified
+        # Autoconfigure max_workers if not specified
         if max_workers is None:
             max_workers = ParallelProcessingHelper.get_optimal_workers(len(pages))
         else:
@@ -85,10 +85,10 @@ class ParallelProcessingHelper:
                 try:
                     # Call the processing function for the page
                     page_result = await process_func(page)
-                    return (page.get("page", 0), page_result)
+                    return page.get("page", 0), page_result
                 except Exception as e:
                     log_warning(f"[PARALLEL] Error processing page {page.get('page', 'unknown')}: {e}")
-                    return (page.get("page", 0), ({"page": page.get("page", 0), "sensitive": []}, []))
+                    return page.get("page", 0), ({"page": page.get("page", 0), "sensitive": []}, [])
 
         # Create and gather tasks
         tasks = [process_with_semaphore(page) for page in pages]

@@ -58,39 +58,27 @@ class HybridEntityDetector(EntityDetector):
             timeout=30.0
         )
 
-        # If pre-created detectors are provided, use them directly
-        if "detectors" in config and isinstance(config["detectors"], list):
-            self.detectors = config["detectors"]
-            detector_types = [type(d).__name__ for d in self.detectors]
-            log_info(f"[HYBRID] Using pre-created detectors: {detector_types}")
-            return
-
-        # Create detectors based on configuration, using cached instances from initialization service
         if config.get("use_presidio", True):
-            # Get cached Presidio detector
             detector = initialization_service.get_presidio_detector()
             self.detectors.append(detector)
+            log_info("[INIT] Presidio Detector Initialized Successfully")
 
-        if config.get("use_gemini", False):
-            # Get cached Gemini detector
+        if config.get("use_gemini", True):
             detector = initialization_service.get_gemini_detector()
-            self.detectors.append(detector)
+            if detector:
+                self.detectors.append(detector)
+                log_info("[INIT] Gemini Detector Initialized Successfully")
+            else:
+                log_warning("[INIT] Gemini Detector Initialization Failed")
 
-        if config.get("use_gliner", False):
-            # For GLiNER, get the specific model based on requested entities
+        if config.get("use_gliner", True):
             entity_list = config.get("entities", [])
-
-            # Get cached GLiNER detector
             detector = initialization_service.get_gliner_detector(entity_list)
-            self.detectors.append(detector)
-
-        if not self.detectors:
-            # Default to Presidio if no detectors specified
-            detector = initialization_service.get_presidio_detector()
-            self.detectors.append(detector)
-
-        detector_types = [type(d).__name__ for d in self.detectors]
-        log_info(f"[OK] Created hybrid entity detector with {len(self.detectors)} detection engines: {detector_types}")
+            if detector:
+                self.detectors.append(detector)
+                log_info("[INIT] GLiNER Detector Initialized Successfully")
+            else:
+                log_warning("[INIT] GLiNER Detector Initialization Failed")
 
     # In hybrid.py, update the detect_sensitive_data_async method to properly handle async operations
     # This is the key fix for "object HybridEntityDetector can't be used in 'await' expression"
@@ -147,7 +135,7 @@ class HybridEntityDetector(EntityDetector):
                             detector.detect_sensitive_data_async(
                                 minimized_data, requested_entities
                             ),
-                            timeout=60.0  # 60 second timeout for detector
+                            timeout=600.0  # 60 second timeout for detector
                         )
                     except asyncio.TimeoutError:
                         log_warning(f"[WARNING] Timeout in {engine_name} detector")
@@ -218,7 +206,7 @@ class HybridEntityDetector(EntityDetector):
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*tasks, return_exceptions=False),
-                timeout=120.0  # Overall 2-minute timeout for all detectors
+                timeout=600.0  # Overall 2-minute timeout for all detectors
             )
         except asyncio.TimeoutError:
             log_error("[ERROR] Global timeout for all detection engines")
@@ -326,7 +314,7 @@ class HybridEntityDetector(EntityDetector):
                 async def run_with_timeout():
                     return await asyncio.wait_for(
                         self.detect_sensitive_data_async(minimized_data, requested_entities),
-                        timeout=180.0  # 3-minute timeout for overall sync detection
+                        timeout=600.0  # 3-minute timeout for overall sync detection
                     )
 
                 return loop.run_until_complete(run_with_timeout())
@@ -382,7 +370,7 @@ class HybridEntityDetector(EntityDetector):
                 )
             finally:
                 loop.close()
-        except (asyncio.TimeoutError, Exception):
+        except Exception:
             # Return limited information if lock acquisition fails
             return {
                 "initialized": True,

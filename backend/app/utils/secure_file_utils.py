@@ -16,6 +16,7 @@ import time
 from contextlib import contextmanager, asynccontextmanager
 from typing import Optional, Union, BinaryIO, Any, Callable, Generator, AsyncGenerator, TypeVar, Tuple, Awaitable
 
+
 import aiofiles
 
 from backend.app.configs.gdpr_config import TEMP_FILE_RETENTION_SECONDS
@@ -144,15 +145,18 @@ class SecureTempFileManager:
 
             # Acquire lock with timeout
             async with SecureTempFileManager._buffer_pool_lock.acquire_timeout(timeout=2.0):
-                # Return to pool
                 buffer_pool = await SecureTempFileManager._get_buffer_pool()
                 buffer.seek(0)
-                await buffer_pool.return_buffer(memoryview(buffer.getbuffer()))
+                # If the BytesIO has the original memoryview attached, use it:
+                if hasattr(buffer, '_orig_memview'):
+                    memview = buffer._orig_memview
+                else:
+                    memview = memoryview(buffer.getbuffer())
+                await buffer_pool.release_buffer(memview)
         except TimeoutError:
             log_warning("[SECURITY] Timeout acquiring buffer pool lock, closing buffer")
             buffer.close()
         except Exception as e:
-            # Just close if there's an error
             buffer.close()
             log_warning(f"[SECURITY] Error returning buffer to pool: {e}")
 
@@ -654,6 +658,7 @@ class SecureTempFileManager:
         Returns:
             Result from the processor.
         """
+
         trace_id = f"mem_process_{time.time()}_{hashlib.md5(extension.encode()).hexdigest()[:6]}"
         content_size = len(content) / 1024  # in KB
 

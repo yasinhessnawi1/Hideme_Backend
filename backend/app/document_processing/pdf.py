@@ -30,7 +30,7 @@ class PDFTextExtractor(DocumentExtractor):
     # Class-level lock for thread-safe operations with timeout capability
     _extraction_lock = ReadWriteLock("pdf_extraction_lock", priority=LockPriority.MEDIUM)
     # Timeouts
-    DEFAULT_EXTRACTION_TIMEOUT = 120.0  # 60 seconds for extraction operations
+    DEFAULT_EXTRACTION_TIMEOUT = 300.0  # 60 seconds for extraction operations
 
     def __init__(self, pdf_input: Union[str, pymupdf.Document, bytes, BinaryIO],
                  page_batch_size: int = 5):
@@ -224,13 +224,6 @@ class PDFTextExtractor(DocumentExtractor):
             # Process each page in the current batch with timeout handling
             batch_start_time = time.time()
             try:
-                # Use instance lock with timeout to ensure one batch completes before starting another
-                with self._instance_lock.acquire_timeout(timeout=self.DEFAULT_EXTRACTION_TIMEOUT) as acquired:
-                    if not acquired:
-                        log_warning(
-                            f"[WARNING] Batch processing lock acquisition timed out for pages {batch_start}-{batch_end - 1}")
-                        raise TimeoutError(f"Batch processing timed out for pages {batch_start}-{batch_end - 1}")
-
                     for page_num in range(batch_start, batch_end):
                         page_start_time = time.time()
                         max_page_time = 10.0  # 10 seconds timeout per page
