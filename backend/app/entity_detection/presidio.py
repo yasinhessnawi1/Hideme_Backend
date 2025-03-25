@@ -15,10 +15,10 @@ from presidio_anonymizer import AnonymizerEngine
 
 from backend.app.configs.presidio_config import (DEFAULT_LANGUAGE, REQUESTED_ENTITIES)
 from backend.app.entity_detection.base import BaseEntityDetector
-from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
 from backend.app.utils.helpers.text_utils import TextUtils, EntityUtils
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.parallel.core import ParallelProcessingCore
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.security.processing_records import record_keeper
@@ -171,7 +171,7 @@ class PresidioEntityDetector(BaseEntityDetector):
                     log_info(f"[OK] Found {len(entity_dicts)} entities on page {page_number}")
 
                     # Process entities
-                    processed_entities, page_redaction_info = await ParallelProcessingHelper.process_entities_in_parallel(
+                    processed_entities, page_redaction_info = await ParallelProcessingCore.process_entities_in_parallel(
                         self, full_text, mapping, entity_dicts, page_number
                     )
 
@@ -187,7 +187,7 @@ class PresidioEntityDetector(BaseEntityDetector):
             # Process pages in parallel with a global timeout
             try:
                 page_results = await asyncio.wait_for(
-                    ParallelProcessingHelper.process_pages_in_parallel(pages, process_page),
+                    ParallelProcessingCore.process_pages_in_parallel(pages, process_page),
                     timeout=120.0  # 2-minute timeout for all pages
                 )
             except asyncio.TimeoutError:

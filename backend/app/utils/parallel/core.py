@@ -6,17 +6,19 @@ monitoring, adaptive resource allocation, and standardized error handling. It se
 the foundation for all batch processing operations throughout the application.
 """
 import asyncio
+import logging
 import os
 import time
-import psutil
-import logging
-from typing import List, Dict, Any, Callable, TypeVar, Awaitable, Tuple, Optional, Union, Coroutine
+from typing import List, Dict, Any, Callable, TypeVar, Awaitable, Tuple, Optional
 
-from backend.app.utils.synchronization_utils import AsyncTimeoutSemaphore, LockPriority, AsyncTimeoutLock
-from backend.app.utils.logging.logger import log_info, log_warning, log_error
+import psutil
+
+from backend.app.configs.config_singleton import get_config
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.memory_management import memory_monitor
+from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
+from backend.app.utils.memory_management import memory_monitor
+from backend.app.utils.synchronization_utils import AsyncTimeoutSemaphore, LockPriority, AsyncTimeoutLock
 
 # Type variables for generic functions
 T = TypeVar('T')
@@ -274,6 +276,119 @@ class ParallelProcessingCore:
 
             return partial_results
 
+    @staticmethod
+    async def process_pages_in_parallel(
+            pages: List[Dict[str, Any]],
+            process_func: Callable[[Dict[str, Any]], Awaitable[Tuple[Dict[str, Any], List[Dict[str, Any]]]]],
+            max_workers: Optional[int] = None
+    ) -> List[Tuple[int, Tuple[Dict[str, Any], List[Dict[str, Any]]]]]:
+        """
+        Process multiple document pages in parallel with async support.
+
+        Args:
+            pages: List of page data dictionaries
+            process_func: Async function to call for each page
+            max_workers: Maximum number of parallel workers (None for auto)
+
+        Returns:
+            List of tuples (page_number, (page_redaction_info, processed_entities))
+        """
+        if not pages:
+            return []
+
+        # Autoconfigure max_workers if not specified
+        if max_workers is None:
+            max_workers = ParallelProcessingCore.get_optimal_workers(len(pages))
+        else:
+            max_workers = min(max_workers, len(pages))
+
+        # Use semaphore to limit concurrent tasks
+        semaphore = asyncio.Semaphore(max_workers)
+
+        # Wrapper function to acquire and release semaphore
+        async def process_with_semaphore(page):
+            async with semaphore:
+                try:
+                    # Call the processing function for the page
+                    page_result = await process_func(page)
+                    return page.get("page", 0), page_result
+                except Exception as e:
+                    log_warning(f"[PARALLEL] Error processing page {page.get('page', 'unknown')}: {e}")
+                    return page.get("page", 0), ({"page": page.get("page", 0), "sensitive": []}, [])
+
+        # Create and gather tasks
+        tasks = [process_with_semaphore(page) for page in pages]
+
+        # Wait for all tasks to complete
+        results = await asyncio.gather(*tasks)
+
+        log_info(f"[PARALLEL] Processed {len(pages)} pages with {max_workers} workers")
+
+        return results
+
+    @staticmethod
+    async def process_entities_in_parallel(
+            detector,
+            full_text: str,
+            mapping: List[Tuple[Dict[str, Any], int, int]],
+            entities: List[Any],
+            page_number: int,
+            batch_size: Optional[int] = None
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """
+        Process entities in parallel for a single page with async support.
+        Externalizes the batch size from the config and adds detailed logging.
+
+        Args:
+            detector: Entity detector instance.
+            full_text: Full text of the page.
+            mapping: Text-to-position mapping.
+            entities: List of entities to process.
+            page_number: Current page number.
+            batch_size: Number of entities to process in each batch (optional).
+
+        Returns:
+            Tuple of (processed_entities, page_redaction_info).
+        """
+        if not entities:
+            return [], {"page": page_number, "sensitive": []}
+
+        # Use the config singleton to load the batch size if not explicitly provided.
+        if batch_size is None:
+            batch_size = get_config("entity_batch_size", 10)
+
+        log_info(
+            f"[PARALLEL] Starting entity processing for page {page_number} with batch size {batch_size} and {len(entities)} total entities")
+
+        # Split entities into batches based on the externalized batch size.
+        entity_batches = [entities[i:i + batch_size] for i in range(0, len(entities), batch_size)]
+        batch_results = []
+        batch_times = []
+
+        # Process each batch and log performance metrics.
+        for i, batch in enumerate(entity_batches):
+            start_time = time.perf_counter()
+            result = await detector.process_entities_for_page(page_number, full_text, mapping, batch)
+            end_time = time.perf_counter()
+            elapsed = end_time - start_time
+            batch_results.append(result)
+            batch_times.append(elapsed)
+            log_info(
+                f"[PARALLEL] Processed batch {i + 1}/{len(entity_batches)} with {len(batch)} entities in {elapsed:.2f}s")
+
+        total_time = sum(batch_times)
+        log_sensitive_operation("Entity Batch Processing", len(entities), total_time, page=page_number)
+
+        # Combine batch results.
+        processed_entities = []
+        page_redaction_info = {"page": page_number, "sensitive": []}
+        for processed, redaction in batch_results:
+            processed_entities.extend(processed)
+            page_redaction_info["sensitive"].extend(redaction.get("sensitive", []))
+
+        log_info(f"[PARALLEL] Completed entity processing for page {page_number} in {total_time:.2f}s")
+        return processed_entities, page_redaction_info
+
 
 class BatchProcessor:
     """
@@ -303,66 +418,4 @@ class BatchProcessor:
             ParallelProcessingCore.get_optimal_workers,
             total_items,
             memory_per_item
-        )
-
-    @staticmethod
-    async def split_into_batches(
-        items: List[T],
-        batch_size: Optional[int] = None,
-        memory_per_item: Optional[int] = None
-    ) -> List[List[T]]:
-        """
-        Split items into optimally sized batches based on system resources.
-
-        Args:
-            items: List of items to process
-            batch_size: Size of each batch (calculated automatically if None)
-            memory_per_item: Estimated memory required per item in bytes (optional)
-
-        Returns:
-            List of batches, each containing a subset of items
-        """
-        if not items:
-            return []
-
-        # Calculate optimal batch size if not provided
-        if batch_size is None:
-            batch_size = await BatchProcessor.adaptive_batch_size(
-                len(items),
-                memory_per_item
-            )
-
-        # Split items into batches
-        return [items[i:i+batch_size] for i in range(0, len(items), batch_size)]
-
-    @staticmethod
-    async def process_with_progress(
-        items: List[T],
-        processor: Callable[[T], Awaitable[R]],
-        max_workers: Optional[int] = None,
-        operation_id: Optional[str] = None,
-        progress_callback: Optional[Callable[[int, int, float], Awaitable[None]]] = None
-    ) -> List[Tuple[int, Optional[R]]]:
-        """
-        Process items in parallel with progress tracking.
-
-        This is a convenience wrapper around ParallelProcessingCore.process_in_parallel
-        with a focus on progress reporting.
-
-        Args:
-            items: List of items to process
-            processor: Async function to process each item
-            max_workers: Maximum number of parallel workers (auto-calculated if None)
-            operation_id: Unique identifier for the operation (for logging)
-            progress_callback: Optional async function called with (completed, total, elapsed_time)
-
-        Returns:
-            List of tuples (index, result) for each item
-        """
-        return await ParallelProcessingCore.process_in_parallel(
-            items=items,
-            processor=processor,
-            max_workers=max_workers,
-            operation_id=operation_id,
-            progress_callback=progress_callback
         )

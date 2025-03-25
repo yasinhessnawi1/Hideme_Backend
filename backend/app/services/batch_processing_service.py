@@ -1,23 +1,17 @@
-"""
-Optimized batch processing service leveraging centralized PDF processing functionality.
-
-This service handles batch document processing with enhanced performance through
-unified parallel processing and memory optimization, utilizing the centralized PDF
-processing and batch utilities for consistent results and optimized resource utilization.
-"""
 import asyncio
 import json
+import os
 import time
 import uuid
 import zipfile
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import List, Dict, Any, Optional, Union
 
-import os
 from fastapi import UploadFile, BackgroundTasks
 from starlette.responses import JSONResponse, StreamingResponse
 
-from backend.app.factory.document_processing_factory import DocumentFormat, EntityDetectionEngine, \
-    DocumentProcessingFactory
+from backend.app.factory.document_processing_factory import (
+    EntityDetectionEngine
+)
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers.json_helper import validate_requested_entities
@@ -29,7 +23,7 @@ from backend.app.utils.parallel.core import ParallelProcessingCore
 from backend.app.utils.secure_file_utils import SecureTempFileManager
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
-from backend.app.utils.validation.file_validation import validate_mime_type, sanitize_filename
+from backend.app.utils.validation.file_validation import sanitize_filename, validate_mime_type
 from backend.app.utils.validation.sanitize_utils import sanitize_detection_output
 
 
@@ -44,12 +38,6 @@ class BatchProcessingService:
     - Aggregated response formatting
     - Detailed performance tracking
     - Comprehensive GDPR compliance
-
-    Key features:
-    - Uses centralized PDF processing functionality for consistent results
-    - Optimized parallel processing with dynamic resource allocation
-    - Improved memory management with adaptive buffer sizing
-    - Enhanced error handling and recovery
     """
 
     @staticmethod
@@ -65,23 +53,27 @@ class BatchProcessingService:
         """
         Detect entities in multiple files in parallel with optimized resource utilization.
 
+        This revised method leverages the batch_extract_text method (which ensures that
+        the extracted text is returned as a consistent dictionary format) and then passes
+        the normalized results to the entity detection routine.
+
         Args:
-            files: List of uploaded files to process
-            requested_entities: JSON string of entity types to detect
-            detection_engine: Entity detection engine to use
-            max_parallel_files: Maximum number of files to process in parallel
-            use_presidio: Whether to use Presidio detector (for hybrid engine)
-            use_gemini: Whether to use Gemini detector (for hybrid engine)
-            use_gliner: Whether to use GLiNER detector (for hybrid engine)
+            files: List of uploaded files to process.
+            requested_entities: JSON string of entity types to detect.
+            detection_engine: Entity detection engine to use.
+            max_parallel_files: Maximum number of files to process in parallel.
+            use_presidio: Whether to use the Presidio detector (for hybrid engine).
+            use_gemini: Whether to use the Gemini detector (for hybrid engine).
+            use_gliner: Whether to use the GLiNER detector (for hybrid engine).
 
         Returns:
-            Dict with batch processing results
+            Dictionary with batch processing results.
         """
         start_time = time.time()
         batch_id = str(uuid.uuid4())
         log_info(f"Starting batch entity detection (Batch ID: {batch_id})")
 
-        # Validate entity list
+        # Validate and prepare the entity list.
         try:
             entity_list = validate_requested_entities(requested_entities) if requested_entities else []
         except Exception as e:
@@ -89,145 +81,38 @@ class BatchProcessingService:
                 e, "entity_validation", len(files)
             )
 
-        # Pre-initialize detector
+        # Pre-initialize the detector.
         try:
             detector = await BatchProcessingService._get_initialized_detector(
-                detection_engine,
-                use_presidio,
-                use_gemini,
-                use_gliner,
-                entity_list
+                detection_engine, use_presidio, use_gemini, use_gliner, entity_list
             )
         except Exception as e:
             return SecurityAwareErrorHandler.handle_batch_processing_error(
                 e, "detector_initialization", len(files)
             )
 
-        # Determine optimal batch size and parallelism
+        # Determine optimal parallelism.
         use_memory, total_size, optimal_workers = BatchProcessingUtils.determine_processing_strategy(files)
-
-        # Adjust by user-specified max workers if provided
         if max_parallel_files is not None:
             optimal_workers = min(optimal_workers, max_parallel_files)
-
         log_info(f"Processing {len(files)} files with {optimal_workers} workers (Batch ID: {batch_id})")
 
-        # Track file metadata for processing
-        file_metadata = []
-        valid_files = []
+        # Use batch_extract_text to extract text from all files.
+        extraction_response = await BatchProcessingService.batch_extract_text(files, max_parallel_files)
 
-        # Validate and prepare files
-        async for batch in BatchProcessingUtils.validate_files_in_batches(files):
-            for file, content, safe_filename in batch:
-                file_idx = len(file_metadata)
-                file_metadata.append({
-                    "original_name": file.filename,
-                    "content_type": file.content_type or "application/octet-stream",
-                    "size": len(content),
-                    "safe_name": safe_filename
-                })
-                valid_files.append((file_idx, file, content))
-
-        if not valid_files:
-            return {
-                "batch_summary": {
-                    "batch_id": batch_id,
-                    "total_files": len(files),
-                    "successful": 0,
-                    "failed": len(files),
-                    "total_entities": 0,
-                    "total_time": time.time() - start_time
-                },
-                "file_results": []
-            }
-
-        # Separate PDF files for optimized processing
-        pdf_indices = []
-        pdf_files = []
-        other_indices = []
-        other_files = []
-
-        for idx, file, content in valid_files:
-            content_type = file.content_type or "application/octet-stream"
-            if "pdf" in content_type.lower():
-                pdf_indices.append(idx)
-                pdf_files.append(content)
-            else:
-                other_indices.append(idx)
-                other_files.append((file, content))
-
-        # Process PDF files with optimized batch processing
+        # Convert extraction results into a list of tuples (index, extracted_data).
+        # The batch_extract_text method returns a response with a "file_results" list.
         extraction_results = []
+        extraction_file_results = extraction_response.get("file_results", [])
+        for idx, res in enumerate(extraction_file_results):
+            if res.get("status") == "success":
+                # Ensure that the "results" key contains our normalized extracted data.
+                extraction_results.append((idx, res.get("results")))
+            else:
+                # For files that failed extraction, pass an error placeholder.
+                extraction_results.append((idx, {"error": res.get("error"), "pages": []}))
 
-        if pdf_files:
-            log_info(f"Processing {len(pdf_files)} PDF files with optimized batch extraction (Batch ID: {batch_id})")
-
-            try:
-                pdf_extraction_results = await BatchProcessingUtils.extract_text_from_pdf_batch(
-                    pdf_files,
-                    max_workers=optimal_workers,
-                )
-
-                # Map back to original indices
-                for i, (_, result) in enumerate(pdf_extraction_results):
-                    if i < len(pdf_indices):
-                        extraction_results.append((pdf_indices[i], result))
-            except Exception as e:
-                log_error(f"Error in PDF batch extraction: {str(e)}")
-                # Continue with processing other files
-
-        # Process non-PDF files individually
-        if other_files:
-            log_info(f"Processing {len(other_files)} non-PDF files (Batch ID: {batch_id})")
-
-            # Define extraction function for non-PDF files
-            async def extract_non_pdf(item: Tuple[int, Tuple[UploadFile, bytes]]) -> Tuple[int, Dict[str, Any]]:
-                idx, (file, content) = item
-
-                try:
-                    # Determine document format
-                    document_format = None
-                    filename = file.filename or ""
-
-                    if filename.lower().endswith('.pdf'):
-                        document_format = DocumentFormat.PDF
-                    elif filename.lower().endswith(('.docx', '.doc')):
-                        document_format = DocumentFormat.DOCX
-                    elif filename.lower().endswith('.txt'):
-                        document_format = DocumentFormat.TXT
-
-                    # Use DocumentProcessingFactory
-                    extractor = DocumentProcessingFactory.create_document_extractor(
-                        content, document_format
-                    )
-                    extracted_data = extractor.extract_text()
-                    extractor.close()
-
-                    return idx, extracted_data
-                except Exception as e:
-                    error_id = SecurityAwareErrorHandler.log_processing_error(
-                        e, "non_pdf_extraction", file.filename or f"file_{idx}"
-                    )
-                    log_error(f"Error extracting text from non-PDF file at index {idx}: {str(e)} [error_id={error_id}]")
-                    return idx, {"error": str(e), "pages": []}
-
-            # Process non-PDF files in parallel
-            other_indices_with_files = [(idx, file_tuple) for idx, file_tuple in zip(other_indices, other_files)]
-
-            other_extraction_results = await ParallelProcessingCore.process_in_parallel(
-                items=other_indices_with_files,
-                processor=extract_non_pdf,
-                max_workers=optimal_workers,
-                operation_id=f"non_pdf_extraction_{batch_id}"
-            )
-
-            # Add to extraction results
-            extraction_results.extend(other_extraction_results)
-
-        # Sort extraction results by original index
-        extraction_results.sort(key=lambda x: x[0])
-
-        # Apply entity detection to extracted data
+        # Apply entity detection on the normalized extraction results.
         detection_results = await BatchProcessingUtils.detect_entities_in_batch(
             extraction_results,
             detector,
@@ -235,122 +120,100 @@ class BatchProcessingService:
             optimal_workers
         )
 
-        # Process results and prepare response
+        # Build a mapping from file index to detection result.
+        detection_map = {idx: result for idx, result in detection_results}
+
+        # Prepare final file results.
         file_results = []
         successful = 0
         failed = 0
         total_entities = 0
-        log_warning(f"[OK] {detection_results}")
-        # Map detection results
-        detection_map = {}
-        for idx, result in detection_results:
-            detection_map[idx] = result
 
-        # Create response for each file
-        for idx, metadata in enumerate(file_metadata):
-            # Check if we have extraction and detection results
-            extraction_result = next((r[1] for r in extraction_results if r[0] == idx), None)
+        # Use the extraction response file order for merging.
+        for idx, extraction in enumerate(extraction_file_results):
+            if extraction.get("status") != "success":
+                file_results.append({
+                    "file": extraction.get("file", f"file_{idx}"),
+                    "status": "error",
+                    "error": extraction.get("error", "Text extraction failed")
+                })
+                failed += 1
+                continue
+
             detection_result = detection_map.get(idx)
-
-            if extraction_result is None:
-                # Missing extraction result
-                file_results.append({
-                    "file": metadata["original_name"],
-                    "status": "error",
-                    "error": "Text extraction failed"
-                })
-                failed += 1
-                continue
-
-            if "error" in extraction_result:
-                # Extraction error
-                file_results.append({
-                    "file": metadata["original_name"],
-                    "status": "error",
-                    "error": extraction_result["error"]
-                })
-                failed += 1
-                continue
-
             if detection_result is None:
-                # Missing detection result
                 file_results.append({
-                    "file": metadata["original_name"],
+                    "file": extraction.get("file", f"file_{idx}"),
                     "status": "error",
                     "error": "Entity detection failed"
                 })
                 failed += 1
-                continue
-
-            # Fix: Properly check and handle the detection result
-            if isinstance(detection_result, tuple) and len(detection_result) == 3:
-                anonymized_text, entities, redaction_mapping = detection_result
-
-                # Calculate file-specific statistics
-                total_words = sum(len(page.get("words", [])) for page in extraction_result.get("pages", []))
-                pages_count = len(extraction_result.get("pages", []))
-                entity_density = (len(entities) / total_words) * 1000 if total_words > 0 else 0
-
-                processing_times = {
-                    "words_count": total_words,
-                    "pages_count": pages_count,
-                    "entity_density": entity_density
-                }
-
-                # Create sanitized response
-                sanitized_response = sanitize_detection_output(
-                    anonymized_text, entities, redaction_mapping, processing_times
-                )
-
-                sanitized_response["file_info"] = {
-                    "filename": metadata["original_name"],
-                    "content_type": metadata["content_type"],
-                    "size": metadata["size"]
-                }
-
-                # Add model info
-                model_info = {"engine": detection_engine.name}
-                if detection_engine == EntityDetectionEngine.HYBRID:
-                    model_info = {
-                        "engine": "hybrid",
-                        "engines_used": {
-                            "presidio": use_presidio,
-                            "gemini": use_gemini,
-                            "gliner": use_gliner
-                        }
-                    }
-                sanitized_response["model_info"] = model_info
-
-                # Add to file results
-                file_results.append({
-                    "file": metadata["original_name"],
-                    "status": "success",
-                    "results": sanitized_response
-                })
-
-                successful += 1
-                total_entities += len(entities)
-
-                # Record successful detection for GDPR compliance
-                record_keeper.record_processing(
-                    operation_type="batch_file_detection",
-                    document_type=metadata["content_type"],
-                    entity_types_processed=entity_list,
-                    processing_time=0.0,  # We don't have per-file timing
-                    file_count=1,
-                    entity_count=len(entities),
-                    success=True
-                )
             else:
-                # Invalid detection result format
-                file_results.append({
-                    "file": metadata["original_name"],
-                    "status": "error",
-                    "error": "Invalid detection result format"
-                })
-                failed += 1
+                if isinstance(detection_result, tuple) and len(detection_result) == 3:
+                    anonymized_text, entities, redaction_mapping = detection_result
 
-        # Calculate batch summary
+                    # Calculate file-specific statistics.
+                    extracted_data = extraction.get("results", {})
+                    total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
+                    pages_count = len(extracted_data.get("pages", []))
+                    entity_density = (len(entities) / total_words) * 1000 if total_words > 0 else 0
+                    processing_times = {
+                        "words_count": total_words,
+                        "pages_count": pages_count,
+                        "entity_density": entity_density
+                    }
+
+                    # Create a sanitized response.
+                    sanitized_response = sanitize_detection_output(
+                        anonymized_text, entities, redaction_mapping, processing_times
+                    )
+
+                    # Add file info (if available).
+                    sanitized_response["file_info"] = {
+                        "filename": extraction.get("file", f"file_{idx}"),
+                        "content_type": extraction.get("content_type", "unknown"),
+                        "size": extraction.get("size", 0)
+                    }
+
+                    # Add model information.
+                    model_info = {"engine": detection_engine.name}
+                    if detection_engine == EntityDetectionEngine.HYBRID:
+                        model_info = {
+                            "engine": "hybrid",
+                            "engines_used": {
+                                "presidio": use_presidio,
+                                "gemini": use_gemini,
+                                "gliner": use_gliner
+                            }
+                        }
+                    sanitized_response["model_info"] = model_info
+
+                    file_results.append({
+                        "file": extraction.get("file", f"file_{idx}"),
+                        "status": "success",
+                        "results": sanitized_response
+                    })
+                    successful += 1
+                    total_entities += len(entities)
+
+                    # Record successful detection for GDPR compliance.
+                    record_keeper.record_processing(
+                        operation_type="batch_file_detection",
+                        document_type=extraction.get("content_type", "unknown"),
+                        entity_types_processed=entity_list,
+                        processing_time=0.0,  # Timing details can be added if available.
+                        file_count=1,
+                        entity_count=len(entities),
+                        success=True
+                    )
+                else:
+                    file_results.append({
+                        "file": extraction.get("file", f"file_{idx}"),
+                        "status": "error",
+                        "error": "Invalid detection result format"
+                    })
+                    failed += 1
+
         total_time = time.time() - start_time
 
         batch_summary = {
@@ -363,15 +226,8 @@ class BatchProcessingService:
             "workers": optimal_workers
         }
 
-        # Log batch operation
-        log_batch_operation(
-            "Batch Entity Detection",
-            len(files),
-            successful,
-            total_time
-        )
-
-        # Record batch processing for GDPR compliance
+        # Log batch operation and record GDPR processing.
+        log_batch_operation("Batch Entity Detection", len(files), successful, total_time)
         record_keeper.record_processing(
             operation_type="batch_entity_detection",
             document_type="multiple_files",
@@ -382,18 +238,14 @@ class BatchProcessingService:
             success=(successful > 0)
         )
 
-        # Create final response
         response = {
             "batch_summary": batch_summary,
-            "file_results": file_results
-        }
-
-        # Add memory statistics
-        mem_stats = memory_monitor.get_memory_stats()
-        response["_debug"] = {
-            "memory_usage": mem_stats["current_usage"],
-            "peak_memory": mem_stats["peak_usage"],
-            "operation_id": batch_id
+            "file_results": file_results,
+            "_debug": {
+                "memory_usage": memory_monitor.get_memory_stats().get("current_usage"),
+                "peak_memory": memory_monitor.get_memory_stats().get("peak_usage"),
+                "operation_id": batch_id
+            }
         }
 
         return response
@@ -991,6 +843,7 @@ class BatchProcessingService:
                 "use_gemini": use_gemini,
                 "use_gliner": use_gliner
             }
+
 
             # Add entities to config if provided
             if entity_list:

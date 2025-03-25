@@ -1,7 +1,5 @@
-import asyncio
 import json
 import time
-from typing import Optional
 
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -9,17 +7,17 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from backend.app.document_processing.pdf import PDFTextExtractor, PDFRedactionService
+from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_warning, log_info, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
-from backend.app.utils.validation.data_minimization import minimize_extracted_data
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.memory_management import memory_optimized, memory_monitor
 from backend.app.utils.security.processing_records import record_keeper
+from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.validation.file_validation import (
     MAX_PDF_SIZE_BYTES,
     validate_file_content_async,
     validate_mime_type
 )
-from backend.app.utils.memory_management import memory_optimized, memory_monitor
 
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)

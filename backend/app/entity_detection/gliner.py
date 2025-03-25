@@ -14,6 +14,8 @@ from typing import Dict, Any, List, Optional, Tuple
 
 import torch
 
+from backend.app.utils.parallel.core import ParallelProcessingCore
+
 # Import GLiNER with error handling
 try:
     from gliner import GLiNER
@@ -516,8 +518,6 @@ class GlinerEntityDetector(BaseEntityDetector):
             # Select entities to detect
             entity_list = requested_entities or self.default_entities
 
-            # Process pages in parallel
-            from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
 
             async def process_page(page):
                 # Add timeout handling
@@ -535,7 +535,7 @@ class GlinerEntityDetector(BaseEntityDetector):
                         e, "gliner_page_processing_timeout", f"page_{page.get('page', 'unknown')}")
                     return {"page": page.get('page'), "sensitive": []}, []
 
-            page_results = await ParallelProcessingHelper.process_pages_in_parallel(pages, process_page)
+            page_results = await ParallelProcessingCore.process_pages_in_parallel(pages, process_page)
 
             # Organize results
             combined_results = []

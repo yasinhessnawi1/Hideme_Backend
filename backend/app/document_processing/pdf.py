@@ -18,7 +18,6 @@ import pymupdf
 
 from backend.app.domain.interfaces import DocumentExtractor, DocumentRedactor
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.parallel.core import ParallelProcessingCore
@@ -512,7 +511,7 @@ class PDFTextExtractor(DocumentExtractor):
         """
         # Calculate optimal worker count if not specified
         if max_workers is None:
-            max_workers = ParallelProcessingHelper.get_optimal_workers(len(pdf_files))
+            max_workers = ParallelProcessingCore.get_optimal_workers(len(pdf_files))
 
         log_info(f"[BATCH] Processing {len(pdf_files)} PDFs with {max_workers} workers")
 
@@ -1065,7 +1064,7 @@ class PDFRedactionService(DocumentRedactor):
 
         # Calculate optimal worker count if not specified
         if max_workers is None:
-            max_workers = ParallelProcessingHelper.get_optimal_workers(len(pdf_files))
+            max_workers = ParallelProcessingCore.get_optimal_workers(len(pdf_files))
 
         log_info(f"[BATCH] Redacting {len(pdf_files)} PDFs with {max_workers} workers")
 

@@ -8,12 +8,12 @@ import time
 from typing import Dict, Any, List, Optional, Tuple
 
 from backend.app.entity_detection.base import BaseEntityDetector
+from backend.app.utils.parallel.core import ParallelProcessingCore
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers.gemini_helper import GeminiHelper
 # Import the usage manager
 from backend.app.utils.helpers.gemini_usage_manager import gemini_usage_manager
-from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
 from backend.app.utils.helpers.text_utils import TextUtils
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.security.processing_records import record_keeper
@@ -164,7 +164,7 @@ class GeminiEntityDetector(BaseEntityDetector):
             log_info(f"[OK] Processing {len(pages)} pages with Gemini API in parallel")
             max_api_workers = min(4, len(pages))  # Limit concurrent API calls
 
-            page_results = await ParallelProcessingHelper.process_pages_in_parallel(
+            page_results = await ParallelProcessingCore.process_pages_in_parallel(
                 pages,
                 process_page,
                 max_workers=max_api_workers
