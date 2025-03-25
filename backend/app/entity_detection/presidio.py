@@ -17,11 +17,11 @@ from backend.app.configs.presidio_config import (DEFAULT_LANGUAGE, REQUESTED_ENT
 from backend.app.entity_detection.base import BaseEntityDetector
 from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
 from backend.app.utils.helpers.text_utils import TextUtils, EntityUtils
-from backend.app.utils.logger import log_info, log_warning, log_error
+from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.data_minimization import minimize_extracted_data
-from backend.app.utils.secure_logging import log_sensitive_operation
-from backend.app.utils.processing_records import record_keeper
+from backend.app.utils.validation.data_minimization import minimize_extracted_data
+from backend.app.utils.logging.secure_logging import log_sensitive_operation
+from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority
 
 

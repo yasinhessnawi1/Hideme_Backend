@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-from backend.app.utils.logger import log_warning
+from backend.app.utils.logging.logger import log_warning
 
 
 class GeminiUsageManager:

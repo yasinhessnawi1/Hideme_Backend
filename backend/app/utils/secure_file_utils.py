@@ -1,9 +1,10 @@
 """
-Enhanced secure file handling utilities with improved in-memory processing and GDPR compliance.
+Enhanced secure file handling utilities with improved in-memory processing and batch support.
 
 This module provides comprehensive utilities for securely handling files with a preference for
 in-memory operations when possible. It ensures proper cleanup, secure deletion, and optimized
-buffer management (via buffer pooling) to reduce memory copying.
+buffer management (via buffer pooling) to reduce memory copying, now with enhanced support
+for batch operations leveraging centralized document processing.
 """
 import asyncio
 import hashlib
@@ -13,18 +14,16 @@ import os
 import shutil
 import tempfile
 import time
+import uuid
 from contextlib import contextmanager, asynccontextmanager
-from typing import Optional, Union, BinaryIO, Any, Callable, Generator, AsyncGenerator, TypeVar, Tuple, Awaitable
-
-
-import aiofiles
+from typing import Optional, Union, BinaryIO, Any, Callable, Generator, AsyncGenerator, TypeVar, Tuple, Awaitable, List, Dict
 
 from backend.app.configs.gdpr_config import TEMP_FILE_RETENTION_SECONDS
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.file_validation import calculate_file_hash, sanitize_filename
-from backend.app.utils.logger import log_info, log_warning
+from backend.app.utils.validation.file_validation import calculate_file_hash, sanitize_filename
+from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.memory_management import memory_monitor
-from backend.app.utils.retention_management import retention_manager
+from backend.app.utils.security.retention_management import retention_manager
 from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority, AsyncTimeoutLock
 
 _logger = logging.getLogger("secure_file_utils")
@@ -38,7 +37,7 @@ class SecureTempFileManager:
     This class provides comprehensive utilities for securely handling files with a preference for
     in-memory operations when possible, ensuring proper cleanup to comply with GDPR requirements.
     It implements optimized buffer pooling for improved memory efficiency and provides
-    both synchronous and asynchronous interfaces.
+    both synchronous and asynchronous interfaces, with enhanced batch operation support.
 
     Key enhancements:
     - Integration with BufferPool for optimized memory management
@@ -47,6 +46,7 @@ class SecureTempFileManager:
     - GDPR-compliant file handling with secure deletion
     - Consolidated temporary file creation methods
     - Automatic cleanup tracking for all created files
+    - Enhanced batch operation support
     """
 
     # Size threshold for in-memory processing instead of using disk (default 10MB)
@@ -56,14 +56,14 @@ class SecureTempFileManager:
 
     # Enable buffer pooling (true/false via env)
     _use_buffer_pool = os.environ.get("USE_BUFFER_POOL", "true").lower() == "true"
-    _buffer_pool_lock = AsyncTimeoutLock("buffer_pool_lock", LockPriority.MEDIUM, 5.0)  # Async lock with timeout for buffer pool
+    _buffer_pool_lock = AsyncTimeoutLock("buffer_pool_lock", LockPriority.MEDIUM, 5.0, is_instance_lock=True)
 
     # Initialize buffer pool using BufferPool class from buffer_pool.py
     _buffer_pool_instance = None
 
     # Registry of all created temporary files for cleanup tracking
     _temp_files_registry = set()
-    _registry_lock = TimeoutLock("temp_files_registry_lock", LockPriority.MEDIUM, 3.0)  # Timeout lock for registry operations
+    _registry_lock = TimeoutLock("temp_files_registry_lock", LockPriority.MEDIUM, 3.0, is_instance_lock=True)
 
     @staticmethod
     async def _get_buffer_pool():
@@ -73,7 +73,7 @@ class SecureTempFileManager:
             from backend.app.utils.buffer_pool import BufferPool
             # Dynamically adjust max size based on available memory
             try:
-                available_mb = memory_monitor.memory_stats["available_memory_mb"]
+                available_mb = memory_monitor.memory_stats.available_memory_mb.get()
                 # Use at most 10% of available memory for buffer pool, within limits
                 max_pool_size_mb = min(int(available_mb * 0.1),
                                        SecureTempFileManager.MAX_BUFFER_POOL_SIZE // (1024 * 1024))
@@ -104,7 +104,11 @@ class SecureTempFileManager:
 
         try:
             # Acquire lock with timeout - no more blocking forever
-            async with SecureTempFileManager._buffer_pool_lock.acquire_timeout(timeout=5.0):
+            async with SecureTempFileManager._buffer_pool_lock.acquire_timeout(timeout=5.0) as acquired:
+                if not acquired:
+                    log_warning("[SECURITY] Timeout acquiring buffer pool lock, creating new buffer")
+                    return io.BytesIO()
+
                 # Get buffer from pool
                 buffer_pool = await SecureTempFileManager._get_buffer_pool()
                 memview = await buffer_pool.get_buffer(size)
@@ -144,7 +148,12 @@ class SecureTempFileManager:
                 return
 
             # Acquire lock with timeout
-            async with SecureTempFileManager._buffer_pool_lock.acquire_timeout(timeout=2.0):
+            async with SecureTempFileManager._buffer_pool_lock.acquire_timeout(timeout=2.0) as acquired:
+                if not acquired:
+                    log_warning("[SECURITY] Timeout acquiring buffer pool lock, closing buffer")
+                    buffer.close()
+                    return
+
                 buffer_pool = await SecureTempFileManager._get_buffer_pool()
                 buffer.seek(0)
                 # If the BytesIO has the original memoryview attached, use it:
@@ -170,12 +179,12 @@ class SecureTempFileManager:
             retention_seconds: Optional retention period in seconds
         """
         try:
-            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=3.0):
-                SecureTempFileManager._temp_files_registry.add(file_path)
-        except TimeoutError:
-            log_warning(f"[SECURITY] Timeout registering temp file {os.path.basename(file_path)}, "
-                       "continuing without registry tracking")
-            # Even if registry tracking fails, still register with retention manager
+            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=3.0) as acquired:
+                if not acquired:
+                    log_warning(f"[SECURITY] Timeout registering temp file {os.path.basename(file_path)}, "
+                               "continuing without registry tracking")
+                else:
+                    SecureTempFileManager._temp_files_registry.add(file_path)
         except Exception as e:
             log_warning(f"[SECURITY] Error registering temp file: {e}")
 
@@ -194,11 +203,11 @@ class SecureTempFileManager:
             file_path: Path to the temporary file
         """
         try:
-            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=2.0):
-                if file_path in SecureTempFileManager._temp_files_registry:
+            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=2.0) as acquired:
+                if not acquired:
+                    log_warning(f"[SECURITY] Timeout unregistering temp file {os.path.basename(file_path)}")
+                elif file_path in SecureTempFileManager._temp_files_registry:
                     SecureTempFileManager._temp_files_registry.remove(file_path)
-        except TimeoutError:
-            log_warning(f"[SECURITY] Timeout unregistering temp file {os.path.basename(file_path)}")
         except Exception as e:
             log_warning(f"[SECURITY] Error unregistering temp file: {e}")
 
@@ -244,8 +253,9 @@ class SecureTempFileManager:
                 )
                 # Try to also register in our tracking system
                 try:
-                    with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0):
-                        SecureTempFileManager._temp_files_registry.add(temp_file.name)
+                    with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0) as acquired:
+                        if acquired:
+                            SecureTempFileManager._temp_files_registry.add(temp_file.name)
                 except TimeoutError:
                     # Non-critical if this fails
                     pass
@@ -266,8 +276,8 @@ class SecureTempFileManager:
                     retention_manager.unregister_file(temp_file.name)
                     # Also try to unregister from our tracking
                     try:
-                        with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0):
-                            if temp_file.name in SecureTempFileManager._temp_files_registry:
+                        with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0) as acquired:
+                            if acquired and temp_file.name in SecureTempFileManager._temp_files_registry:
                                 SecureTempFileManager._temp_files_registry.remove(temp_file.name)
                     except TimeoutError:
                         # Non-critical if this fails
@@ -332,6 +342,7 @@ class SecureTempFileManager:
             Path to the created file.
         """
         trace_id = f"secure_file_{time.time()}_{hashlib.md5(prefix.encode()).hexdigest()[:6]}"
+        temp_file = None
         try:
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, prefix=prefix)
             if content:
@@ -354,7 +365,7 @@ class SecureTempFileManager:
                      f"({len(content) / 1024 if content else 0:.1f}KB) [trace_id={trace_id}]")
             return temp_file.name
         except Exception as e:
-            if os.path.exists(temp_file.name):
+            if temp_file and os.path.exists(temp_file.name):
                 await asyncio.to_thread(SecureTempFileManager.secure_delete_file, temp_file.name)
             SecurityAwareErrorHandler.log_processing_error(e, "secure_temp_file_creation", trace_id=trace_id)
             raise e
@@ -377,6 +388,7 @@ class SecureTempFileManager:
         """
         loop = asyncio.get_event_loop() if asyncio.get_event_loop_policy().get_event_loop().is_running() else None
         trace_id = f"secure_file_{time.time()}_{hashlib.md5(prefix.encode()).hexdigest()[:6]}"
+        temp_file = None
         try:
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, prefix=prefix)
             if content:
@@ -397,17 +409,20 @@ class SecureTempFileManager:
 
             # Also register in our tracking
             try:
-                with SecureTempFileManager._registry_lock.acquire_timeout(timeout=2.0):
-                    SecureTempFileManager._temp_files_registry.add(temp_file.name)
-            except TimeoutError:
-                log_warning(f"[SECURITY] Timeout registering temp file {os.path.basename(temp_file.name)}, "
-                           "continuing without registry tracking")
+                with SecureTempFileManager._registry_lock.acquire_timeout(timeout=2.0) as acquired:
+                    if acquired:
+                        SecureTempFileManager._temp_files_registry.add(temp_file.name)
+                    else:
+                        log_warning(f"[SECURITY] Timeout registering temp file {os.path.basename(temp_file.name)}, "
+                                   "continuing without registry tracking")
+            except Exception as e:
+                log_warning(f"[SECURITY] Error registering temp file: {e}")
 
             log_info(f"[SECURITY] Created secure temporary file: {os.path.basename(temp_file.name)} "
                      f"({len(content) / 1024 if content else 0:.1f}KB) [trace_id={trace_id}]")
             return temp_file.name
         except Exception as e:
-            if os.path.exists(temp_file.name):
+            if temp_file and os.path.exists(temp_file.name):
                 SecureTempFileManager.secure_delete_file(temp_file.name)
             SecurityAwareErrorHandler.log_processing_error(e, "secure_temp_file_creation", trace_id=trace_id)
             raise e
@@ -436,35 +451,30 @@ class SecureTempFileManager:
         return temp_dir
 
     @staticmethod
-    def create_secure_temp_dir(prefix: str = "secure_dir_", retention_seconds: Optional[int] = None) -> str:
+    async def create_batch_temp_dirs(count: int, prefix: str = "batch_dir_",
+                                   retention_seconds: Optional[int] = None) -> List[str]:
         """
-        Create a secure temporary directory and register it for cleanup.
+        Create multiple temporary directories efficiently for batch processing.
 
         Args:
-            prefix: Directory name prefix.
-            retention_seconds: Optional retention period in seconds.
+            count: Number of directories to create
+            prefix: Directory name prefix
+            retention_seconds: Optional retention period in seconds
 
         Returns:
-            Path to the created directory.
+            List of paths to the created directories
         """
-        temp_dir = tempfile.mkdtemp(prefix=prefix)
+        dirs = []
+        for i in range(count):
+            dir_prefix = f"{prefix}{i+1}_"
+            dir_path = await SecureTempFileManager.create_secure_temp_dir_async(
+                prefix=dir_prefix,
+                retention_seconds=retention_seconds
+            )
+            dirs.append(dir_path)
 
-        # Register with retention manager
-        retention_manager.register_processed_file(
-            temp_dir,
-            retention_seconds or TEMP_FILE_RETENTION_SECONDS
-        )
-
-        # Also register in our tracking
-        try:
-            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=2.0):
-                SecureTempFileManager._temp_files_registry.add(temp_dir)
-        except TimeoutError:
-            log_warning(f"[SECURITY] Timeout registering temp dir {os.path.basename(temp_dir)}, "
-                       "continuing without registry tracking")
-
-        log_info(f"[SECURITY] Created secure temporary directory: {os.path.basename(temp_dir)}")
-        return temp_dir
+        log_info(f"[SECURITY] Created {len(dirs)} temporary directories for batch processing")
+        return dirs
 
     @staticmethod
     def secure_delete_file(file_path: str) -> bool:
@@ -495,8 +505,8 @@ class SecureTempFileManager:
 
             # Unregister from our tracking and retention manager
             try:
-                with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0):
-                    if file_path in SecureTempFileManager._temp_files_registry:
+                with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0) as acquired:
+                    if acquired and file_path in SecureTempFileManager._temp_files_registry:
                         SecureTempFileManager._temp_files_registry.remove(file_path)
             except TimeoutError:
                 # Continue even if unregistering fails
@@ -556,8 +566,8 @@ class SecureTempFileManager:
 
             # Unregister from our tracking and retention manager
             try:
-                with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0):
-                    if dir_path in SecureTempFileManager._temp_files_registry:
+                with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0) as acquired:
+                    if acquired and dir_path in SecureTempFileManager._temp_files_registry:
                         SecureTempFileManager._temp_files_registry.remove(dir_path)
             except TimeoutError:
                 # Continue even if unregistering fails
@@ -588,6 +598,45 @@ class SecureTempFileManager:
             # Ensure it's unregistered from our tracking
             await SecureTempFileManager._unregister_temp_file(dir_path)
         return result
+
+    @staticmethod
+    async def secure_delete_batch(paths: List[str]) -> Dict[str, bool]:
+        """
+        Securely delete multiple files or directories in parallel.
+
+        Args:
+            paths: List of file or directory paths to delete
+
+        Returns:
+            Dictionary mapping paths to deletion success status
+        """
+        if not paths:
+            return {}
+
+        # Determine optimal worker count for parallelization
+        from backend.app.utils.parallel.batch import BatchProcessingUtils
+        worker_count = BatchProcessingUtils.get_optimal_batch_size(len(paths))
+
+        # Create semaphore to control concurrency
+        semaphore = asyncio.Semaphore(worker_count)
+
+        async def delete_path(path: str) -> Tuple[str, bool]:
+            """Delete a single path with concurrency control"""
+            async with semaphore:
+                if os.path.isdir(path):
+                    result = await SecureTempFileManager.secure_delete_directory_async(path)
+                elif os.path.isfile(path):
+                    result = await SecureTempFileManager.secure_delete_file_async(path)
+                else:
+                    result = False
+                return path, result
+
+        # Process all paths in parallel
+        tasks = [delete_path(path) for path in paths]
+        results = await asyncio.gather(*tasks)
+
+        # Convert results to dictionary
+        return {path: result for path, result in results}
 
     @staticmethod
     def process_content_in_memory(
@@ -694,6 +743,82 @@ class SecureTempFileManager:
             return result
 
     @staticmethod
+    async def process_batch_content_in_memory_async(
+            contents: List[bytes],
+            processor: Callable[[bytes], Awaitable[Any]],
+            max_workers: Optional[int] = None
+    ) -> List[Any]:
+        """
+        Process multiple content items in parallel with memory optimization.
+
+        This method efficiently processes a batch of content items, keeping smaller items
+        in memory while using temporary files for larger ones as needed.
+
+        Args:
+            contents: List of content byte arrays to process
+            processor: Async function to process each content item
+            max_workers: Maximum number of parallel workers (None for auto)
+
+        Returns:
+            List of processing results in the same order as input contents
+        """
+        if not contents:
+            return []
+
+        # Generate operation ID for tracking
+        operation_id = f"batch_mem_process_{uuid.uuid4().hex[:8]}"
+        log_info(f"[SECURITY] Starting batch in-memory processing of {len(contents)} items [operation_id={operation_id}]")
+
+        # Calculate optimal worker count
+        from backend.app.utils.parallel.batch import BatchProcessingUtils
+        optimal_workers = max_workers or BatchProcessingUtils.get_optimal_batch_size(len(contents))
+
+        # Create semaphore for controlling concurrency
+        semaphore = asyncio.Semaphore(optimal_workers)
+
+        async def process_single_content(index: int, content: bytes) -> Tuple[int, Any]:
+            """Process a single content item with memory optimization"""
+            async with semaphore:
+                content_size = len(content) / 1024  # KB
+                use_memory = len(content) <= SecureTempFileManager.IN_MEMORY_THRESHOLD
+
+                if use_memory:
+                    try:
+                        # Process in memory
+                        buffer = await SecureTempFileManager.get_buffer(len(content))
+                        buffer.write(content)
+                        buffer.seek(0)
+
+                        try:
+                            result = await processor(buffer.getvalue())
+                        finally:
+                            # Always return buffer to pool
+                            buffer.seek(0)
+                            await SecureTempFileManager.return_buffer(buffer)
+
+                        return index, result
+                    except Exception as e:
+                        log_warning(f"[SECURITY] In-memory processing failed for item {index}: {e}, "
+                                  f"falling back to file [operation_id={operation_id}]")
+
+                # Fall back to file-based processing
+                async with SecureTempFileManager.create_temp_file_async(content=content) as tmp_path:
+                    with open(tmp_path, "rb") as f:
+                        file_content = f.read()
+                    result = await processor(file_content)
+                    return index, result
+
+        # Process all content items in parallel
+        tasks = [process_single_content(i, content) for i, content in enumerate(contents)]
+        results = await asyncio.gather(*tasks)
+
+        # Sort results by original index
+        sorted_results = [result for _, result in sorted(results, key=lambda x: x[0])]
+
+        log_info(f"[SECURITY] Completed batch in-memory processing of {len(contents)} items [operation_id={operation_id}]")
+        return sorted_results
+
+    @staticmethod
     def get_memory_buffer_content(buffer: io.BytesIO, close_after: bool = False) -> bytes:
         """
         Get content from a memory buffer, resetting its position.
@@ -750,7 +875,7 @@ class SecureTempFileManager:
         # Check memory pressure first
         try:
             current_usage = memory_monitor.get_memory_usage()
-            available_memory = memory_monitor.memory_stats["available_memory_mb"] * 1024 * 1024
+            available_memory = memory_monitor.memory_stats.available_memory_mb.get() * 1024 * 1024
 
             # Adjust threshold based on memory pressure
             if current_usage > 90:  # Critical memory pressure
@@ -794,11 +919,11 @@ class SecureTempFileManager:
             Tuple: (is_valid, error_message, sanitized_content, sanitized_filename)
         """
         safe_filename = sanitize_filename(filename)
-        from backend.app.utils.file_validation import validate_file_content
+        from backend.app.utils.validation.file_validation import validate_file_content
         is_valid, reason, detected_type = validate_file_content(content, safe_filename, content_type)
         if not is_valid:
             return False, reason, b"", safe_filename
-        from backend.app.utils.file_validation import is_valid_file_size
+        from backend.app.utils.validation.file_validation import is_valid_file_size
         file_type = "text"
         if detected_type:
             if "pdf" in detected_type:
@@ -833,53 +958,64 @@ class SecureTempFileManager:
                                        content_type)
 
     @staticmethod
-    async def stream_file_processing(
-            file_path: str,
-            chunk_size: int = 64 * 1024,  # 64KB chunks
-            processor: Callable[[bytes, int], Awaitable[Any]] = None
-    ) -> Any:
+    async def validate_and_sanitize_batch_files_async(
+        contents: List[bytes],
+        filenames: List[str],
+        content_types: Optional[List[str]] = None
+    ) -> List[Tuple[int, bool, str, bytes, str]]:
         """
-        Process a file in streaming mode to reduce memory footprint.
+        Asynchronously validate and sanitize multiple files in parallel.
 
         Args:
-            file_path: Path to the file
-            chunk_size: Size of chunks to process
-            processor: Async function to process each chunk with position
+            contents: List of file contents
+            filenames: List of original filenames
+            content_types: Optional list of content types
 
         Returns:
-            Result from processor if provided, otherwise None
+            List of tuples (index, is_valid, error_message, sanitized_content, sanitized_filename)
         """
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File not found: {file_path}")
+        if not contents or not filenames:
+            return []
 
-        file_size = os.path.getsize(file_path)
-        position = 0
+        if len(contents) != len(filenames):
+            raise ValueError("Contents and filenames lists must have the same length")
 
-        try:
-            async with aiofiles.open(file_path, 'rb') as f:
-                while position < file_size:
-                    chunk = await f.read(chunk_size)
-                    if not chunk:
-                        break
+        # Use None for any missing content types
+        if content_types and len(content_types) != len(contents):
+            content_types = [None] * len(contents)
+        elif not content_types:
+            content_types = [None] * len(contents)
 
-                    if processor:
-                        await processor(chunk, position)
+        # Generate operation ID for tracking
+        operation_id = f"batch_validate_{uuid.uuid4().hex[:8]}"
 
-                    position += len(chunk)
-        except ImportError:
-            # Fall back to regular file I/O if aiofiles is not available
-            with open(file_path, 'rb') as f:
-                while position < file_size:
-                    chunk = f.read(chunk_size)
-                    if not chunk:
-                        break
+        # Calculate optimal worker count
+        from backend.app.utils.parallel.batch import BatchProcessingUtils
+        worker_count = BatchProcessingUtils.get_optimal_batch_size(len(contents))
 
-                    if processor:
-                        await processor(chunk, position)
+        # Create semaphore for controlling concurrency
+        semaphore = asyncio.Semaphore(worker_count)
 
-                    position += len(chunk)
+        async def validate_single_file(index: int, content: bytes, filename: str, content_type: Optional[str]) -> Tuple[int, bool, str, bytes, str]:
+            """Validate a single file with concurrency control"""
+            async with semaphore:
+                result = await SecureTempFileManager.validate_and_sanitize_file_async(
+                    content, filename, content_type
+                )
+                return (index,) + result
 
-        return position
+        # Process all files in parallel
+        tasks = [
+            validate_single_file(i, content, filename, content_type)
+            for i, (content, filename, content_type) in enumerate(zip(contents, filenames, content_types))
+        ]
+        results = await asyncio.gather(*tasks)
+
+        # Sort results by original index
+        sorted_results = sorted(results, key=lambda x: x[0])
+
+        log_info(f"[SECURITY] Validated {len(contents)} files in batch [operation_id={operation_id}]")
+        return sorted_results
 
     @staticmethod
     async def cleanup_all_temporary_files() -> int:
@@ -892,23 +1028,21 @@ class SecureTempFileManager:
         cleaned_count = 0
 
         try:
-            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=10.0):
-                # Make a copy of the set to avoid modification during iteration
-                files_to_clean = set(SecureTempFileManager._temp_files_registry)
-        except TimeoutError:
-            log_warning("[SECURITY] Timeout acquiring registry lock for cleanup, using empty set")
+            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=10.0) as acquired:
+                if not acquired:
+                    log_warning("[SECURITY] Timeout acquiring registry lock for cleanup, using empty set")
+                    files_to_clean = set()
+                else:
+                    # Make a copy of the set to avoid modification during iteration
+                    files_to_clean = set(SecureTempFileManager._temp_files_registry)
+        except Exception as e:
+            log_warning(f"[SECURITY] Error accessing registry for cleanup: {e}")
             files_to_clean = set()
 
-        for file_path in files_to_clean:
-            if os.path.exists(file_path):
-                if os.path.isfile(file_path):
-                    success = await SecureTempFileManager.secure_delete_file_async(file_path)
-                elif os.path.isdir(file_path):
-                    success = await SecureTempFileManager.secure_delete_directory_async(file_path)
-                else:
-                    success = False
-
-                if success:
-                    cleaned_count += 1
+        # Use batch deletion for better performance
+        if files_to_clean:
+            results = await SecureTempFileManager.secure_delete_batch(list(files_to_clean))
+            cleaned_count = sum(1 for success in results.values() if success)
 
         log_info(f"[SECURITY] Cleaned up {cleaned_count} temporary files/directories")
+        return cleaned_count

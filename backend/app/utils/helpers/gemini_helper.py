@@ -18,7 +18,7 @@ from backend.app.configs.gemini_config import (
     SYSTEM_INSTRUCTION
 )
 from backend.app.configs.config_singleton import get_config
-from backend.app.utils.logger import default_logger as logger
+from backend.app.utils.logging.logger import default_logger as logger
 
 # Load environment variables
 load_dotenv(verbose=True)

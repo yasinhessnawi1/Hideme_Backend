@@ -15,8 +15,8 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from backend.app.utils.logger import log_info, log_warning
-from backend.app.utils.synchronization_utils import ReadWriteLock, LockPriority
+from backend.app.utils.logging.logger import log_info, log_warning
+from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority
 
 
 # In-memory cache store with TTL
@@ -43,7 +43,7 @@ class ResponseCache:
         self.etags: Dict[str, str] = {}  # Store ETags for cache entries
 
         # Use ReadWriteLock with appropriate priority
-        self.rwlock = ReadWriteLock(
+        self.rwlock = TimeoutLock(
             "response_cache_lock",
             priority=LockPriority.LOW  # Low priority as caching is not critical
         )

@@ -10,10 +10,8 @@ import os
 import time
 import threading
 import shutil
-from typing import Dict
-from datetime import datetime
 
-from backend.app.utils.logger import log_info, log_warning
+from backend.app.utils.logging.logger import log_info, log_warning
 from backend.app.configs.gdpr_config import TEMP_FILE_RETENTION_SECONDS
 
 
@@ -94,19 +92,6 @@ class DocumentRetentionManager:
             expiration_time = time.time() + retention_seconds
             self.processed_files[file_path] = expiration_time
             log_info(f"[GDPR] Registered file for retention: {os.path.basename(file_path)}")
-
-    def register_permanent_file(self, file_path: str) -> None:
-        """
-        Register a file as permanent (will not be automatically deleted).
-
-        Args:
-            file_path: Path to the file to mark as permanent
-        """
-        with self._lock:
-            if file_path in self.processed_files:
-                del self.processed_files[file_path]
-            self.permanent_files.add(file_path)
-            log_info(f"[GDPR] Registered file as permanent: {os.path.basename(file_path)}")
 
     def unregister_file(self, file_path: str) -> None:
         """
@@ -223,48 +208,6 @@ class DocumentRetentionManager:
         except Exception as e:
             log_warning(f"[GDPR] Failed immediate cleanup of: {os.path.basename(path)}. Error: {e}")
             return False
-
-    def get_retention_status(self, include_file_paths: bool = False) -> Dict:
-        """
-        Get status information about retained files.
-
-        Args:
-            include_file_paths: Whether to include actual file paths in the report
-
-        Returns:
-            Dictionary with retention status information
-        """
-        with self._lock:
-            current_time = time.time()
-            total_files = len(self.processed_files)
-            permanent_files = len(self.permanent_files)
-            expired_files = sum(1 for _, exp_time in self.processed_files.items() if current_time > exp_time)
-            active_files = total_files - expired_files
-            status = {
-                "total_tracked_files": total_files,
-                "permanent_files": permanent_files,
-                "files_pending_deletion": expired_files,
-                "active_retention_files": active_files,
-                "timestamp": datetime.now().isoformat(),
-                "thread_running": self._thread_running
-            }
-            if include_file_paths:
-                status["file_details"] = {
-                    "permanent_files": [os.path.basename(p) for p in self.permanent_files],
-                    "pending_deletion": [
-                        os.path.basename(p) for p, exp in self.processed_files.items()
-                        if current_time > exp
-                    ],
-                    "active_files": [
-                        {
-                            "file": os.path.basename(p),
-                            "expires_in_seconds": int(exp - current_time)
-                        }
-                        for p, exp in self.processed_files.items()
-                        if current_time <= exp
-                    ]
-                }
-            return status
 
     def shutdown(self) -> None:
         """

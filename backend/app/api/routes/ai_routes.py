@@ -8,26 +8,21 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from backend.app.document_processing.pdf import PDFTextExtractor
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.helpers.json_helper import validate_requested_entities
-from backend.app.utils.sanitize_utils import sanitize_detection_output
-from backend.app.utils.secure_logging import log_sensitive_operation
-from backend.app.utils.data_minimization import minimize_extracted_data
+from backend.app.utils.logging.logger import log_info, log_error, log_warning
+from backend.app.utils.validation.sanitize_utils import sanitize_detection_output
+from backend.app.utils.logging.secure_logging import log_sensitive_operation
+from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.processing_records import record_keeper
-from backend.app.utils.file_validation import validate_mime_type, validate_file_content_async
+from backend.app.utils.security.processing_records import record_keeper
+from backend.app.utils.validation.file_validation import validate_mime_type, validate_file_content_async
 from backend.app.utils.memory_management import memory_optimized, memory_monitor
-from backend.app.utils.document_processing_utils import extract_text_data_in_memory
-from backend.app.utils.secure_file_utils import SecureTempFileManager
-from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
-from backend.app.utils.logger import log_info, log_warning, log_error
 
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
-
-# Create shared lock for AI detection resources
-_ai_resource_lock = AsyncTimeoutLock("ai_detection_lock", priority=LockPriority.HIGH)
 
 
 @router.post("/detect")
@@ -41,18 +36,14 @@ async def ai_detect_sensitive(
     """
     Detect sensitive information in a document using Gemini AI with enhanced security.
 
-    The entire file is read once into memory and processed using in-memory buffers,
-    avoiding unnecessary temporary files. Common validation and extraction logic is
-    centralized in a shared helper function.
-
-    Enhanced with timeout lock handling to prevent deadlocks and ensure proper resource management.
+    This endpoint leverages the centralized PDFTextExtractor for text extraction and
+    the cached Gemini detector for entity detection with optimized memory usage.
     """
     start_time = time.time()
     processing_times = {}
     operation_id = str(uuid.uuid4())
 
     log_info(f"[SECURITY] Starting Gemini AI detection operation [operation_id={operation_id}]")
-
 
     try:
         # Validate allowed MIME types
@@ -77,15 +68,14 @@ async def ai_detect_sensitive(
                 )
                 return JSONResponse(status_code=status_code, content=error_response)
 
-        # Read file content using SecureTempFileManager
-        log_info(f"[SECURITY] Reading file content for processing: {file.filename} [operation_id={operation_id}]")
+        # Read file content
         file_read_start = time.time()
-
-        # Use SecureTempFileManager to determine whether to use in-memory or file-based processing
         file_content = await file.read()
         processing_times["file_read_time"] = time.time() - file_read_start
+
         log_info(
-            f"[SECURITY] File read completed in {processing_times['file_read_time']:.3f}s. Size: {len(file_content) / 1024:.1f}KB [operation_id={operation_id}]")
+            f"[SECURITY] File read completed in {processing_times['file_read_time']:.3f}s. "
+            f"Size: {len(file_content) / 1024:.1f}KB [operation_id={operation_id}]")
 
         # Validate file content (format, safety, size)
         is_valid, reason, detected_mime = await validate_file_content_async(
@@ -98,70 +88,51 @@ async def ai_detect_sensitive(
                 content={"detail": reason}
             )
 
-        # Extract text using SecureTempFileManager
+        # Extract text using the centralized PDFTextExtractor
         extract_start = time.time()
-        log_info(
-            f"[SECURITY] Starting text extraction from {detected_mime or file.content_type} [operation_id={operation_id}]")
+        log_info(f"[SECURITY] Starting text extraction [operation_id={operation_id}]")
 
-        # Define processor function for extraction
-        async def extraction_processor(content):
-            # If we received a BytesIO object, extract the bytes from it
-            if hasattr(content, 'read') and hasattr(content, 'seek'):
-                content.seek(0)  # Reset position to beginning
-                content = content.read()  # Read all bytes
-            return await extract_text_data_in_memory(file.content_type, content)
-
-        # Use SecureTempFileManager for memory-efficient processing
-        extracted_data = await SecureTempFileManager.process_content_in_memory_async(
-            file_content,
-            extraction_processor,
-            use_path=False,
-            extension="." + (file.filename.split(".")[-1] if "." in file.filename else "tmp")
-        )
+        try:
+            # Initialize the text extractor with the file content
+            extractor = PDFTextExtractor(file_content)
+            extracted_data = extractor.extract_text(detect_images=True)
+            extractor.close()
+        except Exception as e:
+            log_error(f"[SECURITY] Extraction error: {str(e)} [operation_id={operation_id}]")
+            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+                e, "text_extraction", 500, file.filename
+            )
+            return JSONResponse(status_code=status_code, content=error_response)
 
         processing_times["extraction_time"] = time.time() - extract_start
         log_info(
             f"[SECURITY] Text extraction completed in {processing_times['extraction_time']:.3f}s [operation_id={operation_id}]")
 
         # Apply data minimization to reduce exposure of sensitive information
-        log_info(f"[SECURITY] Applying data minimization [operation_id={operation_id}]")
-        extracted_data = minimize_extracted_data(extracted_data)
+        minimized_data = minimize_extracted_data(extracted_data)
 
-        # Try to get Gemini detector with lock
+        # Get Gemini detector from the initialization service
         detector_start = time.time()
-        log_info(f"[AI] Attempting to acquire AI resource lock for Gemini detection [operation_id={operation_id}]")
-
-        try:
-            # Use lock with timeout to prevent deadlocks
-            async with _ai_resource_lock.acquire_timeout(timeout=15.0) as acquired:
-                if not acquired:
-                    log_warning(f"[AI] Failed to acquire AI resource lock [operation_id={operation_id}]")
-                    # Continue with direct detector initialization as fallback
-                    detector = initialization_service.get_gemini_detector()
-                    log_info(f"[AI] Using Gemini detector without lock acquisition [operation_id={operation_id}]")
-                else:
-                    # Normal path with lock acquired
-                    detector = initialization_service.get_gemini_detector()
-                    log_info(f"[AI] Successfully acquired AI resource lock [operation_id={operation_id}]")
-
-                processing_times["detector_init_time"] = time.time() - detector_start
-        except Exception as lock_error:
-            log_error(f"[AI] Error acquiring AI resource lock: {str(lock_error)} [operation_id={operation_id}]")
-            # Still try to get detector without lock as last resort
-            detector = initialization_service.get_gemini_detector()
-            processing_times["detector_init_time"] = time.time() - detector_start
+        detector = initialization_service.get_gemini_detector()
+        processing_times["detector_init_time"] = time.time() - detector_start
 
         # Set detection timeout and run detection
         detection_timeout = 200
         detection_start = time.time()
-        log_info(
-            f"[SECURITY] Starting Gemini AI detection with timeout {detection_timeout}s [operation_id={operation_id}]")
+        log_info(f"[SECURITY] Starting Gemini AI detection [operation_id={operation_id}]")
+
         try:
-            detection_task = detector.detect_sensitive_data_async(extracted_data, entity_list)
-            detection_result = await asyncio.wait_for(detection_task, timeout=detection_timeout)
+            # Use the asynchronous detect method if available, otherwise run in a thread
+            if hasattr(detector, 'detect_sensitive_data_async') and callable(
+                    getattr(detector, 'detect_sensitive_data_async')):
+                detection_task = detector.detect_sensitive_data_async(minimized_data, entity_list)
+                detection_result = await asyncio.wait_for(detection_task, timeout=detection_timeout)
+            else:
+                detection_result = await asyncio.to_thread(
+                    detector.detect_sensitive_data, minimized_data, entity_list
+                )
         except asyncio.TimeoutError:
             log_error(f"[SECURITY] Gemini detection timed out after {detection_timeout}s [operation_id={operation_id}]")
-
             return JSONResponse(
                 status_code=408,
                 content={
@@ -172,7 +143,6 @@ async def ai_detect_sensitive(
 
         if detection_result is None:
             log_error(f"[SECURITY] Gemini detection returned no results [operation_id={operation_id}]")
-
             return JSONResponse(
                 status_code=500,
                 content={
@@ -183,29 +153,29 @@ async def ai_detect_sensitive(
 
         anonymized_text, entities, redaction_mapping = detection_result
         processing_times["detection_time"] = time.time() - detection_start
-        log_info(
-            f"[SECURITY] Gemini detection completed in {processing_times['detection_time']:.3f}s. Found {len(entities)} entities [operation_id={operation_id}]")
+        processing_times["total_time"] = time.time() - start_time
 
-        total_time = time.time() - start_time
-        processing_times["total_time"] = total_time
+        log_info(f"[SECURITY] Gemini detection completed in {processing_times['detection_time']:.3f}s. "
+                 f"Found {len(entities)} entities [operation_id={operation_id}]")
 
         # Calculate statistics for logging and monitoring
         total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
         processing_times["words_count"] = total_words
         processing_times["pages_count"] = len(extracted_data.get("pages", []))
+
         if total_words > 0 and entities:
             processing_times["entity_density"] = (len(entities) / total_words) * 1000
             log_info(
                 f"[SECURITY] Entity density: {processing_times['entity_density']:.2f} entities per 1000 words [operation_id={operation_id}]")
 
-        log_info(
-            f"[SECURITY] Recording processing metrics. Total words: {total_words}, Pages: {processing_times['pages_count']} [operation_id={operation_id}]")
+        # Record processing for GDPR compliance
         record_keeper.record_processing(
             operation_type="gemini_detection",
             document_type=file.content_type,
             entity_types_processed=entity_list or [],
-            processing_time=total_time,
+            processing_time=processing_times["total_time"],
             entity_count=len(entities),
+            success=True
         )
 
         # Prepare sanitized response
@@ -213,11 +183,13 @@ async def ai_detect_sensitive(
         sanitized_response = sanitize_detection_output(
             anonymized_text, entities, redaction_mapping, processing_times
         )
+
         sanitized_response["file_info"] = {
             "filename": file.filename,
             "content_type": file.content_type,
             "size": len(file_content)
         }
+
         sanitized_response["model_info"] = {"engine": "gemini"}
 
         # Add memory usage stats
@@ -227,22 +199,21 @@ async def ai_detect_sensitive(
             "peak_memory": mem_stats["peak_usage"],
             "operation_id": operation_id
         }
-        log_info(
-            f"[SECURITY] Memory usage: current={mem_stats['current_usage']:.1f}%, peak={mem_stats['peak_usage']:.1f}% [operation_id={operation_id}]")
 
         # Log operation completion
         log_sensitive_operation(
             "Gemini Detection",
             len(entities),
-            total_time,
+            processing_times["total_time"],
             pages=processing_times["pages_count"],
             words=total_words,
             extract_time=processing_times["extraction_time"],
             detect_time=processing_times["detection_time"],
             operation_id=operation_id
         )
+
         log_info(
-            f"[SECURITY] Gemini detection operation completed successfully in {total_time:.3f}s [operation_id={operation_id}]")
+            f"[SECURITY] Gemini detection operation completed successfully in {processing_times['total_time']:.3f}s [operation_id={operation_id}]")
 
         return JSONResponse(content=sanitized_response)
 
@@ -252,7 +223,6 @@ async def ai_detect_sensitive(
         raise e
     except Exception as e:
         log_error(f"[SECURITY] Unhandled exception in Gemini detection: {str(e)} [operation_id={operation_id}]")
-
         error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
             e, "gemini_detection", 500
         )

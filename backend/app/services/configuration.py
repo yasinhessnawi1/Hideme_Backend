@@ -6,10 +6,9 @@ and manages configuration settings for document processing components.
 """
 import os
 import json
-from typing import Dict, Any, List, Optional, Union
-from dotenv import load_dotenv
+from typing import Dict, Any, Optional
 
-from backend.app.utils.logger import default_logger as logger
+from backend.app.utils.logging.logger import default_logger as logger
 from backend.app.configs.config_singleton import get_config, set_config
 
 

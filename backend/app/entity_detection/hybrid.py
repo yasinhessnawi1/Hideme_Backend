@@ -1,9 +1,6 @@
 """
-hybrid entity detection implementation with improved GDPR compliance features.
-
-This module provides a dedicated implementation of the HybridEntityDetector
-that combines multiple detection engines with comprehensive GDPR compliance,
-data minimization, and enhanced error handling.
+This is a fixed version of the HybridEntityDetector class that resolves the len() issue
+and ensures proper result formatting.
 """
 import asyncio
 import time
@@ -11,12 +8,12 @@ from typing import Dict, Any, List, Optional, Tuple
 
 from backend.app.domain.interfaces import EntityDetector
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.data_minimization import minimize_extracted_data
+from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers import EntityUtils
-from backend.app.utils.logger import log_info, log_warning, log_error
-from backend.app.utils.processing_records import record_keeper
-from backend.app.utils.secure_logging import log_sensitive_operation
+from backend.app.utils.logging.logger import log_info, log_warning, log_error
+from backend.app.utils.security.processing_records import record_keeper
+from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
 
@@ -27,14 +24,6 @@ class HybridEntityDetector(EntityDetector):
     This detector runs all configured detection engines and merges their results,
     with comprehensive GDPR compliance, data minimization, and enhanced error
     handling features.
-
-    Features:
-    - Combines results from multiple detection engines
-    - Applies data minimization principles
-    - Maintains GDPR compliance records
-    - Provides enhanced security features
-    - Robust error handling
-    - Improved synchronization to prevent deadlocks
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -60,8 +49,9 @@ class HybridEntityDetector(EntityDetector):
 
         if config.get("use_presidio", True):
             detector = initialization_service.get_presidio_detector()
-            self.detectors.append(detector)
-            log_info("[INIT] Presidio Detector Initialized Successfully")
+            if detector:  # Only add if detector was successfully created
+                self.detectors.append(detector)
+                log_info("[INIT] Presidio Detector Initialized Successfully")
 
         if config.get("use_gemini", True):
             detector = initialization_service.get_gemini_detector()
@@ -80,9 +70,6 @@ class HybridEntityDetector(EntityDetector):
             else:
                 log_warning("[INIT] GLiNER Detector Initialization Failed")
 
-    # In hybrid.py, update the detect_sensitive_data_async method to properly handle async operations
-    # This is the key fix for "object HybridEntityDetector can't be used in 'await' expression"
-
     async def detect_sensitive_data_async(
             self,
             extracted_data: Dict[str, Any],
@@ -99,199 +86,295 @@ class HybridEntityDetector(EntityDetector):
         Returns:
             Tuple of (anonymized_text, results_json, redaction_mapping)
         """
-        start_time = time.time()
-        all_entities = []
-        all_redaction_mappings = []
-        anonymized_text = None
-
-        # Apply data minimization principles
-        minimized_data = minimize_extracted_data(extracted_data)
-
-        # Track detector usage - use async lock
-        async with self._detector_lock.acquire_timeout(timeout=5.0) as acquired:
-            if acquired:
-                self._total_calls += 1
-                self._last_used = start_time
-
-        # Track processing for GDPR compliance
-        operation_type = "hybrid_detection"
-        document_type = "document"
-
-        # For storing results from each engine
-        success_count = 0
-        failure_count = 0
-
-        # Define a function to process with one detector
-        async def process_with_detector(detector):
-            engine_name = type(detector).__name__
-            detector_start = time.time()
-
-            try:
-                # Use timeout handling with proper async/sync distinction
-                if hasattr(detector, 'detect_sensitive_data_async'):
-                    # Use async version with timeout
-                    try:
-                        result = await asyncio.wait_for(
-                            detector.detect_sensitive_data_async(
-                                minimized_data, requested_entities
-                            ),
-                            timeout=600.0  # 60 second timeout for detector
-                        )
-                    except asyncio.TimeoutError:
-                        log_warning(f"[WARNING] Timeout in {engine_name} detector")
-                        return {
-                            "success": False,
-                            "engine": engine_name,
-                            "error": "Detection timeout",
-                            "processing_time": time.time() - detector_start
-                        }
-                else:
-                    # Fall back to sync version with timeout
-                    try:
-                        result = await asyncio.to_thread(
-                            detector.detect_sensitive_data,
-                            minimized_data, requested_entities
-                        )
-                    except asyncio.TimeoutError:
-                        log_warning(f"[WARNING] Timeout in {engine_name} detector (sync mode)")
-                        return {
-                            "success": False,
-                            "engine": engine_name,
-                            "error": "Detection timeout in sync mode",
-                            "processing_time": time.time() - detector_start
-                        }
-
-                # Calculate detector time
-                detector_time = time.time() - detector_start
-
-                # Log detection results without sensitive information
-                log_info(f"[OK] {engine_name} found {len(result[1])} entities in {detector_time:.2f}s")
-
-                # Record successful detection for GDPR compliance
-                record_keeper.record_processing(
-                    operation_type=f"{operation_type}_{engine_name.lower()}",
-                    document_type=document_type,
-                    entity_types_processed=requested_entities or [],
-                    processing_time=detector_time,
-                    entity_count=len(result[1]),
-                    success=True
-                )
-
-                return {
-                    "success": True,
-                    "engine": engine_name,
-                    "result": result,
-                    "processing_time": detector_time
-                }
-
-            except Exception as e:
-                # Use standardized error handling
-                SecurityAwareErrorHandler.log_processing_error(
-                    e, f"hybrid_{engine_name.lower()}_detection", "document"
-                )
-
-                return {
-                    "success": False,
-                    "engine": engine_name,
-                    "error": str(e),
-                    "processing_time": time.time() - detector_start
-                }
-
-        # Create tasks for all detectors
-        tasks = []
-        for detector in self.detectors:
-            tasks.append(process_with_detector(detector))
-
-        # Run all detector tasks concurrently with overall timeout
         try:
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=False),
-                timeout=600.0  # Overall 2-minute timeout for all detectors
-            )
-        except asyncio.TimeoutError:
-            log_error("[ERROR] Global timeout for all detection engines")
-            # Return empty results to avoid crashing
-            return "", [], {"pages": []}
+            start_time = time.time()
+            all_entities = []
+            all_redaction_mappings = []
+            anonymized_text = None
 
-        # Process results
-        for result in results:
-            if result["success"]:
-                # Extract data from successful result
-                engine_result = result["result"]
-                anon_text, entities, redaction_mapping = engine_result
+            # Handle case where no detectors were initialized successfully
+            if not self.detectors:
+                log_warning("[WARNING] No detection engines available in hybrid detector")
+                return "", [], {"pages": []}
 
-                # Log detection results without sensitive information
-                log_sensitive_operation(
-                    f"{result['engine']} Detection",
-                    len(entities),
-                    result["processing_time"],
-                    engine=result["engine"]
+            # Apply data minimization principles
+            minimized_data = minimize_extracted_data(extracted_data)
+
+            # Track detector usage - use async lock
+            async with self._detector_lock.acquire_timeout(timeout=5.0) as acquired:
+                if acquired:
+                    self._total_calls += 1
+                    self._last_used = start_time
+
+            # Track processing for GDPR compliance
+            operation_type = "hybrid_detection"
+            document_type = "document"
+
+            # For storing results from each engine
+            success_count = 0
+            failure_count = 0
+
+            # Define a function to process with one detector
+            async def process_with_detector(detector):
+                engine_name = type(detector).__name__
+                detector_start = time.time()
+
+                try:
+                    # Use timeout handling with proper async/sync distinction
+                    if hasattr(detector, 'detect_sensitive_data_async'):
+                        # Use async version with timeout
+                        try:
+                            result = await asyncio.wait_for(
+                                detector.detect_sensitive_data_async(
+                                    minimized_data, requested_entities
+                                ),
+                                timeout=600.0  # 10 minute timeout for detector
+                            )
+                        except asyncio.TimeoutError:
+                            log_warning(f"[WARNING] Timeout in {engine_name} detector")
+                            return {
+                                "success": False,
+                                "engine": engine_name,
+                                "error": "Detection timeout",
+                                "processing_time": time.time() - detector_start
+                            }
+                    else:
+                        # Fall back to sync version with timeout
+                        try:
+                            result = await asyncio.to_thread(
+                                detector.detect_sensitive_data,
+                                minimized_data, requested_entities
+                            )
+                        except asyncio.TimeoutError:
+                            log_warning(f"[WARNING] Timeout in {engine_name} detector (sync mode)")
+                            return {
+                                "success": False,
+                                "engine": engine_name,
+                                "error": "Detection timeout in sync mode",
+                                "processing_time": time.time() - detector_start
+                            }
+
+                    # Verify result format - it must be a tuple of (anonymized_text, entities, redaction_mapping)
+                    if not isinstance(result, tuple) or len(result) != 3:
+                        log_warning(f"[WARNING] Invalid result format from {engine_name} detector: {type(result)}")
+                        return {
+                            "success": False,
+                            "engine": engine_name,
+                            "error": f"Invalid result format: {type(result)}",
+                            "processing_time": time.time() - detector_start
+                        }
+
+                    # Ensure the result components are the correct types
+                    text, entities, mapping = result
+                    if not isinstance(text, str):
+                        log_warning(f"[WARNING] Text result from {engine_name} is not a string: {type(text)}")
+                        text = ""  # Convert to string to ensure valid format
+
+                    if not isinstance(entities, list):
+                        log_warning(f"[WARNING] Entities result from {engine_name} is not a list: {type(entities)}")
+                        entities = []  # Use empty list to ensure valid format
+
+                    if not isinstance(mapping, dict):
+                        log_warning(f"[WARNING] Redaction mapping from {engine_name} is not a dict: {type(mapping)}")
+                        mapping = {"pages": []}  # Use empty mapping to ensure valid format
+
+                    # Create sanitized result with verified types
+                    sanitized_result = (text, entities, mapping)
+
+                    # Calculate detector time
+                    detector_time = time.time() - detector_start
+
+                    # Log detection results without sensitive information
+                    log_info(f"[OK] {engine_name} found {len(entities)} entities in {detector_time:.2f}s")
+
+                    # Record successful detection for GDPR compliance
+                    record_keeper.record_processing(
+                        operation_type=f"{operation_type}_{engine_name.lower()}",
+                        document_type=document_type,
+                        entity_types_processed=requested_entities or [],
+                        processing_time=detector_time,
+                        entity_count=len(entities),
+                        success=True
+                    )
+
+                    return {
+                        "success": True,
+                        "engine": engine_name,
+                        "result": sanitized_result,
+                        "processing_time": detector_time
+                    }
+
+                except Exception as e:
+                    # Use standardized error handling
+                    SecurityAwareErrorHandler.log_processing_error(
+                        e, f"hybrid_{engine_name.lower()}_detection", "document"
+                    )
+
+                    return {
+                        "success": False,
+                        "engine": engine_name,
+                        "error": str(e),
+                        "processing_time": time.time() - detector_start
+                    }
+
+            # Create tasks for all detectors
+            tasks = []
+            for detector in self.detectors:
+                tasks.append(process_with_detector(detector))
+
+            # Run all detector tasks concurrently with overall timeout
+            try:
+                results = await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=False),
+                    timeout=600.0  # Overall 10-minute timeout for all detectors
                 )
+            except asyncio.TimeoutError:
+                log_error("[ERROR] Global timeout for all detection engines")
+                # Return empty results with correct format to avoid crashing
+                return "", [], {"pages": []}
 
-                # Use the first anonymized text (we'll merge entities, not text)
-                if anonymized_text is None:
-                    anonymized_text = anon_text
+            # Process results
+            for result in results:
+                if result["success"]:
+                    # Extract data from successful result
+                    engine_result = result["result"]
+                    if isinstance(engine_result, tuple) and len(engine_result) == 3:
+                        anon_text, entities, redaction_mapping = engine_result
 
-                # Add entities and redaction mappings
-                all_entities.extend(entities)
-                all_redaction_mappings.append(redaction_mapping)
-                success_count += 1
-            else:
-                failure_count += 1
+                        # Log detection results without sensitive information
+                        log_sensitive_operation(
+                            f"{result['engine']} Detection",
+                            len(entities),
+                            result["processing_time"],
+                            engine=result["engine"]
+                        )
 
-        # Handle the case where all detectors failed
-        if success_count == 0:
-            log_error("[ERROR] All detection engines failed")
-            # Return empty results to avoid crashing
+                        # Use the first anonymized text (we'll merge entities, not text)
+                        if anonymized_text is None:
+                            anonymized_text = anon_text
+
+                        # Add entities and redaction mappings
+                        all_entities.extend(entities)
+                        all_redaction_mappings.append(redaction_mapping)
+                        success_count += 1
+                    else:
+                        log_warning(f"[WARNING] Invalid result format from {result['engine']}: {type(engine_result)}")
+                        failure_count += 1
+                else:
+                    failure_count += 1
+
+            # Handle the case where all detectors failed
+            if success_count == 0:
+                log_error("[ERROR] All detection engines failed")
+                # Return empty results but in the correct format to avoid crashing
+                return "", [], {"pages": []}
+
+            # Merge redaction mappings from all engines
+            merged_mapping = self._merge_redaction_mappings(all_redaction_mappings)
+
+            # Ensure merged mapping has the correct structure
+            if not merged_mapping.get("pages"):
+                merged_mapping["pages"] = []
+
+            # Remove duplicate entities
+            from backend.app.utils.validation.sanitize_utils import deduplicate_entities
+            all_entities = deduplicate_entities(all_entities)
+
+            # Calculate total processing time
+            total_time = time.time() - start_time
+
+            # Track entity count using async lock
+            async with self._detector_lock.acquire_timeout(timeout=5.0) as acquired:
+                if acquired:
+                    self._total_entities_detected += len(all_entities)
+
+            # Record the overall processing operation for GDPR compliance
+            record_keeper.record_processing(
+                operation_type=operation_type,
+                document_type=document_type,
+                entity_types_processed=requested_entities or [],
+                processing_time=total_time,
+                file_count=1,
+                entity_count=len(all_entities),
+                success=(success_count > 0)  # Consider successful if at least one engine succeeded
+            )
+
+            # Log performance metrics
+            log_info(
+                f"[PERF] Hybrid detection completed in {total_time:.2f}s with {success_count} successful engines and {failure_count} failures")
+            log_info(
+                f"[PERF] Total {len(all_entities)} entities detected across {len(extracted_data.get('pages', []))} pages")
+
+            # Log detection summary with secure logging
+            log_sensitive_operation(
+                "Hybrid Detection",
+                len(all_entities),
+                total_time,
+                engines_used=success_count,
+                engines_failed=failure_count
+            )
+
+            # Make sure anonymized_text is a string
+            if anonymized_text is None:
+                anonymized_text = ""
+
+            return anonymized_text, all_entities, merged_mapping
+        except Exception as e:
+            # Handle any unexpected errors by returning a valid tuple
+            log_error(f"[ERROR] Unexpected error in hybrid detection: {str(e)}")
             return "", [], {"pages": []}
 
-        merged_mapping = EntityUtils.merge_redaction_mappings(all_redaction_mappings)
+    def _merge_redaction_mappings(self, mappings: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Merge multiple redaction mappings into a single mapping.
 
-        # Remove duplicate entities
-        from backend.app.utils.sanitize_utils import deduplicate_entities
-        all_entities = deduplicate_entities(all_entities)
+        Args:
+            mappings: List of redaction mappings to merge
 
-        # Calculate total processing time
-        total_time = time.time() - start_time
+        Returns:
+            Merged redaction mapping
+        """
+        if not mappings:
+            return {"pages": []}
 
-        # Track entity count using async lock
-        async with self._detector_lock.acquire_timeout(timeout=5.0) as acquired:
-            if acquired:
-                self._total_entities_detected += len(all_entities)
+        # Initialize the result with the structure of redaction mapping
+        result = {"pages": []}
 
-        # Record the overall processing operation for GDPR compliance
-        record_keeper.record_processing(
-            operation_type=operation_type,
-            document_type=document_type,
-            entity_types_processed=requested_entities or [],
-            processing_time=total_time,
-            entity_count=len(all_entities),
-            success=(success_count > 0)  # Consider successful if at least one engine succeeded
-        )
+        # Create a dictionary to store sensitive items by page
+        pages_dict = {}
 
-        # Log performance metrics
-        log_info(
-            f"[PERF] Hybrid detection completed in {total_time:.2f}s with {success_count} successful engines and {failure_count} failures")
-        log_info(
-            f"[PERF] Total {len(all_entities)} entities detected across {len(extracted_data.get('pages', []))} pages")
+        # Process each mapping
+        for mapping in mappings:
+            # Skip invalid mappings
+            if not isinstance(mapping, dict) or "pages" not in mapping:
+                continue
 
-        # Log detection summary with secure logging
-        log_sensitive_operation(
-            "Hybrid Detection",
-            len(all_entities),
-            total_time,
-            engines_used=success_count,
-            engines_failed=failure_count
-        )
+            # Process each page in the mapping
+            for page_info in mapping.get("pages", []):
+                page_num = page_info.get("page")
 
-        return anonymized_text or "", all_entities, merged_mapping
+                # Skip pages without page number
+                if page_num is None:
+                    continue
+
+                # Initialize page in dictionary if not exists
+                if page_num not in pages_dict:
+                    pages_dict[page_num] = {"page": page_num, "sensitive": []}
+
+                # Add sensitive items to the page
+                pages_dict[page_num]["sensitive"].extend(page_info.get("sensitive", []))
+
+        # Convert dictionary back to list
+        for page_num in sorted(pages_dict.keys()):
+            result["pages"].append(pages_dict[page_num])
+
+        return result
 
     def detect_sensitive_data(
             self,
             extracted_data: Dict[str, Any],
             requested_entities: Optional[List[str]] = None
-    ) -> tuple[str, list[Any], dict[str, list[Any]]] | None | tuple[str, list[Any], dict[str, list[Any]]] | tuple[
-        str, list[Any], dict[str, list[Any]]]:
+    ) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any]]:
         """
         Detect sensitive entities using multiple detection engines (sync wrapper).
 
@@ -314,7 +397,7 @@ class HybridEntityDetector(EntityDetector):
                 async def run_with_timeout():
                     return await asyncio.wait_for(
                         self.detect_sensitive_data_async(minimized_data, requested_entities),
-                        timeout=600.0  # 3-minute timeout for overall sync detection
+                        timeout=600.0  # 10-minute timeout for overall sync detection
                     )
 
                 return loop.run_until_complete(run_with_timeout())
@@ -337,8 +420,7 @@ class HybridEntityDetector(EntityDetector):
             SecurityAwareErrorHandler.log_processing_error(e, "hybrid_detection", "document")
             return "", [], {"pages": []}
 
-
-    def get_status(self) -> dict[str, bool | list[Any] | float | int] | None:
+    def get_status(self) -> Dict[str, Any]:
         """
         Get the current status of the hybrid entity detector.
 

@@ -13,8 +13,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from backend.app.api.models import StatusResponse
-from backend.app.utils.caching_middleware import response_cache
-from backend.app.utils.logger import log_info
+from backend.app.utils.security.caching_middleware import response_cache
+from backend.app.utils.logging.logger import log_info
 from backend.app.utils.memory_management import memory_monitor
 
 # Configure rate limiter

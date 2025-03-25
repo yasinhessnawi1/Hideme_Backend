@@ -1,98 +1,223 @@
 """
-Refactored machine learning entity detection routes that utilize shared code and utilities.
+Machine learning entity detection routes using centralized PDF processing.
 
 This module provides API endpoints for detecting sensitive information in uploaded files
-using different machine learning models. It implements consistent error handling and
-leverages shared processing logic to maintain code quality and reliability.
-
-Enhanced with optimized timeout lock handling and exponential backoff for shared resources
-to prevent deadlocks and improve concurrency.
+using different machine learning models. It leverages the centralized PDFTextExtractor for
+text extraction and maintains consistent error handling across endpoints.
 """
-import asyncio
-import random
 import time
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from backend.app.document_processing.pdf import PDFTextExtractor
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.common_detection import process_common_detection
+from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.memory_management import memory_optimized
-from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
-from backend.app.utils.logger import log_info, log_warning, log_error
+from backend.app.utils.helpers.json_helper import validate_requested_entities
+from backend.app.utils.memory_management import memory_optimized, memory_monitor
+from backend.app.utils.logging.logger import log_info, log_warning, log_error
+from backend.app.utils.validation.file_validation import validate_mime_type, validate_file_content_async
+from backend.app.utils.security.processing_records import record_keeper
+from backend.app.utils.validation.sanitize_utils import sanitize_detection_output
+from backend.app.utils.logging.secure_logging import log_sensitive_operation
 
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 
-# Create shared lock for ML detection endpoints with shorter timeout
-# Reduced from 30.0 to 5.0 seconds
-_ml_resource_lock = AsyncTimeoutLock("ml_detection_lock", priority=LockPriority.HIGH)
 
-# Exponential backoff configuration
-INITIAL_TIMEOUT = 2.0  # Start with a shorter initial timeout
-MAX_TIMEOUT = 8.0      # Maximum timeout value
-MAX_RETRIES = 3        # Maximum number of retry attempts
-
-
-async def acquire_lock_with_backoff(operation_id: str, resource_name: str = "ML resource"):
+async def process_entity_detection(
+    file: UploadFile,
+    requested_entities: Optional[str],
+    detector_type: str,
+    operation_id: str
+) -> JSONResponse:
     """
-    Attempt to acquire the ML resource lock with exponential backoff.
+    Common processing function for entity detection that uses the centralized PDFTextExtractor.
 
     Args:
-        operation_id: ID for the current operation for logging
-        resource_name: Name of the resource for logging purposes
+        file: The uploaded file
+        requested_entities: Optional string with requested entity types
+        detector_type: Type of detector (presidio, gliner)
+        operation_id: Unique operation ID for tracking
 
     Returns:
-        Tuple of (acquired, context_manager) - If acquired is True,
-        context_manager should be used in a with statement.
-        If acquired is False, no lock was obtained.
+        JSONResponse with detection results
     """
-    timeout = INITIAL_TIMEOUT
+    start_time = time.time()
+    processing_times = {}
 
-    for attempt in range(MAX_RETRIES):
+    try:
+        # Validate MIME type
+        allowed_types = ["application/pdf", "text/plain", "text/csv", "text/markdown", "text/html"]
+        if not validate_mime_type(file.content_type, allowed_types):
+            log_warning(f"[ML] Unsupported file type: {file.content_type} [operation_id={operation_id}]")
+            return JSONResponse(
+                status_code=415,
+                content={"detail": "Unsupported file type. Please upload a PDF or text file."}
+            )
+
+        # Process requested entities
         try:
-            # Add jitter to avoid thundering herd problem
-            jitter = random.uniform(0, 0.5)
-            current_timeout = min(timeout * (1.5 ** attempt) + jitter, MAX_TIMEOUT)
-
-            log_info(f"[ML] Attempting to acquire {resource_name} lock (attempt {attempt+1}/{MAX_RETRIES}, "
-                    f"timeout={current_timeout:.2f}s) [operation_id={operation_id}]")
-
-            # Create the context manager with current timeout
-            context = _ml_resource_lock.acquire_timeout(timeout=current_timeout)
-            ctx_manager = await context.__aenter__()
-
-            if ctx_manager:
-                log_info(f"[ML] Successfully acquired {resource_name} lock on attempt {attempt+1} "
-                        f"[operation_id={operation_id}]")
-                # Return the context manager which the caller should use in a with statement
-                return True, context
-
-            log_warning(f"[ML] Failed to acquire {resource_name} lock on attempt {attempt+1} "
-                       f"[operation_id={operation_id}]")
-
-            # Release the failed context manager
-            await context.__aexit__(None, None, None)
-
-            # Add delay before retry with random jitter
-            if attempt < MAX_RETRIES - 1:
-                delay = 0.5 * (1.5 ** attempt) + random.uniform(0, 0.5)
-                log_info(f"[ML] Waiting {delay:.2f}s before retry [operation_id={operation_id}]")
-                await asyncio.sleep(delay)
+            entity_list = validate_requested_entities(requested_entities) if requested_entities else None
         except Exception as e:
-            log_warning(f"[ML] Error during lock acquisition attempt {attempt+1}: {str(e)} "
-                       f"[operation_id={operation_id}]")
-            if attempt < MAX_RETRIES - 1:
-                await asyncio.sleep(0.5 * (1.5 ** attempt))
+            log_error(f"[ML] Entity validation error: {str(e)} [operation_id={operation_id}]")
+            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+                e, "entity_validation", 400
+            )
+            return JSONResponse(status_code=status_code, content=error_response)
 
-    log_warning(f"[ML] Failed to acquire {resource_name} lock after {MAX_RETRIES} attempts "
-               f"[operation_id={operation_id}]")
-    return False, None
+        # Read file content
+        file_read_start = time.time()
+        content = await file.read()
+        processing_times["file_read_time"] = time.time() - file_read_start
+
+        # Validate file content
+        is_valid, reason, _ = await validate_file_content_async(
+            content, file.filename, file.content_type
+        )
+        if not is_valid:
+            log_warning(f"[ML] Invalid file content: {reason} [operation_id={operation_id}]")
+            return JSONResponse(
+                status_code=415,
+                content={"detail": reason}
+            )
+
+        # Extract text using the centralized PDFTextExtractor
+        extract_start = time.time()
+        log_info(f"[ML] Starting text extraction using {detector_type} [operation_id={operation_id}]")
+
+        try:
+            # Initialize the text extractor with the file content
+            extractor = PDFTextExtractor(content)
+            extracted_data = extractor.extract_text(detect_images=True)
+            extractor.close()
+        except Exception as e:
+            log_error(f"[ML] Extraction error: {str(e)} [operation_id={operation_id}]")
+            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+                e, "text_extraction", 500, file.filename
+            )
+            return JSONResponse(status_code=status_code, content=error_response)
+
+        processing_times["extraction_time"] = time.time() - extract_start
+        log_info(f"[ML] Text extraction completed in {processing_times['extraction_time']:.3f}s [operation_id={operation_id}]")
+
+        # Apply data minimization
+        minimized_data = minimize_extracted_data(extracted_data)
+
+        # Get the appropriate detector
+        detector_start = time.time()
+        if detector_type == "presidio":
+            detector = initialization_service.get_presidio_detector()
+        elif detector_type == "gliner":
+            detector = initialization_service.get_gliner_detector(entity_list)
+        else:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": f"Unsupported detector type: {detector_type}"}
+            )
+
+        processing_times["detector_init_time"] = time.time() - detector_start
+
+        # Run detection
+        detection_start = time.time()
+        log_info(f"[ML] Starting {detector_type} detection [operation_id={operation_id}]")
+
+        # Use async detection if available
+        if hasattr(detector, 'detect_sensitive_data_async'):
+            detection_result = await detector.detect_sensitive_data_async(minimized_data, entity_list)
+        else:
+            # Fall back to running in a thread
+            import asyncio
+            detection_result = await asyncio.to_thread(detector.detect_sensitive_data, minimized_data, entity_list)
+
+        if detection_result is None:
+            log_error(f"[ML] {detector_type} detection returned no results [operation_id={operation_id}]")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": f"{detector_type} detection failed to return results",
+                    "operation_id": operation_id
+                }
+            )
+
+        anonymized_text, entities, redaction_mapping = detection_result
+        processing_times["detection_time"] = time.time() - detection_start
+        total_time = time.time() - start_time
+        processing_times["total_time"] = total_time
+
+        log_info(f"[ML] {detector_type} detection completed in {processing_times['detection_time']:.3f}s. "
+               f"Found {len(entities)} entities [operation_id={operation_id}]")
+
+        # Calculate statistics
+        total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
+        total_pages = len(extracted_data.get("pages", []))
+        processing_times["words_count"] = total_words
+        processing_times["pages_count"] = total_pages
+
+        if total_words > 0 and entities:
+            processing_times["entity_density"] = (len(entities) / total_words) * 1000
+
+        # Record GDPR compliance
+        record_keeper.record_processing(
+            operation_type=f"{detector_type}_detection",
+            document_type=file.content_type,
+            entity_types_processed=entity_list or [],
+            processing_time=total_time,
+            entity_count=len(entities),
+            success=True
+        )
+
+        # Prepare sanitized response
+        sanitized_response = sanitize_detection_output(
+            anonymized_text, entities, redaction_mapping, processing_times
+        )
+
+        sanitized_response["file_info"] = {
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "size": len(content)
+        }
+
+        sanitized_response["model_info"] = {"engine": detector_type}
+
+        # Add memory statistics
+        mem_stats = memory_monitor.get_memory_stats()
+        sanitized_response["_debug"] = {
+            "memory_usage": mem_stats["current_usage"],
+            "peak_memory": mem_stats["peak_usage"],
+            "operation_id": operation_id
+        }
+
+        # Log operation completion
+        log_sensitive_operation(
+            f"{detector_type.capitalize()} Detection",
+            len(entities),
+            total_time,
+            pages=total_pages,
+            words=total_words,
+            extract_time=processing_times["extraction_time"],
+            detect_time=processing_times["detection_time"],
+            operation_id=operation_id
+        )
+
+        log_info(f"[ML] {detector_type} detection operation completed successfully in {total_time:.3f}s [operation_id={operation_id}]")
+
+        return JSONResponse(content=sanitized_response)
+
+    except HTTPException as e:
+        log_error(f"[ML] HTTP exception in {detector_type} detection: {e.detail} (status {e.status_code}) [operation_id={operation_id}]")
+        raise e
+    except Exception as e:
+        log_error(f"[ML] Unhandled exception in {detector_type} detection: {str(e)} [operation_id={operation_id}]")
+        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+            e, f"{detector_type}_detection", 500, file.filename if hasattr(file, 'filename') else None
+        )
+        return JSONResponse(status_code=status_code, content=error_response)
 
 
 @router.post("/detect")
@@ -108,42 +233,17 @@ async def presidio_detect_sensitive(
 
     This endpoint processes documents using Presidio's named entity recognition system,
     which is optimized for identifying standard PII entities like names, emails, and
-    identification numbers with high precision. Presidio excels at detecting structured
-    PII patterns using a combination of regex patterns and machine learning models.
-
-    Args:
-        request: Request object for rate limiting
-        file: The uploaded document file (PDF or text-based formats)
-        requested_entities: Optional comma-separated list of entity types to detect
-                           (if not provided, all supported entity types will be used)
-
-    Returns:
-        JSON with detected entities, anonymized text, and redaction mapping
-
-    Raises:
-        HTTPException: For invalid file formats, size limits, or processing errors
+    identification numbers with high precision.
     """
-    operation_id = f"presidio_detect_{int(time.time())}" if 'time' in globals() else "presidio_detect"
+    operation_id = f"presidio_detect_{int(time.time())}"
+    log_info(f"[ML] Starting Presidio detection processing [operation_id={operation_id}]")
 
-    try:
-        log_info(f"[ML] Starting Presidio detection processing [operation_id={operation_id}]")
-        # Presidio is lightweight, so we don't need lock acquisition for it
-        return await process_common_detection(
-            file=file,
-            requested_entities=requested_entities,
-            detector_type="presidio",
-            get_detector_func=lambda entity_list: initialization_service.get_presidio_detector()
-        )
-    except HTTPException as e:
-        # Pass through HTTP exceptions directly
-        raise e
-    except Exception as e:
-        # Use security-aware error handling for generic exceptions
-        log_error(f"[ML] Error in Presidio detection: {str(e)} [operation_id={operation_id}]")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "presidio_detection", 500, file.filename if file else None
-        )
-        return JSONResponse(status_code=status_code, content=error_response)
+    return await process_entity_detection(
+        file=file,
+        requested_entities=requested_entities,
+        detector_type="presidio",
+        operation_id=operation_id
+    )
 
 
 @router.post("/gl_detect")
@@ -159,74 +259,19 @@ async def gliner_detect_sensitive_entities(
 
     This endpoint processes documents using the GLiNER (Generalized Language-Independent Named Entity
     Recognition) model, which is particularly effective at detecting domain-specific or custom
-    entity types that traditional NER systems might miss. GLiNER leverages transfer learning
-    techniques to identify complex entities like medical conditions, financial instruments,
-    and specialized identifiers.
-
-    Args:
-        request: Request object for rate limiting
-        file: The uploaded document file (PDF or text-based formats)
-        requested_entities: Optional comma-separated list of entity types to detect
-                           (if not provided, default GLiNER entities will be used)
-
-    Returns:
-        JSON with detected entities, anonymized text, and redaction mapping
-
-    Raises:
-        HTTPException: For invalid file formats, size limits, or processing errors
+    entity types that traditional NER systems might miss.
     """
-    operation_id = f"gliner_detect_{int(time.time())}" if 'time' in globals() else "gliner_detect"
+    operation_id = f"gliner_detect_{int(time.time())}"
+    log_info(f"[ML] Starting GLiNER detection processing [operation_id={operation_id}]")
 
-    try:
-        # Try to acquire GLiNER-specific lock with exponential backoff
-        acquired, lock_ctx = await acquire_lock_with_backoff(
-            operation_id=operation_id,
-            resource_name="GLiNER"
-        )
+    # Check memory pressure before proceeding with GLiNER (it's memory-intensive)
+    current_memory_usage = memory_monitor.get_memory_usage()
+    if current_memory_usage > 85:
+        log_warning(f"[ML] High memory pressure ({current_memory_usage:.1f}%), may impact GLiNER performance [operation_id={operation_id}]")
 
-        if acquired:
-            try:
-                log_info(f"[ML] Processing with GLiNER detection using lock [operation_id={operation_id}]")
-                return await process_common_detection(
-                    file=file,
-                    requested_entities=requested_entities,
-                    detector_type="gliner",
-                    get_detector_func=lambda entity_list: initialization_service.get_gliner_detector(entity_list)
-                )
-            finally:
-                # Ensure lock is always released
-                await lock_ctx.__aexit__(None, None, None)
-        else:
-            # Continue without lock as fallback if all retries failed
-            log_warning(f"[ML] Processing GLiNER detection without lock after retry failure [operation_id={operation_id}]")
-
-            # Check system load before proceeding without lock
-            from backend.app.utils.memory_management import memory_monitor
-            current_load = memory_monitor.get_memory_usage()
-
-            if current_load > 85:
-                # System under heavy load - return error rather than proceeding unsafely
-                log_error(f"[ML] System under heavy load ({current_load}%), rejecting GLiNER request [operation_id={operation_id}]")
-                return JSONResponse(
-                    status_code=503,
-                    content={
-                        "detail": "System is currently under heavy load. Please try again later.",
-                        "retry_after": 30,
-                        "operation_id": operation_id
-                    }
-                )
-
-            # Proceed with fallback (without lock) only if system load is acceptable
-            return await process_common_detection(
-                file=file,
-                requested_entities=requested_entities,
-                detector_type="gliner",
-                get_detector_func=lambda entity_list: initialization_service.get_gliner_detector(entity_list)
-            )
-    except Exception as e:
-        # Handle any lock-related errors or other exceptions
-        log_error(f"[ML] Error in GLiNER detection: {str(e)} [operation_id={operation_id}]")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "gliner_detection", 500, file.filename if file else None
-        )
-        return JSONResponse(status_code=status_code, content=error_response)
+    return await process_entity_detection(
+        file=file,
+        requested_entities=requested_entities,
+        detector_type="gliner",
+        operation_id=operation_id
+    )

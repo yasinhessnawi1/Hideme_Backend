@@ -6,7 +6,7 @@ logging sensitive information while still providing useful diagnostic data.
 """
 import json
 
-from backend.app.utils.logger import log_info
+from backend.app.utils.logging.logger import log_info
 
 
 def log_sensitive_operation(

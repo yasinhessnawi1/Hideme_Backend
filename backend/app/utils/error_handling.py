@@ -17,7 +17,7 @@ import time
 import logging
 from typing import Dict, Any, Optional, TypeVar, Callable, Union, Tuple, Awaitable
 
-from backend.app.utils.logger import log_warning, log_error
+from backend.app.utils.logging.logger import log_warning, log_error
 
 # Type variable for generic functions
 T = TypeVar('T')

@@ -7,12 +7,13 @@ import time
 from typing import Dict, Any, List, Callable, Tuple, TypeVar, Optional, Awaitable
 
 from backend.app.configs.config_singleton import get_config
-from backend.app.utils.logger import log_info, log_warning
-from backend.app.utils.secure_logging import log_sensitive_operation
+from backend.app.utils.logging.logger import log_info, log_warning, log_error
+from backend.app.utils.logging.secure_logging import log_sensitive_operation
 
 # Type variables for generic functions
 T = TypeVar('T')
 R = TypeVar('R')
+U = TypeVar('U')
 
 
 class ParallelProcessingHelper:
@@ -49,6 +50,87 @@ class ParallelProcessingHelper:
         optimal = max(optimal, min_workers)
 
         return optimal
+
+    @staticmethod
+    async def process_in_parallel(
+            items: List[T],
+            processor: Callable[[T], Awaitable[U]],
+            max_workers: Optional[int] = None,
+            timeout: Optional[float] = None,
+            item_timeout: Optional[float] = None
+    ) -> List[Tuple[int, U]]:
+        """
+        Process a list of items asynchronously in parallel while ensuring controlled concurrency,
+        timeout management, and error handling.
+
+        Args:
+            items: A list of items to process.
+            processor: An asynchronous function to process each item.
+            max_workers: The maximum number of concurrent workers (determined automatically if None).
+            timeout: The overall timeout for processing the entire batch.
+            item_timeout: The timeout for processing individual items.
+
+        Returns:
+            A list of tuples (index, result), where index is the original item index.
+        """
+        if not items:
+            return []
+
+        # Set default timeouts
+        DEFAULT_TIMEOUT = 300.0  # 5 minutes for overall batch
+        DEFAULT_ITEM_TIMEOUT = 60.0  # 1 minute per item
+
+        worker_count = max_workers or ParallelProcessingHelper.get_optimal_workers(len(items))
+        batch_timeout = timeout or DEFAULT_TIMEOUT
+        single_item_timeout = item_timeout or (batch_timeout / 2 if batch_timeout < DEFAULT_ITEM_TIMEOUT * 2
+                                               else DEFAULT_ITEM_TIMEOUT)
+
+        # Use semaphore to limit concurrent tasks
+        semaphore = asyncio.Semaphore(worker_count)
+        operation_id = f"parallel_{time.time():.0f}"
+
+        log_info(
+            f"[PARALLEL] Starting parallel processing of {len(items)} items with {worker_count} workers (operation: {operation_id})"
+        )
+
+        start_time = time.time()
+        completed, failed = 0, 0
+
+        async def process_with_semaphore(index: int, item: T):
+            """Process a single item with semaphore and timeout protection."""
+            nonlocal completed, failed
+
+            async with semaphore:
+                try:
+                    # Apply timeout to individual item processing
+                    result = await asyncio.wait_for(processor(item), timeout=single_item_timeout)
+                    completed += 1
+                    return index, result
+                except asyncio.TimeoutError:
+                    failed += 1
+                    log_warning(f"[PARALLEL] Item {index} processing timed out after {single_item_timeout}s")
+                    return index, None
+                except Exception as e:
+                    failed += 1
+                    log_error(f"[PARALLEL] Error processing item {index}: {str(e)}")
+                    return index, None
+
+        # Create and gather tasks
+        tasks = [process_with_semaphore(i, item) for i, item in enumerate(items)]
+
+        try:
+            # Apply overall batch timeout
+            results = await asyncio.wait_for(asyncio.gather(*tasks), timeout=batch_timeout)
+            total_time = time.time() - start_time
+
+            log_info(
+                f"[PARALLEL] Completed processing {len(items)} items in {total_time:.2f}s: "
+                f"{completed} completed, {failed} failed (operation: {operation_id})"
+            )
+            return results
+        except asyncio.TimeoutError:
+            log_error(f"[PARALLEL] Overall batch processing timed out after {batch_timeout}s (operation: {operation_id})")
+            return []
 
     @staticmethod
     async def process_pages_in_parallel(

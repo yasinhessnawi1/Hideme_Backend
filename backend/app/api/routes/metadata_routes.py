@@ -13,9 +13,9 @@ from backend.app.configs.gliner_config import GLINER_ENTITIES
 from backend.app.configs.presidio_config import REQUESTED_ENTITIES
 from backend.app.factory.document_processing_factory import EntityDetectionEngine
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.caching_middleware import get_cached_response, response_cache
+from backend.app.utils.security.caching_middleware import get_cached_response, response_cache
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.logger import log_error
+from backend.app.utils.logging.logger import log_error
 from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
 # Configure rate limiter

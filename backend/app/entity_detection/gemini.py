@@ -8,16 +8,16 @@ import time
 from typing import Dict, Any, List, Optional, Tuple
 
 from backend.app.entity_detection.base import BaseEntityDetector
-from backend.app.utils.data_minimization import minimize_extracted_data
+from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers.gemini_helper import GeminiHelper
 # Import the usage manager
 from backend.app.utils.helpers.gemini_usage_manager import gemini_usage_manager
 from backend.app.utils.helpers.parallel_helper import ParallelProcessingHelper
 from backend.app.utils.helpers.text_utils import TextUtils
-from backend.app.utils.logger import log_info, log_warning, log_error
-from backend.app.utils.processing_records import record_keeper
-from backend.app.utils.secure_logging import log_sensitive_operation
+from backend.app.utils.logging.logger import log_info, log_warning, log_error
+from backend.app.utils.security.processing_records import record_keeper
+from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
 

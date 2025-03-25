@@ -15,9 +15,9 @@ from backend.app.configs.config_singleton import get_config
 from backend.app.configs.gdpr_config import MAX_DETECTOR_CACHE_SIZE
 from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_ENTITIES, GLINER_MODEL_PATH
 from backend.app.factory.document_processing_factory import EntityDetectionEngine
-from backend.app.utils.logger import log_info, log_warning, log_error
+from backend.app.utils.logging.logger import log_info, log_warning, log_error
 # Keep ReadWriteLock but also import AsyncTimeoutLock
-from backend.app.utils.synchronization_utils import ReadWriteLock, LockPriority, AsyncTimeoutLock
+from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority, AsyncTimeoutLock
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class InitializationService:
         self.max_cache_size = max_cache_size or get_config("max_detector_cache_size", MAX_DETECTOR_CACHE_SIZE)
 
         # Keep ReadWriteLock but reduce timeout values
-        self._lock = ReadWriteLock("detector_cache_lock", priority=LockPriority.HIGH, timeout=15.0)
+        self._lock = TimeoutLock("detector_cache_lock", priority=LockPriority.HIGH, timeout=15.0)
 
         # Add AsyncTimeoutLock for async-friendly operations if needed
         self._async_lock = AsyncTimeoutLock("detector_async_lock", priority=LockPriority.HIGH, timeout=15.0)
@@ -250,6 +250,8 @@ class InitializationService:
 
     # Update the initialization_service.py - focusing on key methods with lock issues
 
+    # Update in initialization_service.py
+
     def get_detector(self, engine: EntityDetectionEngine, config: Optional[Dict[str, Any]] = None):
         """
         Get a detector instance for the specified engine with improved lock management.
@@ -271,7 +273,7 @@ class InitializationService:
             return self._gemini_detector
 
         elif engine == EntityDetectionEngine.GLINER:
-            entities = config.get("entities", []) if config else []
+            entities = config.get("entities", []) if isinstance(config, dict) else []
             cache_key = self._get_gliner_cache_key(entities)
             if cache_key in self._gliner_detectors:
                 self._update_usage_metrics_no_lock(f"gliner_{cache_key}")
@@ -283,35 +285,43 @@ class InitializationService:
                 return self._hybrid_detectors[cache_key]
         log_info(f"Creating hybrid detector with config: {config}")
 
-        # Use ReadWriteLock with shorter timeout values and improved fallback
+        # Use TimeoutLock with acquire() instead of read_locked/write_locked
         try:
-            # Try with read lock for cache check (faster than write lock)
-            # Much shorter timeout to fail fast if there's contention
-            with self._lock.read_locked(timeout=0.5):
-                # Double-check cache after acquiring read lock
-                if engine == EntityDetectionEngine.PRESIDIO and self._presidio_detector:
-                    self._update_usage_metrics_no_lock("presidio")
-                    return self._presidio_detector
+            # Try with lock for cache check
+            acquired = self._lock.acquire(timeout=0.5)
+            if not acquired:
+                log_warning("[WARNING] Timeout acquiring lock for detector check")
+            else:
+                try:
+                    # Double-check cache after acquiring lock
+                    if engine == EntityDetectionEngine.PRESIDIO and self._presidio_detector:
+                        self._update_usage_metrics_no_lock("presidio")
+                        return self._presidio_detector
 
-                elif engine == EntityDetectionEngine.GEMINI and self._gemini_detector:
-                    self._update_usage_metrics_no_lock("gemini")
-                    return self._gemini_detector
+                    elif engine == EntityDetectionEngine.GEMINI and self._gemini_detector:
+                        self._update_usage_metrics_no_lock("gemini")
+                        return self._gemini_detector
 
-                elif engine == EntityDetectionEngine.GLINER:
-                    entities = config.get("entities", []) if config else []
-                    cache_key = self._get_gliner_cache_key(entities)
-                    if cache_key in self._gliner_detectors:
-                        self._update_usage_metrics_no_lock(f"gliner_{cache_key}")
-                        return self._gliner_detectors[cache_key]
+                    elif engine == EntityDetectionEngine.GLINER:
+                        entities = config.get("entities", []) if isinstance(config, dict) else []
+                        cache_key = self._get_gliner_cache_key(entities)
+                        if cache_key in self._gliner_detectors:
+                            self._update_usage_metrics_no_lock(f"gliner_{cache_key}")
+                            return self._gliner_detectors[cache_key]
 
-                elif engine == EntityDetectionEngine.HYBRID:
-                    cache_key = self._get_hybrid_cache_key(config or {})
-                    if cache_key in self._hybrid_detectors:
-                        return self._hybrid_detectors[cache_key]
+                    elif engine == EntityDetectionEngine.HYBRID:
+                        cache_key = self._get_hybrid_cache_key(config or {})
+                        if cache_key in self._hybrid_detectors:
+                            return self._hybrid_detectors[cache_key]
+                finally:
+                    self._lock.release()
 
-            # We need to initialize a detector - try with write lock but very short timeout
-            try:
-                with self._lock.write_locked(timeout=1.0):
+            # We need to initialize a detector - try with lock but with short timeout
+            acquired = self._lock.acquire(timeout=1.0)
+            if not acquired:
+                log_warning("[WARNING] Timeout acquiring lock for detector initialization")
+            else:
+                try:
                     # Triple-check to avoid duplicate initialization
                     if engine == EntityDetectionEngine.PRESIDIO:
                         if self._presidio_detector:
@@ -336,14 +346,15 @@ class InitializationService:
                         return detector
 
                     elif engine == EntityDetectionEngine.GLINER:
-                        entities = config.get("entities", []) if config else []
+                        entities = config.get("entities", []) if isinstance(config, dict) else []
                         cache_key = self._get_gliner_cache_key(entities)
 
                         if cache_key in self._gliner_detectors:
                             self._update_usage_metrics_no_lock(f"gliner_{cache_key}")
                             return self._gliner_detectors[cache_key]
 
-                        model_name = config.get("model_name", GLINER_MODEL_NAME) if config else GLINER_MODEL_NAME
+                        model_name = config.get("model_name", GLINER_MODEL_NAME) if isinstance(config,
+                                                                                               dict) else GLINER_MODEL_NAME
                         detector = self._initialize_gliner_detector(model_name, entities)
 
                         # Add to cache with LRU eviction if needed
@@ -373,44 +384,37 @@ class InitializationService:
 
                     else:
                         raise ValueError(f"Unsupported detection engine: {engine}")
-            except TimeoutError:
-                # If write lock fails, initialize without lock as a last resort
-                log_warning(
-                    f"Timeout acquiring write lock for detector initialization - creating detector without lock")
-            except Exception as e:
-                log_error(f"Error acquiring write lock: {str(e)} - creating detector without lock")
+                finally:
+                    self._lock.release()
+
         except TimeoutError:
-            # If read lock fails, continue without lock
-            log_warning(f"Timeout acquiring read lock for detector check - proceeding without lock")
+            log_warning("Timeout acquiring detector lock - proceeding with fallback initialization")
         except Exception as e:
             log_error(f"Error during detector initialization with locks: {str(e)} - proceeding without lock")
 
         # If all lock attempts fail, fall back to direct initialization without locks
-        # This is a last resort to ensure the system keeps working even with lock contention
         try:
             if engine == EntityDetectionEngine.PRESIDIO:
                 if self._presidio_detector:
                     return self._presidio_detector
                 detector = self._initialize_presidio_detector()
-                # Don't store in the shared cache to avoid race conditions
                 return detector
 
             elif engine == EntityDetectionEngine.GEMINI:
                 if self._gemini_detector:
                     return self._gemini_detector
                 detector = self._initialize_gemini_detector()
-                # Don't store in the shared cache to avoid race conditions
                 return detector
 
             elif engine == EntityDetectionEngine.GLINER:
-                entities = config.get("entities", []) if config else []
+                entities = config.get("entities", []) if isinstance(config, dict) else []
                 cache_key = self._get_gliner_cache_key(entities)
                 if cache_key in self._gliner_detectors:
                     return self._gliner_detectors[cache_key]
 
-                model_name = config.get("model_name", GLINER_MODEL_NAME) if config else GLINER_MODEL_NAME
+                model_name = config.get("model_name", GLINER_MODEL_NAME) if isinstance(config,
+                                                                                       dict) else GLINER_MODEL_NAME
                 detector = self._initialize_gliner_detector(model_name, entities)
-                # Don't store in the shared cache to avoid race conditions
                 return detector
 
             elif engine == EntityDetectionEngine.HYBRID:
@@ -419,7 +423,6 @@ class InitializationService:
                     return self._hybrid_detectors[cache_key]
 
                 detector = self._initialize_hybrid_detector(config or {})
-                # Don't store in the shared cache to avoid race conditions
                 return detector
 
             else:
@@ -503,7 +506,7 @@ class InitializationService:
         """
         return self.get_detector(EntityDetectionEngine.HYBRID, config)
 
-    # Add an async version for hybrid_routes.py and other async contexts
+    # Add an async version for async contexts
     async def get_detector_async(self, engine: EntityDetectionEngine, config: Optional[Dict[str, Any]] = None):
         """
         Async version of get_detector for use in async contexts.

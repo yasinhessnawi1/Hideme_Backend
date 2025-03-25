@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional
 import time
 from collections import defaultdict
 
-from backend.app.utils.logger import log_info
+from backend.app.utils.logging.logger import log_info
 
 
 def sanitize_detection_output(

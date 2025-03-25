@@ -6,8 +6,8 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.helpers.batch_processing_helper import BatchProcessingHelper, validate_batch_files_optimized, \
-    get_optimal_batch_size
+from backend.app.utils.parallel.batch import BatchProcessingUtils
+from backend.app.utils.parallel.core import ParallelProcessingCore
 from backend.app.utils.secure_file_utils import SecureTempFileManager
 from backend.app.utils.synchronization_utils import AsyncTimeoutLock, AsyncTimeoutSemaphore
 
@@ -20,7 +20,7 @@ async def test_init_global_semaphore_valid():
         mock_semaphore.value = 5  # Explicitly setting the value attribute
         MockSemaphore.return_value = mock_semaphore
 
-        semaphore = await BatchProcessingHelper._init_global_semaphore(5)
+        semaphore = await BatchProcessingUtils._init_global_semaphore(5)
 
         assert semaphore is not None, "Semaphore should be initialized"
         assert semaphore.value == 5, f"Expected 5, but got {semaphore.value}"
@@ -81,7 +81,7 @@ def test_get_optimal_batch_size_small_file_count():
         mock_memory.return_value.available = 8 * 1024 * 1024 * 1024  # 8GB available memory
         mock_memory.return_value.percent = 50  # Memory usage at 50%
 
-        batch_size = BatchProcessingHelper.get_optimal_batch_size(file_count=3, total_bytes=0)
+        batch_size = BatchProcessingUtils.get_optimal_batch_size(file_count=3, total_bytes=0)
 
         assert batch_size == 3, f"Expected batch size of 3, but got {batch_size}"
 
@@ -99,9 +99,9 @@ def test_get_optimal_batch_size_invalid_inputs(file_count, total_bytes, expected
 
     if should_raise:
         with pytest.raises(ValueError, match="file_count cannot be negative"):
-            BatchProcessingHelper.get_optimal_batch_size(file_count, total_bytes)
+            BatchProcessingUtils.get_optimal_batch_size(file_count, total_bytes)
     else:
-        batch_size = BatchProcessingHelper.get_optimal_batch_size(file_count, total_bytes)
+        batch_size = BatchProcessingUtils.get_optimal_batch_size(file_count, total_bytes)
         assert batch_size >= expected_min_workers, f"Expected at least {expected_min_workers}, got {batch_size}"
 
 
@@ -111,7 +111,7 @@ def test_get_optimal_batch_size_high_memory_usage():
         mock_memory.return_value.available = 8 * 1024 * 1024 * 1024  # 8GB available
         mock_memory.return_value.percent = 95  # Very high memory usage
 
-        batch_size = BatchProcessingHelper.get_optimal_batch_size(file_count=10, total_bytes=500_000_000)
+        batch_size = BatchProcessingUtils.get_optimal_batch_size(file_count=10, total_bytes=500_000_000)
 
         assert batch_size == 1, f"Expected reduced workers, got {batch_size}"
 
@@ -120,7 +120,7 @@ def test_get_optimal_batch_size_extreme_large_file_size():
     """❌ Ensure extremely large file sizes do not break calculations."""
     with patch("os.cpu_count", return_value=8), patch("psutil.virtual_memory") as mock_memory:
         mock_memory.return_value.available = 16 * 1024 * 1024 * 1024  # 16GB available
-        batch_size = BatchProcessingHelper.get_optimal_batch_size(file_count=5,
+        batch_size = BatchProcessingUtils.get_optimal_batch_size(file_count=5,
                                                                   total_bytes=1_000_000_000_000)  # 1TB total
 
         assert batch_size >= 1, f"Batch size should be valid, got {batch_size}"
@@ -142,20 +142,20 @@ async def test_process_in_parallel_valid_cases():
         mock_semaphore.return_value = mock_semaphore_instance  # Ensure we return this instance
 
         # Case 1: Default settings
-        results = await BatchProcessingHelper.process_in_parallel(items, mock_processor)
+        results = await ParallelProcessingCore.process_in_parallel(items, mock_processor)
         expected_results = [(i, item * 2) for i, item in enumerate(items)]
         assert results == expected_results, f"Default case failed, expected {expected_results}, got {results}"
 
         # Case 2: Custom max_workers
-        results = await BatchProcessingHelper.process_in_parallel(items, mock_processor, max_workers=2)
+        results = await ParallelProcessingCore.process_in_parallel(items, mock_processor, max_workers=2)
         assert results == expected_results, f"Custom max_workers failed, expected {expected_results}, got {results}"
 
         # Case 3: Custom timeout
-        results = await BatchProcessingHelper.process_in_parallel(items, mock_processor, timeout=10)
+        results = await ParallelProcessingCore.process_in_parallel(items, mock_processor, timeout=10)
         assert results == expected_results, f"Custom timeout failed, expected {expected_results}, got {results}"
 
         # Case 4: Custom item timeout
-        results = await BatchProcessingHelper.process_in_parallel(items, mock_processor, item_timeout=1)
+        results = await ParallelProcessingCore.process_in_parallel(items, mock_processor, item_timeout=1)
         assert results == expected_results, f"Custom item timeout failed, expected {expected_results}, got {results}"
 
 @pytest.mark.asyncio

@@ -9,10 +9,9 @@ import re
 import time
 import logging
 import hashlib
-from typing import Dict, Any, List, Optional, Set
-from datetime import datetime
+from typing import Dict, Any, List, Optional, Set, Union, Tuple
 
-from backend.app.utils.processing_records import record_keeper
+from backend.app.utils.security.processing_records import record_keeper
 from backend.app.configs.gdpr_config import (
     DATA_MINIMIZATION_RULES,
     ANONYMIZATION_CONFIG
@@ -23,7 +22,7 @@ _logger = logging.getLogger("data_minimization")
 
 
 def minimize_extracted_data(
-    extracted_data: Dict[str, Any],
+    extracted_data: Union[Dict[str, Any], Tuple[int, Dict[str, Any]]],
     required_fields_only: Optional[bool] = None,
     metadata_fields: Optional[Set[str]] = None,
     trace_id: Optional[str] = None
@@ -36,7 +35,7 @@ def minimize_extracted_data(
     precise records for GDPR compliance.
 
     Args:
-        extracted_data: Original extracted data
+        extracted_data: Original extracted data (dict or tuple containing dict)
         required_fields_only: Whether to keep only required fields (overrides config)
         metadata_fields: Optional set of metadata fields to retain
         trace_id: Optional trace ID for audit logging
@@ -44,7 +43,13 @@ def minimize_extracted_data(
     Returns:
         Minimized version of the extracted data
     """
-    if not extracted_data:
+    # Handle tuple input (index, data) from batch processing
+    if isinstance(extracted_data, tuple) and len(extracted_data) == 2 and isinstance(extracted_data[1], dict):
+        # Extract the dictionary from the tuple
+        extracted_data = extracted_data[1]
+
+    # If it's not a dictionary or it's empty, return empty result
+    if not isinstance(extracted_data, dict) or not extracted_data:
         return {"pages": []}
 
     # Generate trace ID if not provided
@@ -126,7 +131,7 @@ def minimize_extracted_data(
 
     # Add minimization metadata
     minimized_data["_minimization_meta"] = {
-        "applied_at": datetime.now().isoformat(),
+        "applied_at": time.time(),
         "required_fields_only": required_fields_only,
         "fields_retained": list(metadata_fields) if metadata_fields else []
     }
@@ -247,91 +252,6 @@ def sanitize_document_metadata(
     )
 
     return sanitized
-
-
-def anonymize_entity(
-    text: str,
-    entity: Dict[str, Any],
-    anonymization_strategy: Optional[str] = None
-) -> str:
-    """
-    Anonymize a single entity in text with configurable strategy.
-
-    Args:
-        text: Original text containing the entity
-        entity: Entity dictionary with start, end, and entity_type
-        anonymization_strategy: Strategy to use (tag, hash, randomize)
-
-    Returns:
-        Text with the entity anonymized
-    """
-    # Default to tag strategy if not specified
-    if not anonymization_strategy:
-        anonymization_strategy = ANONYMIZATION_CONFIG.get("anonymization_strategy", "tag")
-
-    start = entity.get("start", 0)
-    end = entity.get("end", 0)
-    entity_type = entity.get("entity_type", "UNKNOWN")
-
-    # Ensure valid indices
-    if not (0 <= start < end <= len(text)):
-        return text
-
-    # Get the entity text
-    entity_text = text[start:end]
-
-    # Apply the selected anonymization strategy
-    if anonymization_strategy == "tag":
-        replacement = f"<{entity_type}>"
-    elif anonymization_strategy == "hash":
-        # Create a consistent hash of the entity text
-        hash_obj = hashlib.sha256(entity_text.encode())
-        replacement = f"[{entity_type[:3]}:{hash_obj.hexdigest()[:8]}]"
-    elif anonymization_strategy == "randomize":
-        # Replace with random characters preserving length
-        import random
-        import string
-        chars = string.ascii_letters + string.digits
-        replacement = ''.join(random.choice(chars) for _ in range(len(entity_text)))
-    else:
-        # Default fallback
-        replacement = f"[REDACTED:{entity_type}]"
-
-    # Replace the entity in the text
-    return text[:start] + replacement + text[end:]
-
-
-def anonymize_text(
-    text: str,
-    entities: List[Dict[str, Any]],
-    strategy: Optional[str] = None
-) -> str:
-    """
-    Anonymize multiple entities in text.
-
-    Args:
-        text: Original text
-        entities: List of entities to anonymize
-        strategy: Anonymization strategy
-
-    Returns:
-        Anonymized text
-    """
-    if not text or not entities:
-        return text
-
-    # Sort entities by start position in reverse order to avoid changing offsets
-    sorted_entities = sorted(entities, key=lambda e: e.get("start", 0), reverse=True)
-
-    # Create a copy of the text to modify
-    anonymized = text
-
-    # Apply anonymization to each entity
-    for entity in sorted_entities:
-        anonymized = anonymize_entity(anonymized, entity, strategy)
-
-    return anonymized
-
 
 def _estimate_data_size(data: Any) -> int:
     """

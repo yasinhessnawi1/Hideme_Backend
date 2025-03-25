@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple, Any, Union
 
 from presidio_analyzer import RecognizerResult
 
-from backend.app.utils.logger import log_warning
+from backend.app.utils.logging.logger import log_warning
 
 
 
@@ -149,41 +149,74 @@ class EntityUtils:
     """Utilities for processing and manipulating entities."""
 
     @staticmethod
-    def merge_redaction_mappings(
-            redaction_mappings: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def merge_redaction_mappings(mappings: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Merge multiple redaction mappings into one.
+        Merge multiple redaction mappings into a single mapping.
 
         Args:
-            redaction_mappings: List of redaction mappings to merge
+            mappings: List of redaction mappings to merge
 
         Returns:
             Merged redaction mapping
         """
-        if not redaction_mappings:
+        if not mappings:
             return {"pages": []}
 
-        merged = {"pages": []}
-        page_mappings = {}
+        if len(mappings) == 1:
+            return mappings[0]
 
-        # Group mappings by page
-        for mapping in redaction_mappings:
+        # Create a new mapping with empty pages
+        merged = {"pages": []}
+
+        # Create a dictionary to organize sensitive items by page number
+        pages_dict = {}
+
+        # Collect all sensitive items from all mappings
+        for mapping in mappings:
             for page_info in mapping.get("pages", []):
                 page_num = page_info.get("page")
+                if page_num is None:
+                    continue
+
                 sensitive_items = page_info.get("sensitive", [])
+                if not sensitive_items:
+                    continue
 
-                if page_num not in page_mappings:
-                    page_mappings[page_num] = []
+                if page_num not in pages_dict:
+                    pages_dict[page_num] = []
 
-                page_mappings[page_num].extend(sensitive_items)
+                pages_dict[page_num].extend(sensitive_items)
 
-        # Create merged mapping
-        for page_num, sensitive_items in sorted(page_mappings.items()):
+        # Create merged pages list
+        for page_num, sensitive_items in sorted(pages_dict.items()):
+            # Deduplicate sensitive items
+            deduplicated_items = []
+            seen_items = set()
+
+            for item in sensitive_items:
+                # Create a hash of the item's position and text
+                if "bbox" in item and "original_text" in item:
+                    item_key = (
+                        item["original_text"],
+                        item.get("entity_type", ""),
+                        tuple(item["bbox"].items()) if isinstance(item["bbox"], dict) else str(item["bbox"])
+                    )
+
+                    if item_key not in seen_items:
+                        seen_items.add(item_key)
+                        deduplicated_items.append(item)
+                else:
+                    # If we can't create a good key, just add the item
+                    deduplicated_items.append(item)
+
+            # Add page to merged mapping
             merged["pages"].append({
                 "page": page_num,
-                "sensitive": sensitive_items
+                "sensitive": deduplicated_items
             })
+
+        # Sort pages by page number
+        merged["pages"].sort(key=lambda x: x.get("page", 0))
 
         return merged
 

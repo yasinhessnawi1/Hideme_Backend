@@ -12,7 +12,7 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
-from backend.app.utils.logger import log_info
+from backend.app.utils.logging.logger import log_info
 from backend.app.configs.gdpr_config import (
     PROCESSING_RECORDS,
     GDPR_DOCUMENTATION
