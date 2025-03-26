@@ -167,7 +167,6 @@ class BatchProcessingUtils:
 
                 # Log the minimized data for debugging purposes.
                 minimized_data = minimize_extracted_data(data)
-                log_info(f"[DEBUG] Minimized data for item {_inner_idx}: {minimized_data}")
 
                 # Ensure 'pages' key exists
                 if "pages" not in minimized_data:
@@ -180,7 +179,7 @@ class BatchProcessingUtils:
                     if hasattr(detector, 'detect_sensitive_data_async'):
                         raw_result = await asyncio.wait_for(
                             detector.detect_sensitive_data_async(minimized_data, requested_entities),
-                            timeout=120.0  # 2 minute timeout per document
+                            timeout=600.0  # 2 minute timeout per document
                         )
                     else:
                         raw_result = await asyncio.to_thread(

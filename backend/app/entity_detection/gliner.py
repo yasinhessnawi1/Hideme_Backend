@@ -525,7 +525,7 @@ class GlinerEntityDetector(BaseEntityDetector):
                     # Wrap the page processing in asyncio.wait_for to add timeout
                     return await asyncio.wait_for(
                         self._process_page_async(page, page_texts_and_mappings, entity_list),
-                        timeout=40.0  # 20 second timeout per page
+                        timeout=60.0  # 60 second timeout per page
                     )
                 except asyncio.TimeoutError:
                     log_warning(f"[WARNING] Timeout processing page {page.get('page', 'unknown')} with GLiNER")

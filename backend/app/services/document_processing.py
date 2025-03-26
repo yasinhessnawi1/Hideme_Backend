@@ -129,7 +129,7 @@ class DocumentProcessingService:
             log_info(f"[OK] Detecting sensitive information using {detection_engine.name}")
 
             # Use shorter timeout for detection
-            detection_timeout = 60  # 60 seconds for detection
+            detection_timeout = 600  # 60 seconds for detection
             try:
                 if hasattr(detector, 'detect_sensitive_data_async'):
                     detection_task = detector.detect_sensitive_data_async(minimized_data, entity_list)

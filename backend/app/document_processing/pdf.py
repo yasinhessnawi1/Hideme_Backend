@@ -924,7 +924,7 @@ class PDFRedactionService(DocumentRedactor):
 
         # Process each page in the batch
         batch_start_time = time.time()
-        max_batch_time = 60.0  # 60 seconds max per batch
+        max_batch_time = 300.0  # 60 seconds max per batch
 
         for page_num in page_numbers:
             # Check if we're exceeding batch timeout
