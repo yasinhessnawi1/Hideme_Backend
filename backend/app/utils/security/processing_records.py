@@ -124,7 +124,7 @@ class ProcessingRecordKeeper:
 
             self.stats["total_records"] = total_count
             log_info(f"[GDPR] Found {total_count} existing processing records")
-        except Exception as e:
+        except Exception:
             log_info("[GDPR] Error initializing record stats")
 
     def record_processing(
@@ -248,7 +248,7 @@ class ProcessingRecordKeeper:
             if deleted_count > 0:
                 log_info(
                     f"[GDPR] Deleted {deleted_count} processing record files older than {self.record_retention_days} days")
-        except Exception as e:
+        except Exception:
             log_info("[GDPR] Error cleaning up old records")
 
     def get_record_stats(self) -> Dict[str, Any]:

@@ -243,5 +243,4 @@ def create_app() -> FastAPI:
     log_info("[OK] API application created and configured successfully")
     return app
 
-
 app = create_app()

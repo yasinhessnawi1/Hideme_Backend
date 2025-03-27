@@ -5,17 +5,16 @@ This module provides functions to implement the GDPR principle of data
 minimization by ensuring only necessary data is processed and retained,
 with advanced anonymization, metadata removal, and audit logging capabilities.
 """
+import hashlib
+import logging
 import re
 import time
-import logging
-import hashlib
 from typing import Dict, Any, List, Optional, Set, Union, Tuple
 
-from backend.app.utils.security.processing_records import record_keeper
 from backend.app.configs.gdpr_config import (
-    DATA_MINIMIZATION_RULES,
-    ANONYMIZATION_CONFIG
+    DATA_MINIMIZATION_RULES
 )
+from backend.app.utils.security.processing_records import record_keeper
 
 # Configure module logger
 _logger = logging.getLogger("data_minimization")
@@ -48,7 +47,7 @@ def minimize_extracted_data(
         # Extract the dictionary from the tuple
         extracted_data = extracted_data[1]
 
-    # If it's not a dictionary or it's empty, return empty result
+    # If it's not a dictionary ,or it's empty, return empty result
     if not isinstance(extracted_data, dict) or not extracted_data:
         return {"pages": []}
 

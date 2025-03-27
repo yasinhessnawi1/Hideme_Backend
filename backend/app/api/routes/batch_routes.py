@@ -13,8 +13,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
-from backend.app.factory.document_processing_factory import EntityDetectionEngine
-from backend.app.services.batch_processing_service import BatchProcessingService
+from backend.app.entity_detection import EntityDetectionEngine
+from backend.app.services import BatchDetectService, BatchRedactService, BatchExtractService
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.memory_management import memory_optimized
@@ -63,7 +63,7 @@ async def batch_detect_sensitive(
         engine_enum = engine_map[detection_engine]
 
         # Process using the batch processing service
-        result = await BatchProcessingService.detect_entities_in_files(
+        result = await BatchDetectService.detect_entities_in_files(
             files=files,
             requested_entities=requested_entities,
             detection_engine=engine_enum,
@@ -78,6 +78,38 @@ async def batch_detect_sensitive(
         log_error(f"[BATCH] Unhandled exception in batch detection: {str(e)} [operation_id={operation_id}]")
         error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
             e, "batch_detection", 500
+        )
+        return JSONResponse(status_code=status_code, content=error_response)
+
+@router.post("/extract")
+@memory_optimized(threshold_mb=50)
+async def batch_extract_text(
+        request: Request,
+        files: List[UploadFile] = File(...),
+        max_parallel_files: Optional[int] = Form(4)
+):
+    """
+    Extract text from multiple PDF files in parallel.
+
+    Uses the centralized batch processing service for efficient text extraction
+    with optimized resource utilization and comprehensive error handling.
+    """
+    operation_id = f"batch_extract_{int(time.time())}"
+    log_info(f"[BATCH] Starting batch text extraction [operation_id={operation_id}]")
+
+    try:
+        # Process using the batch processing service
+        result = await BatchExtractService.batch_extract_text(
+            files=files,
+            max_parallel_files=max_parallel_files
+        )
+
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        log_error(f"[BATCH] Unhandled exception in batch extraction: {str(e)} [operation_id={operation_id}]")
+        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+            e, "batch_extraction", 500
         )
         return JSONResponse(status_code=status_code, content=error_response)
 
@@ -103,7 +135,7 @@ async def batch_redact_documents(
 
     try:
         # Process using the batch processing service
-        response = await BatchProcessingService.batch_redact_documents(
+        response = await BatchRedactService.batch_redact_documents(
             files=files,
             redaction_mappings=redaction_mappings,
             max_parallel_files=max_parallel_files,
@@ -116,39 +148,6 @@ async def batch_redact_documents(
         log_error(f"[BATCH] Unhandled exception in batch redaction: {str(e)} [operation_id={operation_id}]")
         error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
             e, "batch_redaction", 500
-        )
-        return JSONResponse(status_code=status_code, content=error_response)
-
-
-@router.post("/extract")
-@memory_optimized(threshold_mb=50)
-async def batch_extract_text(
-        request: Request,
-        files: List[UploadFile] = File(...),
-        max_parallel_files: Optional[int] = Form(4)
-):
-    """
-    Extract text from multiple PDF files in parallel.
-
-    Uses the centralized batch processing service for efficient text extraction
-    with optimized resource utilization and comprehensive error handling.
-    """
-    operation_id = f"batch_extract_{int(time.time())}"
-    log_info(f"[BATCH] Starting batch text extraction [operation_id={operation_id}]")
-
-    try:
-        # Process using the batch processing service
-        result = await BatchProcessingService.batch_extract_text(
-            files=files,
-            max_parallel_files=max_parallel_files
-        )
-
-        return JSONResponse(content=result)
-
-    except Exception as e:
-        log_error(f"[BATCH] Unhandled exception in batch extraction: {str(e)} [operation_id={operation_id}]")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "batch_extraction", 500
         )
         return JSONResponse(status_code=status_code, content=error_response)
 
@@ -187,7 +186,7 @@ async def batch_hybrid_detect_sensitive(
             )
 
         # Process using the batch processing service
-        result = await BatchProcessingService.detect_entities_in_files(
+        result = await BatchDetectService.detect_entities_in_files(
             files=files,
             requested_entities=requested_entities,
             detection_engine=EntityDetectionEngine.HYBRID,

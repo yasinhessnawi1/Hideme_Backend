@@ -108,7 +108,7 @@ class LocalRateLimiter:
 
     def __init__(self):
         self.requests: Dict[str, Dict[int, int]] = {}
-        self.window_size = 60  # 1 minute window
+        self.window_size = 60  # 1-minute window
 
     def is_rate_limited(self, key: str, max_requests: int) -> bool:
         """
@@ -199,7 +199,8 @@ class RateLimitingMiddleware(BaseHTTPMiddleware):
 
         return await call_next(request)
 
-    def _is_admin_user(self, request: Request) -> bool:
+    @staticmethod
+    def _is_admin_user(request: Request) -> bool:
         """
         Verify if the request is from an admin user.
 

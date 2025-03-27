@@ -28,9 +28,9 @@ R = TypeVar('R')
 logger = logging.getLogger(__name__)
 
 # Default timeouts
-DEFAULT_BATCH_TIMEOUT = 600.0  # 5 minutes for batch operations
-DEFAULT_ITEM_TIMEOUT = 600.0    # 1 minute per item
-DEFAULT_LOCK_TIMEOUT = 20.0    # 10 seconds for lock acquisition
+DEFAULT_BATCH_TIMEOUT = 600.0  # 10 minutes for batch operations
+DEFAULT_ITEM_TIMEOUT = 600.0    # 10 minute per item
+DEFAULT_LOCK_TIMEOUT = 20.0    # 20 seconds for lock acquisition
 
 
 class ParallelProcessingCore:

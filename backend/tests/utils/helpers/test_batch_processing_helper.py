@@ -6,7 +6,6 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.parallel.batch import BatchProcessingUtils
 from backend.app.utils.parallel.core import ParallelProcessingCore
 from backend.app.utils.secure_file_utils import SecureTempFileManager
 from backend.app.utils.synchronization_utils import AsyncTimeoutLock, AsyncTimeoutSemaphore

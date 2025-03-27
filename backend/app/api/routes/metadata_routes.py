@@ -11,7 +11,7 @@ from slowapi.util import get_remote_address
 from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
 from backend.app.configs.gliner_config import GLINER_ENTITIES
 from backend.app.configs.presidio_config import REQUESTED_ENTITIES
-from backend.app.factory.document_processing_factory import EntityDetectionEngine
+from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.security.caching_middleware import get_cached_response, response_cache
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
@@ -156,8 +156,6 @@ async def get_detectors_status(request: Request):
         Status information for all detector instances
     """
     try:
-        # This endpoint should not be cached for too long as status changes frequently
-        cache_key = "detectors_status"
         last_updated = datetime.isoformat(datetime.now())
 
         # Get status from initialization service

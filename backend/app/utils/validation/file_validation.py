@@ -5,13 +5,13 @@ This module provides advanced functions to validate uploaded files by checking t
 content types, signatures, and sizes to prevent security issues related to malicious file uploads.
 It implements in-depth content inspection, additional file type support, and improved security checks.
 """
-import re
-import os
+import asyncio
+import hashlib
 import logging
 import mimetypes
-import hashlib
-import asyncio
-from typing import Dict, List, Optional, Union, Set, Tuple, BinaryIO, Any
+import os
+import re
+from typing import List, Optional, Union, Set, Tuple, BinaryIO
 
 # Configure logging
 _logger = logging.getLogger("file_validation")
@@ -83,19 +83,6 @@ MALICIOUS_PATTERNS = {
 }
 
 
-async def validate_pdf_file_async(content: bytes) -> bool:
-    """
-    Asynchronously validate that a file is a genuine PDF by checking its header and structure.
-
-    Args:
-        content: First chunk of file content (at least first 1024 bytes)
-
-    Returns:
-        True if the file appears to be a valid PDF, False otherwise
-    """
-    return await asyncio.to_thread(validate_pdf_file, content)
-
-
 def validate_pdf_file(content: bytes) -> bool:
     """
     Validate that a file is a genuine PDF by checking its header.
@@ -130,19 +117,6 @@ def validate_pdf_file(content: bytes) -> bool:
         return False
 
 
-async def validate_docx_file_async(content: bytes) -> bool:
-    """
-    Asynchronously validate that a file is a genuine DOCX by checking its header and structure.
-
-    Args:
-        content: First chunk of file content (at least first 4096 bytes)
-
-    Returns:
-        True if the file appears to be a valid DOCX, False otherwise
-    """
-    return await asyncio.to_thread(validate_docx_file, content)
-
-
 def validate_docx_file(content: bytes) -> bool:
     """
     Validate that a file is a genuine DOCX by checking its header and structure.
@@ -171,23 +145,6 @@ def validate_docx_file(content: bytes) -> bool:
     except Exception as e:
         _logger.warning(f"DOCX validation error: {str(e)}")
         return False
-
-
-async def validate_mime_type_async(
-        content_type: str,
-        allowed_types: Optional[Union[List[str], Set[str]]] = None
-) -> bool:
-    """
-    Asynchronously validate that a content type is in the list of allowed types with improved normalization.
-
-    Args:
-        content_type: The content type to validate
-        allowed_types: List of allowed content types. If None, all configured types are allowed.
-
-    Returns:
-        True if the content type is allowed, False otherwise
-    """
-    return await asyncio.to_thread(validate_mime_type, content_type, allowed_types)
 
 
 def validate_mime_type(
@@ -240,19 +197,6 @@ def validate_mime_type(
         _logger.warning(f"Invalid content type: {content_type}, allowed types: {allowed_types}")
 
     return result
-
-
-async def get_file_signature_async(content: bytes) -> Optional[str]:
-    """
-    Asynchronously determine the file type from the content's signature (magic bytes).
-
-    Args:
-        content: First chunk of file content (at least first 16 bytes)
-
-    Returns:
-        File type string or None if the signature is not recognized
-    """
-    return await asyncio.to_thread(get_file_signature, content)
 
 
 def get_file_signature(content: bytes) -> Optional[str]:
@@ -321,20 +265,6 @@ def sanitize_filename(filename: str) -> str:
     return filename
 
 
-async def is_valid_file_size_async(file_size: int, file_type: str) -> bool:
-    """
-    Asynchronously check if the file size is within the allowed limit for the given file type.
-
-    Args:
-        file_size: Size of the file in bytes
-        file_type: Type of the file (pdf, text, docx, batch)
-
-    Returns:
-        True if the file size is within limits, False otherwise
-    """
-    return await asyncio.to_thread(is_valid_file_size, file_size, file_type)
-
-
 def is_valid_file_size(file_size: int, file_type: str) -> bool:
     """
     Check if the file size is within the allowed limit for the given file type.
@@ -364,23 +294,6 @@ def is_valid_file_size(file_size: int, file_type: str) -> bool:
         _logger.warning(f"File size {file_size} exceeds maximum {max_size} for type {file_type}")
 
     return is_valid
-
-
-async def get_mime_type_from_buffer_async(
-        buffer: Union[bytes, BinaryIO],
-        filename: Optional[str] = None
-) -> str:
-    """
-    Asynchronously determine MIME type from file content and optional filename.
-
-    Args:
-        buffer: File content as bytes or file-like object
-        filename: Optional filename for extension-based guessing
-
-    Returns:
-        MIME type string
-    """
-    return await asyncio.to_thread(get_mime_type_from_buffer, buffer, filename)
 
 
 def get_mime_type_from_buffer(
@@ -458,21 +371,6 @@ def get_mime_type_from_buffer(
 
     # If nothing else works, return default
     return "application/octet-stream"
-
-
-async def validate_file_safety_async(content: bytes, filename: Optional[str] = None) -> Tuple[bool, str]:
-    """
-    Asynchronously validate file content for potentially malicious patterns.
-
-    Args:
-        content: File content as bytes
-        filename: Optional filename for extension-based checks
-
-    Returns:
-        Tuple of (is_safe, reason) where reason is empty string if safe
-    """
-    return await asyncio.to_thread(validate_file_safety, content, filename)
-
 
 
 def validate_file_safety(content: bytes, filename: Optional[str] = None) -> Tuple[bool, str]:
@@ -632,71 +530,6 @@ def validate_file_content(
     return True, "", detected_mime
 
 
-async def is_valid_batch_async(
-        files: List[Dict[str, Any]],
-        max_files: int = MAX_FILE_COUNT,
-        max_batch_size: int = MAX_BATCH_SIZE_BYTES
-) -> Tuple[bool, str, List[str]]:
-    """
-    Asynchronously validate a batch of files for total size and count limits.
-
-    Args:
-        files: List of file dictionaries with content and metadata
-        max_files: Maximum number of files allowed in a batch
-        max_batch_size: Maximum total batch size in bytes
-
-    Returns:
-        Tuple of (is_valid, reason, valid_file_ids)
-    """
-    return await asyncio.to_thread(is_valid_batch, files, max_files, max_batch_size)
-
-
-def is_valid_batch(
-        files: List[Dict[str, Any]],
-        max_files: int = MAX_FILE_COUNT,
-        max_batch_size: int = MAX_BATCH_SIZE_BYTES
-) -> Tuple[bool, str, List[str]]:
-    """
-    Validate a batch of files for total size and count limits.
-
-    Args:
-        files: List of file dictionaries with content and metadata
-        max_files: Maximum number of files allowed in a batch
-        max_batch_size: Maximum total batch size in bytes
-
-    Returns:
-        Tuple of (is_valid, reason, valid_file_ids)
-    """
-    if not files:
-        return False, "No files provided", []
-
-    if len(files) > max_files:
-        return False, f"Too many files. Maximum allowed: {max_files}", []
-
-    total_size = 0
-    valid_file_ids = []
-
-    for file_info in files:
-        file_size = file_info.get("size", 0)
-        file_id = file_info.get("id", "unknown")
-
-        # Validate individual file size
-        file_type = file_info.get("type", "text")
-        if not is_valid_file_size(file_size, file_type):
-            continue
-
-        total_size += file_size
-        valid_file_ids.append(file_id)
-
-        # Check batch size limit
-        if total_size > max_batch_size:
-            return False, f"Batch exceeds maximum size of {max_batch_size // (1024 * 1024)}MB", []
-
-    if not valid_file_ids:
-        return False, "No valid files in batch", []
-
-    return True, "", valid_file_ids
-
 
 def calculate_file_hash(file_content: bytes) -> str:
     """
@@ -711,75 +544,3 @@ def calculate_file_hash(file_content: bytes) -> str:
     hash_obj = hashlib.sha256()
     hash_obj.update(file_content)
     return hash_obj.hexdigest()
-
-
-async def calculate_file_hash_async(file_content: bytes) -> str:
-    """
-    Asynchronously calculate a secure hash of file content for deduplication or verification.
-
-    Args:
-        file_content: File content as bytes
-
-    Returns:
-        SHA-256 hash of the file content
-    """
-    return await asyncio.to_thread(calculate_file_hash, file_content)
-
-
-def get_file_extension(filename: str, content_type: Optional[str] = None) -> str:
-    """
-    Get the appropriate file extension based on filename and content type.
-
-    Args:
-        filename: Original filename
-        content_type: Optional content type
-
-    Returns:
-        File extension including the dot (e.g., ".pdf")
-    """
-    # First, try to get extension from filename
-    ext = os.path.splitext(filename)[1].lower()
-    if ext:
-        return ext
-
-    # If no extension in filename, try to derive from content type
-    if content_type:
-        # Normalize content type
-        mime_type = content_type.split(';')[0].strip().lower()
-
-        # Reverse mapping from MIME type to extension
-        mime_to_ext = {
-            "application/pdf": ".pdf",
-            "text/plain": ".txt",
-            "text/csv": ".csv",
-            "text/markdown": ".md",
-            "text/html": ".html",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-            "application/msword": ".doc",
-            "image/jpeg": ".jpg",
-            "image/png": ".png",
-            "image/gif": ".gif",
-            "image/svg+xml": ".svg",
-            "application/vnd.oasis.opendocument.text": ".odt",
-            "text/xml": ".xml"
-        }
-
-        if mime_type in mime_to_ext:
-            return mime_to_ext[mime_type]
-
-    # Default to text extension if nothing else matches
-    return ".txt"
-
-
-async def get_file_extension_async(filename: str, content_type: Optional[str] = None) -> str:
-    """
-    Asynchronously get the appropriate file extension based on filename and content type.
-
-    Args:
-        filename: Original filename
-        content_type: Optional content type
-
-    Returns:
-        File extension including the dot (e.g., ".pdf")
-    """
-    return await asyncio.to_thread(get_file_extension, filename, content_type)

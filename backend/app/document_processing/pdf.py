@@ -1121,4 +1121,3 @@ async def extraction_processor(content):
         extracted_data = extractor.extract_text()
         extractor.close()
     return extracted_data
-

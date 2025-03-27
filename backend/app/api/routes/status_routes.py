@@ -139,7 +139,7 @@ async def metrics(request: Request, response: Response):
     # This endpoint should not be cached for too long as metrics change frequently
     response.headers["Cache-Control"] = "no-cache"
 
-    # Check if requester is authorized (in future, this would integrate with auth system)
+    # Check if requester is authorized (in the future, this would integrate with auth system)
     # For now, we use a simple API key check from environment
     api_key = request.headers.get("X-API-Key")
     expected_key = os.environ.get("METRICS_API_KEY", "")

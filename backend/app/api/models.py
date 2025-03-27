@@ -3,7 +3,8 @@ API models for document processing endpoints.
 
 This module contains Pydantic models for API request and response validation.
 """
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
+
 from pydantic import BaseModel
 
 

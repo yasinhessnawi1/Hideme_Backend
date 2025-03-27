@@ -30,7 +30,8 @@ class ConfigurationService:
 
         logger.info("Configuration service initialized")
 
-    def _load_config_from_file(self, config_path: str) -> None:
+    @staticmethod
+    def _load_config_from_file(config_path: str) -> None:
         """
         Load configuration from a JSON file.
 

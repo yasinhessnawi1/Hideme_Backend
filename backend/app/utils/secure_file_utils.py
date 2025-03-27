@@ -16,15 +16,18 @@ import tempfile
 import time
 import uuid
 from contextlib import contextmanager, asynccontextmanager
-from typing import Optional, Union, BinaryIO, Any, Callable, Generator, AsyncGenerator, TypeVar, Tuple, Awaitable, List, Dict
+from typing import Optional, Union, BinaryIO, Any, Callable, Generator, AsyncGenerator, TypeVar, Tuple, Awaitable, List, \
+    Dict
+
+import psutil
 
 from backend.app.configs.gdpr_config import TEMP_FILE_RETENTION_SECONDS
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.validation.file_validation import calculate_file_hash, sanitize_filename
-from backend.app.utils.logging.logger import log_info, log_warning, log_error
+from backend.app.utils.logging.logger import log_info, log_warning
 from backend.app.utils.memory_management import memory_monitor
 from backend.app.utils.security.retention_management import retention_manager
 from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority, AsyncTimeoutLock
+from backend.app.utils.validation.file_validation import calculate_file_hash, sanitize_filename
 
 _logger = logging.getLogger("secure_file_utils")
 T = TypeVar('T')
@@ -613,9 +616,7 @@ class SecureTempFileManager:
         if not paths:
             return {}
 
-        # Determine optimal worker count for parallelization
-        from backend.app.utils.parallel.batch import BatchProcessingUtils
-        worker_count = BatchProcessingUtils.get_optimal_batch_size(len(paths))
+        worker_count = SecureTempFileManager.get_optimal_batch_size(len(paths))
 
         # Create semaphore to control concurrency
         semaphore = asyncio.Semaphore(worker_count)
@@ -637,6 +638,52 @@ class SecureTempFileManager:
 
         # Convert results to dictionary
         return {path: result for path, result in results}
+
+    def get_optimal_batch_size(file_count: int, total_bytes: int = 0) -> int:
+        MAX_PARALLELISM = 8
+        MIN_MEMORY_PER_WORKER = 100 * 1024 * 1024
+        MAX_MEMORY_PERCENTAGE = 80
+        if file_count < 0:
+            raise ValueError("file_count cannot be negative")
+        file_count = max(1, file_count)
+        total_bytes = max(0, total_bytes)
+        try:
+            cpu_count = os.cpu_count() or 4
+            available_memory = psutil.virtual_memory().available
+            current_memory_percent = float(psutil.virtual_memory().percent)
+        except Exception:
+            cpu_count = 4
+            available_memory = 4 * 1024 * 1024 * 1024
+            current_memory_percent = 50.0
+        cpu_based_workers = max(1, min(cpu_count - 1, file_count, MAX_PARALLELISM))
+        if total_bytes > 0:
+            avg_bytes_per_file = total_bytes / max(file_count, 1)
+            estimated_memory_per_worker = avg_bytes_per_file * 5
+            memory_based_workers = max(1, int(available_memory / estimated_memory_per_worker))
+        else:
+            memory_based_workers = max(1, int(available_memory / MIN_MEMORY_PER_WORKER))
+        if current_memory_percent > 90:
+            memory_pressure_factor = 0.2
+            log_warning(
+                f"[BATCH] Critical memory pressure detected ({current_memory_percent}%), reducing workers to minimum")
+        elif current_memory_percent > MAX_MEMORY_PERCENTAGE:
+            memory_pressure_factor = 0.5
+            log_warning(f"[BATCH] High memory pressure detected ({current_memory_percent}%), reducing parallelism")
+        elif current_memory_percent > 70:
+            memory_pressure_factor = 0.7
+            log_info(f"[BATCH] Moderate memory pressure detected ({current_memory_percent}%), adjusting parallelism")
+        else:
+            memory_pressure_factor = 1.0
+        optimal_workers = min(
+            cpu_based_workers,
+            memory_based_workers,
+            max(1, int(cpu_based_workers * memory_pressure_factor)),
+            file_count
+        )
+        log_info(f"[BATCH] Optimal batch size: {optimal_workers} workers (CPU: {cpu_count}, "
+                 f"Memory: {available_memory / 1024 / 1024:.1f}MB, Files: {file_count}, "
+                 f"Memory pressure: {current_memory_percent}%)")
+        return optimal_workers
 
     @staticmethod
     def process_content_in_memory(
@@ -769,9 +816,8 @@ class SecureTempFileManager:
         operation_id = f"batch_mem_process_{uuid.uuid4().hex[:8]}"
         log_info(f"[SECURITY] Starting batch in-memory processing of {len(contents)} items [operation_id={operation_id}]")
 
-        # Calculate optimal worker count
-        from backend.app.utils.parallel.batch import BatchProcessingUtils
-        optimal_workers = max_workers or BatchProcessingUtils.get_optimal_batch_size(len(contents))
+
+        optimal_workers = max_workers or SecureTempFileManager.get_optimal_batch_size(len(contents))
 
         # Create semaphore for controlling concurrency
         semaphore = asyncio.Semaphore(optimal_workers)
@@ -989,9 +1035,7 @@ class SecureTempFileManager:
         # Generate operation ID for tracking
         operation_id = f"batch_validate_{uuid.uuid4().hex[:8]}"
 
-        # Calculate optimal worker count
-        from backend.app.utils.parallel.batch import BatchProcessingUtils
-        worker_count = BatchProcessingUtils.get_optimal_batch_size(len(contents))
+        worker_count = SecureTempFileManager.get_optimal_batch_size(len(contents))
 
         # Create semaphore for controlling concurrency
         semaphore = asyncio.Semaphore(worker_count)
