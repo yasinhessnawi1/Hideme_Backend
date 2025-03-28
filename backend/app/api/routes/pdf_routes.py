@@ -16,14 +16,16 @@ router = APIRouter()
 async def pdf_redact(
     request: Request,
     file: UploadFile = File(...),
-    redaction_mapping: str = Form(None)
+    redaction_mapping: str = Form(None),
+    remove_images: bool = Form(False)  # New parameter to control image redaction
 ):
     """
     Apply redactions to a PDF file using the provided redaction mapping.
+    If `remove_images` is True, images on the PDF pages will also be redacted.
     Returns the redacted PDF as a streamed response to minimize memory footprint.
     """
     service = DocumentRedactionService()
-    return await service.redact(file, redaction_mapping)
+    return await service.redact(file, redaction_mapping, remove_images)
 
 
 # Router: The endpoint simply delegates PDF extraction to PDFExtractService.

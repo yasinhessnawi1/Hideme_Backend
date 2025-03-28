@@ -122,6 +122,7 @@ async def batch_redact_documents(
         background_tasks: BackgroundTasks,
         files: List[UploadFile] = File(...),
         redaction_mappings: str = Form(...),
+        remove_images: bool = Form(False),
         max_parallel_files: Optional[int] = None
 ):
     """
@@ -129,19 +130,22 @@ async def batch_redact_documents(
 
     Uses the centralized batch processing service for efficient document redaction
     with streaming response, background cleanup, and resource management.
+
+    The `remove_images` parameter controls whether images in the documents
+    should also be detected and redacted.
     """
     operation_id = f"batch_redact_{int(time.time())}"
     log_info(f"[BATCH] Starting batch redaction [operation_id={operation_id}]")
 
     try:
-        # Process using the batch processing service
+        # Process using the batch processing service, passing the remove_images flag.
         response = await BatchRedactService.batch_redact_documents(
             files=files,
             redaction_mappings=redaction_mappings,
             max_parallel_files=max_parallel_files,
-            background_tasks=background_tasks
+            background_tasks=background_tasks,
+            remove_images=remove_images
         )
-
         return response
 
     except Exception as e:

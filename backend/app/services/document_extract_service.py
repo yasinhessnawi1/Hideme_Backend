@@ -4,7 +4,7 @@ from typing import Optional, Tuple, Any
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
 
-from backend.app.document_processing.pdf import PDFTextExtractor
+from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_error, log_warning
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
@@ -70,7 +70,7 @@ class DocumentExtractService:
         extracted_data["file_info"] = {
             "filename": file.filename,
             "content_type": file.content_type,
-            "size": len(content)
+            "size": f"{round(len(content) / (1024 * 1024), 2)} MB"
         }
 
         # Step 8: Record processing for compliance.
@@ -136,7 +136,7 @@ class DocumentExtractService:
         log_info(f"[SECURITY] Starting PDF text extraction [operation_id={operation_id}]")
         try:
             extractor = PDFTextExtractor(content)
-            extracted_data = extractor.extract_text(detect_images=True)
+            extracted_data = extractor.extract_text()
             extractor.close()
             log_info(f"[SECURITY] PDF text extraction completed [operation_id={operation_id}]")
             return extracted_data, None

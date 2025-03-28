@@ -32,7 +32,6 @@ from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
-# UPGRADE: Replace with prioritized lock from synchronization utilities
 from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority
 
 
@@ -290,29 +289,6 @@ class GlinerEntityDetector(BaseEntityDetector):
             return False
         log_info(f"[GLINER] Found valid model directory at {self.model_dir_path}")
         return True
-
-    def _test_model(self) -> bool:
-        """
-        Test the GLiNER model with a simple prediction to verify functionality.
-
-        Returns:
-            True if the test was successful, False otherwise
-        """
-        try:
-            if not self.model:
-                log_warning("[WARNING] Cannot test model - model not initialized")
-                return False
-            test_text = "John Smith works at Microsoft."
-            test_entities = ["Person", "Organization"]
-            if not hasattr(self.model, "predict_entities"):
-                log_warning("[WARNING] Model doesn't have predict_entities method")
-                return False
-            results = self.model.predict_entities(test_text, test_entities, threshold=0.5)
-            log_info(f"[OK] GLiNER model test successful. Found {len(results)} entities.")
-            return True
-        except Exception as test_error:
-            SecurityAwareErrorHandler.log_processing_error(test_error, "gliner_model_test", self.model_name)
-            return False
 
     def _save_model_to_directory(self, model_dir: str) -> bool:
         """

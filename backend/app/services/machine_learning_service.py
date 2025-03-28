@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from backend.app.document_processing.pdf import PDFTextExtractor
+from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers.json_helper import validate_requested_entities
@@ -41,7 +41,7 @@ class MashinLearningService:
 
         try:
             # Step 1: Validate MIME type.
-            allowed_types = ["application/pdf", "text/plain", "text/csv", "text/markdown", "text/html"]
+            allowed_types = ["application/pdf"]
             mime_error = self._validate_mime(file, allowed_types, operation_id)
             if mime_error:
                 return mime_error
@@ -180,7 +180,7 @@ class MashinLearningService:
         log_info(f"[ML] Starting text extraction [operation_id={operation_id}]")
         try:
             extractor = PDFTextExtractor(file_content)
-            extracted_data = extractor.extract_text(detect_images=True)
+            extracted_data = extractor.extract_text()
             extractor.close()
             return extracted_data, None
         except Exception as e:
@@ -226,6 +226,6 @@ class MashinLearningService:
         sanitized_response["file_info"] = {
             "filename": file.filename,
             "content_type": file.content_type,
-            "size": len(file_content)
+            "size": f"{round(len(file_content) / (1024 * 1024), 2)} MB"
         }
         return sanitized_response
