@@ -14,9 +14,10 @@ from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
 from backend.app.entity_detection import EntityDetectionEngine
-from backend.app.services import BatchDetectService, BatchRedactService, BatchExtractService
-from backend.app.utils.logging.logger import log_info, log_error
+from backend.app.services import BatchDetectService, BatchRedactService
+from backend.app.services.batch_search_service import BatchSearchService
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.memory_management import memory_optimized
 
 # Configure rate limiter
@@ -71,35 +72,37 @@ async def batch_detect_sensitive(
         )
         return JSONResponse(status_code=status_code, content=error_response)
 
-@router.post("/extract")
+@router.post("/search")
 @memory_optimized(threshold_mb=50)
-async def batch_extract_text(
+async def batch_search_text(
         request: Request,
         files: List[UploadFile] = File(...),
+        search_terms: str = Form(...),  # Now a single string parameter
         max_parallel_files: Optional[int] = Form(4)
 ):
     """
-    Extract text from multiple PDF files in parallel.
+    Search for specific terms in multiple PDF files in parallel.
 
-    Uses the centralized batch processing service for efficient text extraction
-    with optimized resource utilization and comprehensive error handling.
+    This endpoint uses the centralized batch search service to extract text from PDFs and then search
+    for provided search terms. The input search_terms parameter is a single string; if it contains multiple words,
+    each is searched for individually. The response includes detailed matching results.
     """
-    operation_id = f"batch_extract_{int(time.time())}"
-    log_info(f"[BATCH] Starting batch text extraction [operation_id={operation_id}]")
+    operation_id = f"batch_search_{int(time.time())}"
+    log_info(f"[BATCH] Starting batch text search [operation_id={operation_id}]")
 
     try:
-        # Process using the batch processing service
-        result = await BatchExtractService.batch_extract_text(
+        # Process using the batch search service
+        result = await BatchSearchService.batch_search_text(
             files=files,
+            search_terms=search_terms,
             max_parallel_files=max_parallel_files
         )
-
         return JSONResponse(content=result)
 
     except Exception as e:
-        log_error(f"[BATCH] Unhandled exception in batch extraction: {str(e)} [operation_id={operation_id}]")
+        log_error(f"[BATCH] Unhandled exception in batch search: {str(e)} [operation_id={operation_id}]")
         error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "batch_extraction", 500
+            e, "batch_search", 500
         )
         return JSONResponse(status_code=status_code, content=error_response)
 
