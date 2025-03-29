@@ -13,7 +13,6 @@ from backend.app.utils.logging.logger import log_info
 
 
 def sanitize_detection_output(
-        anonymized_text: str,
         entities: List[Dict[str, Any]],
         redaction_mapping: Dict[str, Any],
         processing_times: Optional[Dict[str, float]] = None

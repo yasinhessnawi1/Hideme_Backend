@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 import uuid
 from typing import Optional, Tuple, Any
@@ -6,6 +7,7 @@ from typing import Optional, Tuple, Any
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 
+from backend.app.document_processing.detection_updater import DetectionResultUpdater
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
@@ -24,7 +26,7 @@ class AIDetectService:
     Service that encapsulates all steps of sensitive information detection.
     """
 
-    async def detect(self, file: UploadFile, requested_entities: Optional[str]) -> JSONResponse:
+    async def detect(self, file: UploadFile, requested_entities: Optional[str], remove_words: Optional[str] = None) -> JSONResponse:
         start_time = time.time()
         processing_times = {}
         operation_id = str(uuid.uuid4())
@@ -78,11 +80,17 @@ class AIDetectService:
                     content={"detail": "Detection failed to return results", "operation_id": operation_id}
                 )
 
-            anonymized_text, entities, redaction_mapping = detection_result
+            entities, redaction_mapping = detection_result
             processing_times["total_time"] = time.time() - start_time
 
             log_info(f"[SECURITY] Gemini detection completed in {processing_times['detection_time']:.3f}s. "
                      f"Found {len(entities)} entities [operation_id={operation_id}]")
+
+            if remove_words:
+                words_to_remove = self._parse_remove_words(remove_words)
+                updater = DetectionResultUpdater(extracted_data, detection_result)
+                updated_result = updater.update_result(words_to_remove)
+                redaction_mapping = updated_result.get("redaction_mapping", redaction_mapping)
 
             # Step 8: Logging statistics.
             total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
@@ -102,7 +110,7 @@ class AIDetectService:
             )
 
             # Step 9: Prepare response.
-            response_payload = self._prepare_response(anonymized_text, entities, redaction_mapping, processing_times, file, file_content, operation_id)
+            response_payload = self._prepare_response(entities, redaction_mapping, processing_times, file, file_content, operation_id)
             log_sensitive_operation(
                 "Gemini Detection",
                 len(entities),
@@ -124,6 +132,19 @@ class AIDetectService:
             log_error(f"[SECURITY] Unhandled exception in Gemini detection: {str(e)} [operation_id={operation_id}]")
             error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(e, "gemini_detection", 500)
             return JSONResponse(status_code=status_code, content=error_response)
+
+    @staticmethod
+    def _parse_remove_words(remove_words: str) -> list:
+        """
+        Parses the remove_words parameter into a list of words/phrases.
+        """
+        try:
+            parsed = json.loads(remove_words)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+            return [str(parsed).strip()]
+        except json.JSONDecodeError:
+            return [word.strip() for word in remove_words.split(",") if word.strip()]
 
     @staticmethod
     async def _read_file_content(file: UploadFile, operation_id: str) -> Tuple[bytes, float]:
@@ -192,9 +213,9 @@ class AIDetectService:
             return None, JSONResponse(status_code=status_code, content=error_response)
 
     @staticmethod
-    def _prepare_response(anonymized_text: str, entities: list, redaction_mapping: dict, processing_times: dict,
+    def _prepare_response(entities: list, redaction_mapping: dict, processing_times: dict,
                           file: UploadFile, file_content: bytes, operation_id: str) -> dict:
-        sanitized_response = sanitize_detection_output(anonymized_text, entities, redaction_mapping, processing_times)
+        sanitized_response = sanitize_detection_output(entities, redaction_mapping, processing_times)
         sanitized_response["file_info"] = {
             "filename": file.filename,
             "content_type": file.content_type,

@@ -53,7 +53,7 @@ class EntityDetector(ABC):
             requested_entities: List of entity types to detect (optional)
 
         Returns:
-            Tuple of (anonymized_text, results_json, redaction_mapping)
+            Tuple of (results_json, redaction_mapping)
         """
         pass
 

@@ -32,48 +32,38 @@ async def batch_detect_sensitive(
         files: List[UploadFile] = File(...),
         requested_entities: Optional[str] = Form(None),
         detection_engine: Optional[str] = Form("presidio"),
-        max_parallel_files: Optional[int] = Form(4)
+        max_parallel_files: Optional[int] = Form(4),
+        remove_words: Optional[str] = Form(None)  # New parameter
 ):
     """
     Process multiple files for entity detection in parallel.
-
-    Uses the centralized batch processing service for efficient and consistent
-    document processing with comprehensive error handling and resource management.
     """
     operation_id = f"batch_detect_{int(time.time())}"
     log_info(f"[BATCH] Starting batch entity detection [operation_id={operation_id}]")
-
     try:
-        # Map detection engine string to enum
         engine_map = {
             "presidio": EntityDetectionEngine.PRESIDIO,
             "gemini": EntityDetectionEngine.GEMINI,
             "gliner": EntityDetectionEngine.GLINER,
             "hybrid": EntityDetectionEngine.HYBRID
         }
-
         if detection_engine not in engine_map:
             return JSONResponse(
                 status_code=400,
-                content={
-                    "detail": f"Invalid detection engine. Must be one of: {', '.join(engine_map.keys())}"
-                }
+                content={"detail": f"Invalid detection engine. Must be one of: {', '.join(engine_map.keys())}"}
             )
-
         engine_enum = engine_map[detection_engine]
-
-        # Process using the batch processing service
+        # Pass remove_words to the service call.
         result = await BatchDetectService.detect_entities_in_files(
             files=files,
             requested_entities=requested_entities,
             detection_engine=engine_enum,
             max_parallel_files=max_parallel_files,
             use_presidio=True,
-            use_gemini=(detection_engine == "hybrid")
+            use_gemini=(detection_engine == "hybrid"),
+            remove_words=remove_words
         )
-
         return JSONResponse(content=result)
-
     except Exception as e:
         log_error(f"[BATCH] Unhandled exception in batch detection: {str(e)} [operation_id={operation_id}]")
         error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
@@ -166,7 +156,8 @@ async def batch_hybrid_detect_sensitive(
         use_presidio: bool = Form(True),
         use_gemini: bool = Form(True),
         use_gliner: bool = Form(False),
-        max_parallel_files: Optional[int] = Form(4)
+        max_parallel_files: Optional[int] = Form(4),
+        remove_words: Optional[str] = Form(None)  # New parameter
 ):
     """
     Process multiple files using hybrid detection combining multiple engines.
@@ -197,7 +188,8 @@ async def batch_hybrid_detect_sensitive(
             max_parallel_files=max_parallel_files,
             use_presidio=use_presidio,
             use_gemini=use_gemini,
-            use_gliner=use_gliner
+            use_gliner=use_gliner,
+            remove_words = remove_words
         )
 
         return JSONResponse(content=result)

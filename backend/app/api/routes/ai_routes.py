@@ -19,10 +19,11 @@ router = APIRouter()
 async def ai_detect_sensitive(
     request: Request,
     file: UploadFile = File(...),
-    requested_entities: Optional[str] = Form(None)
+    requested_entities: Optional[str] = Form(None),
+    remove_words: Optional[str] = Form(None)  # New parameter for comma-separated words
 ):
     """
     Minimal endpoint that delegates document processing to AIDetectService.
     """
     service = AIDetectService()
-    return await service.detect(file, requested_entities)
+    return await service.detect(file, requested_entities, remove_words)

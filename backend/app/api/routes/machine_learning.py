@@ -22,15 +22,18 @@ router = APIRouter()
 async def presidio_detect_sensitive(
     request: Request,
     file: UploadFile = File(...),
-    requested_entities: Optional[str] = Form(None)
+    requested_entities: Optional[str] = Form(None),
+    remove_words: Optional[str] = Form(None)  # New parameter for comma-separated words
 ):
     """
     Detect sensitive information using Microsoft Presidio NER with enhanced security.
+    Optionally remove specified words from the final redaction mapping.
     """
     operation_id = f"presidio_detect_{int(time.time())}"
     log_info(f"[ML] Starting Presidio detection processing [operation_id={operation_id}]")
     service = MashinLearningService(detector_type="presidio")
-    return await service.detect(file, requested_entities, operation_id)
+    # Pass the remove_words parameter to the service
+    return await service.detect(file, requested_entities, operation_id, remove_words)
 
 
 @router.post("/gl_detect")
@@ -39,7 +42,8 @@ async def presidio_detect_sensitive(
 async def gliner_detect_sensitive_entities(
     request: Request,
     file: UploadFile = File(...),
-    requested_entities: Optional[str] = Form(None)
+    requested_entities: Optional[str] = Form(None),
+    remove_words: Optional[str] = Form(None)  # New parameter for comma-separated words
 ):
     """
     Detect sensitive information using GLiNER with enhanced security and specialized entity recognition.
@@ -50,4 +54,4 @@ async def gliner_detect_sensitive_entities(
     if current_memory_usage > 85:
         log_warning(f"[ML] High memory pressure ({current_memory_usage:.1f}%), may impact GLiNER performance [operation_id={operation_id}]")
     service = MashinLearningService(detector_type="gliner")
-    return await service.detect(file, requested_entities, operation_id)
+    return await service.detect(file, requested_entities, operation_id, remove_words)

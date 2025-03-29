@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 from typing import Optional, Tuple, Any
 
@@ -7,6 +8,7 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from backend.app.document_processing.detection_updater import DetectionResultUpdater
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
@@ -33,48 +35,52 @@ class MashinLearningService:
     def __init__(self, detector_type: str):
         self.detector_type = detector_type.lower()
 
-    async def detect(self, file: UploadFile, requested_entities: Optional[str], operation_id: str) -> JSONResponse:
+    async def detect(
+        self,
+        file: UploadFile,
+        requested_entities: Optional[str],
+        operation_id: str,
+        remove_words: Optional[str] = None
+    ) -> JSONResponse:
         start_time = time.time()
         processing_times: dict = {}
-
         log_info(f"[ML] Starting {self.detector_type} detection operation [operation_id={operation_id}]")
-
         try:
-            # Step 1: Validate MIME type.
-            allowed_types = ["application/pdf"]
-            mime_error = self._validate_mime(file, allowed_types, operation_id)
+            # 1. Validate MIME type.
+            mime_error = self._validate_mime(file, ["application/pdf"], operation_id)
             if mime_error:
                 return mime_error
 
-            # Step 2: Process requested entities.
+            # 2. Process requested entities.
             entity_list, entity_error = self._process_requested_entities(requested_entities, operation_id)
             if entity_error:
                 return entity_error
 
-            # Step 3: Read file content.
+            # 3. Read file content.
             file_content, read_time = await self._read_file_content(file, operation_id)
             processing_times["file_read_time"] = read_time
 
-            # Step 4: Validate file content.
+            # 4. Validate file content.
             is_valid, reason, _ = await validate_file_content_async(file_content, file.filename, file.content_type)
             if not is_valid:
                 log_warning(f"[ML] File validation failed: {reason} [operation_id={operation_id}]")
                 return JSONResponse(status_code=415, content={"detail": reason})
 
-            # Step 5: Extract text.
+            # 5. Extract text.
             extracted_data, extraction_error = self._extract_text(file_content, file.filename, operation_id)
             if extraction_error:
                 return extraction_error
             processing_times["extraction_time"] = time.time() - (start_time + processing_times.get("file_read_time", 0))
             log_info(f"[ML] Text extraction completed in {processing_times['extraction_time']:.3f}s [operation_id={operation_id}]")
 
-            # Step 6: Minimize data.
+            # 6. Minimize data.
             minimized_data = minimize_extracted_data(extracted_data)
 
-            # Step 7: Perform detection.
-            processing_times["detector_init_time"] = 0  # Detector init is part of the detection call
+            # 7. Perform detection.
             detection_start = time.time()
-            detection_result, detection_error = await self._perform_detection(minimized_data, entity_list, operation_id, detection_timeout=200)
+            detection_result, detection_error = await self._perform_detection(
+                minimized_data, entity_list, operation_id, detection_timeout=200
+            )
             if detection_error:
                 return detection_error
             processing_times["detection_time"] = time.time() - detection_start
@@ -86,22 +92,33 @@ class MashinLearningService:
                     content={"detail": f"{self.detector_type} detection failed to return results", "operation_id": operation_id}
                 )
 
-            anonymized_text, entities, redaction_mapping = detection_result
+            entities, redaction_mapping = detection_result
             total_time = time.time() - start_time
             processing_times["total_time"] = total_time
+            log_info(
+                f"[ML] {self.detector_type} detection completed in {processing_times['detection_time']:.3f}s. "
+                f"Found {len(entities)} entities [operation_id={operation_id}]"
+            )
 
-            log_info(f"[ML] {self.detector_type} detection completed in {processing_times['detection_time']:.3f}s. Found {len(entities)} entities [operation_id={operation_id}]")
+            # 8. Optionally update detection result with removal words.
+            if remove_words:
+                words_to_remove = self._parse_remove_words(remove_words)
+                updater = DetectionResultUpdater(extracted_data, detection_result)
+                updated_result = updater.update_result(words_to_remove)
+                redaction_mapping = updated_result.get("redaction_mapping", redaction_mapping)
 
-            # Step 8: Calculate statistics.
+            # 9. Calculate statistics.
             total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
             total_pages = len(extracted_data.get("pages", []))
             processing_times["words_count"] = total_words
             processing_times["pages_count"] = total_pages
             if total_words > 0 and entities:
                 processing_times["entity_density"] = (len(entities) / total_words) * 1000
-                log_info(f"[ML] Entity density: {processing_times['entity_density']:.2f} entities per 1000 words [operation_id={operation_id}]")
+                log_info(
+                    f"[ML] Entity density: {processing_times['entity_density']:.2f} entities per 1000 words [operation_id={operation_id}]"
+                )
 
-            # Record processing for compliance.
+            # 10. Record processing for compliance.
             record_keeper.record_processing(
                 operation_type=f"{self.detector_type}_detection",
                 document_type=file.content_type,
@@ -111,9 +128,11 @@ class MashinLearningService:
                 success=True
             )
 
-            # Step 9: Prepare response.
-            sanitized_response = self._prepare_response(anonymized_text, entities, redaction_mapping, processing_times, file, file_content, operation_id)
-            # Update model_info based on detector type.
+            # 11. Prepare response.
+            sanitized_response = self._prepare_response(
+                entities, redaction_mapping,
+                processing_times, file, file_content
+            )
             sanitized_response["model_info"] = {"engine": self.detector_type}
             mem_stats = memory_monitor.get_memory_stats()
             sanitized_response["_debug"] = {
@@ -136,13 +155,32 @@ class MashinLearningService:
 
             return JSONResponse(content=sanitized_response)
 
-        except HTTPException as e:
-            log_error(f"[ML] HTTP exception in {self.detector_type} detection: {e.detail} (status {e.status_code}) [operation_id={operation_id}]")
-            raise e
+        except HTTPException as http_exc:
+            log_error(
+                f"[ML] HTTP exception in {self.detector_type} detection: {http_exc.detail} "
+                f"(status {http_exc.status_code}) [operation_id={operation_id}]"
+            )
+            raise http_exc
         except Exception as e:
+            # Broad exception clause kept here solely for logging purposes.
             log_error(f"[ML] Unhandled exception in {self.detector_type} detection: {str(e)} [operation_id={operation_id}]")
-            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(e, f"{self.detector_type}_detection", 500, file.filename if hasattr(file, 'filename') else None)
+            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+                e, f"{self.detector_type}_detection", 500, getattr(file, 'filename', None)
+            )
             return JSONResponse(status_code=status_code, content=error_response)
+
+    @staticmethod
+    def _parse_remove_words(remove_words: str) -> list:
+        """
+        Parses the remove_words parameter into a list of words/phrases.
+        """
+        try:
+            parsed = json.loads(remove_words)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+            return [str(parsed).strip()]
+        except json.JSONDecodeError:
+            return [word.strip() for word in remove_words.split(",") if word.strip()]
 
     @staticmethod
     async def _read_file_content(file: UploadFile, operation_id: str) -> Tuple[bytes, float]:
@@ -188,14 +226,14 @@ class MashinLearningService:
             error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(e, "text_extraction", 500, filename)
             return None, JSONResponse(status_code=status_code, content=error_response)
 
-    async def _perform_detection(self, minimized_data: Any, entity_list: Optional[Any], operation_id: str, detection_timeout: int) -> Tuple[Optional[Any], Optional[JSONResponse]]:
-        # Choose detector based on mode.
+    async def _perform_detection(
+        self, minimized_data: Any, entity_list: Optional[Any], operation_id: str, detection_timeout: int
+    ) -> Tuple[Optional[Any], Optional[JSONResponse]]:
         if self.detector_type == "presidio" and hasattr(initialization_service, "get_presidio_detector"):
             detector = initialization_service.get_presidio_detector()
         elif self.detector_type == "gliner" and hasattr(initialization_service, "get_gliner_detector"):
             detector = initialization_service.get_gliner_detector(entity_list)
         else:
-            # Fallback: if mode is unrecognized, return error.
             return None, JSONResponse(
                 status_code=400,
                 content={"detail": f"Unsupported detector type: {self.detector_type}"}
@@ -220,9 +258,11 @@ class MashinLearningService:
             return None, JSONResponse(status_code=status_code, content=error_response)
 
     @staticmethod
-    def _prepare_response(anonymized_text: str, entities: list, redaction_mapping: dict, processing_times: dict,
-                          file: UploadFile, file_content: bytes, operation_id: str) -> dict:
-        sanitized_response = sanitize_detection_output(anonymized_text, entities, redaction_mapping, processing_times)
+    def _prepare_response(
+        entities: list, redaction_mapping: dict, processing_times: dict,
+        file: UploadFile, file_content: bytes
+    ) -> dict:
+        sanitized_response = sanitize_detection_output(entities, redaction_mapping, processing_times)
         sanitized_response["file_info"] = {
             "filename": file.filename,
             "content_type": file.content_type,

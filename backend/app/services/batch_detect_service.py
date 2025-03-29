@@ -1,24 +1,12 @@
-"""
-BatchDetectService.py
-
-Service for batch entity detection.
-This service reads PDF files, extracts their text in batch mode,
-and applies entity detection using a pre-initialized detector.
-It is broken down into helper functions:
-  • _read_pdf_files: Reads file contents and returns file data, names, and metadata.
-  • _batch_extract_text: Performs batch text extraction.
-  • _process_detection_for_file: Processes a single file's extracted data using the detector.
-    Now it minimizes the extracted data before further processing and uses file metadata.
-  • _get_initialized_detector: Initializes and returns the detector instance.
-"""
-
 import asyncio
 import time
 import uuid
-from typing import List, Dict, Any, Optional, Tuple
+import json
+from typing import List, Dict, Any, Optional, Tuple, cast
 
 from fastapi import UploadFile
 
+from backend.app.document_processing.detection_updater import DetectionResultUpdater
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.initialization_service import initialization_service
@@ -47,7 +35,8 @@ class BatchDetectService:
             max_parallel_files: Optional[int] = None,
             use_presidio: bool = True,
             use_gemini: bool = False,
-            use_gliner: bool = False
+            use_gliner: bool = False,
+            remove_words: Optional[str] = None  # New parameter for removal phrases
     ) -> Dict[str, Any]:
         """
         Main function to detect entities in a list of PDF files.
@@ -107,10 +96,11 @@ class BatchDetectService:
                 })
                 continue
             # Process detection for this file using the pre-initialized detector.
-            # Pass the corresponding file metadata.
+            # Pass remove_words into the per-file detection processing.
             result = await BatchDetectService._process_detection_for_file(
                 extracted, filename, file_metadata[i], entity_list, detector,
-                detection_engine, use_presidio, use_gemini, use_gliner
+                detection_engine, use_presidio, use_gemini, use_gliner,
+                remove_words=remove_words
             )
             detection_results.append(result)
 
@@ -208,7 +198,8 @@ class BatchDetectService:
             detection_engine: EntityDetectionEngine,
             use_presidio: bool,
             use_gemini: bool,
-            use_gliner: bool
+            use_gliner: bool,
+            remove_words: Optional[str] = None  # New parameter for per-file removal
     ) -> Dict[str, Any]:
         """
         Processes a single file's extracted data by applying the detector.
@@ -221,9 +212,21 @@ class BatchDetectService:
             minimized_extracted = minimize_extracted_data(extracted)
             # Use the pre-initialized detector to detect sensitive data.
             detection_raw = await asyncio.to_thread(detector.detect_sensitive_data, minimized_extracted, entity_list)
-            if not (isinstance(detection_raw, tuple) and len(detection_raw) == 3):
+            if not (isinstance(detection_raw, tuple) and len(detection_raw) == 2):
                 raise ValueError("Invalid detection result format")
-            anonymized_text, entities, redaction_mapping = detection_raw
+            entities, redaction_mapping = detection_raw
+
+            # Apply removal logic if remove_words is provided.
+            if remove_words:
+                words_to_remove = BatchDetectService._parse_remove_words(remove_words)
+                # Explicitly cast detection_raw to the expected type
+                detection_result: Tuple[List[Dict[str, Any]], Dict[str, Any]] = cast(
+                    Tuple[List[Dict[str, Any]], Dict[str, Any]], detection_raw
+                )
+                updater = DetectionResultUpdater(minimized_extracted, detection_result)
+                updated_result = updater.update_result(words_to_remove)
+                redaction_mapping = updated_result.get("redaction_mapping", redaction_mapping)
+
             total_words = sum(len(page.get("words", [])) for page in minimized_extracted.get("pages", []))
             pages_count = len(minimized_extracted.get("pages", []))
             processing_times = {
@@ -231,7 +234,7 @@ class BatchDetectService:
                 "pages_count": pages_count,
                 "entity_density": (len(entities) / total_words * 1000) if total_words > 0 else 0
             }
-            sanitized = sanitize_detection_output(anonymized_text, entities, redaction_mapping, processing_times)
+            sanitized = sanitize_detection_output(entities, redaction_mapping, processing_times)
             sanitized["file_info"] = {
                 "filename": filename,
                 "content_type": file_meta.get("content_type", "unknown"),
@@ -290,3 +293,16 @@ class BatchDetectService:
         if detector is None:
             raise ValueError(f"Failed to initialize {detection_engine.name} detector")
         return detector
+
+    @staticmethod
+    def _parse_remove_words(remove_words: str) -> list:
+        """
+        Parses the remove_words parameter into a list of words/phrases.
+        """
+        try:
+            parsed = json.loads(remove_words)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+            return [str(parsed).strip()]
+        except json.JSONDecodeError:
+            return [word.strip() for word in remove_words.split(",") if word.strip()]
