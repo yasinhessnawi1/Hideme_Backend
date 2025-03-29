@@ -1,201 +1,283 @@
 """
 Enhanced data minimization utilities with comprehensive GDPR compliance.
 
-This module provides functions to implement the GDPR principle of data
-minimization by ensuring only necessary data is processed and retained,
-with advanced anonymization, metadata removal, and audit logging capabilities.
+This module provides functions to implement the GDPR principle of data minimization by ensuring only
+necessary data is processed and retained, with advanced anonymization, metadata removal, and audit logging capabilities.
 """
+
 import hashlib
 import logging
 import re
 import time
 from typing import Dict, Any, List, Optional, Set, Union, Tuple
 
-from backend.app.configs.gdpr_config import (
-    DATA_MINIMIZATION_RULES
-)
+from backend.app.configs.gdpr_config import DATA_MINIMIZATION_RULES
 from backend.app.utils.security.processing_records import record_keeper
 
 # Configure module logger
 _logger = logging.getLogger("data_minimization")
 
+# Constants for sensitive fields and default metadata retention.
+SENSITIVE_FIELDS = ["content", "meta", "original", "raw", "owner", "source"]
+DEFAULT_METADATA_FIELDS: Set[str] = {"total_document_pages", "empty_pages", "content_pages"}
+
+# Helper functions for minimize_extracted_data
+
+def _get_trace_id(provided: Optional[str]) -> str:
+    """Generate a trace ID if not provided."""
+    if provided:
+        return provided
+    now = time.time()
+    return f"minimize_{int(now)}_{hashlib.md5(str(now).encode()).hexdigest()[:6]}"
+
+
+def _minimize_word(word: Dict[str, Any], required_fields_only: bool) -> Optional[Dict[str, Any]]:
+    """
+    Process a single word entry to minimize it.
+
+    If required_fields_only is True, only a fixed set of fields is retained.
+    Otherwise, a copy is made and sensitive fields are removed.
+    """
+    if not word.get("text", "").strip():
+        return None
+    if required_fields_only:
+        return {
+            "text": word.get("text", ""),
+            "x0": word.get("x0"),
+            "y0": word.get("y0"),
+            "x1": word.get("x1"),
+            "y1": word.get("y1")
+        }
+    minimized = word.copy()
+    for field in SENSITIVE_FIELDS:
+        if field in minimized:
+            del minimized[field]
+    return minimized
+
+
+def _minimize_page(page: Dict[str, Any], required_fields_only: bool) -> Optional[Dict[str, Any]]:
+    """
+    Process a single page by minimizing all its word entries.
+
+    Returns a page dictionary only if there are words retained.
+    """
+    minimized_words = []
+    for word in page.get("words", []):
+        try:
+            mw = _minimize_word(word, required_fields_only)
+            if mw is not None:
+                minimized_words.append(mw)
+        except Exception as e:
+            _logger.warning("Error minimizing word: %s", e)
+            continue
+    if minimized_words:
+        return {"page": page.get("page"), "words": minimized_words}
+    return None
+
+
+def _estimate_data_size(data: Any) -> int:
+    """
+    Estimate the size of a data structure in bytes using JSON serialization.
+
+    Falls back to recursive estimation if serialization fails.
+    """
+    import sys, json
+    try:
+        serialized = json.dumps(data)
+        return len(serialized)
+    except (TypeError, OverflowError):
+        if isinstance(data, dict):
+            return sum(_estimate_data_size(k) + _estimate_data_size(v) for k, v in data.items())
+        elif isinstance(data, (list, tuple, set)):
+            return sum(_estimate_data_size(i) for i in data)
+        else:
+            return sys.getsizeof(data)
+
+
+def _extract_valid_data(data: Union[Dict[str, Any], Tuple[int, Dict[str, Any]]]) -> Dict[str, Any]:
+    """
+    Extract the dictionary from the input if valid.
+
+    If the input is a tuple of (index, dict) or already a dict, return the dict.
+    Otherwise, return an empty dict.
+    """
+    if isinstance(data, tuple) and len(data) == 2 and isinstance(data[1], dict):
+        return data[1]
+    if isinstance(data, dict):
+        return data
+    return {}
+
+
+def _process_pages(pages: List[Dict[str, Any]], required_fields_only: bool) -> List[Dict[str, Any]]:
+    """
+    Process a list of pages by applying minimization to each page.
+
+    Returns a list of minimized page dictionaries.
+    """
+    processed = []
+    for page in pages:
+        try:
+            mp = _minimize_page(page, required_fields_only)
+            if mp:
+                processed.append(mp)
+        except Exception as e:
+            _logger.warning("Error processing page: %s", e)
+    return processed
+
+
+# Primary functions
 
 def minimize_extracted_data(
-    extracted_data: Union[Dict[str, Any], Tuple[int, Dict[str, Any]]],
-    required_fields_only: Optional[bool] = None,
-    metadata_fields: Optional[Set[str]] = None,
-    trace_id: Optional[str] = None
+        extracted_data: Union[Dict[str, Any], Tuple[int, Dict[str, Any]]],
+        required_fields_only: Optional[bool] = None,
+        metadata_fields: Optional[Set[str]] = None,
+        trace_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Minimize data according to GDPR principles of data minimization with audit logging.
+    Minimize extracted data according to GDPR data minimization principles.
 
-    Only retains what's necessary for entity detection and redaction,
-    applying additional filters based on configuration and keeping
-    precise records for GDPR compliance.
+    Processes input data (which may come as a tuple from batch processing) and returns a minimized version
+    that retains only necessary fields. Logs the reduction in data size and records the operation for GDPR compliance.
 
     Args:
-        extracted_data: Original extracted data (dict or tuple containing dict)
-        required_fields_only: Whether to keep only required fields (overrides config)
-        metadata_fields: Optional set of metadata fields to retain
-        trace_id: Optional trace ID for audit logging
+        extracted_data: Original extracted data as a dict or a tuple (index, dict).
+        required_fields_only: If True, only required fields are retained (overrides config if provided).
+        metadata_fields: Set of metadata fields to retain.
+        trace_id: Optional trace ID for audit logging.
 
     Returns:
-        Minimized version of the extracted data
+        A dictionary with minimized data.
     """
-    # Handle tuple input (index, data) from batch processing
-    if isinstance(extracted_data, tuple) and len(extracted_data) == 2 and isinstance(extracted_data[1], dict):
-        # Extract the dictionary from the tuple
-        extracted_data = extracted_data[1]
-
-    # If it's not a dictionary ,or it's empty, return empty result
-    if not isinstance(extracted_data, dict) or not extracted_data:
+    data = _extract_valid_data(extracted_data)
+    if not data:
         return {"pages": []}
 
-    # Generate trace ID if not provided
-    if not trace_id:
-        trace_id = f"minimize_{int(time.time())}_{hashlib.md5(str(time.time()).encode()).hexdigest()[:6]}"
-
+    trace_id = _get_trace_id(trace_id)
     start_time = time.time()
 
-    # Use configured setting if not explicitly provided
     if required_fields_only is None:
         required_fields_only = DATA_MINIMIZATION_RULES.get("required_fields_only", True)
+    metadata_fields = metadata_fields or DEFAULT_METADATA_FIELDS
 
-    # Create a deep copy to avoid modifying the original
-    minimized_data = {"pages": []}
-
-    # Default metadata fields to retain
-    if metadata_fields is None:
-        metadata_fields = {
-            "total_document_pages",
-            "empty_pages",
-            "content_pages"
-        }
-
-    # Copy permitted metadata fields
+    minimized_data: Dict[str, Any] = {"pages": []}
+    # Copy permitted metadata fields.
     for field in metadata_fields:
-        if field in extracted_data:
-            minimized_data[field] = extracted_data[field]
+        if field in data:
+            minimized_data[field] = data[field]
 
-    # Calculate initial data size for audit
-    original_size = _estimate_data_size(extracted_data)
-    field_counts = {"total_words": 0, "removed_fields": 0, "retained_fields": 0}
+    minimized_data["pages"] = _process_pages(data.get("pages", []), required_fields_only)
 
-    # Process each page
-    for page in extracted_data.get("pages", []):
-        minimized_page = {
-            "page": page["page"],
-            "words": []
-        }
-
-        # Process words in page
-        for word in page.get("words", []):
-            field_counts["total_words"] += 1
-
-            # Skip empty words
-            if not word.get("text", "").strip():
-                continue
-
-            # Only keep required fields for processing
-            if required_fields_only:
-                minimized_word = {
-                    "text": word["text"],
-                    "x0": word["x0"],
-                    "y0": word["y0"],
-                    "x1": word["x1"],
-                    "y1": word["y1"]
-                }
-                field_counts["removed_fields"] += len(word) - len(minimized_word)
-                field_counts["retained_fields"] += len(minimized_word)
-            else:
-                # Create a copy of the word to avoid modifying the original
-                minimized_word = word.copy()
-
-                # Remove any potentially sensitive fields not needed for processing
-                sensitive_fields = ["content", "meta", "original", "raw", "owner", "source"]
-                for sensitive_field in sensitive_fields:
-                    if sensitive_field in minimized_word:
-                        del minimized_word[sensitive_field]
-                        field_counts["removed_fields"] += 1
-
-            minimized_page["words"].append(minimized_word)
-
-        # Only add pages with content
-        if minimized_page["words"]:
-            minimized_data["pages"].append(minimized_page)
-
-    # Calculate final data size for audit
+    original_size = _estimate_data_size(data)
     minimized_size = _estimate_data_size(minimized_data)
     reduction_percentage = ((original_size - minimized_size) / original_size * 100) if original_size > 0 else 0
 
-    # Add minimization metadata
     minimized_data["_minimization_meta"] = {
         "applied_at": time.time(),
         "required_fields_only": required_fields_only,
-        "fields_retained": list(metadata_fields) if metadata_fields else []
+        "fields_retained": list(metadata_fields)
     }
 
-    # Log minimization metrics
     _logger.info(
-        f"[GDPR] Data minimized: {original_size/1024:.1f}KB → {minimized_size/1024:.1f}KB "
-        f"({reduction_percentage:.1f}% reduction) [trace_id={trace_id}]"
+        "[GDPR] Data minimized: %.1fKB → %.1fKB (%.1f%% reduction) [trace_id=%s]",
+        original_size / 1024, minimized_size / 1024, reduction_percentage, trace_id
     )
 
-    # Record operation for GDPR compliance
-    record_keeper.record_processing(
-        operation_type="data_minimization",
-        document_type="extracted_data",
-        entity_types_processed=[],
-        processing_time=time.time() - start_time,
-        file_count=1,
-        entity_count=0,
-        success=True
-    )
+    try:
+        record_keeper.record_processing(
+            operation_type="data_minimization",
+            document_type="extracted_data",
+            entity_types_processed=[],
+            processing_time=time.time() - start_time,
+            file_count=1,
+            entity_count=0,
+            success=True
+        )
+    except Exception as e:
+        _logger.warning("Failed to record processing: %s", e)
 
     return minimized_data
 
 
+# Helper functions for sanitize_document_metadata
+
+def _remove_unwanted_fields(metadata: Dict[str, Any], fields_to_remove: List[str], preserve_fields: List[str]) -> None:
+    """
+    Remove fields from metadata that are not in the preserve list.
+    """
+    for field in fields_to_remove:
+        if field in metadata and field not in preserve_fields:
+            try:
+                del metadata[field]
+            except Exception as e:
+                _logger.warning("Error removing field '%s': %s", field, e)
+
+
+def _sanitize_specific_fields(metadata: Dict[str, Any], fields_to_sanitize: Dict[str, str], preserve_fields: List[str]) -> None:
+    """
+    Replace values of specific fields with predefined replacement values.
+    """
+    for field, replacement in fields_to_sanitize.items():
+        if field in metadata and field not in preserve_fields:
+            metadata[field] = replacement
+
+
+def _apply_sensitive_patterns(value: str, patterns: List[Tuple[str, str]]) -> str:
+    """
+    Apply regex-based substitutions to a string value.
+    """
+    for pattern, replacement in patterns:
+        try:
+            value = re.sub(pattern, replacement, value)
+        except Exception as e:
+            _logger.warning("Error applying pattern '%s': %s", pattern, e)
+    return value
+
+
+def _sanitize_all_fields(metadata: Dict[str, Any], preserve_fields: List[str], patterns: List[Tuple[str, str]]) -> None:
+    """
+    Sanitize all string fields in metadata (except those preserved) using regex patterns.
+    """
+    for field, value in list(metadata.items()):
+        if field not in preserve_fields and isinstance(value, str):
+            metadata[field] = _apply_sensitive_patterns(value, patterns)
+
+
+# Primary function for metadata sanitization
+
 def sanitize_document_metadata(
-    metadata: Dict[str, Any],
-    sanitize_all: bool = False,
-    preserve_fields: Optional[List[str]] = None
+        metadata: Dict[str, Any],
+        sanitize_all: bool = False,
+        preserve_fields: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Sanitize document metadata to remove potentially sensitive information.
 
-    This function provides comprehensive metadata sanitization with configurable
-    field preservation and sanitization strategies.
+    Applies comprehensive sanitization by removing unwanted fields, replacing values for certain fields,
+    and, if requested, applying regex-based sanitization to all remaining fields.
 
     Args:
-        metadata: Original document metadata
-        sanitize_all: Whether to sanitize all fields except preserved ones
-        preserve_fields: List of fields to preserve even when sanitize_all is True
+        metadata: Original document metadata.
+        sanitize_all: If True, sanitize all fields except those explicitly preserved.
+        preserve_fields: List of field names to preserve even during full sanitization.
 
     Returns:
-        Sanitized metadata with sensitive information removed
+        A dictionary with sanitized metadata.
     """
     if not metadata:
         return {}
 
     start_time = time.time()
-
-    # Create a copy to avoid modifying the original
     sanitized = metadata.copy()
 
-    # Default fields to preserve
-    if preserve_fields is None:
-        preserve_fields = ["page_count", "version", "title", "subject"]
+    # Default fields to preserve.
+    preserve_fields = preserve_fields or ["page_count", "version", "title", "subject"]
 
-    # Fields to completely remove unless preserved
+    # Define fields to remove and fields to replace.
     fields_to_remove = [
-        "author", "creator", "producer", "keywords",
-        "owner", "user", "email", "phone", "address", "location",
-        "gps", "coordinates", "custom", "username", "computer",
-        "device", "software", "revision", "person", "modified_by",
-        "thumbnail", "last_modified_by", "comment", "category"
+        "author", "creator", "producer", "keywords", "owner", "user", "email", "phone", "address",
+        "location", "gps", "coordinates", "custom", "username", "computer", "device", "software",
+        "revision", "person", "modified_by", "thumbnail", "last_modified_by", "comment", "category"
     ]
-
-    # Fields to sanitize with replacement values
     fields_to_sanitize = {
         "title": "[Document Title]",
         "subject": "[Document Subject]",
@@ -205,75 +287,37 @@ def sanitize_document_metadata(
         "mod_date": "[Modification Date Removed]",
         "last_modified": "[Last Modified Date Removed]"
     }
-
-    # Regular expressions to detect potentially sensitive information
     sensitive_patterns = [
         (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL]'),
         (r'\b(?:\+\d{1,3}[-\.\s]?)?(?:\d{1,4}[-\.\s]?){2,5}\d{1,4}\b', '[PHONE]'),
-        (r'\b\d{6}\s?\d{5}\b', '[ID_NUMBER]'),  # Generic ID number pattern
+        (r'\b\d{6}\s?\d{5}\b', '[ID_NUMBER]'),
         (r'\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b', '[MAC_ADDRESS]'),
         (r'\b(?:\d{1,3}\.){3}\d{1,3}\b', '[IP_ADDRESS]')
     ]
 
-    # Process removal of fields
-    for field in fields_to_remove:
-        if field in sanitized and field not in preserve_fields:
-            del sanitized[field]
-
-    # Process sanitization of specific fields
-    for field, replacement in fields_to_sanitize.items():
-        if field in sanitized and field not in preserve_fields:
-            sanitized[field] = replacement
-
-    # If sanitize_all is True, sanitize all remaining fields except preserved ones
+    # Remove unwanted fields.
+    _remove_unwanted_fields(sanitized, fields_to_remove, preserve_fields)
+    # Replace values for specific fields.
+    _sanitize_specific_fields(sanitized, fields_to_sanitize, preserve_fields)
+    # If requested, sanitize all remaining string fields.
     if sanitize_all:
-        for field in list(sanitized.keys()):
-            if field not in preserve_fields:
-                # Apply pattern-based sanitization to string fields
-                if isinstance(sanitized[field], str):
-                    sanitized_value = sanitized[field]
-                    for pattern, replacement in sensitive_patterns:
-                        sanitized_value = re.sub(pattern, replacement, sanitized_value)
-                    sanitized[field] = sanitized_value
+        _sanitize_all_fields(sanitized, preserve_fields, sensitive_patterns)
 
-    # Add sanitization metadata
+    # Mark metadata as sanitized.
     sanitized["_sanitized"] = True
 
-    # Record operation for GDPR compliance
-    record_keeper.record_processing(
-        operation_type="metadata_sanitization",
-        document_type="document_metadata",
-        entity_types_processed=[],
-        processing_time=time.time() - start_time,
-        file_count=1,
-        entity_count=0,
-        success=True
-    )
+    # Record processing for GDPR compliance.
+    try:
+        record_keeper.record_processing(
+            operation_type="metadata_sanitization",
+            document_type="document_metadata",
+            entity_types_processed=[],
+            processing_time=time.time() - start_time,
+            file_count=1,
+            entity_count=0,
+            success=True
+        )
+    except Exception as e:
+        _logger.warning("Failed to record metadata sanitization: %s", e)
 
     return sanitized
-
-def _estimate_data_size(data: Any) -> int:
-    """
-    Estimate the size of data structure in bytes.
-
-    Args:
-        data: Data to estimate size for
-
-    Returns:
-        Estimated size in bytes
-    """
-    import sys
-    import json
-
-    try:
-        # Fast estimation using JSON serialization
-        serialized = json.dumps(data)
-        return len(serialized)
-    except (TypeError, OverflowError):
-        # Fallback for objects that can't be serialized
-        if isinstance(data, dict):
-            return sum(_estimate_data_size(k) + _estimate_data_size(v) for k, v in data.items())
-        elif isinstance(data, (list, tuple, set)):
-            return sum(_estimate_data_size(i) for i in data)
-        else:
-            return sys.getsizeof(data)

@@ -9,6 +9,7 @@ from backend.app.document_processing.pdf_searcher import PDFSearcher
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_batch_operation
 from backend.app.utils.memory_management import memory_monitor
+from backend.app.utils.security.processing_records import record_keeper  # Import record_keeper
 
 
 class BatchSearchService:
@@ -99,6 +100,18 @@ class BatchSearchService:
             "query_time": round(query_time, 2)
         }
         log_batch_operation("Batch Text Search", len(files), successful, query_time)
+
+        # Register the batch search operation for processing records.
+        record_keeper.record_processing(
+            operation_type="batch_text_search",
+            document_type="multiple_files",
+            entity_types_processed=search_words,
+            processing_time=query_time,
+            file_count=len(files),
+            entity_count=total_matches,
+            success=(successful > 0)
+        )
+
         mem_stats = memory_monitor.get_memory_stats()
         response = {
             "batch_summary": batch_summary,
@@ -172,12 +185,9 @@ class BatchSearchService:
 
         if isinstance(search_words, list):
             return [clean(word) for word in search_words if clean(word)]
-
         s = search_words.strip()
-        # Remove surrounding quotes if present.
         if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
             s = s[1:-1].strip()
-        # Split on whitespace.
         return [w.strip() for w in s.split() if w.strip()]
 
     @staticmethod
@@ -201,18 +211,16 @@ class BatchSearchService:
         Returns:
             A tuple containing:
               - The result dictionary for the file.
-              - success flag (1 if successful, 0 otherwise).
-              - failure flag (1 if failed, 0 otherwise).
+              - Success flag (1 if successful, 0 otherwise).
+              - Failure flag (1 if failed, 0 otherwise).
               - Total matches found in the file.
         """
-        # If file metadata indicates an error, mark as failed.
         if metadata.get("status") == "error":
             return ({
                         "file": metadata["original_name"],
                         "status": "error",
                         "error": metadata["error"]
                     }, 0, 1, 0)
-
         pdf_index = pdf_indices[index] if index < len(pdf_indices) else None
         if pdf_index is None or pdf_index not in extraction_map:
             return ({
@@ -220,7 +228,6 @@ class BatchSearchService:
                         "status": "error",
                         "error": "Search failed or file not processed"
                     }, 0, 1, 0)
-
         result = extraction_map[pdf_index]
         if isinstance(result, dict) and "error" in result:
             return ({
@@ -228,8 +235,6 @@ class BatchSearchService:
                         "status": "error",
                         "error": result["error"]
                     }, 0, 1, 0)
-
-        # Otherwise, process search using PDFSearcher.
         try:
             searcher = PDFSearcher(result)
             search_result = searcher.search_terms(search_words)

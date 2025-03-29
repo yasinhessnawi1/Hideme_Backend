@@ -119,7 +119,7 @@ class GlinerEntityDetector(BaseEntityDetector):
         self._model_analyzer_lock: Optional[TimeoutLock] = None
 
         # Attempt model initialization
-        self._initialize_model_refactored()
+        self._initialize_model()
 
         # Mark as initialized
         self._already_initialized = True
@@ -139,7 +139,7 @@ class GlinerEntityDetector(BaseEntityDetector):
     # -------------------------------------------------------------------------
     # Model Initialization
     # -------------------------------------------------------------------------
-    def _initialize_model_refactored(self) -> None:
+    def _initialize_model(self) -> None:
         """
         Refactored entry point for model initialization to reduce complexity.
         """
@@ -741,7 +741,7 @@ class GlinerEntityDetector(BaseEntityDetector):
 
         for i in range(0, len(paragraphs), batch_size):
             batch_paragraphs = paragraphs[i:i + batch_size]
-            batch_results = self._process_paragraph_batch_refactored(batch_paragraphs, text, requested_entities)
+            batch_results = self._process_paragraph_batch(batch_paragraphs, text, requested_entities)
             all_entities.extend(batch_results)
 
         deduplicated_entities = deduplicate_entities(all_entities)
@@ -750,7 +750,7 @@ class GlinerEntityDetector(BaseEntityDetector):
         self.total_processing_time += processing_time
         return filtered_entities
 
-    def _process_paragraph_batch_refactored(
+    def _process_paragraph_batch(
         self,
         paragraphs: List[str],
         full_text: str,
@@ -778,7 +778,7 @@ class GlinerEntityDetector(BaseEntityDetector):
             if base_offset == -1:
                 continue
 
-            sentence_groups = self._split_into_sentence_groups_refactored(local_paragraph, 350)
+            sentence_groups = self._split_into_sentence_groups(local_paragraph, 350)
             for group_text in sentence_groups:
                 group_offset = local_paragraph.find(group_text)
                 if group_offset == -1:
@@ -857,7 +857,7 @@ class GlinerEntityDetector(BaseEntityDetector):
 
         return local_entities
 
-    def _split_into_sentence_groups_refactored(self, text: str, max_tokens: int) -> List[str]:
+    def _split_into_sentence_groups(self, text: str, max_tokens: int) -> List[str]:
         """
         Refactored version of _split_into_sentence_groups to reduce complexity.
         Splits text into sentences and then groups them by token count.

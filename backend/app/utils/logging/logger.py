@@ -38,22 +38,25 @@ logging.basicConfig(
 default_logger = logging.getLogger("document_processing")
 default_logger.setLevel(logging.INFO)
 
+ERROR_WORD = "[ERROR]"
+WARNING_WORD = "[WARNING]"
+
 # Replace checkmark emoji with text equivalent to avoid encoding issues
 def log_info(message, *args, **kwargs):
     # Replace Unicode characters that might cause encoding issues
-    safe_message = message.replace("❌", "[ERROR]").replace("⚠️", "[WARNING]")
+    safe_message = message.replace("❌", ERROR_WORD).replace("⚠️", WARNING_WORD)
     default_logger.info(safe_message, *args, **kwargs)
 
 def log_error(message, *args, **kwargs):
-    safe_message = message.replace("[OK]", "[ERROR]").replace("❌", "[ERROR]").replace("⚠️", "[WARNING]")
+    safe_message = message.replace("[OK]", ERROR_WORD).replace("❌", ERROR_WORD).replace("⚠️", WARNING_WORD)
     default_logger.error(safe_message, *args, **kwargs)
 
 def log_warning(message, *args, **kwargs):
-    safe_message = message.replace("[OK]", "[WARNING]").replace("❌", "[ERROR]").replace("⚠️", "[WARNING]")
+    safe_message = message.replace("[OK]", WARNING_WORD).replace("❌", ERROR_WORD).replace("⚠️", WARNING_WORD)
     default_logger.warning(safe_message, *args, **kwargs)
 
 def log_debug(message, *args, **kwargs):
-    safe_message = message.replace("[OK]", "[DEBUG]").replace("❌", "[ERROR]").replace("⚠️", "[WARNING]")
+    safe_message = message.replace("[OK]", "[DEBUG]").replace("❌", ERROR_WORD).replace("⚠️", WARNING_WORD)
     default_logger.info(safe_message, *args, **kwargs)
 
 # Export functions

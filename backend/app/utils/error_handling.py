@@ -8,14 +8,14 @@ diagnostics for developers and users. It includes distributed tracing
 support and comprehensive logging for security audits.
 """
 import asyncio
-import uuid
 import json
-import traceback
-import re
-import os
-import time
 import logging
-from typing import Dict, Any, Optional, TypeVar, Callable, Union, Tuple, Awaitable
+import os
+import re
+import time
+import traceback
+import uuid
+from typing import Dict, Any, Optional, TypeVar, Callable, Union, Tuple
 
 from backend.app.utils.logging.logger import log_warning, log_error
 

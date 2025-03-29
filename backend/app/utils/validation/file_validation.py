@@ -1,73 +1,40 @@
 """
 Enhanced utility functions for validating file types and content with comprehensive security.
 
-This module provides advanced functions to validate uploaded files by checking their headers,
+This module provides advanced functions to validate uploaded PDF files by checking their headers,
 content types, signatures, and sizes to prevent security issues related to malicious file uploads.
-It implements in-depth content inspection, additional file type support, and improved security checks.
+It implements in-depth content inspection and improved security checks.
 """
+
 import asyncio
 import hashlib
 import logging
 import mimetypes
 import os
 import re
-from typing import List, Optional, Union, Set, Tuple, BinaryIO
+from typing import Optional, Union, Tuple, BinaryIO
 
 # Configure logging
 _logger = logging.getLogger("file_validation")
 
-# Configure maximum file sizes (in bytes) with environment variable overrides
+# Maximum file size for PDFs (in bytes)
 MAX_PDF_SIZE_BYTES = int(os.environ.get("MAX_PDF_SIZE_BYTES", 25 * 1024 * 1024))  # 25MB
-MAX_TEXT_SIZE_BYTES = int(os.environ.get("MAX_TEXT_SIZE_BYTES", 10 * 1024 * 1024))  # 10MB
-MAX_DOCX_SIZE_BYTES = int(os.environ.get("MAX_DOCX_SIZE_BYTES", 20 * 1024 * 1024))  # 20MB
-MAX_BATCH_SIZE_BYTES = int(os.environ.get("MAX_BATCH_SIZE_BYTES", 50 * 1024 * 1024))  # 50MB
-MAX_FILE_COUNT = int(os.environ.get("MAX_FILE_COUNT", 20))  # Maximum number of files in a batch
 
-# Define allowed mime types by operation
+APPLICATION_WORD = "application/pdf"
+
+# Allowed MIME types (only PDFs are allowed)
 ALLOWED_MIME_TYPES = {
-    "pdf": {"application/pdf"},
-    "text": {"text/plain", "text/csv", "text/markdown", "text/html", "text/xml"},
-    "docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-             "application/msword", "application/vnd.oasis.opendocument.text"},
-    "image": {"image/jpeg", "image/png", "image/gif", "image/svg+xml", "image/webp"},
-    "all": {"application/pdf", "text/plain", "text/csv", "text/markdown", "text/html", "text/xml",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/msword", "application/vnd.oasis.opendocument.text",
-            "image/jpeg", "image/png", "image/gif", "image/svg+xml", "image/webp"}
+    "pdf": {APPLICATION_WORD, "application/x-pdf"}
 }
 
-# File signatures (magic bytes) for common file formats
+# File signatures (magic bytes) for PDF files
 FILE_SIGNATURES = {
-    "pdf": [(b"%PDF", 0)],  # PDF starts with %PDF
-    "docx": [(b"PK\x03\x04", 0)],  # DOCX is a ZIP file, starts with PK
-    "doc": [(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1", 0)],  # DOC file header
-    "jpg": [(b"\xFF\xD8\xFF", 0)],  # JPEG file header
-    "png": [(b"\x89PNG\r\n\x1A\n", 0)],  # PNG file header
-    "gif": [(b"GIF87a", 0), (b"GIF89a", 0)],  # GIF file headers
-    "zip": [(b"PK\x03\x04", 0)],  # ZIP file header
-    "odt": [(b"PK\x03\x04", 0)],  # ODT is also a ZIP file
-    "xml": [(b"<?xml", 0)],  # XML declaration
-    "html": [(b"<!DOCTYPE html", 0), (b"<html", 0)]  # HTML file headers
+    "pdf": [(b"%PDF", 0)]
 }
 
-# File extension to MIME type mapping (supplementing mimetypes module)
+# Mapping from file extension to MIME type (only PDF is supported)
 EXTENSION_TO_MIME = {
-    ".pdf": "application/pdf",
-    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ".doc": "application/msword",
-    ".txt": "text/plain",
-    ".csv": "text/csv",
-    ".md": "text/markdown",
-    ".html": "text/html",
-    ".htm": "text/html",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".gif": "image/gif",
-    ".svg": "image/svg+xml",
-    ".webp": "image/webp",
-    ".odt": "application/vnd.oasis.opendocument.text",
-    ".xml": "text/xml"
+    ".pdf": APPLICATION_WORD
 }
 
 # Malicious content patterns to check for
@@ -83,135 +50,21 @@ MALICIOUS_PATTERNS = {
 }
 
 
-def validate_pdf_file(content: bytes) -> bool:
-    """
-    Validate that a file is a genuine PDF by checking its header.
-    This is a more lenient version that only checks essential markers.
-
-    Args:
-        content: First chunk of file content (at least first 1024 bytes)
-
-    Returns:
-        True if the file appears to be a valid PDF, False otherwise
-    """
-    # Check for PDF signature at beginning of file
-    if not content.startswith(b"%PDF"):
-        return False
-
-    # Additional PDF validation checks
-    try:
-        # Check for PDF version (must be between 1.0 and 9.9)
-        match = re.search(rb"%PDF-(\d+)\.(\d+)", content[:20])
-        if not match:
-            return False
-
-        major, minor = int(match.group(1)), int(match.group(2))
-        if major < 1 or major > 9:
-            return False
-
-        # More lenient approach - don't require EOF marker or xref table
-        # as these might not be in the first chunk we're checking
-        return True
-    except Exception as e:
-        _logger.warning(f"PDF validation error: {str(e)}")
-        return False
-
-
-def validate_docx_file(content: bytes) -> bool:
-    """
-    Validate that a file is a genuine DOCX by checking its header and structure.
-
-    Args:
-        content: First chunk of file content (at least first 4096 bytes)
-
-    Returns:
-        True if the file appears to be a valid DOCX, False otherwise
-    """
-    # DOCX files are ZIP files, so they start with PK
-    if not content.startswith(b"PK\x03\x04"):
-        return False
-
-    # Additional DOCX validation checks
-    try:
-        # Check for required DOCX content signatures
-        required_markers = [
-            b"[Content_Types].xml",  # Content types definition
-            b"word/",  # Word directory
-            b"docProps/"  # Document properties
-        ]
-
-        # Check for at least one of the markers
-        return any(marker in content for marker in required_markers)
-    except Exception as e:
-        _logger.warning(f"DOCX validation error: {str(e)}")
-        return False
-
-
-def validate_mime_type(
-        content_type: str,
-        allowed_types: Optional[Union[List[str], Set[str]]] = None
-) -> bool:
-    """
-    Validate that a content type is in the list of allowed types with improved normalization.
-
-    Args:
-        content_type: The content type to validate
-        allowed_types: List of allowed content types. If None, all configured types are allowed.
-
-    Returns:
-        True if the content type is allowed, False otherwise
-    """
-    if not content_type:
-        return False
-
-    if allowed_types is None:
-        allowed_types = ALLOWED_MIME_TYPES["all"]
-    elif isinstance(allowed_types, list):
-        allowed_types = set(allowed_types)
-
-    # Normalize content type (remove parameters, charset, etc.)
-    content_type = content_type.split(';')[0].strip().lower()
-
-    # Handle aliases (e.g., text/x-markdown -> text/markdown)
-    # Some clients use non-standard MIME types
-    content_type_aliases = {
-        "text/x-markdown": "text/markdown",
-        "application/x-pdf": "application/pdf",
-        "text/x-csv": "text/csv",
-        "application/csv": "text/csv",
-        "application/excel": "text/csv",
-        "application/vnd.ms-excel": "text/csv",
-        "application/msword": "application/msword",
-        "application/doc": "application/msword",
-        "application/ms-doc": "application/msword",
-        "application/vnd.ms-word": "application/msword"
-    }
-
-    # If we have an alias, use it
-    if content_type in content_type_aliases:
-        content_type = content_type_aliases[content_type]
-
-    # Perform the actual check
-    result = content_type in allowed_types
-    if not result:
-        _logger.warning(f"Invalid content type: {content_type}, allowed types: {allowed_types}")
-
-    return result
-
-
+###############################################################################
+# Utility Functions
+###############################################################################
 def get_file_signature(content: bytes) -> Optional[str]:
     """
     Determine the file type from the content's signature (magic bytes).
 
     Args:
-        content: First chunk of file content (at least first 16 bytes)
+        content: First chunk of file content (at least first 16 bytes).
 
     Returns:
-        File type string or None if the signature is not recognized
+        File type string or None if the signature is not recognized.
     """
-    if not content or len(content) < 8:
+    if not content or len(content) < 4:
         return None
-
     for file_type, signatures in FILE_SIGNATURES.items():
         for signature, offset in signatures:
             if len(content) >= offset + len(signature):
@@ -220,249 +73,212 @@ def get_file_signature(content: bytes) -> Optional[str]:
     return None
 
 
-def sanitize_filename(filename: str) -> str:
-    """
-    Sanitize a filename to prevent path traversal and other security issues.
-
-    Args:
-        filename: The filename to sanitize
-
-    Returns:
-        Sanitized filename
-    """
-    if not filename:
-        return "unnamed_file"
-
-    # Remove any path components
-    filename = re.sub(r"[/\\]", "", filename)
-
-    # Remove any null bytes
-    filename = re.sub(r"\x00", "", filename)
-
-    # Remove any control characters
-    filename = re.sub(r"[\x01-\x1F\x7F]", "", filename)
-
-    # Remove potentially dangerous characters
-    filename = re.sub(r"[;&|`$><^]", "", filename)
-
-    # Limit length
-    if len(filename) > 255:
-        base, ext = os.path.splitext(filename)
-        filename = base[:250] + ext
-
-    # Ensure filename is not empty
-    if not filename:
-        filename = "unnamed_file"
-
-    # Add a random suffix for additional safety
-    if os.environ.get("RANDOMIZE_FILENAMES", "false").lower() == "true":
-        import random
-        import string
-        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
-        base, ext = os.path.splitext(filename)
-        filename = f"{base}_{suffix}{ext}"
-
-    return filename
-
-
-def is_valid_file_size(file_size: int, file_type: str) -> bool:
-    """
-    Check if the file size is within the allowed limit for the given file type.
-
-    Args:
-        file_size: Size of the file in bytes
-        file_type: Type of the file (pdf, text, docx, batch)
-
-    Returns:
-        True if the file size is within limits, False otherwise
-    """
-    max_sizes = {
-        "pdf": MAX_PDF_SIZE_BYTES,
-        "text": MAX_TEXT_SIZE_BYTES,
-        "docx": MAX_DOCX_SIZE_BYTES,
-        "batch": MAX_BATCH_SIZE_BYTES,
-        "image": 5 * 1024 * 1024  # 5MB
-    }
-
-    # Get the max size for this file type, defaulting to the most restrictive limit
-    max_size = max_sizes.get(file_type, MAX_TEXT_SIZE_BYTES)
-
-    # Check if the file size is within the limit
-    is_valid = file_size <= max_size
-
-    if not is_valid:
-        _logger.warning(f"File size {file_size} exceeds maximum {max_size} for type {file_type}")
-
-    return is_valid
-
-
 def get_mime_type_from_buffer(
         buffer: Union[bytes, BinaryIO],
         filename: Optional[str] = None
 ) -> str:
     """
-    Determine MIME type from file content and optional filename.
+    Determine MIME type from file content and an optional filename.
 
     Args:
-        buffer: File content as bytes or file-like object
-        filename: Optional filename for extension-based guessing
+        buffer: File content as bytes or a file-like object.
+        filename: Optional filename for extension-based guessing.
 
     Returns:
-        MIME type string
+        MIME type string.
     """
-    # First, try to guess from filename if provided
     if filename:
-        # Try our custom mapping first
         ext = os.path.splitext(filename)[1].lower()
         if ext in EXTENSION_TO_MIME:
             return EXTENSION_TO_MIME[ext]
-
-        # Then try using mimetypes module
         mime_type, _ = mimetypes.guess_type(filename)
         if mime_type:
             return mime_type
-
-    # If filename doesn't help, check file signature
     if isinstance(buffer, bytes):
-        content = buffer[:4096]  # First 4KB should be enough for signatures
+        content = buffer[:4096]
     else:
-        # Save position, read content, and restore position
         pos = buffer.tell()
         content = buffer.read(4096)
         buffer.seek(pos)
-
-    # Get file type from signature
     file_type = get_file_signature(content)
-    if file_type:
-        # Map file type to MIME type
-        mime_map = {
-            "pdf": "application/pdf",
-            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "doc": "application/msword",
-            "jpg": "image/jpeg",
-            "png": "image/png",
-            "gif": "image/gif",
-            "zip": "application/zip",
-            "xml": "text/xml",
-            "html": "text/html"
-        }
-        return mime_map.get(file_type, "application/octet-stream")
-
-    # If we can't determine from signature, check for text content
-    try:
-        # Try to decode as text
-        text_sample = content.decode('utf-8', errors='ignore')
-        # Heuristic: if >80% of characters are printable, it's probably text
-        printable_chars = sum(c.isprintable() for c in text_sample)
-        if printable_chars / len(text_sample) > 0.8:
-            # Try to detect if it's HTML
-            if re.search(r'<!DOCTYPE html|<html|<body', text_sample, re.IGNORECASE):
-                return "text/html"
-            # Try to detect if it's XML
-            elif re.search(r'<\?xml|<[a-zA-Z0-9]+\s+xmlns', text_sample):
-                return "text/xml"
-            # Try to detect if it's CSV
-            elif re.search(r'([^,]+,){3,}[^,]+', text_sample):
-                return "text/csv"
-            # Default to plain text
-            return "text/plain"
-    except:
-        pass
-
-    # If nothing else works, return default
+    if file_type == "pdf":
+        return APPLICATION_WORD
     return "application/octet-stream"
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize a filename to prevent path traversal and other security issues.
+
+    Args:
+        filename: The filename to sanitize.
+
+    Returns:
+        A sanitized filename.
+    """
+    if not filename:
+        return "unnamed_file"
+    # Remove any path components.
+    filename = re.sub(r"[/\\]", "", filename)
+    # Replace null bytes using str.replace.
+    filename = filename.replace("\x00", "")
+    # Remove any control characters.
+    filename = re.sub(r"[\x01-\x1F\x7F]", "", filename)
+    # Remove potentially dangerous characters.
+    filename = re.sub(r"[;&|`$><^]", "", filename)
+    # Limit filename length.
+    if len(filename) > 255:
+        base, ext = os.path.splitext(filename)
+        filename = base[:250] + ext
+    if not filename:
+        filename = "unnamed_file"
+    # Optionally add a random suffix for extra safety.
+    if os.environ.get("RANDOMIZE_FILENAMES", "false").lower() == "true":
+        import random, string
+        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        base, ext = os.path.splitext(filename)
+        filename = f"{base}_{suffix}{ext}"
+    return filename
+
+
+def is_valid_file_size(file_size: int, file_type: str) -> bool:
+    """
+    Check if the file size is within the allowed limit for PDF files.
+
+    Args:
+        file_size: Size of the file in bytes.
+        file_type: Type of the file (only 'pdf' is supported).
+
+    Returns:
+        True if the file size is within limits, False otherwise.
+    """
+    max_size = MAX_PDF_SIZE_BYTES
+    valid = file_size <= max_size
+    if not valid:
+        _logger.warning("File size %d exceeds maximum %d for type %s", file_size, max_size, file_type)
+    return valid
+
+
+def calculate_file_hash(file_content: bytes) -> str:
+    """
+    Calculate a secure SHA-256 hash of file content for deduplication or verification.
+
+    Args:
+        file_content: File content as bytes.
+
+    Returns:
+        Hexadecimal SHA-256 hash of the file content.
+    """
+    hash_obj = hashlib.sha256()
+    hash_obj.update(file_content)
+    return hash_obj.hexdigest()
+
+
+def validate_mime_type(content_type: str, allowed_types: Optional[Union[list, set]] = None) -> bool:
+    """
+    Validate that the provided content type is allowed.
+
+    Args:
+        content_type: The MIME type to check.
+        allowed_types: Optional list or set of allowed MIME types. Defaults to ALLOWED_MIME_TYPES["pdf"].
+
+    Returns:
+        True if the normalized content type is allowed, otherwise False.
+    """
+    if not content_type:
+        return False
+    normalized = content_type.split(';')[0].strip().lower()
+    if allowed_types is None:
+        allowed_types = ALLOWED_MIME_TYPES["pdf"]
+    elif isinstance(allowed_types, list):
+        allowed_types = set(allowed_types)
+    return normalized in allowed_types
+
+
+###############################################################################
+# PDF Validation Functions (Only PDFs are Supported)
+###############################################################################
+def validate_pdf_file(content: bytes) -> bool:
+    """
+    Validate that a file is a genuine PDF by checking its header.
+
+    Args:
+        content: File content as bytes (first chunk should include the header).
+
+    Returns:
+        True if the file appears to be a valid PDF, False otherwise.
+    """
+    try:
+        if not content.startswith(b"%PDF"):
+            return False
+        match = re.search(rb"%PDF-(\d+)\.(\d+)", content[:20])
+        if not match:
+            return False
+        major, _ = int(match.group(1)), int(match.group(2))
+        if major < 1 or major > 9:
+            return False
+        return True
+    except (ValueError, re.error) as e:
+        _logger.warning("PDF validation error: %s", e)
+        return False
+
+
+def _check_pdf_javascript(content: bytes, filename: Optional[str]) -> Tuple[bool, str]:
+    """
+    Check PDF content for JavaScript markers.
+
+    Args:
+        content: PDF content as bytes.
+        filename: Optional filename.
+
+    Returns:
+        Tuple (is_safe, reason). If JavaScript is found and BLOCK_PDF_JAVASCRIPT is true,
+        returns False with an appropriate reason.
+    """
+    if b"/JavaScript" in content or b"/JS" in content:
+        if os.environ.get("BLOCK_PDF_JAVASCRIPT", "false").lower() == "true":
+            return False, "PDF contains JavaScript, which is not allowed"
+        else:
+            _logger.warning("PDF contains JavaScript: %s", filename or "")
+    return True, ""
+
+
+def _check_pdf_acroform(content: bytes, filename: Optional[str]) -> None:
+    """
+    Check for the presence of AcroForm in the PDF and log a warning if found.
+
+    Args:
+        content: PDF content as bytes.
+        filename: Optional filename.
+    """
+    if b"/AcroForm" in content:
+        _logger.warning("PDF contains AcroForm: %s", filename or "")
 
 
 def validate_file_safety(content: bytes, filename: Optional[str] = None) -> Tuple[bool, str]:
     """
-    Validate file content for potentially malicious patterns.
+    Validate the safety of a PDF file by checking for potentially malicious elements.
+
+    This function only supports PDFs. It verifies the file signature and checks for JavaScript markers.
 
     Args:
-        content: File content as bytes
-        filename: Optional filename for extension-based checks
+        content: File content as bytes.
+        filename: Optional filename for logging purposes.
 
     Returns:
-        Tuple of (is_safe, reason) where reason is empty string if safe
+        Tuple (is_safe, reason). If safety checks fail, is_safe is False and reason explains why.
     """
-    # Remove the size limitation that creates a security gap
-    # BEFORE: if len(content) > 10 * 1024 * 1024:  # 10MB
-    #    return True, ""
-
-    # Get file type from signature
     file_type = get_file_signature(content)
-
-    # For text-based formats, check for malicious patterns
-    text_formats = {"html", "xml", "text", None}
-    if file_type in text_formats or (filename and any(filename.endswith(ext) for ext in
-                                                      ['.txt', '.html', '.htm', '.xml', '.csv', '.md'])):
-        # Check for malicious patterns
-        for pattern_name, pattern in MALICIOUS_PATTERNS.items():
-            if re.search(pattern, content):
-                return False, f"Potential security issue: {pattern_name}"
-
-    # For document formats like PDF, check for JavaScript or malicious elements
-    if file_type == "pdf":
-        # Check for JavaScript in PDF
-        if b"/JavaScript" in content or b"/JS" in content:
-            # This is a heuristic - not all PDFs with JavaScript are malicious
-            # but many malicious PDFs contain JavaScript
-            if os.environ.get("BLOCK_PDF_JAVASCRIPT", "false").lower() == "true":
-                return False, "PDF contains JavaScript, which is not allowed"
-            else:
-                _logger.warning(f"PDF contains JavaScript: {filename}")
-
-        # Check for AcroForm which could contain malicious elements
-        if b"/AcroForm" in content:
-            _logger.warning(f"PDF contains AcroForm: {filename}")
-
-    # For docx/Office formats, check for macros
-    if file_type in {"docx", "doc"} and b"VBA" in content:
-        if os.environ.get("BLOCK_OFFICE_MACROS", "true").lower() == "true":
-            return False, "Office document contains macros, which are not allowed"
-        else:
-            _logger.warning(f"Office document contains macros: {filename}")
-
-    # For uploaded zip files, validate that they don't contain too many files
-    # (potential zip bomb)
-    if file_type == "zip" and os.environ.get("VALIDATE_ZIP_CONTENTS", "true").lower() == "true":
-        try:
-            import zipfile
-            from io import BytesIO
-
-            with zipfile.ZipFile(BytesIO(content)) as zf:
-                if len(zf.namelist()) > MAX_FILE_COUNT:
-                    return False, f"Zip contains too many files (max: {MAX_FILE_COUNT})"
-
-                # Check for nested zips - potential zip bomb
-                for file_info in zf.infolist():
-                    # Check compressed vs uncompressed size ratio
-                    if file_info.compress_size > 0 and file_info.file_size / file_info.compress_size > 100:
-                        return False, "Suspicious compression ratio detected"
-
-        except Exception as e:
-            _logger.warning(f"Error checking zip file: {str(e)}")
-            return False, "Invalid zip file structure"
-
-    # File passed all safety checks
+    if file_type != "pdf":
+        return False, "Only PDF files are allowed"
+    is_safe, reason = _check_pdf_javascript(content, filename)
+    if not is_safe:
+        return False, reason
+    try:
+        _check_pdf_acroform(content, filename)
+    except OSError as e:
+        _logger.warning("Error checking PDF AcroForm: %s", e)
     return True, ""
-
-async def validate_file_content_async(
-        content: bytes,
-        filename: Optional[str] = None,
-        content_type: Optional[str] = None
-) -> Tuple[bool, str, Optional[str]]:
-    """
-    Asynchronously perform comprehensive file validation checking signatures, content, and safety.
-
-    Args:
-        content: File content as bytes
-        filename: Optional filename for extension-based checks
-        content_type: Optional content type to validate
-
-    Returns:
-        Tuple of (is_valid, reason, detected_mime_type)
-    """
-    return await asyncio.to_thread(validate_file_content, content, filename, content_type)
 
 
 def validate_file_content(
@@ -471,76 +287,65 @@ def validate_file_content(
         content_type: Optional[str] = None
 ) -> Tuple[bool, str, Optional[str]]:
     """
-    Comprehensive file validation checking signatures, content, and safety.
+    Perform comprehensive validation of a PDF file's content.
+
+    This function only supports PDF files. It verifies the MIME type (allowing only PDFs),
+    checks the PDF file structure, and then performs safety checks.
 
     Args:
-        content: File content as bytes
-        filename: Optional filename for extension-based checks
-        content_type: Optional content type to validate
+        content: File content as bytes.
+        filename: Optional filename for extension-based checks.
+        content_type: Optional content type to validate against.
 
     Returns:
-        Tuple of (is_valid, reason, detected_mime_type)
+        Tuple (is_valid, reason, detected_mime_type). If validation fails, is_valid is False and
+        reason provides the explanation.
     """
     if not content:
         return False, "Empty file content", None
 
-    # First, detect the MIME type from the content
     detected_mime = get_mime_type_from_buffer(content, filename)
 
-    # If content_type was provided, validate it matches the detected type
+    # Use content_type if provided to validate the detected MIME type.
     if content_type:
         normalized_content_type = content_type.split(';')[0].strip().lower()
+        if normalized_content_type != detected_mime:
+            return False, f"Content type mismatch: provided {normalized_content_type}, detected {detected_mime}", detected_mime
 
-        # Check if content type and detected type are compatible
-        # We use "compatible" rather than equal because some types have aliases
-        compatible = False
+    if detected_mime not in ALLOWED_MIME_TYPES["pdf"]:
+        return False, f"Only PDF files are allowed, detected: {detected_mime}", detected_mime
 
-        # Exact match
-        if normalized_content_type == detected_mime:
-            compatible = True
-        # Special cases for common text formats
-        elif normalized_content_type.startswith("text/") and detected_mime.startswith("text/"):
-            compatible = True
-        # PDF specific check
-        elif (normalized_content_type == "application/pdf" and
-              (detected_mime == "application/pdf" or detected_mime == "application/x-pdf")):
-            compatible = True
-        # Office document checks
-        elif (normalized_content_type in ALLOWED_MIME_TYPES["docx"] and
-              detected_mime in ALLOWED_MIME_TYPES["docx"]):
-            compatible = True
+    if not validate_pdf_file(content):
+        return False, "Invalid PDF file structure", detected_mime
 
-        if not compatible:
-            return False, f"Content type mismatch: {normalized_content_type} vs {detected_mime}", detected_mime
-
-    # Validate file integrity and structure according to claimed type
-    if detected_mime == "application/pdf":
-        if not validate_pdf_file(content):
-            return False, "Invalid PDF file structure", detected_mime
-    elif detected_mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        if not validate_docx_file(content):
-            return False, "Invalid DOCX file structure", detected_mime
-
-    # Validate file safety
     is_safe, reason = validate_file_safety(content, filename)
     if not is_safe:
         return False, reason, detected_mime
 
-    # All validations passed
     return True, "", detected_mime
 
 
-
-def calculate_file_hash(file_content: bytes) -> str:
+async def validate_file_content_async(
+        content: bytes,
+        filename: Optional[str] = None,
+        content_type: Optional[str] = None
+) -> Tuple[bool, str, Optional[str]]:
     """
-    Calculate a secure hash of file content for deduplication or verification.
+    Asynchronously perform comprehensive validation of a PDF file's content.
+
+    Wraps the synchronous validate_file_content function in an asynchronous call.
 
     Args:
-        file_content: File content as bytes
+        content: File content as bytes.
+        filename: Optional filename.
+        content_type: Optional content type to validate against.
 
     Returns:
-        SHA-256 hash of the file content
+        Tuple (is_valid, reason, detected_mime_type).
     """
-    hash_obj = hashlib.sha256()
-    hash_obj.update(file_content)
-    return hash_obj.hexdigest()
+    try:
+        result = await asyncio.to_thread(validate_file_content, content, filename, content_type)
+        return result
+    except Exception as e:
+        _logger.warning("Error in async file content validation: %s", e)
+        return False, "Async validation error", None
