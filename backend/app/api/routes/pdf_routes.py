@@ -4,7 +4,7 @@ from slowapi.util import get_remote_address
 
 from backend.app.services.document_extract_service import DocumentExtractService
 from backend.app.services.document_redact_service import DocumentRedactionService
-from backend.app.utils.memory_management import memory_optimized
+from backend.app.utils.system_utils.memory_management import memory_optimized
 
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)

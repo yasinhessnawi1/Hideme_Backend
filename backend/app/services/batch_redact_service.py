@@ -24,12 +24,12 @@ from fastapi import UploadFile, BackgroundTasks
 from starlette.responses import JSONResponse, StreamingResponse
 
 from backend.app.document_processing.pdf_redactor import PDFRedactionService
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_batch_operation
-from backend.app.utils.memory_management import memory_monitor
+from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.parallel.core import ParallelProcessingCore
-from backend.app.utils.secure_file_utils import SecureTempFileManager
+from backend.app.utils.system_utils.secure_file_utils import SecureTempFileManager
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.validation.file_validation import sanitize_filename, validate_mime_type
 

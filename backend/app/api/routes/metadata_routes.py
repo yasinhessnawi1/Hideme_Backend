@@ -14,9 +14,9 @@ from backend.app.configs.presidio_config import REQUESTED_ENTITIES
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.security.caching_middleware import get_cached_response, response_cache
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_error
-from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
+from backend.app.utils.system_utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)

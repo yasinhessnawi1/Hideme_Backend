@@ -50,7 +50,7 @@ def _parse_color(color_str: str) -> tuple:
     try:
         r, g, b = map(int, color_str.split(','))
         return r, g, b
-    except Exception:
+    except ValueError:
         return 0, 0, 0  # Default to black
 
 

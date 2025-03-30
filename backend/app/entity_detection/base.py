@@ -12,11 +12,11 @@ from typing import Dict, Any, List, Tuple, Optional
 
 from backend.app.domain.interfaces import EntityDetector
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers.text_utils import TextUtils
 from backend.app.utils.logging.logger import default_logger as logger, log_warning
 from backend.app.utils.security.processing_records import record_keeper
-from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority
+from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
 
 
 class BaseEntityDetector(EntityDetector, ABC):

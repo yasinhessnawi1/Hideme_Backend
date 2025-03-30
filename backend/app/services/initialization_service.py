@@ -16,7 +16,8 @@ from backend.app.configs.gdpr_config import MAX_DETECTOR_CACHE_SIZE
 from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_ENTITIES, GLINER_MODEL_PATH
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
-from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority, AsyncTimeoutLock
+from backend.app.utils.system_utils.memory_management import memory_monitor
+from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority, AsyncTimeoutLock
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -112,7 +113,6 @@ class InitializationService:
         """
         Conditionally initialize GLiNER if memory usage is low enough.
         """
-        from backend.app.utils.memory_management import memory_monitor
         if memory_monitor.get_memory_usage() < 60.0:
             log_info("[STARTUP] Lazily initializing GLiNER detector...")
             try:

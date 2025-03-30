@@ -16,9 +16,9 @@ from starlette.responses import JSONResponse
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services import BatchDetectService, BatchRedactService
 from backend.app.services.batch_search_service import BatchSearchService
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_error
-from backend.app.utils.memory_management import memory_optimized
+from backend.app.utils.system_utils.memory_management import memory_optimized
 
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)

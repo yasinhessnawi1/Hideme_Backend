@@ -29,11 +29,11 @@ from backend.app.utils.helpers.text_utils import TextUtils
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.configs.gliner_config import GLINER_MODEL_PATH, GLINER_MODEL_NAME, GLINER_ENTITIES
 from backend.app.utils.validation.sanitize_utils import deduplicate_entities
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
-from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority
+from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
 from backend.app.utils.parallel.core import ParallelProcessingCore
 
 # Constants to avoid duplicating these literal strings

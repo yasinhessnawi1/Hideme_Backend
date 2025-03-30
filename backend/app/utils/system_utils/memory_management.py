@@ -18,7 +18,7 @@ from typing import Optional, Dict, Any, Callable, List, TypeVar, Awaitable, Tupl
 import psutil
 
 # Import enhanced synchronization utilities
-from backend.app.utils.synchronization_utils import (
+from backend.app.utils.system_utils.synchronization_utils import (
     TimeoutLock, LockPriority
 )
 

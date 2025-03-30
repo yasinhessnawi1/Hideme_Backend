@@ -6,7 +6,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from backend.app.services.ai_detect_service import AIDetectService
-from backend.app.utils.memory_management import memory_optimized
+from backend.app.utils.system_utils.memory_management import memory_optimized
 
 # Configure rate limiter and router
 limiter = Limiter(key_func=get_remote_address)

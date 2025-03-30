@@ -10,11 +10,11 @@ from fastapi.responses import JSONResponse
 from backend.app.document_processing.detection_updater import DetectionResultUpdater
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers.json_helper import validate_requested_entities
 from backend.app.utils.logging.logger import log_info, log_error, log_warning
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
-from backend.app.utils.memory_management import memory_monitor
+from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.validation.file_validation import validate_mime_type, validate_file_content_async

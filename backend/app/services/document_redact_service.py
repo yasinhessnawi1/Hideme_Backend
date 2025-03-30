@@ -6,10 +6,10 @@ from fastapi import UploadFile
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from backend.app.document_processing.pdf_redactor import PDFRedactionService
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_error, log_warning
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
-from backend.app.utils.memory_management import memory_monitor
+from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.validation.file_validation import (
     MAX_PDF_SIZE_BYTES,

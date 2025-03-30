@@ -22,11 +22,11 @@ from typing import Optional, Union, BinaryIO, Any, Callable, Generator, AsyncGen
 import psutil
 
 from backend.app.configs.gdpr_config import TEMP_FILE_RETENTION_SECONDS
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_warning
-from backend.app.utils.memory_management import memory_monitor
+from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.security.retention_management import retention_manager
-from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority, AsyncTimeoutLock
+from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority, AsyncTimeoutLock
 from backend.app.utils.validation.file_validation import calculate_file_hash, sanitize_filename
 
 _logger = logging.getLogger("secure_file_utils")
@@ -73,7 +73,7 @@ class SecureTempFileManager:
         """Get or initialize the buffer pool instance"""
         if SecureTempFileManager._buffer_pool_instance is None:
             # Import here to avoid circular imports
-            from backend.app.utils.buffer_pool import BufferPool
+            from backend.app.utils.system_utils.buffer_pool import BufferPool
             # Dynamically adjust max size based on available memory
             try:
                 available_mb = memory_monitor.memory_stats.available_memory_mb.get()
@@ -370,7 +370,7 @@ class SecureTempFileManager:
         except Exception as e:
             if temp_file and os.path.exists(temp_file.name):
                 await asyncio.to_thread(SecureTempFileManager.secure_delete_file, temp_file.name)
-            SecurityAwareErrorHandler.log_processing_error(e, "secure_temp_file_creation", trace_id=trace_id)
+            SecurityAwareErrorHandler.log_processing_error("secure_temp_file_creation", trace_id=trace_id)
             raise e
 
     @staticmethod
@@ -427,7 +427,7 @@ class SecureTempFileManager:
         except Exception as e:
             if temp_file and os.path.exists(temp_file.name):
                 SecureTempFileManager.secure_delete_file(temp_file.name)
-            SecurityAwareErrorHandler.log_processing_error(e, "secure_temp_file_creation", trace_id=trace_id)
+            SecurityAwareErrorHandler.log_processing_error("secure_temp_file_creation", trace_id=trace_id)
             raise e
 
     @staticmethod
@@ -582,7 +582,7 @@ class SecureTempFileManager:
             log_info(f"[SECURITY] Securely deleted directory: {os.path.basename(dir_path)}")
             return True
         except Exception as e:
-            SecurityAwareErrorHandler.log_processing_error(e, "directory_secure_deletion", dir_path)
+            SecurityAwareErrorHandler.log_processing_error("directory_secure_deletion", dir_path)
             return False
 
     @staticmethod
@@ -884,7 +884,7 @@ class SecureTempFileManager:
                 buffer.close()
             return content
         except Exception as e:
-            SecurityAwareErrorHandler.log_processing_error(e, "buffer_content_reading", "")
+            SecurityAwareErrorHandler.log_processing_error("buffer_content_reading", "")
             return b""
 
     @staticmethod
