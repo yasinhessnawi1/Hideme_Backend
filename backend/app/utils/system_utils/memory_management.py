@@ -1,9 +1,9 @@
 """
 Memory management utilities for document processing with enhanced support for batch operations.
 
-This module provides functions for monitoring and optimizing memory usage during document processing operations,
+This module provides functions for monitoring and optimizing memory usage during document processing,
 ensuring efficient resource utilization and preventing memory-related vulnerabilities with adaptive thresholds
-based on system resources. It now includes specialized helpers for batch document processing.
+based on system resources. It also includes specialized helpers for batch document processing.
 """
 
 import asyncio
@@ -12,20 +12,19 @@ import logging
 import os
 import threading
 import time
+import aiofiles
 from functools import wraps
 from typing import Optional, Dict, Any, Callable, List, TypeVar, Awaitable, Tuple
 
 import psutil
 
 # Import enhanced synchronization utilities
-from backend.app.utils.system_utils.synchronization_utils import (
-    TimeoutLock, LockPriority
-)
+from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
-# Type variable for generic functions
+# Generic type variable for functions
 T = TypeVar('T')
 
 
@@ -87,14 +86,14 @@ class MemoryMonitor:
     """
     Memory usage monitoring and management with enhanced thread safety and batch processing support.
 
-    Uses a TimeoutLock for complex operations and atomic operations for frequent stat updates.
-    Now includes specialized settings and helpers for batch document processing.
+    This class uses a lazy-initialized TimeoutLock for complex operations and atomic operations for frequent
+    stat updates. It also features adaptive thresholds for both regular and batch document processing.
     """
     def __init__(
             self,
-            memory_threshold: float = 80.0,  # 80% memory threshold
-            critical_threshold: float = 90.0,  # 90% critical threshold
-            check_interval: float = 5.0,       # 5 seconds check interval
+            memory_threshold: float = 80.0,    # 80% memory threshold
+            critical_threshold: float = 90.0,    # 90% critical threshold
+            check_interval: float = 5.0,         # 5 seconds between checks
             enable_monitoring: bool = True,
             adaptive_thresholds: bool = True
     ):
@@ -109,12 +108,9 @@ class MemoryMonitor:
         self.enable_monitoring = enable_monitoring
         self.adaptive_thresholds = adaptive_thresholds
         self._monitor_thread = None
+        self._lock_instance = None
         self._stop_monitor = threading.Event()
-
-        # Enhanced TimeoutLock for complex operations
-        self._lock = TimeoutLock("memory_monitor_lock", priority=LockPriority.MEDIUM,
-                                  timeout=5.0, reentrant=True)
-
+        # _lock is no longer created here; it is lazy-initialized (see property below)
         self._last_gc_time = 0
         self._gc_interval = 60  # Minimum seconds between full garbage collections
 
@@ -123,24 +119,37 @@ class MemoryMonitor:
 
         # Batch processing specific settings
         self.batch_memory_threshold = 70.0  # Lower threshold for batch operations
-        self.batch_max_memory_factor = 0.8  # Maximum memory factor for batch operations
+        self.batch_max_memory_factor = 0.8    # Maximum memory factor for batch operations
 
         # Initialize available memory stats
         self._update_available_memory()
 
-        # Adapt thresholds based on available memory if enabled
-        if adaptive_thresholds:
+        # Adapt thresholds based on system resources if enabled
+        if self.adaptive_thresholds:
             self._adjust_thresholds_based_on_system()
 
         # Start background monitoring if enabled
         if self.enable_monitoring:
             self.start_monitoring()
 
+    @property
+    def _lock(self) -> TimeoutLock:
+        """
+        Lazily initialize and return the TimeoutLock.
+        This ensures that the lock is not instantiated during object construction.
+        """
+        if self._lock_instance is None:
+            self._lock_instance = TimeoutLock("memory_monitor_lock", priority=LockPriority.MEDIUM,
+                                              timeout=5.0, reentrant=True)
+        return self._lock_instance
+
     def _update_available_memory(self) -> None:
-        """Update available memory statistics from the system."""
+        """
+        Update available memory statistics from the system.
+        """
         try:
             system_memory = psutil.virtual_memory()
-            # Update available memory atomically without acquiring the global lock
+            # Update available memory in MB atomically.
             self.memory_stats.available_memory_mb.set(system_memory.available / (1024 * 1024))
         except Exception as e:
             logger.error(f"Error updating available memory: {str(e)}")
@@ -182,24 +191,27 @@ class MemoryMonitor:
                     self.critical_threshold = new_critical_threshold
                     self.memory_stats.system_threshold_adjustments.increment(1)
                     logger.info(
-                        f"Adjusted memory thresholds: memory_threshold={self.memory_threshold:.1f}%, "
-                        f"critical_threshold={self.critical_threshold:.1f}%, "
-                        f"batch_threshold={self.batch_memory_threshold:.1f}%, "
-                        f"total_memory={total_memory_gb:.1f}GB, "
-                        f"available_memory={available_memory_gb:.1f}GB"
+                        f"Adjusted thresholds: memory={self.memory_threshold:.1f}%, "
+                        f"critical={self.critical_threshold:.1f}%, batch={self.batch_memory_threshold:.1f}%, "
+                        f"total={total_memory_gb:.1f}GB, available={available_memory_gb:.1f}GB"
                     )
             except TimeoutError:
                 logger.warning("Timeout acquiring lock to adjust thresholds - will retry later")
 
         except Exception as e:
             logger.error(f"Error adjusting thresholds: {str(e)}")
-            with self._lock.acquire_timeout(timeout=1.0):
-                self.memory_threshold = self.base_memory_threshold
-                self.critical_threshold = self.base_critical_threshold
-                self.batch_memory_threshold = max(50.0, self.base_memory_threshold - 10)
+            try:
+                with self._lock.acquire_timeout(timeout=1.0):
+                    self.memory_threshold = self.base_memory_threshold
+                    self.critical_threshold = self.base_critical_threshold
+                    self.batch_memory_threshold = max(50.0, self.base_memory_threshold - 10)
+            except TimeoutError:
+                logger.warning("Timeout acquiring lock during fallback threshold adjustment")
 
     def start_monitoring(self) -> None:
-        """Start the background memory monitoring thread."""
+        """
+        Start the background memory monitoring thread.
+        """
         if self._monitor_thread is not None and self._monitor_thread.is_alive():
             return
 
@@ -209,7 +221,9 @@ class MemoryMonitor:
         logger.info("Memory monitoring started")
 
     def stop_monitoring(self) -> None:
-        """Stop the background memory monitoring thread."""
+        """
+        Stop the background memory monitoring thread.
+        """
         if self._monitor_thread is None or not self._monitor_thread.is_alive():
             return
 
@@ -217,43 +231,52 @@ class MemoryMonitor:
         self._monitor_thread.join(timeout=2.0)
         logger.info("Memory monitoring stopped")
 
+    def _update_memory_stats(self, current_usage: float) -> None:
+        """
+        Update memory statistics (usage, peak, average) atomically.
+
+        This helper encapsulates the logic for updating the stats and reduces the
+        cognitive complexity of the monitoring loop.
+        """
+        try:
+            self._update_available_memory()
+            self.memory_stats.current_usage.set(current_usage)
+            self.memory_stats.checks_count.increment(1)
+            self.memory_stats.last_check_time.set(time.time())
+            if current_usage > self.memory_stats.peak_usage.get():
+                self.memory_stats.peak_usage.set(current_usage)
+            try:
+                with self._lock.acquire_timeout(timeout=1.0):
+                    cnt = self.memory_stats.checks_count.get()
+                    if cnt > 1:
+                        prev_avg = self.memory_stats.average_usage.get()
+                        new_avg = (prev_avg * (cnt - 1) + current_usage) / cnt
+                        self.memory_stats.average_usage.set(new_avg)
+                    else:
+                        self.memory_stats.average_usage.set(current_usage)
+            except TimeoutError:
+                logger.warning("Timeout acquiring lock to update average memory usage")
+        except Exception as e:
+            logger.error(f"Error updating memory stats: {str(e)}")
+
     def _monitor_memory(self) -> None:
-        """Background thread: periodically check memory usage and trigger cleanup if needed."""
+        """
+        Background thread: periodically check memory usage and trigger cleanup if needed.
+
+        Refactored to delegate memory stat updates to a helper method, reducing cognitive complexity.
+        """
         adaptive_counter = 0
 
         while not self._stop_monitor.is_set():
             current_usage = self.get_memory_usage()
-            try:
-                self._update_available_memory()
-
-                # Atomically update simple counters and flags
-                self.memory_stats.current_usage.set(current_usage)
-                self.memory_stats.checks_count.increment(1)
-                self.memory_stats.last_check_time.set(time.time())
-                if current_usage > self.memory_stats.peak_usage.get():
-                    self.memory_stats.peak_usage.set(current_usage)
-
-                # Update average usage under lock protection (for read-modify-write cycle)
-                try:
-                    with self._lock.acquire_timeout(timeout=1.0):
-                        cnt = self.memory_stats.checks_count.get()
-                        if cnt > 1:
-                            prev_avg = self.memory_stats.average_usage.get()
-                            new_avg = (prev_avg * (cnt - 1) + current_usage) / cnt
-                            self.memory_stats.average_usage.set(new_avg)
-                        else:
-                            self.memory_stats.average_usage.set(current_usage)
-                except TimeoutError:
-                    logger.warning("Timeout acquiring lock to update average memory usage")
-            except Exception as e:
-                logger.error(f"Error in memory monitor: {str(e)}")
+            self._update_memory_stats(current_usage)
 
             adaptive_counter += 1
             if self.adaptive_thresholds and adaptive_counter >= 60:
                 self._adjust_thresholds_based_on_system()
                 adaptive_counter = 0
 
-            # Check if cleanup is needed
+            # Trigger cleanup if thresholds are exceeded
             if current_usage >= self.critical_threshold:
                 self._emergency_cleanup()
             elif current_usage >= self.memory_threshold:
@@ -261,7 +284,8 @@ class MemoryMonitor:
 
             self._stop_monitor.wait(self.check_interval)
 
-    def get_memory_usage(self) -> float:
+    @staticmethod
+    def get_memory_usage() -> float:
         """
         Get the current memory usage as a percentage of total system memory.
         """
@@ -290,10 +314,9 @@ class MemoryMonitor:
 
     def should_use_memory_buffer(self, size_bytes: int) -> bool:
         """
-        Decide whether to use an in-memory buffer based on the size and current memory pressure.
+        Decide whether to use an in-memory buffer based on the file size and current memory pressure.
         """
         current_usage = self.get_memory_usage()
-
         try:
             with self._lock.acquire_timeout(timeout=0.5):
                 available_memory = self.memory_stats.available_memory_mb.get() * 1024 * 1024
@@ -314,60 +337,38 @@ class MemoryMonitor:
         """
         Calculate the optimal batch size for document processing based on current memory conditions.
 
-        This method is optimized for centralized batch document processing to ensure
-        efficient resource utilization without causing memory pressure.
-
         Args:
-            file_count: Number of files to process
-            total_bytes: Total size of all files in bytes
+            file_count: Number of files to process.
+            total_bytes: Total size of all files in bytes.
 
         Returns:
-            Optimal number of files to process in parallel
+            Optimal number of files to process in parallel.
         """
-        # Get current memory statistics
         current_usage = self.get_memory_usage()
         available_memory_mb = self.memory_stats.available_memory_mb.get()
 
-        # Calculate base worker count based on CPU cores
         cpu_count = os.cpu_count() or 4
-        base_workers = max(1, min(cpu_count - 1, 8))  # Leave at least one core free
+        base_workers = max(1, min(cpu_count - 1, 8))  # Reserve one core for system tasks
 
-        # Adjust based on memory pressure
         if current_usage >= self.critical_threshold:
-            # Critical memory pressure - use minimal workers
             max_workers = 1
         elif current_usage >= self.memory_threshold:
-            # High memory pressure - reduce workers significantly
             max_workers = max(1, base_workers // 3)
         elif current_usage >= self.batch_memory_threshold:
-            # Moderate memory pressure - reduce workers moderately
             max_workers = max(1, base_workers // 2)
         else:
-            # Low memory pressure - use optimal worker count
             max_workers = base_workers
 
-        # Further adjust based on file size if provided
         if total_bytes > 0:
             avg_bytes_per_file = total_bytes / max(file_count, 1)
-
-            # Calculate memory required per worker
-            memory_per_worker_mb = (avg_bytes_per_file * 3) / (1024 * 1024)  # 3x multiplier for processing overhead
-
-            # Calculate maximum number of workers based on available memory
+            memory_per_worker_mb = (avg_bytes_per_file * 3) / (1024 * 1024)  # 3x multiplier for overhead
             memory_based_workers = int(available_memory_mb * self.batch_max_memory_factor / max(memory_per_worker_mb, 1))
-
-            # Use the more conservative estimate
             max_workers = min(max_workers, max(1, memory_based_workers))
 
-        # Cap at file count
         max_workers = min(max_workers, file_count)
-
-        # Update statistics
         self.memory_stats.batch_operations.increment(1)
-
-        logger.info(f"Calculated optimal batch size: {max_workers} workers for {file_count} files "
-                   f"(memory usage: {current_usage:.1f}%, available: {available_memory_mb:.1f}MB)")
-
+        logger.info(f"Optimal batch size: {max_workers} workers for {file_count} files "
+                    f"(usage: {current_usage:.1f}%, available: {available_memory_mb:.1f}MB)")
         return max_workers
 
     def record_batch_memory_usage(self, peak_usage: float) -> None:
@@ -375,25 +376,20 @@ class MemoryMonitor:
         Record memory usage statistics from a batch processing operation.
 
         Args:
-            peak_usage: Peak memory usage percentage during batch processing
+            peak_usage: Peak memory usage percentage during batch processing.
         """
-        # Update batch peak memory if this was higher
         current_peak = self.memory_stats.batch_peak_memory.get()
         if peak_usage > current_peak:
             self.memory_stats.batch_peak_memory.set(peak_usage)
-
         logger.info(f"Recorded batch operation peak memory usage: {peak_usage:.1f}%")
 
     def _perform_cleanup(self) -> None:
         """
-        Perform a regular cleanup when memory usage exceeds the threshold.
+        Perform a regular cleanup when memory usage exceeds the set threshold.
         """
         current_time = time.time()
         current_usage = self.memory_stats.current_usage.get()
-
-        logger.warning(
-            f"Memory usage ({current_usage:.1f}%) exceeded threshold {self.memory_threshold}%. Running cleanup..."
-        )
+        logger.warning(f"Memory usage ({current_usage:.1f}%) exceeded threshold {self.memory_threshold}%. Running cleanup...")
 
         if current_usage > (self.memory_threshold + self.critical_threshold) / 2:
             logger.info("Performing aggressive cleanup due to high memory pressure")
@@ -415,26 +411,24 @@ class MemoryMonitor:
         Execute an emergency cleanup when critical memory thresholds are exceeded.
         """
         current_usage = self.memory_stats.current_usage.get()
-        logger.error(
-            f"CRITICAL: Memory usage ({current_usage:.1f}%) exceeded critical threshold {self.critical_threshold}%!"
-        )
+        logger.error(f"CRITICAL: Memory usage ({current_usage:.1f}%) exceeded critical threshold {self.critical_threshold}%!")
         try:
             with self._lock.acquire_timeout(timeout=1.0):
                 self.memory_stats.emergency_cleanups.increment(1)
         except TimeoutError:
             logger.warning("Timeout acquiring lock to update emergency cleanup count")
-
         gc.collect(generation=2)
         self._clear_application_caches()
         self._free_additional_memory()
         new_usage = self.get_memory_usage()
         freed_percent = current_usage - new_usage
-        logger.warning(
-            f"Emergency cleanup completed: freed {freed_percent:.1f}% memory. New usage: {new_usage:.1f}%"
-        )
+        logger.warning(f"Emergency cleanup: freed {freed_percent:.1f}% memory. New usage: {new_usage:.1f}%")
 
-    def _clear_application_caches(self) -> None:
-        """Clear application-specific caches to free up memory."""
+    @staticmethod
+    def _clear_application_caches() -> None:
+        """
+        Clear application-specific caches to free up memory.
+        """
         try:
             try:
                 from backend.app.utils.security.caching_middleware import invalidate_cache
@@ -443,9 +437,10 @@ class MemoryMonitor:
             except (ImportError, AttributeError):
                 pass
         except Exception as e:
-            logger.error(f"Error clearing application caches: {str(e)}")
+            logger.error(f"Error clearing caches: {str(e)}")
 
-    def _free_additional_memory(self) -> None:
+    @staticmethod
+    def _free_additional_memory() -> None:
         """
         Attempt to free extra memory using aggressive strategies.
         """
@@ -457,265 +452,11 @@ class MemoryMonitor:
             if hasattr(gc, 'malloc_trim'):
                 gc.malloc_trim()
         except Exception as e:
-            logger.error(f"Error in additional memory freeing: {str(e)}")
+            logger.error(f"Error freeing additional memory: {str(e)}")
 
 
 # Global memory monitor instance with adaptive thresholds
 memory_monitor = MemoryMonitor(adaptive_thresholds=True)
-
-
-def memory_optimized(threshold_mb: Optional[int] = None, adaptive: bool = True,
-                     min_gc_interval: float = 10.0):
-    """
-    Decorator to optimize memory usage for functions processing large data.
-    """
-    _gc_stats = {}
-    _gc_lock = threading.RLock()
-
-    def decorator(func):
-        func_name = func.__name__
-
-        with _gc_lock:
-            if func_name not in _gc_stats:
-                _gc_stats[func_name] = {
-                    'last_gc_time': 0,
-                    'last_gc_effectiveness': 0,
-                    'total_calls': 0,
-                    'gc_calls': 0,
-                    'memory_increases': [],
-                }
-
-        @wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            # Record function call
-            with _gc_lock:
-                _gc_stats[func_name]['total_calls'] += 1
-
-            # Check initial memory state
-            initial_memory = memory_monitor.get_memory_usage()
-            adaptive_threshold = threshold_mb
-
-            # Calculate adaptive threshold if not provided
-            if adaptive_threshold is None:
-                available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
-                with _gc_lock:
-                    stats = _gc_stats[func_name]
-                    avg_memory_increase = (sum(stats['memory_increases']) / len(stats['memory_increases'])
-                                           if stats['memory_increases'] else 0)
-
-                # Adjust threshold based on historical memory usage
-                if avg_memory_increase > 0:
-                    adaptive_threshold = max(5, min(100, avg_memory_increase * 1.5))
-                else:
-                    # Default thresholds based on current memory pressure
-                    if initial_memory < 30:
-                        adaptive_threshold = 30 if available_memory_mb > 1000 else 15
-                    elif initial_memory < 60:
-                        adaptive_threshold = 20 if available_memory_mb > 500 else 10
-                    else:
-                        adaptive_threshold = 10 if available_memory_mb > 300 else 5
-
-            # Log memory optimization information
-            logger.debug(f"[MEMORY] Running {func_name} with adaptive threshold {adaptive_threshold}MB")
-
-            # Check if garbage collection is needed before function execution
-            current_time = time.time()
-            run_gc = False
-            gc_generation = 0
-
-            with _gc_lock:
-                stats = _gc_stats[func_name]
-                time_since_last_gc = current_time - stats['last_gc_time']
-
-                # Determine GC strategy based on current memory pressure
-                if initial_memory > 90:
-                    run_gc = True
-                    gc_generation = 2
-                elif initial_memory > 70:
-                    if time_since_last_gc > min_gc_interval / 2:
-                        run_gc = True
-                        gc_generation = 2
-                elif initial_memory > 50:
-                    if time_since_last_gc > min_gc_interval and stats['last_gc_effectiveness'] > 5:
-                        run_gc = True
-                        gc_generation = 1
-                elif initial_memory > 30:
-                    if time_since_last_gc > min_gc_interval * 2 and stats['last_gc_effectiveness'] > 10:
-                        run_gc = True
-                        gc_generation = 0
-
-            # Run garbage collection if needed
-            if run_gc:
-                gc.collect(generation=gc_generation)
-                with _gc_lock:
-                    _gc_stats[func_name]['last_gc_time'] = time.time()
-                    _gc_stats[func_name]['gc_calls'] += 1
-                logger.debug(
-                    f"[MEMORY] Pre-function GC(gen={gc_generation}) for {func_name} - memory usage {initial_memory:.1f}%"
-                )
-
-            try:
-                # Execute the function
-                result = await func(*args, **kwargs)
-                return result
-            finally:
-                # Perform post-function memory management
-                final_memory = memory_monitor.get_memory_usage()
-                memory_diff = final_memory - initial_memory
-
-                # Update memory usage statistics
-                with _gc_lock:
-                    _gc_stats[func_name]['memory_increases'].append(memory_diff)
-                    if len(_gc_stats[func_name]['memory_increases']) > 10:
-                        _gc_stats[func_name]['memory_increases'].pop(0)
-
-                # Calculate memory threshold for cleanup
-                process = psutil.Process(os.getpid())
-                system_memory = psutil.virtual_memory()
-                threshold_percent = (adaptive_threshold * 1024 * 1024 / system_memory.total) * 100.0
-
-                # Run cleanup if needed
-                if memory_diff > threshold_percent or final_memory > 80:
-                    logger.info(
-                        f"Function {func_name} increased memory by {memory_diff:.1f}%. Running cleanup with adaptive threshold {adaptive_threshold}MB"
-                    )
-
-                    # Choose GC strategy based on memory pressure
-                    if final_memory > 90:
-                        gc.collect(generation=2)
-                        logger.debug(
-                            f"[MEMORY] Post-function full GC for {func_name} - critical memory usage {final_memory:.1f}%"
-                        )
-                    elif final_memory > 70 or memory_diff > threshold_percent * 2:
-                        gc.collect(generation=1)
-                        logger.debug(
-                            f"[MEMORY] Post-function partial GC for {func_name} - high memory usage {final_memory:.1f}%"
-                        )
-                    else:
-                        gc.collect(generation=0)
-                        logger.debug(
-                            f"[MEMORY] Post-function light GC for {func_name} - memory usage {final_memory:.1f}%"
-                        )
-
-                    # Record GC effectiveness
-                    post_gc_memory = memory_monitor.get_memory_usage()
-                    gc_effect = final_memory - post_gc_memory
-                    with _gc_lock:
-                        _gc_stats[func_name]['last_gc_time'] = time.time()
-                        _gc_stats[func_name]['last_gc_effectiveness'] = gc_effect
-                        _gc_stats[func_name]['gc_calls'] += 1
-
-                    if gc_effect > 0:
-                        logger.info(f"Garbage collection freed {gc_effect:.1f}% memory")
-                    else:
-                        logger.info(f"Garbage collection had minimal effect ({gc_effect:.1f}%)")
-
-        @wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            # Implementation for synchronous functions follows same pattern as async
-            with _gc_lock:
-                _gc_stats[func_name]['total_calls'] += 1
-
-            initial_memory = memory_monitor.get_memory_usage()
-            adaptive_threshold = threshold_mb
-
-            if adaptive_threshold is None:
-                available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
-                with _gc_lock:
-                    stats = _gc_stats[func_name]
-                    avg_memory_increase = (sum(stats['memory_increases']) / len(stats['memory_increases'])
-                                           if stats['memory_increases'] else 0)
-                if avg_memory_increase > 0:
-                    adaptive_threshold = max(5, min(100, avg_memory_increase * 1.5))
-                else:
-                    if initial_memory < 30:
-                        adaptive_threshold = 30 if available_memory_mb > 1000 else 15
-                    elif initial_memory < 60:
-                        adaptive_threshold = 20 if available_memory_mb > 500 else 10
-                    else:
-                        adaptive_threshold = 10 if available_memory_mb > 300 else 5
-
-            logger.debug(f"[MEMORY] Running {func_name} with adaptive threshold {adaptive_threshold}MB")
-            current_time = time.time()
-            run_gc = False
-            gc_generation = 0
-
-            with _gc_lock:
-                stats = _gc_stats[func_name]
-                time_since_last_gc = current_time - stats['last_gc_time']
-                if initial_memory > 90:
-                    run_gc = True
-                    gc_generation = 2
-                elif initial_memory > 70:
-                    if time_since_last_gc > min_gc_interval / 2:
-                        run_gc = True
-                        gc_generation = 2
-                elif initial_memory > 50:
-                    if time_since_last_gc > min_gc_interval and stats['last_gc_effectiveness'] > 5:
-                        run_gc = True
-                        gc_generation = 1
-                elif initial_memory > 30:
-                    if time_since_last_gc > min_gc_interval * 2 and stats['last_gc_effectiveness'] > 10:
-                        run_gc = True
-                        gc_generation = 0
-
-            if run_gc:
-                gc.collect(generation=gc_generation)
-                with _gc_lock:
-                    _gc_stats[func_name]['last_gc_time'] = time.time()
-                    _gc_stats[func_name]['gc_calls'] += 1
-                logger.debug(
-                    f"[MEMORY] Pre-function GC(gen={gc_generation}) for {func_name} - memory usage {initial_memory:.1f}%"
-                )
-            try:
-                result = func(*args, **kwargs)
-                return result
-            finally:
-                final_memory = memory_monitor.get_memory_usage()
-                memory_diff = final_memory - initial_memory
-                with _gc_lock:
-                    _gc_stats[func_name]['memory_increases'].append(memory_diff)
-                    if len(_gc_stats[func_name]['memory_increases']) > 10:
-                        _gc_stats[func_name]['memory_increases'].pop(0)
-                process = psutil.Process(os.getpid())
-                system_memory = psutil.virtual_memory()
-                threshold_percent = (adaptive_threshold * 1024 * 1024 / system_memory.total) * 100.0
-                if memory_diff > threshold_percent or final_memory > 80:
-                    logger.info(
-                        f"Function {func_name} increased memory by {memory_diff:.1f}%. Running cleanup with adaptive threshold {adaptive_threshold}MB"
-                    )
-                    if final_memory > 90:
-                        gc.collect(generation=2)
-                        logger.debug(
-                            f"[MEMORY] Post-function full GC for {func_name} - critical memory usage {final_memory:.1f}%"
-                        )
-                    elif final_memory > 70 or memory_diff > threshold_percent * 2:
-                        gc.collect(generation=1)
-                        logger.debug(
-                            f"[MEMORY] Post-function partial GC for {func_name} - high memory usage {final_memory:.1f}%"
-                        )
-                    else:
-                        gc.collect(generation=0)
-                        logger.debug(
-                            f"[MEMORY] Post-function light GC for {func_name} - memory usage {final_memory:.1f}%"
-                        )
-                    post_gc_memory = memory_monitor.get_memory_usage()
-                    gc_effect = final_memory - post_gc_memory
-                    with _gc_lock:
-                        _gc_stats[func_name]['last_gc_time'] = time.time()
-                        _gc_stats[func_name]['last_gc_effectiveness'] = gc_effect
-                        _gc_stats[func_name]['gc_calls'] += 1
-                    if gc_effect > 0:
-                        logger.info(f"Garbage collection freed {gc_effect:.1f}% memory")
-                    else:
-                        logger.info(f"Garbage collection had minimal effect ({gc_effect:.1f}%)")
-
-        # Choose appropriate wrapper based on function type
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
-
-    return decorator
 
 
 class MemoryOptimizedReader:
@@ -723,149 +464,337 @@ class MemoryOptimizedReader:
     Memory-optimized file reader for large document processing.
 
     This class provides utilities for reading and processing large files in chunks to minimize memory usage,
-    with adaptive buffer sizing based on system resources. Now supports batch processing optimization.
+    with adaptive buffer sizing based on system resources. It also supports batch processing optimization.
     """
-    @staticmethod
-    async def read_file_chunks(file_path: str, chunk_size: Optional[int] = None) -> bytes:
-        file_size = os.path.getsize(file_path)
-        if chunk_size is None:
-            available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
-            current_usage = memory_monitor.get_memory_usage()
-            if current_usage > 80:
-                chunk_size = min(64 * 1024, max(4 * 1024, int(available_memory_mb * 1024 * 0.001)))
-            elif current_usage > 60:
-                chunk_size = min(256 * 1024, max(16 * 1024, int(available_memory_mb * 1024 * 0.005)))
-            else:
-                chunk_size = min(1024 * 1024, max(64 * 1024, int(available_memory_mb * 1024 * 0.01)))
-        content = b""
-        try:
-            import aiofiles
-            async with aiofiles.open(file_path, "rb") as f:
-                while chunk := await f.read(chunk_size):
-                    content += chunk
-                    if len(content) % (10 * chunk_size) == 0:
-                        await asyncio.sleep(0)
-        except ImportError:
-            with open(file_path, "rb") as f:
-                while chunk := f.read(chunk_size):
-                    content += chunk
-                    if len(content) % (10 * chunk_size) == 0:
-                        await asyncio.sleep(0)
-        return content
 
     @staticmethod
-    async def process_file_streamed(
-            file_path: str,
-            processor: Callable[[bytes], Any],
-            chunk_size: Optional[int] = None
-    ) -> List[Any]:
-        file_size = os.path.getsize(file_path)
-        if chunk_size is None:
+    def _determine_chunk_size(available_memory_mb: float, current_usage: float) -> int:
+        """
+        Determine a default chunk size based on available memory and current usage.
+
+        Args:
+            available_memory_mb (float): Available memory in MB.
+            current_usage (float): Current memory usage percentage.
+
+        Returns:
+            int: The determined chunk size in bytes.
+        """
+        if current_usage > 80:
+            return min(64 * 1024, max(4 * 1024, int(available_memory_mb * 1024 * 0.001)))
+        elif current_usage > 60:
+            return min(256 * 1024, max(16 * 1024, int(available_memory_mb * 1024 * 0.005)))
+        else:
+            return min(1024 * 1024, max(64 * 1024, int(available_memory_mb * 1024 * 0.01)))
+
+    @staticmethod
+    def _determine_chunk_size_for_large_file(file_size: int, available_memory_mb: float, current_usage: float) -> int:
+        """
+        Determine a chunk size for streaming large files, taking file size into account.
+
+        Args:
+            file_size (int): Total file size in bytes.
+            available_memory_mb (float): Available memory in MB.
+            current_usage (float): Current memory usage percentage.
+
+        Returns:
+            int: The chunk size in bytes.
+        """
+        # For very small files, read the entire file at once.
+        if file_size < 1024 * 1024:
+            return file_size
+        return MemoryOptimizedReader._determine_chunk_size(available_memory_mb, current_usage)
+
+    @staticmethod
+    def _get_adaptive_chunk_size(chunk_size: Optional[int]) -> int:
+        """
+        If chunk_size is None, determine it adaptively based on system memory; otherwise return the provided value.
+        """
+        if chunk_size is not None:
+            return chunk_size
+        try:
             available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
             current_usage = memory_monitor.get_memory_usage()
-            if current_usage > 80:
-                chunk_size = min(64 * 1024, max(4 * 1024, int(available_memory_mb * 1024 * 0.001)))
-            elif current_usage > 60:
-                chunk_size = min(256 * 1024, max(16 * 1024, int(available_memory_mb * 1024 * 0.005)))
-            else:
-                chunk_size = min(1024 * 1024, max(64 * 1024, int(available_memory_mb * 1024 * 0.01)))
-        results = []
+            return MemoryOptimizedReader._determine_chunk_size(available_memory_mb, current_usage)
+        except Exception as ex:
+            logger.error(f"Error determining chunk size: {str(ex)}")
+            return 64 * 1024  # Fallback chunk size: 64KB
+
+    @staticmethod
+    def _get_adaptive_chunk_size_for_large_file(chunk_size: Optional[int], file_path: str) -> int:
+        """
+        If chunk_size is None, determine it adaptively for large files based on file size and memory stats.
+        """
+        if chunk_size is not None:
+            return chunk_size
         try:
-            import aiofiles
-            async with aiofiles.open(file_path, "rb") as f:
-                while chunk := await f.read(chunk_size):
-                    result = await asyncio.to_thread(processor, chunk)
-                    results.append(result)
-                    if len(results) % 10 == 0:
+            file_size = os.path.getsize(file_path)
+        except Exception as size_ex:
+            logger.error(f"Error getting file size: {str(size_ex)}")
+            file_size = 0
+        try:
+            available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
+            current_usage = memory_monitor.get_memory_usage()
+            return MemoryOptimizedReader._determine_chunk_size_for_large_file(
+                file_size, available_memory_mb, current_usage
+            )
+        except Exception as ex:
+            logger.error(f"Error determining chunk size for large file: {str(ex)}")
+            return 64 * 1024
+
+    @staticmethod
+    async def read_file_chunks(file_path: str, chunk_size: Optional[int] = None) -> bytes:
+        """
+        Asynchronously read the entire file in chunks to minimize memory usage.
+
+        The chunk size is determined adaptively based on available memory and current usage.
+        If aiofiles is unavailable, a synchronous fallback is used.
+
+        Args:
+            file_path (str): Path to the file.
+            chunk_size (Optional[int]): Size of each chunk in bytes. If None, it is determined adaptively.
+
+        Returns:
+            bytes: The full contents of the file.
+        """
+        chunk_size = MemoryOptimizedReader._get_adaptive_chunk_size(chunk_size)
+        content = b""
+        try:
+            async with aiofiles.open(file_path, "rb") as async_file:
+                while chunk_data := await async_file.read(chunk_size):
+                    content += chunk_data
+                    if len(content) % (10 * chunk_size) == 0:
                         await asyncio.sleep(0)
         except ImportError:
-            def read_chunks():
-                chunk_results = []
-                with open(file_path, "rb") as f:
-                    while chunk := f.read(chunk_size):
-                        chunk_results.append(processor(chunk))
-                return chunk_results
-            results = await asyncio.to_thread(read_chunks)
+            # Fallback to synchronous I/O if aiofiles is unavailable.
+            try:
+                with open(file_path, "rb") as sync_file:
+                    while chunk_data := sync_file.read(chunk_size):
+                        content += chunk_data
+                        if len(content) % (10 * chunk_size) == 0:
+                            await asyncio.sleep(0)
+            except Exception as sync_ex:
+                logger.error(f"Error reading file in fallback mode: {str(sync_ex)}")
+        except Exception as error:
+            logger.error(f"Error reading file chunks: {str(error)}")
+        return content
+
+
+    @staticmethod
+    async def _process_file_streamed_async(
+        file_path: str,
+        processor: Callable[[bytes], Any],
+        chunk_size: int
+    ) -> List[Any]:
+        """
+        Helper for asynchronous chunk-by-chunk processing using aiofiles.
+        """
+        results = []
+        async with aiofiles.open(file_path, "rb") as async_file:
+            while chunk_data := await async_file.read(chunk_size):
+                try:
+                    result = await asyncio.to_thread(processor, chunk_data)
+                    results.append(result)
+                except Exception as proc_error:
+                    logger.error(f"Error processing chunk: {str(proc_error)}")
+                if len(results) % 10 == 0:
+                    await asyncio.sleep(0)
         return results
 
     @staticmethod
-    async def stream_large_file(
-            file_path: str,
-            chunk_processor: Callable[[bytes, int], Awaitable[None]],
-            chunk_size: Optional[int] = None
-    ) -> int:
-        if chunk_size is None:
-            file_size = os.path.getsize(file_path)
-            available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
-            current_usage = memory_monitor.get_memory_usage()
-            if file_size < 1024 * 1024:
-                chunk_size = file_size
-            elif current_usage > 80:
-                chunk_size = min(64 * 1024, max(4 * 1024, int(available_memory_mb * 1024 * 0.001)))
-            elif current_usage > 60:
-                chunk_size = min(256 * 1024, max(16 * 1024, int(available_memory_mb * 1024 * 0.005)))
-            else:
-                chunk_size = min(1024 * 1024, max(64 * 1024, int(available_memory_mb * 1024 * 0.01)))
-        chunks_processed = 0
-        position = 0
+    def _process_file_streamed_sync(
+        file_path: str,
+        processor: Callable[[bytes], Any],
+        chunk_size: int
+    ) -> List[Any]:
+        """
+        Synchronous fallback helper for chunk-by-chunk processing.
+        """
+        local_results: List[Any] = []
+        try:
+            with open(file_path, "rb") as file_handle:
+                while chunk_data := file_handle.read(chunk_size):
+                    try:
+                        local_results.append(processor(chunk_data))
+                    except Exception as proc_err_inner:
+                        logger.error(f"Error processing chunk (fallback): {str(proc_err_inner)}")
+        except Exception as fallback_error:
+            logger.error(f"Error in fallback read: {str(fallback_error)}")
+        return local_results
+
+    @staticmethod
+    async def process_file_streamed(
+        file_path: str,
+        processor: Callable[[bytes], Any],
+        chunk_size: Optional[int] = None
+    ) -> List[Any]:
+        """
+        Process a file by streaming its contents chunk by chunk.
+
+        Each chunk is passed to the provided processor function using asyncio.to_thread to avoid blocking.
+        If asynchronous I/O is not available, a synchronous fallback is used.
+
+        Args:
+            file_path (str): Path to the file.
+            processor (Callable[[bytes], Any]): Function to process a chunk.
+            chunk_size (Optional[int]): Chunk size in bytes. If None, determined adaptively.
+
+        Returns:
+            List[Any]: Results returned by processing each chunk.
+        """
+        chunk_size_value = MemoryOptimizedReader._get_adaptive_chunk_size(chunk_size)
         try:
             import aiofiles
-            async with aiofiles.open(file_path, "rb") as f:
-                while chunk := await f.read(chunk_size):
-                    await chunk_processor(chunk, position)
-                    chunks_processed += 1
-                    position += len(chunk)
-                    if chunks_processed % 10 == 0:
-                        await asyncio.sleep(0)
+            return await MemoryOptimizedReader._process_file_streamed_async(file_path, processor, chunk_size_value)
         except ImportError:
-            with open(file_path, "rb") as f:
-                while chunk := f.read(chunk_size):
-                    await chunk_processor(chunk, position)
-                    chunks_processed += 1
-                    position += len(chunk)
-                    if chunks_processed % 10 == 0:
-                        await asyncio.sleep(0)
+            # Fallback to synchronous approach in a separate thread.
+            try:
+                return await asyncio.to_thread(
+                    MemoryOptimizedReader._process_file_streamed_sync,
+                    file_path,
+                    processor,
+                    chunk_size_value
+                )
+            except Exception as fallback_ex:
+                logger.error(f"Error processing file in fallback mode: {str(fallback_ex)}")
+                return []
+        except Exception as error:
+            logger.error(f"Error in streamed file processing: {str(error)}")
+            return []
+
+
+    @staticmethod
+    async def _stream_large_file_async(
+        file_path: str,
+        chunk_processor: Callable[[bytes, int], Awaitable[None]],
+        chunk_size: int
+    ) -> int:
+        """
+        Helper for asynchronously streaming a large file in chunks using aiofiles.
+        """
+        chunks_processed = 0
+        position = 0
+        async with aiofiles.open(file_path, "rb") as async_file:
+            while chunk_data := await async_file.read(chunk_size):
+                try:
+                    await chunk_processor(chunk_data, position)
+                except Exception as proc_error:
+                    logger.error(f"Error in chunk processing: {str(proc_error)}")
+                chunks_processed += 1
+                position += len(chunk_data)
+                if chunks_processed % 10 == 0:
+                    await asyncio.sleep(0)
         return chunks_processed
 
     @staticmethod
-    async def batch_read_files(
-            file_paths: List[str],
-            max_workers: Optional[int] = None
-    ) -> Dict[str, bytes]:
+    def _stream_large_file_sync(
+        file_path: str,
+        chunk_processor: Callable[[bytes, int], Awaitable[None]],
+        chunk_size: int
+    ) -> int:
         """
-        Read multiple files in parallel with memory optimization.
+        Synchronous fallback for streaming a large file in chunks.
+        Because chunk_processor is asynchronous, we run it via a fresh event loop each time.
+        (Inefficient but ensures fallback correctness.)
+        """
+        chunks_processed = 0
+        position = 0
+        try:
+            with open(file_path, "rb") as file_handle:
+                while chunk_data := file_handle.read(chunk_size):
+                    try:
+                        # chunk_processor is async, so we must run it in a separate event loop.
+                        async def wrapper():
+                            return await chunk_processor(chunk_data, position)
+                        asyncio.run(wrapper())
+                    except Exception as proc_error:
+                        logger.error(f"Error in chunk processing (fallback): {str(proc_error)}")
+                    chunks_processed += 1
+                    position += len(chunk_data)
+                    if chunks_processed % 10 == 0:
+                        time.sleep(0.01)
+        except Exception as fallback_error:
+            logger.error(f"Error streaming file in fallback mode: {str(fallback_error)}")
+        return chunks_processed
+
+    @staticmethod
+    async def stream_large_file(
+        file_path: str,
+        chunk_processor: Callable[[bytes, int], Awaitable[None]],
+        chunk_size: Optional[int] = None
+    ) -> int:
+        """
+        Stream a large file, processing each chunk asynchronously via a callback.
 
         Args:
-            file_paths: List of file paths to read
-            max_workers: Maximum number of parallel workers (None for auto)
+            file_path (str): Path to the file.
+            chunk_processor (Callable[[bytes, int], Awaitable[None]]): Asynchronous function to process each chunk.
+                Receives the chunk and its starting position.
+            chunk_size (Optional[int]): Chunk size in bytes. If None, determined based on file size and current usage.
 
         Returns:
-            Dictionary mapping file paths to their contents
+            int: The number of chunks processed.
+        """
+        chunk_size_value = MemoryOptimizedReader._get_adaptive_chunk_size_for_large_file(chunk_size, file_path)
+        try:
+            import aiofiles
+            return await MemoryOptimizedReader._stream_large_file_async(file_path, chunk_processor, chunk_size_value)
+        except ImportError:
+            # Synchronous fallback.
+            return await asyncio.to_thread(
+                MemoryOptimizedReader._stream_large_file_sync,
+                file_path,
+                chunk_processor,
+                chunk_size_value
+            )
+        except Exception as error:
+            logger.error(f"Error streaming large file: {str(error)}")
+            return 0
+
+    @staticmethod
+    async def batch_read_files(
+        file_paths: List[str],
+        max_workers: Optional[int] = None
+    ) -> Dict[str, bytes]:
+        """
+        Read multiple files in parallel using memory optimization.
+
+        Uses a semaphore to limit concurrent reads based on the optimal worker count
+        determined by current memory conditions.
+
+        Args:
+            file_paths (List[str]): List of file paths.
+            max_workers (Optional[int]): Maximum parallel workers (None for auto-determination).
+
+        Returns:
+            Dict[str, bytes]: Mapping from file paths to their contents.
         """
         if not file_paths:
             return {}
 
-        # Determine optimal number of workers
-        if max_workers is None:
-            max_workers = memory_monitor.calculate_optimal_batch_size(len(file_paths))
+        try:
+            if max_workers is None:
+                max_workers = memory_monitor.calculate_optimal_batch_size(len(file_paths))
+        except Exception as calc_error:
+            logger.error(f"Error calculating optimal batch size: {str(calc_error)}")
+            max_workers = 1
 
-        # Create semaphore to limit concurrency
         semaphore = asyncio.Semaphore(max_workers)
 
-        async def read_file(file_path: str) -> Tuple[str, bytes]:
+        async def read_file(path: str) -> Tuple[str, bytes]:
             async with semaphore:
                 try:
-                    content = await MemoryOptimizedReader.read_file_chunks(file_path)
-                    return file_path, content
-                except Exception as e:
-                    logger.error(f"Error reading file {file_path}: {str(e)}")
-                    return file_path, b""
+                    content = await MemoryOptimizedReader.read_file_chunks(path)
+                    return path, content
+                except Exception as read_error:
+                    logger.error(f"Error reading file {path}: {str(read_error)}")
+                    return path, b""
 
-        # Create tasks for reading files
-        tasks = [read_file(path) for path in file_paths]
-        results = await asyncio.gather(*tasks)
-
-        # Convert results to dictionary
+        try:
+            tasks = [read_file(p) for p in file_paths]
+            results = await asyncio.gather(*tasks)
+        except Exception as gather_error:
+            logger.error(f"Error reading batch files: {str(gather_error)}")
+            results = []
         return {path: content for path, content in results if content}
 
 
@@ -893,6 +822,164 @@ def init_memory_monitor():
         logger.error(f"Error initializing memory monitor: {str(e)}")
         memory_monitor = MemoryMonitor()
 
+
+_gc_stats = {}
+_gc_lock = threading.RLock()
+
+def init_gc_stats(func_name: str) -> None:
+    """Ensure that GC statistics for a function are initialized."""
+    with _gc_lock:
+        if func_name not in _gc_stats:
+            _gc_stats[func_name] = {
+                'last_gc_time': 0,
+                'last_gc_effectiveness': 0,
+                'total_calls': 0,
+                'gc_calls': 0,
+                'memory_increases': [],
+            }
+
+def _default_threshold(initial_memory: float, available_memory_mb: float) -> int:
+    """
+    Determine the default threshold based on current memory usage and available memory.
+    """
+    if initial_memory < 30:
+        return 30 if available_memory_mb > 1000 else 15
+    elif initial_memory < 60:
+        return 20 if available_memory_mb > 500 else 10
+    else:
+        return 10 if available_memory_mb > 300 else 5
+
+def calc_adaptive_threshold(func_name: str, provided_threshold: Optional[int]) -> Tuple[int, float]:
+    """
+    Calculate the adaptive threshold and return it along with the initial memory usage.
+    """
+    initial_memory = memory_monitor.get_memory_usage()
+    if provided_threshold is not None:
+        return provided_threshold, initial_memory
+    available_memory_mb = memory_monitor.memory_stats.available_memory_mb.get()
+    with _gc_lock:
+        stats = _gc_stats[func_name]
+        mem_increases = stats.get('memory_increases', [])
+        avg_increase = sum(mem_increases) / len(mem_increases) if mem_increases else 0
+    threshold = max(5, min(100, avg_increase * 1.5)) if avg_increase > 0 else _default_threshold(initial_memory, available_memory_mb)
+    return threshold, initial_memory
+
+def should_run_gc(initial_memory: float, min_interval: float, func_name: str) -> Tuple[bool, int]:
+    """
+    Decide whether to run garbage collection before executing the function.
+    Returns (run_gc, gc_generation).
+    """
+    current_time = time.time()
+    with _gc_lock:
+        stats = _gc_stats[func_name]
+        time_since_gc = current_time - stats['last_gc_time']
+        effectiveness = stats['last_gc_effectiveness']
+    if initial_memory > 90:
+        return True, 2
+    elif initial_memory > 70 and time_since_gc > min_interval / 2:
+        return True, 2
+    elif initial_memory > 50 and time_since_gc > min_interval and effectiveness > 5:
+        return True, 1
+    elif initial_memory > 30 and time_since_gc > min_interval * 2 and effectiveness > 10:
+        return True, 0
+    return False, 0
+
+def run_gc(gc_gen: int, func_name: str) -> None:
+    """
+    Run garbage collection for the specified generation and update GC stats.
+    """
+    gc.collect(generation=gc_gen)
+    with _gc_lock:
+        _gc_stats[func_name]['last_gc_time'] = time.time()
+        _gc_stats[func_name]['gc_calls'] += 1
+    logger.debug(f"[MEMORY] Pre-function GC(gen={gc_gen}) for {func_name}")
+
+def post_function_cleanup(func_name: str, adaptive_threshold: int, initial_memory: float) -> None:
+    """
+    Perform post-function memory cleanup and log GC effectiveness.
+    """
+    final_memory = memory_monitor.get_memory_usage()
+    memory_diff = final_memory - initial_memory
+    with _gc_lock:
+        stats = _gc_stats[func_name]
+        stats['memory_increases'].append(memory_diff)
+        if len(stats['memory_increases']) > 10:
+            stats['memory_increases'].pop(0)
+    system_memory = psutil.virtual_memory()
+    threshold_percent = (adaptive_threshold * 1024 * 1024 / system_memory.total) * 100.0
+    if memory_diff > threshold_percent or final_memory > 80:
+        logger.info(f"Function {func_name} increased memory by {memory_diff:.1f}%. Running cleanup with adaptive threshold {adaptive_threshold}MB")
+        if final_memory > 90:
+            gc.collect(generation=2)
+            logger.debug(f"[MEMORY] Post-function full GC for {func_name} - critical memory usage {final_memory:.1f}%")
+        elif final_memory > 70 or memory_diff > threshold_percent * 2:
+            gc.collect(generation=1)
+            logger.debug(f"[MEMORY] Post-function partial GC for {func_name} - high memory usage {final_memory:.1f}%")
+        else:
+            gc.collect(generation=0)
+            logger.debug(f"[MEMORY] Post-function light GC for {func_name} - memory usage {final_memory:.1f}%")
+        post_gc_memory = memory_monitor.get_memory_usage()
+        gc_effect = final_memory - post_gc_memory
+        with _gc_lock:
+            stats['last_gc_time'] = time.time()
+            stats['last_gc_effectiveness'] = gc_effect
+            stats['gc_calls'] += 1
+        if gc_effect > 0:
+            logger.info(f"Garbage collection freed {gc_effect:.1f}% memory")
+        else:
+            logger.info(f"Garbage collection had minimal effect ({gc_effect:.1f}%)")
+
+def pre_exec(func_name: str, provided_threshold: Optional[int], min_interval: float) -> Tuple[int, float]:
+    """
+    Perform pre-execution memory management: update call count, compute adaptive threshold
+    and initial memory, log threshold, and run GC if needed.
+    """
+    with _gc_lock:
+        _gc_stats.setdefault(func_name, {
+            'total_calls': 0,
+            'last_gc_time': 0,
+            'last_gc_effectiveness': 0,
+            'gc_calls': 0,
+            'memory_increases': [],
+        })
+        _gc_stats[func_name]['total_calls'] += 1
+    adaptive_threshold, initial_memory = calc_adaptive_threshold(func_name, provided_threshold)
+    logger.debug(f"[MEMORY] Running {func_name} with adaptive threshold {adaptive_threshold}MB")
+    run_gc_flag, gc_gen = should_run_gc(initial_memory, min_interval, func_name)
+    if run_gc_flag:
+        run_gc(gc_gen, func_name)
+    return adaptive_threshold, initial_memory
+
+def memory_optimized(threshold_mb: Optional[int] = None, min_gc_interval: float = 10.0):
+    """
+    Decorator to optimize memory usage for functions processing large data.
+
+    This decorator monitors memory usage before and after the wrapped function and
+    triggers garbage collection if memory usage exceeds an adaptive threshold.
+    """
+    def decorator(func):
+        func_name = func.__name__
+        init_gc_stats(func_name)
+
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            adaptive_threshold, initial_memory = pre_exec(func_name, threshold_mb, min_gc_interval)
+            try:
+                return await func(*args, **kwargs)
+            finally:
+                post_function_cleanup(func_name, adaptive_threshold, initial_memory)
+
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            adaptive_threshold, initial_memory = pre_exec(func_name, threshold_mb, min_gc_interval)
+            try:
+                return func(*args, **kwargs)
+            finally:
+                post_function_cleanup(func_name, adaptive_threshold, initial_memory)
+
+        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+
+    return decorator
 
 # Initialize the memory monitor when the module is imported
 init_memory_monitor()

@@ -7,7 +7,6 @@ It implements in-depth content inspection and improved security checks.
 """
 
 import asyncio
-import hashlib
 import logging
 import mimetypes
 import os
@@ -50,9 +49,8 @@ MALICIOUS_PATTERNS = {
 }
 
 
-###############################################################################
 # Utility Functions
-###############################################################################
+
 def get_file_signature(content: bytes) -> Optional[str]:
     """
     Determine the file type from the content's signature (magic bytes).
@@ -159,21 +157,6 @@ def is_valid_file_size(file_size: int, file_type: str) -> bool:
     return valid
 
 
-def calculate_file_hash(file_content: bytes) -> str:
-    """
-    Calculate a secure SHA-256 hash of file content for deduplication or verification.
-
-    Args:
-        file_content: File content as bytes.
-
-    Returns:
-        Hexadecimal SHA-256 hash of the file content.
-    """
-    hash_obj = hashlib.sha256()
-    hash_obj.update(file_content)
-    return hash_obj.hexdigest()
-
-
 def validate_mime_type(content_type: str, allowed_types: Optional[Union[list, set]] = None) -> bool:
     """
     Validate that the provided content type is allowed.
@@ -195,9 +178,8 @@ def validate_mime_type(content_type: str, allowed_types: Optional[Union[list, se
     return normalized in allowed_types
 
 
-###############################################################################
 # PDF Validation Functions (Only PDFs are Supported)
-###############################################################################
+
 def validate_pdf_file(content: bytes) -> bool:
     """
     Validate that a file is a genuine PDF by checking its header.
