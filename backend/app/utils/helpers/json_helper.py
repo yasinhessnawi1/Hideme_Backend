@@ -12,7 +12,7 @@ from backend.app.configs.presidio_config import PRESIDIO_AVAILABLE_ENTITIES
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 
 
-def checkAllOption(entity_list):
+def check_all_option(entity_list):
     new_list = []
     for entity in entity_list:
         if entity == "ALL_PRESIDIO":
@@ -50,7 +50,7 @@ def validate_requested_entities(
 
     try:
         entity_list = json.loads(requested_entities)
-        entity_list = checkAllOption(entity_list)
+        entity_list = check_all_option(entity_list)
 
         # If specific labels are provided, validate against them
         if labels:
