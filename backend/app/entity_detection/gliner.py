@@ -52,7 +52,7 @@ class GlinerEntityDetector(BaseEntityDetector):
     _shared_instance_lock = TimeoutLock(name="gliner_shared_instance_lock", priority=LockPriority.HIGH, timeout=30.0)
 
     # Global caching for model
-    _model_lock = TimeoutLock(name="gliner_model_lock", priority=LockPriority.HIGH, timeout=30.0)
+    _model_lock = TimeoutLock(name="gliner_model_lock", priority=LockPriority.HIGH, timeout=200.0)
     _global_initializing = False
     _global_initialization_time = None
     _model_cache = {}  # cache_key -> {"model": loaded_model, "init_time": initialization_time}
