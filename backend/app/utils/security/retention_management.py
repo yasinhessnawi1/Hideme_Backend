@@ -210,27 +210,6 @@ class DocumentRetentionManager:
         except (OSError, IOError) as e:
             log_warning(f"[GDPR] Failed to remove directory: {os.path.basename(path)} with error: {e}")
 
-    def immediate_cleanup(self, path: str) -> bool:
-        """
-        Immediately clean up a file or directory regardless of its retention period.
-
-        Args:
-            path: Path to the file or directory to clean up.
-
-        Returns:
-            True if the cleanup was successful, False otherwise.
-        """
-        try:
-            with self.__class__._lock:
-                self.unregister_file(path)
-            if os.path.exists(path):
-                self._secure_delete(path)
-                log_info(f"[GDPR] Immediate cleanup of: {os.path.basename(path)}")
-                return True
-            return False
-        except (OSError, IOError) as e:
-            log_warning(f"[GDPR] Failed immediate cleanup of: {os.path.basename(path)}. Error: {e}")
-            return False
 
     def shutdown(self) -> None:
         """

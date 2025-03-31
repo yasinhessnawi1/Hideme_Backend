@@ -189,7 +189,7 @@ class ProcessingRecordKeeper:
             with open(record_file, 'a', encoding='utf-8') as f:
                 f.write(json.dumps(record) + '\n')
         except (OSError, IOError) as e:
-            log_warning(f"[GDPR_RECORD] Failed to write processing record: {e}")
+            log_warning(f"[GDPR_RECORD] Failed to write processing record /Check ANTIVIRUS/: {e}")
             return
 
         # Update statistics in a thread-safe manner using the class-level lock.
