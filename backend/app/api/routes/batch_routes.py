@@ -157,7 +157,7 @@ async def batch_hybrid_detect_sensitive(
         files: List[UploadFile] = File(...),
         requested_entities: Optional[str] = Form(None),
         use_presidio: bool = Form(True),
-        use_gemini: bool = Form(True),
+        use_gemini: bool = Form(False),
         use_gliner: bool = Form(False),
         max_parallel_files: Optional[int] = Form(4),
         remove_words: Optional[str] = Form(None)  # New parameter

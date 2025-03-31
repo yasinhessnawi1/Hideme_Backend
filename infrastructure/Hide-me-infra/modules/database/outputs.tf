@@ -34,6 +34,12 @@ output "db_user" {
   value       = google_sql_user.user.name
 }
 
+output "database_host" {
+  description = "The full URL for the database instance"
+  value       = google_sql_database_instance.postgres.public_ip_address
+}
+/*
+
 output "read_replica_instance_name" {
   description = "The name of the read replica instance (if created)"
   value       = var.environment == "prod" ? google_sql_database_instance.read_replica[0].name : null
@@ -48,3 +54,5 @@ output "read_replica_private_ip_address" {
   description = "The private IP address of the read replica instance (if created)"
   value       = var.environment == "prod" ? google_sql_database_instance.read_replica[0].private_ip_address : null
 }
+
+ */

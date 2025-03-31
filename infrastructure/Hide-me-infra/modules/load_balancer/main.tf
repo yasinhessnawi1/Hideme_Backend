@@ -14,7 +14,7 @@ resource "google_compute_global_address" "lb_static_ip" {
 
 # Create a Google-managed SSL certificate for the root domain
 resource "google_compute_managed_ssl_certificate" "root_certificate" {
-  name = "hide-me-root-ssl-cert-${var.environment}"
+  name    = "hide-me-root-ssl-cert-${var.environment}"
   project = var.project
 
   managed {
@@ -24,7 +24,7 @@ resource "google_compute_managed_ssl_certificate" "root_certificate" {
 
 # Create a Google-managed SSL certificate for the API subdomain
 resource "google_compute_managed_ssl_certificate" "api_certificate" {
-  name = "hide-me-api-ssl-cert-${var.environment}"
+  name    = "hide-me-api-ssl-cert-${var.environment}"
   project = var.project
 
   managed {
@@ -88,17 +88,17 @@ resource "google_compute_target_http_proxy" "lb_http_proxy" {
 
 # Create an HTTPS target proxy with API certificate
 resource "google_compute_target_https_proxy" "lb_https_api_proxy" {
-  name    = "hide-me-https-api-proxy-${var.environment}"
-  project = var.project
-  url_map = google_compute_url_map.lb_url_map.id
+  name             = "hide-me-https-api-proxy-${var.environment}"
+  project          = var.project
+  url_map          = google_compute_url_map.lb_url_map.id
   ssl_certificates = [google_compute_managed_ssl_certificate.api_certificate.id]
 }
 
 # Create an HTTPS target proxy with root domain certificate
 resource "google_compute_target_https_proxy" "lb_https_root_proxy" {
-  name    = "hide-me-https-root-proxy-${var.environment}"
-  project = var.project
-  url_map = google_compute_url_map.lb_url_map.id
+  name             = "hide-me-https-root-proxy-${var.environment}"
+  project          = var.project
+  url_map          = google_compute_url_map.lb_url_map.id
   ssl_certificates = [google_compute_managed_ssl_certificate.root_certificate.id]
 }
 

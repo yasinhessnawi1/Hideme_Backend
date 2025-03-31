@@ -41,6 +41,12 @@ variable "disk_size" {
   type        = number
 }
 
+variable "disk_type" {
+  description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard"
+  type        = string
+  default     = "pd-standard"
+}
+
 variable "network_id" {
   description = "The ID of the VPC network"
   type        = string
@@ -135,23 +141,23 @@ variable "github_branch" {
 }
 
 variable "repo_name" {
-    description = "Name of the GitHub repository"
-    type        = string
-    default     = "Hideme_Backend"
+  description = "Name of the GitHub repository"
+  type        = string
+  default     = "Hideme_Backend"
 }
 
 variable "repo_owner" {
-    description = "Owner of the GitHub repository"
-    type        = string
-    default     = "yasinhessnawi1"
+  description = "Owner of the GitHub repository"
+  type        = string
+  default     = "yasinhessnawi1"
 }
 
 variable "domain" {
-    description = "Domain name for the application"
-    type        = string
+  description = "Domain name for the application"
+  type        = string
 }
 
 variable "ssl_email" {
-    description = "Email address for SSL certificate notifications"
-    type        = string
+  description = "Email address for SSL certificate notifications"
+  type        = string
 }

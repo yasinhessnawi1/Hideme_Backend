@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional, List
 
 from backend.app.configs.config_singleton import get_config
 from backend.app.configs.gdpr_config import MAX_DETECTOR_CACHE_SIZE
-from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_ENTITIES, GLINER_MODEL_PATH
+from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_AVAILABLE_ENTITIES, GLINER_MODEL_PATH
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority, AsyncTimeoutLock
@@ -119,9 +119,9 @@ class InitializationService:
                 gliner_detector = await asyncio.to_thread(
                     self._initialize_gliner_detector,
                     GLINER_MODEL_NAME,
-                    GLINER_ENTITIES
+                    GLINER_AVAILABLE_ENTITIES
                 )
-                cache_key = self._get_gliner_cache_key(GLINER_ENTITIES)
+                cache_key = self._get_gliner_cache_key(GLINER_AVAILABLE_ENTITIES)
                 self._gliner_detectors[cache_key] = gliner_detector
                 self._initialization_status["gliner"] = True
                 log_info("[STARTUP] GLiNER detector lazy initialization complete.")
@@ -180,7 +180,7 @@ class InitializationService:
             from backend.app.entity_detection.gliner import GlinerEntityDetector
             detector = GlinerEntityDetector(
                 model_name=model_name,
-                entities=entities or GLINER_ENTITIES,
+                entities=entities or GLINER_AVAILABLE_ENTITIES,
                 local_model_path=GLINER_MODEL_PATH
             )
             self._initialization_status["gliner"] = True
@@ -225,7 +225,7 @@ class InitializationService:
         """
         Get a GLiNER detector instance for specific entities with basic thread safety.
         """
-        config = {"entities": entities or GLINER_ENTITIES}
+        config = {"entities": entities or GLINER_AVAILABLE_ENTITIES}
         return self.get_detector(EntityDetectionEngine.GLINER, config)
 
     def get_hybrid_detector(self, config: Optional[Dict[str, Any]] = None):

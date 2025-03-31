@@ -14,7 +14,7 @@ LOCAL_HF_MODEL_PATH = os.path.join(BASE_DIR, "models", "local_kushtrim_norbert3_
 
 # Entity types to detect by default
 # Only include entities supported in Norwegian (nb)
-REQUESTED_ENTITIES = [
+PRESIDIO_AVAILABLE_ENTITIES = [
     # Norwegian specific entities
     "NO_FODSELSNUMMER",  # Norwegian national identity number
     "NO_PHONE_NUMBER",   # Norwegian phone numbers

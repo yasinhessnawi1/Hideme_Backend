@@ -14,7 +14,7 @@ resource "google_compute_instance_template" "app_template" {
 
   # Use a service account with minimal permissions
   service_account {
-    email = var.service_account_email
+    email  = var.service_account_email
     scopes = ["cloud-platform"]
   }
 
@@ -24,7 +24,7 @@ resource "google_compute_instance_template" "app_template" {
     auto_delete  = true
     boot         = true
     disk_size_gb = var.disk_size
-    disk_type    = "pd-ssd"
+    disk_type    = var.disk_type
   }
 
   # Network interface in the private subnet
@@ -41,21 +41,21 @@ resource "google_compute_instance_template" "app_template" {
   # Metadata for startup script and SSH keys
   metadata = {
     startup-script = templatefile("${path.module}/scripts/startup.sh", {
-      port         = var.app_port
-      env          = var.environment
-      repo         = var.github_repo
-      branch       = var.github_branch
-      dbuser       = var.db_user
-      dbpass       = var.db_password
-      dbname       = var.db_name
-      dbconn       = var.db_connection_name
+      port           = var.app_port
+      env            = var.environment
+      repo           = var.github_repo
+      branch         = var.github_branch
+      dbuser         = var.db_user
+      dbpass         = var.db_password
+      dbname         = var.db_name
+      dbconn         = var.db_connection_name
       gemini_api_key = var.gemini_api_key
-      GITHUB_TOKEN = var.github_token
-      REPO_PATH    = var.github_repo
-      REPO_OWNER  = var.repo_owner
-      REPO_NAME = var.repo_name
-      domain = var.domain
-      ssl_email = var.ssl_email
+      GITHUB_TOKEN   = var.github_token
+      REPO_PATH      = var.github_repo
+      REPO_OWNER     = var.repo_owner
+      REPO_NAME      = var.repo_name
+      domain         = var.domain
+      ssl_email      = var.ssl_email
     })
     enable-oslogin = "TRUE"
   }
@@ -65,8 +65,8 @@ resource "google_compute_instance_template" "app_template" {
 
   # Ensure proper shutdown for instances
   scheduling {
-    automatic_restart   = true
-    on_host_maintenance = "MIGRATE"
+    automatic_restart   = var.environment == "prod"
+    on_host_maintenance = var.environment == "prod" ? "MIGRATE" : "TERMINATE"
     preemptible         = var.environment != "prod" # Use preemptible VMs in non-prod for cost savings
   }
 

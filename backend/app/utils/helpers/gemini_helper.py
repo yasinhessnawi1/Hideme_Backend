@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from backend.app.configs.gemini_config import (
     GEMINI_PROMPT_HEADER,
     GEMINI_PROMPT_FOOTER,
-    AVAILABLE_ENTITIES,
+    GEMINI_AVAILABLE_ENTITIES,
     SYSTEM_INSTRUCTION
 )
 from backend.app.configs.config_singleton import get_config
@@ -93,7 +93,7 @@ class GeminiHelper:
             Formatted prompt string
         """
         if requested_entities is None:
-            requested_entities = list(AVAILABLE_ENTITIES.values())
+            requested_entities = list(GEMINI_AVAILABLE_ENTITIES.values())
 
         entities_str = "\n".join(f"- **{entity}**" for entity in requested_entities)
 

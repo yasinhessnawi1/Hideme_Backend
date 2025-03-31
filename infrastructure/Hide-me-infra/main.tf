@@ -79,7 +79,7 @@ module "database" {
   db_user                = var.db_user
   db_password            = var.db_password
   db_deletion_protection = var.db_deletion_protection
-  db_disk_size           = 50
+  db_disk_size           = var.db_disk_size
   depends_on = [module.vpc, module.security]
 }
 
@@ -92,6 +92,7 @@ module "compute" {
   instance_name         = var.instance_name
   machine_type          = var.machine_type
   disk_size             = var.disk_size
+  disk_type             = var.disk_type
   network_id            = module.vpc.network_id
   subnet_id             = module.vpc.private_subnet_id
   service_account_email = module.security.app_service_account_email
@@ -123,9 +124,9 @@ module "load_balancer" {
   instance_group       = module.compute.instance_group
   health_check_port    = var.health_check_port
   static_ip_name       = var.static_ip_name
-  domain_name          = var.domain  # Using root domain variable
+  domain_name = var.domain # Using root domain variable
   security_policy_name = module.security.security_policy_name
-  depends_on           = [module.vpc, module.compute]
+  depends_on = [module.vpc, module.compute]
 }
 
 # DNS Module (New)
@@ -133,9 +134,9 @@ module "dns" {
   source           = "./modules/dns"
   project          = var.project
   environment      = var.environment
-  domain_name      = var.domain  # Using root domain variable for DNS zone
+  domain_name = var.domain # Using root domain variable for DNS zone
   load_balancer_ip = module.load_balancer.lb_external_ip
-  depends_on       = [module.load_balancer]
+  depends_on = [module.load_balancer]
 }
 
 /*

@@ -24,7 +24,7 @@ from backend.app.utils.security.rate_limiting import RateLimitingMiddleware, get
 # Allowed origins from environment or default
 ALLOWED_ORIGINS = os.environ.get(
     "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:8000,https://www.hidemeai.com"
+    "http://localhost:3000,http://localhost:8000,https://www.hidemeai.com,http://localhost:5173"
 ).split(",")
 
 

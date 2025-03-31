@@ -10,7 +10,7 @@ resource "google_compute_network" "vpc" {
   name                    = "${var.network_name}-${var.environment}"
   project                 = var.project
   auto_create_subnetworks = false
-  routing_mode            = "GLOBAL"
+  routing_mode            = "REGIONAL"
 }
 
 # Create a public subnet for load balancers and bastion hosts

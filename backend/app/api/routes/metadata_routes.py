@@ -8,9 +8,9 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
-from backend.app.configs.gliner_config import GLINER_ENTITIES
-from backend.app.configs.presidio_config import REQUESTED_ENTITIES
+from backend.app.configs.gemini_config import GEMINI_AVAILABLE_ENTITIES
+from backend.app.configs.gliner_config import GLINER_AVAILABLE_ENTITIES
+from backend.app.configs.presidio_config import PRESIDIO_AVAILABLE_ENTITIES
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.security.caching_middleware import get_cached_response, response_cache
@@ -85,11 +85,11 @@ async def get_available_entities(request: Request, response: Response):
 
         # No need for locks with static configuration data
         # Get GLiNER entities
-        gliner_entities = GLINER_ENTITIES
+        gliner_entities = GLINER_AVAILABLE_ENTITIES
 
         entities_data = {
-            "presidio_entities": REQUESTED_ENTITIES,
-            "gemini_entities": AVAILABLE_ENTITIES,
+            "presidio_entities": PRESIDIO_AVAILABLE_ENTITIES,
+            "gemini_entities": GEMINI_AVAILABLE_ENTITIES,
             "gliner_entities": gliner_entities
         }
 
@@ -223,12 +223,6 @@ async def get_api_routes() -> JSONResponse:
     # No need for locks with static route information
     routes_info = {
         "entity_detection": [
-            {
-                "path": "/hybrid/detect",
-                "method": "POST",
-                "description": "Hybrid entity detection across multiple engines",
-                "engines": ["Presidio", "Gemini", "GLiNER"]
-            },
             {
                 "path": "/ml/detect",
                 "method": "POST",

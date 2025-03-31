@@ -29,3 +29,4 @@ slowapi
 psutil
 redis
 aiofiles
+pytest

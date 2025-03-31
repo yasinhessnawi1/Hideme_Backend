@@ -64,7 +64,7 @@ variable "db_name" {
 variable "health_check_ip_ranges" {
   description = "Google Cloud's health check IP ranges"
   type        = list(string)
-  default     = [
+  default = [
     "35.191.0.0/16",
     "130.211.0.0/22",
     "209.85.152.0/22",
@@ -81,7 +81,7 @@ variable "iap_ip_ranges" {
 variable "load_balancer_ip_ranges" {
   description = "Google Cloud's load balancer IP ranges"
   type        = list(string)
-  default     = [
+  default = [
     "130.211.0.0/22",
     "35.191.0.0/16"
   ]
@@ -90,7 +90,7 @@ variable "load_balancer_ip_ranges" {
 variable "google_api_ranges" {
   description = "Google API IP ranges"
   type        = list(string)
-  default     = [
+  default = [
     "199.36.153.8/30", # Restricted Google APIs
     "199.36.153.4/30"  # Private Google Access
   ]

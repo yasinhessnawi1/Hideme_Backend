@@ -63,6 +63,11 @@ output "db_private_ip_address" {
   value       = module.database.private_ip_address
 }
 
+output "db_host" {
+  description = "The hostname of the database instance"
+  value = module.database.database_host
+}
+
 # Compute Outputs
 output "instance_group" {
   description = "The instance group resource"
@@ -107,8 +112,8 @@ output "load_balancer_name" {
 
 output "load_balancer_url" {
   description = "The URLs to access the application"
-  value       = {
-    api_http = "http://${var.domain}"
+  value = {
+    api_http  = "http://${var.domain}"
     api_https = "https://${var.domain}"
   }
 }

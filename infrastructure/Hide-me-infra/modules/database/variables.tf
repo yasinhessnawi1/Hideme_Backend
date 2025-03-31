@@ -49,7 +49,7 @@ variable "db_tier" {
 variable "db_disk_size" {
   description = "Disk size for the database in GB"
   type        = number
-  default     = 50
+  default     = 10
   validation {
     condition     = var.db_disk_size >= 10 && var.db_disk_size <= 4000
     error_message = "Database disk size must be between 10 and 4000 GB."

@@ -49,6 +49,18 @@ variable "disk_size" {
   type        = number
 }
 
+variable "db_disk_size" {
+  description = "Boot disk size in GB"
+  type        = number
+  default     = 10
+}
+
+variable "disk_type" {
+  description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard"
+  type        = string
+  default     = "pd-standard"
+}
+
 variable "min_instances" {
   description = "Minimum number of instances in the instance group"
   type        = number
@@ -114,7 +126,7 @@ variable "db_password" {
 variable "db_deletion_protection" {
   description = "Whether to enable deletion protection for the database"
   type        = bool
-  default     = true
+  default     = false #todo: change it to true for production
 }
 
 variable "alert_email" {
@@ -157,25 +169,25 @@ variable "github_token" {
 }
 
 variable "repo_name" {
-    description = "Name of the GitHub repository"
-    type        = string
-    default     = "Hideme_Backend"
+  description = "Name of the GitHub repository"
+  type        = string
+  default     = "Hideme_Backend"
 }
 
 variable "repo_owner" {
-    description = "Owner of the GitHub repository"
-    type        = string
-    default     = "yasinhessnawi1"
+  description = "Owner of the GitHub repository"
+  type        = string
+  default     = "yasinhessnawi1"
 }
 
 variable "domain" {
-    description = "Domain name for the application"
-    type        = string
+  description = "Domain name for the application"
+  type        = string
 }
 
 variable "ssl_email" {
-    description = "Email address for SSL certificate notifications"
-    type        = string
+  description = "Email address for SSL certificate notifications"
+  type        = string
 }
 
 variable "static_ip_name" {

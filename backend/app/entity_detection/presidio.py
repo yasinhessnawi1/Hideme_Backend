@@ -14,7 +14,7 @@ from presidio_analyzer import AnalyzerEngine, RecognizerResult
 from presidio_analyzer import AnalyzerEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 
-from backend.app.configs.presidio_config import (DEFAULT_LANGUAGE, REQUESTED_ENTITIES)
+from backend.app.configs.presidio_config import (DEFAULT_LANGUAGE, PRESIDIO_AVAILABLE_ENTITIES)
 from backend.app.entity_detection.base import BaseEntityDetector
 from backend.app.utils.helpers.text_utils import TextUtils, EntityUtils
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
@@ -130,7 +130,7 @@ class PresidioEntityDetector(BaseEntityDetector):
             Tuple of (results_json, redaction_mapping).
         """
         start_time = time.time()
-        local_requested_entities = requested_entities or REQUESTED_ENTITIES
+        local_requested_entities = requested_entities or PRESIDIO_AVAILABLE_ENTITIES
         minimized_data = minimize_extracted_data(extracted_data)
 
         # For GDPR compliance and logging

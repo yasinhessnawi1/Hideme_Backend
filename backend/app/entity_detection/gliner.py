@@ -27,7 +27,7 @@ from transformers import AutoConfig
 from backend.app.entity_detection.base import BaseEntityDetector
 from backend.app.utils.helpers.text_utils import TextUtils
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
-from backend.app.configs.gliner_config import GLINER_MODEL_PATH, GLINER_MODEL_NAME, GLINER_ENTITIES
+from backend.app.configs.gliner_config import GLINER_MODEL_PATH, GLINER_MODEL_NAME, GLINER_AVAILABLE_ENTITIES
 from backend.app.utils.validation.sanitize_utils import deduplicate_entities
 from backend.app.utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
@@ -96,7 +96,7 @@ class GlinerEntityDetector(BaseEntityDetector):
         super().__init__()
         self.model_name = model_name
         self.model = None
-        self.default_entities = entities or GLINER_ENTITIES
+        self.default_entities = entities or GLINER_AVAILABLE_ENTITIES
         self.local_model_path = local_model_path or os.path.dirname(GLINER_MODEL_PATH)
         self.local_files_only = local_files_only
         self.model_dir_path = GLINER_MODEL_PATH

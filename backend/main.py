@@ -22,5 +22,4 @@ if __name__ == "__main__":
         port=port,
         reload=debug,
         log_level="info",
-        workers=1
     )
