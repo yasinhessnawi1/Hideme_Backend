@@ -1,5 +1,6 @@
 import string
 import re
+
 from typing import List, Dict, Any
 from backend.app.utils.logging.logger import log_debug
 
@@ -14,6 +15,7 @@ class PDFSearcher:
       - Case-insensitive matching.
       - Regex-based matching (placeholder implementation).
     The original text is always preserved in the output.
+
     """
     def __init__(self, extracted_data: Dict[str, Any]):
         self.extracted_data = extracted_data
@@ -44,7 +46,8 @@ class PDFSearcher:
 
     def search_terms(self, search_terms: List[str], case_sensitive: bool = False, regex: bool = False) -> Dict[str, Any]:
         """
-        Searches for the provided search_terms within the extracted data.
+        Searches for the provided search_terms within the extracted data using exact (case-sensitive)
+        matching (ignoring leading/trailing punctuation).
 
         If regex is False:
           - If case_sensitive is True, performs exact case-sensitive matching (ignoring surrounding punctuation).
@@ -52,6 +55,7 @@ class PDFSearcher:
         If regex is True:
           - A placeholder is used (currently logging that regex search is not implemented) and
             falls back to non-regex behavior.
+
 
         Returns:
             A dictionary with:
@@ -73,6 +77,7 @@ class PDFSearcher:
             pages_results = []
             total_matches = 0
 
+
             for page in self.extracted_data.get("pages", []):
                 page_number = page.get("page")
                 page_matches = []
@@ -87,8 +92,7 @@ class PDFSearcher:
                         }
                         page_matches.append({
                             "bbox": bbox,
-                            "original_text": word_text
-                        })
+   })
                 if page_matches:
                     pages_results.append({"page": page_number, "matches": page_matches})
                     total_matches += len(page_matches)
