@@ -14,11 +14,11 @@ from dotenv import load_dotenv
 from backend.app.configs.gemini_config import (
     GEMINI_PROMPT_HEADER,
     GEMINI_PROMPT_FOOTER,
-    AVAILABLE_ENTITIES,
+    GEMINI_AVAILABLE_ENTITIES,
     SYSTEM_INSTRUCTION
 )
 from backend.app.configs.config_singleton import get_config
-from backend.app.utils.logger import default_logger as logger
+from backend.app.utils.logging.logger import default_logger as logger
 
 # Load environment variables
 load_dotenv(verbose=True)
@@ -93,7 +93,7 @@ class GeminiHelper:
             Formatted prompt string
         """
         if requested_entities is None:
-            requested_entities = list(AVAILABLE_ENTITIES.values())
+            requested_entities = list(GEMINI_AVAILABLE_ENTITIES.values())
 
         entities_str = "\n".join(f"- **{entity}**" for entity in requested_entities)
 
@@ -108,10 +108,11 @@ class GeminiHelper:
             text: Text to analyze
             requested_entities: List of entity types to detect
             max_retries (int): The maximum number of retry attempts in case of failures.
-                              Defaults to 3.
+                               Defaults to 3.
 
         Returns:
-            Raw response text or None if request failed
+            Raw response text or an empty string if response is restricted (e.g. copyright),
+            or None if request completely failed.
         """
         prompt = self.create_prompt(text, requested_entities)
         attempt = 0
@@ -128,10 +129,15 @@ class GeminiHelper:
                     logger.info("✅ Successfully received response from Gemini API")
                     return response.text.strip("`").strip()
                 logger.error("❌ Empty response from Gemini API")
-                return None
+                return ""
             except ConnectionError as e:
                 logger.error(f"❌ Network Error communicating with Gemini API: {e}")
             except Exception as e:
+                message = str(e)
+                if "finish_reason" in message and "is 4" in message:
+                    logger.warning(
+                        "⚠️ Gemini refused content due to copyright filtering (finish_reason=4). Returning empty result.")
+                    return None  # Return None
                 logger.error(f"❌ Unexpected error communicating with Gemini API: {e}")
             attempt += 1
             if attempt < max_retries:

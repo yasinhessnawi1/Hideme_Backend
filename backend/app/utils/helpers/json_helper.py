@@ -6,10 +6,25 @@ from typing import List, Optional, Any
 
 from fastapi import HTTPException
 
-from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
-from backend.app.configs.gliner_config import GLINER_ENTITIES
-from backend.app.configs.presidio_config import REQUESTED_ENTITIES
-from backend.app.utils.logger import log_info, log_warning, log_error
+from backend.app.configs.gemini_config import GEMINI_AVAILABLE_ENTITIES
+from backend.app.configs.gliner_config import GLINER_AVAILABLE_ENTITIES
+from backend.app.configs.presidio_config import PRESIDIO_AVAILABLE_ENTITIES
+from backend.app.utils.logging.logger import log_info, log_warning, log_error
+
+
+def checkAllOption(entity_list):
+    new_list = []
+    for entity in entity_list:
+        if entity == "ALL_PRESIDIO":
+            new_list.extend(PRESIDIO_AVAILABLE_ENTITIES)
+        elif entity == "ALL_GEMINI":
+            new_list.extend(list(GEMINI_AVAILABLE_ENTITIES.keys()))
+        elif entity == "ALL_GLINER":
+            new_list.extend(GLINER_AVAILABLE_ENTITIES)
+        else:
+            new_list.append(entity)
+    return new_list
+
 
 
 def validate_requested_entities(
@@ -35,6 +50,7 @@ def validate_requested_entities(
 
     try:
         entity_list = json.loads(requested_entities)
+        entity_list = checkAllOption(entity_list)
 
         # If specific labels are provided, validate against them
         if labels:
@@ -47,7 +63,7 @@ def validate_requested_entities(
                     )
         # Otherwise validate against standard entity lists
         else:
-            available_entities = list(AVAILABLE_ENTITIES.keys()) + REQUESTED_ENTITIES + GLINER_ENTITIES
+            available_entities = list(GEMINI_AVAILABLE_ENTITIES.keys()) + PRESIDIO_AVAILABLE_ENTITIES + GLINER_AVAILABLE_ENTITIES
             for entity in entity_list:
                 if entity not in available_entities:
                     raise HTTPException(

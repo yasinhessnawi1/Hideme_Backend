@@ -8,15 +8,15 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from backend.app.configs.gemini_config import AVAILABLE_ENTITIES
-from backend.app.configs.gliner_config import GLINER_ENTITIES
-from backend.app.configs.presidio_config import REQUESTED_ENTITIES
-from backend.app.factory.document_processing_factory import EntityDetectionEngine
+from backend.app.configs.gemini_config import GEMINI_AVAILABLE_ENTITIES
+from backend.app.configs.gliner_config import GLINER_AVAILABLE_ENTITIES
+from backend.app.configs.presidio_config import PRESIDIO_AVAILABLE_ENTITIES
+from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.caching_middleware import get_cached_response, response_cache
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.logger import log_error
-from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
+from backend.app.utils.security.caching_middleware import get_cached_response, response_cache
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.logging.logger import log_error
+from backend.app.utils.system_utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -85,11 +85,11 @@ async def get_available_entities(request: Request, response: Response):
 
         # No need for locks with static configuration data
         # Get GLiNER entities
-        gliner_entities = GLINER_ENTITIES
+        gliner_entities = GLINER_AVAILABLE_ENTITIES
 
         entities_data = {
-            "presidio_entities": REQUESTED_ENTITIES,
-            "gemini_entities": AVAILABLE_ENTITIES,
+            "presidio_entities": PRESIDIO_AVAILABLE_ENTITIES,
+            "gemini_entities": GEMINI_AVAILABLE_ENTITIES,
             "gliner_entities": gliner_entities
         }
 
@@ -156,8 +156,6 @@ async def get_detectors_status(request: Request):
         Status information for all detector instances
     """
     try:
-        # This endpoint should not be cached for too long as status changes frequently
-        cache_key = "detectors_status"
         last_updated = datetime.isoformat(datetime.now())
 
         # Get status from initialization service
@@ -225,12 +223,6 @@ async def get_api_routes() -> JSONResponse:
     # No need for locks with static route information
     routes_info = {
         "entity_detection": [
-            {
-                "path": "/hybrid/detect",
-                "method": "POST",
-                "description": "Hybrid entity detection across multiple engines",
-                "engines": ["Presidio", "Gemini", "GLiNER"]
-            },
             {
                 "path": "/ml/detect",
                 "method": "POST",

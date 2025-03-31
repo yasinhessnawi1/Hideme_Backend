@@ -79,24 +79,24 @@ Copy
 }
 
 """
-AVAILABLE_ENTITIES = {"PHONE": "- ** NO_PHONE_NUMBER ** → Norwegian Phone Numbers",
+GEMINI_AVAILABLE_ENTITIES = {"PHONE": "- ** NO_PHONE_NUMBER ** → Norwegian Phone Numbers",
                         "PERSON": "- ** PERSON ** → Norwegian Names",
                         "EMAIL": "- ** EMAIL_ADDRESS ** → Email Addresses",
                         "ADDRESS": "- ** NO_ADDRESS ** → Norwegian Home/street Addresses",
                         "DATE": "- ** DATE_TIME ** → Dates and Timestamps",
                         "GOVID": "- ** GOV_ID ** → Government - Issued Identifiers any identification number",
                         "FINANCIAL": "- ** FINANCIAL_INFO ** → Financial Data (contextually financial fisk_data not just words about money)",
-                        "EMPLOYMENT": "- ** EMPLOYMENT_INFO ** → Employment and Professional Details", #todo: fix this entity and add organization
+                        "EMPLOYMENT": "- ** EMPLOYMENT_INFO ** → Employment and Professional Details",  #todo: fix this entity and add organization
                         "HEALTH": "- ** HEALTH_INFO ** → Health - Related Information",
                         "SEXUAL": "- ** SEXUAL_ORIENTATION ** → Sexual Relationships and Orientation",
                         "CRIMINAL": "- ** CRIMINAL_RECORD ** → Crime - Related Information",
-                        "CONTEXT": "- ** CONTEXT_SENSITIVE ** → Context - Sensitive Information",
-                        "INFO": "- ** IDENTIFIABLE_IMAGE ** → Any Identifiable Image Reference",
-                        "FAMILY": "- ** FAMILY_RELATION ** → Family and Relationship Data",
-                        "BEHAVIORAL_PATTERN": "- ** BEHAVIORAL_PATTERN ** → Behavioral Pattern Data",
-                        "POLITICAL_CASE": "- ** POLITICAL_CASE ** → Political - Related Cases",
-                        "ECONOMIC_STATUS": "- ** ECONOMIC_STATUS ** → Economic Information"
-                      }
+                             "CONTEXT": "- ** CONTEXT_SENSITIVE ** → Context - Sensitive Information",
+                             "FAMILY": "- ** FAMILY_RELATION ** → Family and Relationship Data",
+                             "BEHAVIORAL_PATTERN": "- ** BEHAVIORAL_PATTERN ** → Behavioral Pattern Data",
+                             "POLITICAL_CASE": "- ** POLITICAL_CASE ** → Political - Related Cases",
+                             "ECONOMIC_STATUS": "- ** ECONOMIC_STATUS ** → Economic Information",
+
+                             }
 
 # System instruction for Gemini API with Norwegian support
 SYSTEM_INSTRUCTION = """

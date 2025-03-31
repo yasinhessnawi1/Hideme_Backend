@@ -14,18 +14,17 @@ from backend.app.api.routes import (
     gemini_router,
     presidio_router,
     metadata_router,
-    hybrid_router,
     batch_router,
 )
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.logger import log_info, log_error
-from backend.app.utils.retention_management import retention_manager
-from backend.app.utils.rate_limiting import RateLimitingMiddleware, get_rate_limit_config
+from backend.app.utils.logging.logger import log_info, log_error
+from backend.app.utils.security.retention_management import retention_manager
+from backend.app.utils.security.rate_limiting import RateLimitingMiddleware, get_rate_limit_config
 
 # Allowed origins from environment or default
 ALLOWED_ORIGINS = os.environ.get(
     "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:8000,https://www.hidemeai.com"
+    "http://localhost:3000,http://localhost:8000,https://www.hidemeai.com,http://localhost:5173"
 ).split(",")
 
 
@@ -147,7 +146,6 @@ def create_app() -> FastAPI:
     app.include_router(gemini_router, prefix="/ai", tags=["AI Detection"])
     app.include_router(presidio_router, prefix="/ml", tags=["Machine Learning Detection"])
     app.include_router(metadata_router, prefix="/help", tags=["System Metadata"])
-    app.include_router(hybrid_router, prefix="/hybrid", tags=["Hybrid Detection"])
     app.include_router(batch_router, prefix="/batch", tags=["Batch Processing"])
 
     def custom_openapi():
@@ -234,7 +232,7 @@ def create_app() -> FastAPI:
         try:
             import gc
             gc.collect()
-            from backend.app.utils.caching_middleware import invalidate_cache
+            from backend.app.utils.security.caching_middleware import invalidate_cache
             invalidate_cache()
             log_info("[SHUTDOWN] Additional cleanup completed successfully")
         except Exception as e:
@@ -244,6 +242,5 @@ def create_app() -> FastAPI:
     atexit.register(lambda: retention_manager.shutdown())
     log_info("[OK] API application created and configured successfully")
     return app
-
 
 app = create_app()

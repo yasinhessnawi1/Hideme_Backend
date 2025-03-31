@@ -5,8 +5,8 @@ This module provides direct access to configuration values
 without requiring service imports.
 """
 import os
-import json
-from typing import Dict, Any, Optional
+from typing import Any
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -49,9 +49,9 @@ def _parse_color(color_str: str) -> tuple:
     """Parse color string into RGB tuple."""
     try:
         r, g, b = map(int, color_str.split(','))
-        return (r, g, b)
-    except Exception:
-        return (0, 0, 0)  # Default to black
+        return r, g, b
+    except ValueError:
+        return 0, 0, 0  # Default to black
 
 
 def get_config(key: str, default: Any = None) -> Any:

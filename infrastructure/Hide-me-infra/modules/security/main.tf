@@ -165,7 +165,7 @@ resource "google_compute_firewall" "deny_all_egress" {
   network     = var.network_id
   description = "Deny all egress traffic not explicitly allowed"
   direction   = "EGRESS"
-  priority    = 65534  # Just above the default allow all
+  priority    = 65534 # Just above the default allow all
 
   deny {
     protocol = "all"

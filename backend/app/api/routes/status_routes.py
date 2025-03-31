@@ -13,9 +13,9 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from backend.app.api.models import StatusResponse
-from backend.app.utils.caching_middleware import response_cache
-from backend.app.utils.logger import log_info
-from backend.app.utils.memory_management import memory_monitor
+from backend.app.utils.security.caching_middleware import response_cache
+from backend.app.utils.logging.logger import log_info
+from backend.app.utils.system_utils.memory_management import memory_monitor
 
 # Configure rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -139,7 +139,7 @@ async def metrics(request: Request, response: Response):
     # This endpoint should not be cached for too long as metrics change frequently
     response.headers["Cache-Control"] = "no-cache"
 
-    # Check if requester is authorized (in future, this would integrate with auth system)
+    # Check if requester is authorized (in the future, this would integrate with auth system)
     # For now, we use a simple API key check from environment
     api_key = request.headers.get("X-API-Key")
     expected_key = os.environ.get("METRICS_API_KEY", "")

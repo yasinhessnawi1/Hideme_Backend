@@ -3,7 +3,7 @@ Main entry point for the document processing API application.
 """
 import uvicorn
 from backend.app.api.main import create_app
-from backend.app.utils.logger import log_info
+from backend.app.utils.logging.logger import log_info
 from backend.app.configs.config_singleton import get_config
 
 # Create the application
@@ -21,5 +21,5 @@ if __name__ == "__main__":
         host=host,
         port=port,
         reload=debug,
-        log_level="info"
+        log_level="info",
     )

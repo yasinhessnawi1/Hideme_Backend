@@ -34,7 +34,7 @@ resource "google_sql_database_instance" "postgres" {
 
   settings {
     tier              = var.db_tier
-    availability_type = var.environment == "prod" ? "REGIONAL" : "ZONAL"
+    availability_type = var.environment == "prod" ? "REGIONAL" : "REGIONAL" #todo: change to Zonal if needed
     disk_size         = var.db_disk_size
     disk_type         = "PD_SSD"
     disk_autoresize   = true
@@ -140,6 +140,8 @@ resource "google_sql_user" "user" {
   password = var.db_password
 }
 
+/*
+
 # Create a read replica for production environment
 resource "google_sql_database_instance" "read_replica" {
   count                = var.environment == "prod" ? 1 : 0
@@ -179,6 +181,8 @@ resource "google_sql_database_instance" "read_replica" {
 
   # Fixed lifecycle block with static value
   lifecycle {
-    prevent_destroy = false #todo: change to true
+    prevent_destroy = true
   }
 }
+
+ */

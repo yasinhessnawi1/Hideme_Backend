@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple, Any, Union
 
 from presidio_analyzer import RecognizerResult
 
-from backend.app.utils.logger import log_warning
+from backend.app.utils.logging.logger import log_warning
 
 
 
@@ -147,84 +147,6 @@ class TextUtils:
 
 class EntityUtils:
     """Utilities for processing and manipulating entities."""
-
-    @staticmethod
-    def merge_redaction_mappings(
-            redaction_mappings: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """
-        Merge multiple redaction mappings into one.
-
-        Args:
-            redaction_mappings: List of redaction mappings to merge
-
-        Returns:
-            Merged redaction mapping
-        """
-        if not redaction_mappings:
-            return {"pages": []}
-
-        merged = {"pages": []}
-        page_mappings = {}
-
-        # Group mappings by page
-        for mapping in redaction_mappings:
-            for page_info in mapping.get("pages", []):
-                page_num = page_info.get("page")
-                sensitive_items = page_info.get("sensitive", [])
-
-                if page_num not in page_mappings:
-                    page_mappings[page_num] = []
-
-                page_mappings[page_num].extend(sensitive_items)
-
-        # Create merged mapping
-        for page_num, sensitive_items in sorted(page_mappings.items()):
-            merged["pages"].append({
-                "page": page_num,
-                "sensitive": sensitive_items
-            })
-
-        return merged
-
-
-    @staticmethod
-    def format_sensitive_entities(
-        full_text: str,
-        entities: List[Union[RecognizerResult, Dict[str, Any]]],
-        bboxes: List[Dict[str, float]],
-        start: int,
-        end: int
-    ) -> List[Dict[str, Any]]:
-        """
-        Formats sensitive entities with their bounding boxes.
-
-        Args:
-            full_text: Original text
-            entities: List of entities
-            bboxes: List of bounding boxes
-            start: Start offset in the text
-            end: End offset in the text
-
-        Returns:
-            List of formatted sensitive entities
-        """
-        result = []
-
-        for entity in entities:
-            entity_dict = EntityUtils.convert_entity_to_dict(entity)
-
-            for bbox in bboxes:
-                result.append({
-                    "original_text": full_text[start:end],
-                    "entity_type": entity_dict["entity_type"],
-                    "start": start,
-                    "end": end,
-                    "score": entity_dict["score"],
-                    "bbox": bbox
-                })
-
-        return result
 
     @staticmethod
     def merge_overlapping_entities(entities: List[RecognizerResult]) -> List[RecognizerResult]:
@@ -375,29 +297,3 @@ class EntityUtils:
                 "end": entity.end,
                 "score": float(entity.score)
             }
-
-
-class JsonUtils:
-    """Utilities for JSON handling and conversion."""
-
-    @staticmethod
-    def presidio_to_json_converter(detected_entities: List[RecognizerResult], min_score: float = 0.5) -> List[Dict[str, Any]]:
-        """
-        Converts Presidio RecognizerResult objects to JSON-serializable dictionaries.
-
-        Args:
-            detected_entities: List of Presidio RecognizerResult objects
-            min_score: Minimum confidence score threshold (default: 0.5)
-
-        Returns:
-            List of entity dictionaries
-        """
-        return [
-            {
-                "entity_type": e.entity_type,
-                "start": e.start,
-                "end": e.end,
-                "score": float(e.score)
-            }
-            for e in detected_entities if e.score > min_score
-        ]

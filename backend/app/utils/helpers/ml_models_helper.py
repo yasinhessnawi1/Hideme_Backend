@@ -6,7 +6,7 @@ from spacy.cli import download as spacy_download
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 from typing import Optional, Any
 
-from backend.app.utils.logger import log_info, log_error, log_warning
+from backend.app.utils.logging.logger import log_info, log_error, log_warning
 
 
 def get_spacy_model(model_name: str) -> Any:

@@ -4,7 +4,7 @@ Helper functions package.
 This package contains various helper functions used throughout the
 document processing system.
 """
-from backend.app.utils.helpers.text_utils import TextUtils, EntityUtils, JsonUtils
+from backend.app.utils.helpers.text_utils import TextUtils, EntityUtils
 from backend.app.utils.helpers.json_helper import (
     validate_requested_entities,
     convert_to_json,
@@ -20,7 +20,6 @@ from backend.app.utils.helpers.gemini_helper import GeminiHelper
 __all__ = [
     "TextUtils",
     "EntityUtils",
-    "JsonUtils",
     "validate_requested_entities",
     "convert_to_json",
     "parse_json",

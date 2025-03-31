@@ -28,8 +28,3 @@ output "apex_dns_record" {
   description = "The apex DNS record"
   value       = google_dns_record_set.apex_a_record.name
 }
-
-output "www_dns_record" {
-  description = "The www DNS record"
-  value       = google_dns_record_set.www_a_record.name
-}

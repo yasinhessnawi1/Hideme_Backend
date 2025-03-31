@@ -67,6 +67,5 @@ class ExtractedData(BaseModel):
 
 class EntityDetectionResult(BaseModel):
     """Result of entity detection."""
-    anonymized_text: str
     entities: List[EntityInfo]
     redaction_mapping: RedactionMapping
