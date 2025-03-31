@@ -4,11 +4,11 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from backend.app.domain.interfaces import EntityDetector
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.security.processing_records import record_keeper
-from backend.app.utils.synchronization_utils import AsyncTimeoutLock, LockPriority
+from backend.app.utils.system_utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
 
 

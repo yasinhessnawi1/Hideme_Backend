@@ -7,11 +7,11 @@ import psutil
 from weakref import WeakKeyDictionary
 
 from backend.app.configs.config_singleton import get_config
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
-from backend.app.utils.memory_management import memory_monitor
-from backend.app.utils.synchronization_utils import AsyncTimeoutSemaphore, LockPriority, AsyncTimeoutLock
+from backend.app.utils.system_utils.memory_management import memory_monitor
+from backend.app.utils.system_utils.synchronization_utils import AsyncTimeoutSemaphore, LockPriority, AsyncTimeoutLock
 
 # Type variables for generic functions
 T = TypeVar('T')

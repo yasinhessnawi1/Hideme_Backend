@@ -17,7 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from backend.app.utils.logging.logger import log_info, log_warning
-from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority
+from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
 
 
 class ResponseCache:

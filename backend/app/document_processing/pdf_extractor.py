@@ -16,12 +16,12 @@ from typing import Dict, Any, List, Union, BinaryIO, Optional, Tuple
 import pymupdf
 
 from backend.app.domain.interfaces import DocumentExtractor
-from backend.app.utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.parallel.core import ParallelProcessingCore
 from backend.app.utils.security.processing_records import record_keeper
-from backend.app.utils.synchronization_utils import TimeoutLock, LockPriority
+from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
 from backend.app.utils.validation.data_minimization import sanitize_document_metadata
 
 
