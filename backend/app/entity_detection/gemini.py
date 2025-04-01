@@ -98,7 +98,16 @@ class GeminiEntityDetector(BaseEntityDetector):
                 start_time=start_time
             )
 
-            return final_results, final_redaction_mapping
+            log_info(f"[DEBUG] Combined entities before filtering [Gemini]: {len(final_results)}")
+
+            # 3. Filter the final entity list.
+            filter_final_entities = BaseEntityDetector.filter_entities_by_score(final_results, threshold=0.85)
+            log_info(f"[DEBUG] Final entities after filtering (score >= 0.85) [Gemini]: {len(filter_final_entities)}")
+
+            # 4. Also filter the redaction mapping.
+            filter_final_redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(final_redaction_mapping, threshold=0.85)
+
+            return filter_final_entities, filter_final_redaction_mapping
 
         except Exception as exc:
             log_error("[ERROR] Error in Gemini detection: " + str(exc))
@@ -383,23 +392,3 @@ class GeminiEntityDetector(BaseEntityDetector):
             except (ValueError, IndexError, TypeError):
                 log_warning("[WARNING] Could not extract original_text from entity indices")
         return entity
-
-    def _convert_to_entity_dict(self, gemini_entity: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Convert a Gemini entity to a standardized dictionary.
-
-        Args:
-            gemini_entity: Entity dictionary from Gemini API.
-
-        Returns:
-            Standardized entity dictionary.
-        """
-        entity_dict_standard = {
-            "entity_type": gemini_entity.get("entity_type", "UNKNOWN"),
-            "start": gemini_entity.get("start", 0),
-            "end": gemini_entity.get("end", 0),
-            "score": float(gemini_entity.get("score", 0.5))
-        }
-        if "original_text" in gemini_entity:
-            entity_dict_standard["original_text"] = gemini_entity["original_text"]
-        return entity_dict_standard
