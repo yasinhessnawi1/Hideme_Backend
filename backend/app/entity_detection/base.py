@@ -6,17 +6,17 @@ with standardized error handling, performance tracking, and data protection feat
 """
 import asyncio
 import time
-from abc import ABC, abstractmethod
+from abc import ABC
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple, Optional
 
 from backend.app.domain.interfaces import EntityDetector
-from backend.app.utils.validation.data_minimization import minimize_extracted_data
-from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers.text_utils import TextUtils
 from backend.app.utils.logging.logger import default_logger as logger, log_warning
 from backend.app.utils.security.processing_records import record_keeper
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
+from backend.app.utils.validation.data_minimization import minimize_extracted_data
 
 
 class BaseEntityDetector(EntityDetector, ABC):
@@ -372,21 +372,6 @@ class BaseEntityDetector(EntityDetector, ABC):
 
         return None
 
-    @abstractmethod
-    def _convert_to_entity_dict(self, entity: Any) -> Dict[str, Any]:
-        """
-        Convert an entity to a standard dictionary format.
-
-        Args:
-            entity: Entity object or dictionary
-
-        Returns:
-            Standardized entity dictionary
-
-        Raises:
-            NotImplementedError: Must be implemented by derived classes
-        """
-        raise NotImplementedError("Subclasses must implement this method")
 
     def get_status(self) -> Dict[str, Any]:
         """
@@ -485,3 +470,86 @@ class BaseEntityDetector(EntityDetector, ABC):
         deduplicated_entities = EntityUtils.remove_duplicate_entities(merged_entities)
 
         return deduplicated_entities
+
+    @staticmethod
+    def filter_entities_by_score(entities: List[Dict[str, Any]], threshold: float = 0.85) -> List[Dict[str, Any]]:
+        """
+        Filter a list of entity dictionaries, returning only those with a score greater than or equal to the threshold.
+
+        Args:
+            entities (List[Dict[str, Any]]): List of entity dictionaries.
+            threshold (float): Minimum score required (default is 0.85).
+
+        Returns:
+            List[Dict[str, Any]]: Filtered list of entity dictionaries.
+        """
+        return [entity for entity in entities if entity.get("score", 0) >= threshold]
+
+    @staticmethod
+    def filter_redaction_mapping_by_score(redaction_mapping: Dict[str, Any], threshold: float = 0.85) -> Dict[str, Any]:
+        """
+        Filter the redaction mapping so that for each page, only entities with a score
+        greater than or equal to the specified threshold are retained.
+
+        Args:
+            redaction_mapping (Dict[str, Any]): Dictionary containing redaction details per page.
+            threshold (float): Minimum score required for an entity to be kept.
+
+        Returns:
+            Dict[str, Any]: The updated redaction mapping with filtered entities.
+        """
+        for page in redaction_mapping.get("pages", []):
+            if "sensitive" in page:
+                page["sensitive"] = [entity for entity in page["sensitive"] if entity.get("score", 0) >= threshold]
+        return redaction_mapping
+
+    @staticmethod
+    def _convert_to_entity_dict(entity: Any) -> Dict[str, Any]:
+        """
+        Convert an entity (either a dictionary or an object with attributes)
+        into a standardized dictionary format.
+
+        Args:
+            entity: An entity which can be a dict, a RecognizerResult, or any object with
+                    'entity_type', 'start', 'end', and 'score' attributes.
+
+        Returns:
+            A standardized dictionary with keys:
+              - "entity_type": The entity type (uppercase), default "UNKNOWN".
+              - "start": The starting character offset (default 0).
+              - "end": The ending character offset (default 0).
+              - "score": The confidence score (as a float, default 0.5).
+              - "original_text": (optional) The original text if present.
+        """
+        # If the entity is a dict, use dict methods.
+        if isinstance(entity, dict):
+            result = {
+                "entity_type": entity.get("entity_type", "UNKNOWN").upper(),
+                "start": entity.get("start", 0),
+                "end": entity.get("end", 0),
+                "score": float(entity.get("score", 0.5))
+            }
+            if "original_text" in entity:
+                result["original_text"] = entity["original_text"]
+            return result
+
+        # If the entity has attributes (e.g., a Presidio RecognizerResult), use them.
+        if hasattr(entity, "entity_type"):
+            return {
+                "entity_type": getattr(entity, "entity_type", "UNKNOWN").upper(),
+                "start": getattr(entity, "start", 0),
+                "end": getattr(entity, "end", 0),
+                "score": float(getattr(entity, "score", 0.5))
+            }
+
+        # Fallback: attempt to extract attributes generically.
+        try:
+            return {
+                "entity_type": getattr(entity, "entity_type", "UNKNOWN").upper(),
+                "start": getattr(entity, "start", 0),
+                "end": getattr(entity, "end", 0),
+                "score": float(getattr(entity, "score", 0.5))
+            }
+        except Exception as conversion_exc:
+            SecurityAwareErrorHandler.log_processing_error(conversion_exc, "entity_conversion")
+            return {"entity_type": "UNKNOWN", "start": 0, "end": 0, "score": 0.0}

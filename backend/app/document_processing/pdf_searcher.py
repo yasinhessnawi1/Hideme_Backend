@@ -87,7 +87,6 @@ class PDFSearcher:
                         }
                         page_matches.append({
                             "bbox": bbox,
-                            "original_text": word_text
                         })
                 if page_matches:
                     pages_results.append({"page": page_number, "matches": page_matches})

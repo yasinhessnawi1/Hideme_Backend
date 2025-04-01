@@ -53,7 +53,7 @@ class MashinLearningService(BaseDetectionService):
         # Perform detection.
         detection_start = time.time()
         detection_result, detection_error = await self.perform_detection(detector, minimized_data, entity_list,
-                                                                         detection_timeout=200,
+                                                                         detection_timeout=600,
                                                                          operation_id=operation_id)
         if detection_error:
             return detection_error
