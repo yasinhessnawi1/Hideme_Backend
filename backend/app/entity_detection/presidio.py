@@ -8,9 +8,9 @@ with improved security features, GDPR compliance, and standardized error handlin
 import asyncio
 import os
 import time
-from typing import Dict, Any, List, Optional, Tuple, Union
+from typing import Dict, Any, List, Optional, Tuple
 
-from presidio_analyzer import AnalyzerEngine, RecognizerResult
+from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer import AnalyzerEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 
@@ -18,12 +18,12 @@ from backend.app.configs.presidio_config import (DEFAULT_LANGUAGE, PRESIDIO_AVAI
 from backend.app.entity_detection.base import BaseEntityDetector
 from backend.app.utils.helpers.text_utils import TextUtils, EntityUtils
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
-from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.parallel.core import ParallelProcessingCore
-from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
+from backend.app.utils.parallel.core import ParallelProcessingCore
 from backend.app.utils.security.processing_records import record_keeper
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
+from backend.app.utils.validation.data_minimization import minimize_extracted_data
 
 
 class PresidioEntityDetector(BaseEntityDetector):
@@ -114,26 +114,14 @@ class PresidioEntityDetector(BaseEntityDetector):
             analyzer_lock.release()
 
     async def detect_sensitive_data_async(
-        self,
-        extracted_data: Dict[str, Any],
-        requested_entities: Optional[List[str]] = None
+            self,
+            extracted_data: Dict[str, Any],
+            requested_entities: Optional[List[str]] = None
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """
-        Asynchronous method to detect sensitive entities in extracted text.
-        Refactored to reduce cognitive complexity by splitting logic into helper methods.
-
-        Args:
-            extracted_data: Dictionary containing text and bounding box information.
-            requested_entities: List of entity types to detect.
-
-        Returns:
-            Tuple of (results_json, redaction_mapping).
-        """
         start_time = time.time()
         local_requested_entities = requested_entities or PRESIDIO_AVAILABLE_ENTITIES
         minimized_data = minimize_extracted_data(extracted_data)
 
-        # For GDPR compliance and logging
         operation_type = "presidio_detection"
         document_type = "document"
 
@@ -148,7 +136,6 @@ class PresidioEntityDetector(BaseEntityDetector):
             # 2. Aggregate results
             combined_entities, redaction_mapping = self._aggregate_page_results(local_page_results)
 
-            # 3. Update usage metrics and record GDPR
             total_time = time.time() - start_time
             self.update_usage_metrics(len(combined_entities), total_time)
             record_keeper.record_processing(
@@ -160,13 +147,20 @@ class PresidioEntityDetector(BaseEntityDetector):
                 success=True
             )
 
-            # 4. Log performance
+            log_info(f"[DEBUG] Combined entities before filtering [Presidio]: {len(combined_entities)}")
+
+            # 3. Filter the final entity list.
+            final_entities = BaseEntityDetector.filter_entities_by_score(combined_entities, threshold=0.85)
+            log_info(f"[DEBUG] Final entities after filtering (score >= 0.85) [Presidio]: {len(final_entities)}")
+
+            # 4. Also filter the redaction mapping.
+            redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping, threshold=0.85)
+
             self._log_detection_performance(combined_entities, redaction_mapping, pages, total_time)
 
-            return combined_entities, redaction_mapping
+            return final_entities, redaction_mapping
 
         except Exception as exc:
-            # Log error with standardized handling
             log_error("[ERROR] Error in Presidio detection: " + str(exc))
             record_keeper.record_processing(
                 operation_type=operation_type,
@@ -280,6 +274,7 @@ class PresidioEntityDetector(BaseEntityDetector):
 
         # Sort pages by page number
         redaction_mapping["pages"].sort(key=lambda x: x.get("page", 0))
+
         return combined_entities, redaction_mapping
 
     @staticmethod
@@ -343,75 +338,3 @@ class PresidioEntityDetector(BaseEntityDetector):
             return []
         finally:
             lock.release()
-
-    def _convert_to_entity_dict(
-        self,
-        entity: Union[RecognizerResult, Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """
-        Convert a Presidio RecognizerResult or a dictionary to a standardized entity dictionary.
-
-        Args:
-            entity: RecognizerResult object or dictionary
-
-        Returns:
-            Standardized entity dictionary
-        """
-        if isinstance(entity, RecognizerResult):
-            # For Presidio RecognizerResult objects
-            return {
-                "entity_type": entity.entity_type,
-                "start": entity.start,
-                "end": entity.end,
-                "score": float(entity.score)
-            }
-        elif isinstance(entity, dict):
-            # For dictionary entities
-            return self._convert_dict_entity(entity)
-        else:
-            # For any other type, attempt a generic conversion
-            return self._convert_unknown_entity(entity)
-
-    @staticmethod
-    def _convert_dict_entity(entity: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Convert a dictionary-based entity into a standardized format.
-
-        Args:
-            entity: Dictionary representing an entity
-
-        Returns:
-            Standardized entity dictionary
-        """
-        entity_dict = {
-            "entity_type": entity.get("entity_type", "UNKNOWN"),
-            "start": entity.get("start", 0),
-            "end": entity.get("end", 0),
-            "score": float(entity.get("score", 0.5))
-        }
-        if "original_text" in entity:
-            entity_dict["original_text"] = entity["original_text"]
-        return entity_dict
-
-    @staticmethod
-    def _convert_unknown_entity(entity: Any) -> Dict[str, Any]:
-        """
-        Convert an unknown entity type into a minimal standardized format.
-
-        Args:
-            entity: An entity object with unknown attributes
-
-        Returns:
-            Standardized entity dictionary
-        """
-        log_warning(f"[WARNING] Unknown entity type: {type(entity)}, attempting basic conversion")
-        try:
-            return {
-                "entity_type": getattr(entity, "entity_type", "UNKNOWN"),
-                "start": getattr(entity, "start", 0),
-                "end": getattr(entity, "end", 0),
-                "score": float(getattr(entity, "score", 0.5))
-            }
-        except Exception as conversion_exc:
-            SecurityAwareErrorHandler.log_processing_error(conversion_exc, "entity_conversion")
-            return {"entity_type": "UNKNOWN", "start": 0, "end": 0, "score": 0.0}
