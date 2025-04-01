@@ -7,7 +7,6 @@ improved initialization, GDPR compliance, and standardized error handling.
 
 import asyncio
 import os
-import re
 import shutil
 import time
 from datetime import datetime, timezone
@@ -15,9 +14,12 @@ from typing import Dict, Any, List, Optional, Tuple
 
 import torch
 
+from backend.app.utils.helpers.gliner_helper import GLiNERHelper
+
 # Attempt to import GLiNER with error handling
 try:
     from gliner import GLiNER
+
     GLINER_AVAILABLE = True
 except ImportError:
     GLINER_AVAILABLE = False
@@ -49,10 +51,10 @@ class GlinerEntityDetector(BaseEntityDetector):
     """
 
     _shared_instance = None
-    _shared_instance_lock = TimeoutLock(name="gliner_shared_instance_lock", priority=LockPriority.HIGH, timeout=30.0)
+    _shared_instance_lock = TimeoutLock(name="gliner_shared_instance_lock", priority=LockPriority.HIGH, timeout=600.0)
 
     # Global caching for model
-    _model_lock = TimeoutLock(name="gliner_model_lock", priority=LockPriority.HIGH, timeout=200.0)
+    _model_lock = TimeoutLock(name="gliner_model_lock", priority=LockPriority.HIGH, timeout=600.0)
     _global_initializing = False
     _global_initialization_time = None
     _model_cache = {}  # cache_key -> {"model": loaded_model, "init_time": initialization_time}
@@ -63,7 +65,7 @@ class GlinerEntityDetector(BaseEntityDetector):
         and create one. Otherwise, return the existing instance.
         """
         if cls._shared_instance is None:
-            acquired = cls._shared_instance_lock.acquire(timeout=30.0)
+            acquired = cls._shared_instance_lock.acquire(timeout=600.0)
             if acquired:
                 try:
                     if cls._shared_instance is None:
@@ -73,11 +75,11 @@ class GlinerEntityDetector(BaseEntityDetector):
         return cls._shared_instance
 
     def __init__(
-        self,
-        model_name: str = GLINER_MODEL_NAME,
-        entities: Optional[List[str]] = None,
-        local_model_path: Optional[str] = None,
-        local_files_only: bool = False
+            self,
+            model_name: str = GLINER_MODEL_NAME,
+            entities: Optional[List[str]] = None,
+            local_model_path: Optional[str] = None,
+            local_files_only: bool = False
     ):
         """
         Initialize the GLiNER entity detector with improved error handling and caching.
@@ -132,7 +134,7 @@ class GlinerEntityDetector(BaseEntityDetector):
             self._model_analyzer_lock = TimeoutLock(
                 name="gliner_analyzer_lock",
                 priority=LockPriority.HIGH,
-                timeout=30.0
+                timeout=600.0
             )
         return self._model_analyzer_lock
 
@@ -155,7 +157,7 @@ class GlinerEntityDetector(BaseEntityDetector):
             return
 
         start_time = time.time()
-        acquired = GlinerEntityDetector._model_lock.acquire(timeout=60.0)
+        acquired = GlinerEntityDetector._model_lock.acquire(timeout=600.0)
         if not acquired:
             log_error("[GLINER] Timeout acquiring model lock for initialization")
             return
@@ -239,7 +241,7 @@ class GlinerEntityDetector(BaseEntityDetector):
         local_exists = self._check_local_model_exists()
         log_info(f"[GLINER] Local model exists: {local_exists}")
         for attempt_index in range(max_retries):
-            log_info(f"[GLINER] Attempt {attempt_index+1}/{max_retries} for model initialization.")
+            log_info(f"[GLINER] Attempt {attempt_index + 1}/{max_retries} for model initialization.")
             if self._attempt_model_init(local_exists, attempt_index):
                 init_duration = time.time() - start_time
                 self._initialization_time = init_duration
@@ -284,7 +286,8 @@ class GlinerEntityDetector(BaseEntityDetector):
                     return True
                 else:
                     local_exists = False
-                    log_warning(f"[WARNING] Attempt {attempt_index+1}: failed to load local model, will attempt download")
+                    log_warning(
+                        f"[WARNING] Attempt {attempt_index + 1}: failed to load local model, will attempt download")
                     self.local_files_only = False
 
             if not local_exists:
@@ -491,9 +494,9 @@ class GlinerEntityDetector(BaseEntityDetector):
     # -------------------------------------------------------------------------
 
     async def detect_sensitive_data_async(
-        self,
-        extracted_data: Dict[str, Any],
-        requested_entities: Optional[List[str]] = None
+            self,
+            extracted_data: Dict[str, Any],
+            requested_entities: Optional[List[str]] = None
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Asynchronously detect sensitive entities in extracted data with GDPR compliance.
@@ -550,7 +553,16 @@ class GlinerEntityDetector(BaseEntityDetector):
             log_info(f"[PERF] GLiNER detection completed in {total_time:.2f}s")
             log_info(f"[PERF] Found {len(combined_results)} entities across {len(pages)} pages")
             log_sensitive_operation("GLiNER Detection", len(combined_results), total_time, pages=len(pages))
-            return combined_results, redaction_mapping
+
+            log_info(f"[DEBUG] Combined entities before filtering [GLiNER]: {len(combined_results)}")
+            # 3. Filter the final entity list.
+            filter_final_entities = BaseEntityDetector.filter_entities_by_score(combined_results, threshold=0.85)
+            log_info(f"[DEBUG] Final entities after filtering (score >= 0.85) [GLiNER]: {len(filter_final_entities)}")
+
+            # 4. Also filter the redaction mapping.
+            filter_final_redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping, threshold=0.85)
+
+            return filter_final_entities, filter_final_redaction_mapping
 
         except Exception as exc:
             error_time = time.time() - start_time
@@ -566,10 +578,10 @@ class GlinerEntityDetector(BaseEntityDetector):
             return [], {"pages": []}
 
     async def _process_pages_gliner_async(
-        self,
-        pages: List[Dict[str, Any]],
-        page_texts_and_mappings: Dict[int, Tuple[str, List]],
-        requested_entities: List[str]
+            self,
+            pages: List[Dict[str, Any]],
+            page_texts_and_mappings: Dict[int, Tuple[str, List]],
+            requested_entities: List[str]
     ) -> List[Tuple[int, Tuple[Dict[str, Any], List[Dict[str, Any]]]]]:
         """
         Process pages in parallel using the GLiNER model.
@@ -582,11 +594,12 @@ class GlinerEntityDetector(BaseEntityDetector):
         Returns:
             A list of (page_number, (page_redaction_info, processed_entities))
         """
+
         async def process_page_async(local_page_data: Dict[str, Any]) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
             try:
                 return await asyncio.wait_for(
                     self._process_single_page_async(local_page_data, page_texts_and_mappings, requested_entities),
-                    timeout=60.0
+                    timeout=600.0
                 )
             except asyncio.TimeoutError:
                 local_page_number = local_page_data.get("page", 0)
@@ -601,22 +614,28 @@ class GlinerEntityDetector(BaseEntityDetector):
         return await ParallelProcessingCore.process_pages_in_parallel(pages, process_page_async)
 
     async def _process_single_page_async(
-        self,
-        local_page_data: Dict[str, Any],
-        page_texts_and_mappings: Dict[int, Tuple[str, List]],
-        requested_entities: List[str]
+            self,
+            local_page_data: Dict[str, Any],
+            page_texts_and_mappings: Dict[int, Tuple[str, List]],
+            requested_entities: List[str]
     ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         """
         Process a single page asynchronously to detect entities with enhanced
         error handling and GDPR compliance.
 
+        This version uses ParallelProcessingCore.process_entities_in_parallel
+        to process the detected entities concurrently in batches.
+
         Args:
-            local_page_data: Dictionary with page information
-            page_texts_and_mappings: Dictionary mapping page numbers to (text, mapping) tuples
-            requested_entities: List of entity types to detect
+            local_page_data: Dictionary with page information.
+            page_texts_and_mappings: Dictionary mapping page numbers to (text, mapping) tuples.
+            requested_entities: List of entity types to detect.
 
         Returns:
-            Tuple of (page_redaction_info, processed_entities)
+            Tuple of (page_redaction_info, processed_entities) where:
+              - page_redaction_info: A dict containing redaction details for the page.
+              - processed_entities: A list of dictionaries for each detected entity,
+                including keys: "entity_type", "start", "end", "score", "original_text".
         """
         page_start_time = time.time()
         local_page_number = local_page_data.get("page")
@@ -633,7 +652,7 @@ class GlinerEntityDetector(BaseEntityDetector):
             log_warning(f"[WARNING] GLiNER model not available, skipping page {local_page_number}")
             return {"page": local_page_number, "sensitive": []}, []
 
-        # Process text with GLiNER
+        # Process text with GLiNER to get initial detected entities.
         page_entities = await asyncio.to_thread(self._process_text_with_gliner, full_text, requested_entities)
         if not page_entities:
             log_info(f"[OK] No entities detected by GLiNER on page {local_page_number}")
@@ -642,16 +661,11 @@ class GlinerEntityDetector(BaseEntityDetector):
         entity_count = len(page_entities)
         log_info(f"[OK] Found {entity_count} entities on page {local_page_number}")
 
-        # Process entities for bounding boxes
-        try:
-            processed_entities, local_page_redaction_info = await self.process_entities_for_page(
-                local_page_number, full_text, mapping, page_entities
-            )
-        except Exception as entity_error:
-            SecurityAwareErrorHandler.log_processing_error(
-                entity_error, "gliner_entity_processing", f"page_{local_page_number}"
-            )
-            return {"page": local_page_number, "sensitive": []}, []
+        # Process entities in parallel using the ParallelProcessingCore helper.
+        # This method batches the processing of entities for the page.
+        processed_entities, local_page_redaction_info = await ParallelProcessingCore.process_entities_in_parallel(
+            self, full_text, mapping, page_entities, local_page_number
+        )
 
         page_time = time.time() - page_start_time
         record_keeper.record_processing(
@@ -662,12 +676,13 @@ class GlinerEntityDetector(BaseEntityDetector):
             entity_count=len(processed_entities),
             success=True
         )
-        log_sensitive_operation("GLiNER Page Detection", len(processed_entities), page_time, page_number=local_page_number)
+        log_sensitive_operation("GLiNER Page Detection", len(processed_entities), page_time,
+                                page_number=local_page_number)
         return local_page_redaction_info, processed_entities
 
     @staticmethod
     def _prepare_page_data(
-        pages: List[Dict[str, Any]]
+            pages: List[Dict[str, Any]]
     ) -> Tuple[Dict[int, Tuple[str, List]], Dict[str, Any]]:
         """
         Prepare page data for processing by extracting text and creating mappings.
@@ -700,9 +715,9 @@ class GlinerEntityDetector(BaseEntityDetector):
         return page_texts_and_mappings, redaction_mapping
 
     def _process_text_with_gliner(
-        self,
-        text: str,
-        requested_entities: List[str]
+            self,
+            text: str,
+            requested_entities: List[str]
     ) -> List[Dict[str, Any]]:
         """
         Process text with GLiNER to extract entities with robust error handling.
@@ -751,220 +766,106 @@ class GlinerEntityDetector(BaseEntityDetector):
         return filtered_entities
 
     def _process_paragraph_batch(
-        self,
-        paragraphs: List[str],
-        full_text: str,
-        requested_entities: List[str]
+            self,
+            paragraphs: List[str],
+            full_text: str,
+            requested_entities: List[str]
     ) -> List[Dict[str, Any]]:
         """
-        Refactored version of _process_paragraph_batch to reduce complexity.
-        Splits logic into smaller helper methods.
+        Process a batch of paragraphs by splitting each paragraph into smaller text groups,
+        each containing at most max_chars (800) characters, and then extracting entities from each group
+        using the full list of requested entity types.
+
+        For each paragraph:
+          1. Determine the paragraph's base offset in the full text.
+          2. Split the paragraph into groups (chunks) using _split_into_sentence_groups.
+          3. For each group, compute the absolute offset and process the group with all requested entity types.
+          4. Aggregate and return all detected entities.
 
         Args:
-            paragraphs: List of paragraphs in the batch
-            full_text: The full document text
-            requested_entities: List of entity types to detect
+            paragraphs: A list of paragraph strings extracted from the page.
+            full_text: The complete text content of the page.
+            requested_entities: The full list of entity types to detect.
 
         Returns:
-            List of detected entities across all paragraphs
+            A list of dictionaries representing the detected entities.
+            Each dictionary contains keys: "entity_type", "start", "end", "score", "original_text".
         """
         all_entities = []
-        entity_groups = self._group_requested_entities(requested_entities)
-
-        for local_paragraph in paragraphs:
-            if not local_paragraph.strip():
+        for paragraph in paragraphs:
+            if not paragraph.strip():
                 continue
-            base_offset = full_text.find(local_paragraph)
+            base_offset = full_text.find(paragraph)
             if base_offset == -1:
                 continue
 
-            sentence_groups = self._split_into_sentence_groups(local_paragraph, 350)
+            # Split the paragraph into groups with at most 800 characters.
+            sentence_groups = GLiNERHelper.split_into_sentence_groups(paragraph, 800)
             for group_text in sentence_groups:
-                group_offset = local_paragraph.find(group_text)
+                group_offset = paragraph.find(group_text)
                 if group_offset == -1:
                     continue
                 absolute_offset = base_offset + group_offset
-                group_entities = self._extract_entities_for_group(group_text, entity_groups, absolute_offset)
+                # Process the group_text with the full list of requested entity types.
+                group_entities = self._extract_entities_for_group(group_text, requested_entities, absolute_offset)
                 all_entities.extend(group_entities)
         return all_entities
 
-    @staticmethod
-    def _group_requested_entities(requested_entities: List[str]) -> Dict[str, List[str]]:
-        """
-        Group entity types by their first character (just an example grouping approach).
-
-        Args:
-            requested_entities: List of entity types
-
-        Returns:
-            Dict of {group_key -> [entity_types]}
-        """
-        entity_groups: Dict[str, List[str]] = {}
-        for etype in requested_entities:
-            group_key = etype[0] if etype else "_"
-            entity_groups.setdefault(group_key, []).append(etype)
-        return entity_groups
-
     def _extract_entities_for_group(
-        self,
-        group_text: str,
-        entity_groups: Dict[str, List[str]],
-        absolute_offset: int
+            self,
+            group_text: str,
+            requested_entities: List[str],
+            absolute_offset: int
     ) -> List[Dict[str, Any]]:
         """
-        Extract entities for a group of text given the offset and entity groups.
-        This call is now synchronized to avoid concurrent access issues.
+        Extract entities from a given text group using the full list of requested entity types.
+
+        This method:
+          1. Acquires a lock to ensure thread-safe access to the model.
+          2. Logs debug information about the text group.
+          3. Calls the model's predict_entities method once with all requested entity types.
+          4. Adjusts the start and end offsets of each detected entity by adding the absolute offset.
+          5. Returns a list of detected entity dictionaries.
 
         Args:
-            group_text: The text portion (sentence group) to process.
-            entity_groups: Dict of {group_key -> [entity_types]}.
-            absolute_offset: Base offset for the group in the full text.
+            group_text: The text group (chunk) to process.
+            requested_entities: The full list of entity types to detect.
+            absolute_offset: The starting offset of group_text within the full page text.
 
         Returns:
-            List of detected entities in the text group.
+            A list of dictionaries representing detected entities.
+            Each dictionary includes: "entity_type", "start", "end", "score", "original_text".
         """
         local_entities = []
-
-        # Acquire lock before calling predict_entities to prevent "Already borrowed" errors.
         lock = self._get_model_analyzer_lock()
-        if not lock.acquire(timeout=30.0):
+        if not lock.acquire(timeout=600.0):
             log_warning("[GLINER] Timeout acquiring model analyzer lock")
             return local_entities
 
         try:
-            for group_key, entity_types in entity_groups.items():
-                if not group_text.strip():
-                    continue
-                try:
-                    group_entities = self.model.predict_entities(group_text, entity_types, threshold=0.5)
-                except Exception as predict_error:
-                    SecurityAwareErrorHandler.log_processing_error(
-                        predict_error, "gliner_predict_entities", f"group_{hash(group_text) % 10000}"
-                    )
-                    continue
-
-                for entity in group_entities:
-                    entity_dict = {
-                        "entity_type": entity.get("label", "UNKNOWN").upper(),
-                        "start": absolute_offset + entity.get("start", 0),
-                        "end": absolute_offset + entity.get("end", 0),
-                        "score": entity.get("score", 0.5),
-                        "original_text": entity.get("text", "")
-                    }
-                    local_entities.append(entity_dict)
+            log_info(
+                f"[DEBUG] Processing group_text (length {len(group_text)}): '{group_text[:100]}...' for entity_types: {requested_entities}")
+            # Process the group_text with all requested entity types in one call.
+            group_entities = self.model.predict_entities(group_text, requested_entities, threshold=0.5)
+            for entity in group_entities:
+                entity_dict = {
+                    "entity_type": entity.get("label", "UNKNOWN").upper(),
+                    "start": absolute_offset + entity.get("start", 0),
+                    "end": absolute_offset + entity.get("end", 0),
+                    "score": entity.get("score", 0.5),
+                    "original_text": entity.get("text", "")
+                }
+                local_entities.append(entity_dict)
+        except Exception as predict_error:
+            log_error(
+                f"[DEBUG] Error in predict_entities for group_text (length {len(group_text)}): '{group_text[:100]}...'. Error: {predict_error}")
+            SecurityAwareErrorHandler.log_processing_error(
+                predict_error, "gliner_predict_entities", f"group_{hash(group_text) % 10000}"
+            )
         finally:
             lock.release()
 
         return local_entities
-
-    def _split_into_sentence_groups(self, text: str, max_tokens: int) -> List[str]:
-        """
-        Refactored version of _split_into_sentence_groups to reduce complexity.
-        Splits text into sentences and then groups them by token count.
-
-        Args:
-            text: Text to split
-            max_tokens: Max tokens per group
-
-        Returns:
-            List of text groups
-        """
-        sentences = self._tokenize_sentences(text)
-        return self._build_sentence_groups(sentences, max_tokens)
-
-    @staticmethod
-    def _tokenize_sentences(text: str) -> List[str]:
-        """
-        Split text into sentences by punctuation-based regex.
-
-        Args:
-            text: The input text
-
-        Returns:
-            A list of sentences
-        """
-        raw_sentences = re.split(r'(?<=[.!?])\s+', text)
-        return [s.strip() for s in raw_sentences if s.strip()]
-
-    def _build_sentence_groups(self, sentences: List[str], max_tokens: int) -> List[str]:
-        """
-        Build sentence groups that do not exceed the max token count.
-
-        Args:
-            sentences: List of sentences.
-            max_tokens: Maximum tokens per group.
-
-        Returns:
-            List of grouped sentences.
-        """
-        groups = []
-        current_group: List[str] = []
-        current_token_count = 0
-
-        for sent in sentences:
-            est = self._estimate_token_count(sent, 0.2)
-            if est > max_tokens:
-                # If this sentence alone exceeds the limit, flush any current group and chunk it
-                if current_group:
-                    groups.append(" ".join(current_group))
-                    current_group = []
-                    current_token_count = 0
-                groups.extend(self._chunk_large_sentence(sent, max_tokens))
-                continue
-
-            if current_token_count + est > max_tokens and current_group:
-                groups.append(" ".join(current_group))
-                current_group = [sent]
-                current_token_count = est
-            else:
-                current_group.append(sent)
-                current_token_count += est
-
-        if current_group:
-            groups.append(" ".join(current_group))
-        return groups
-
-    def _chunk_large_sentence(self, sentence: str, max_tokens: int) -> List[str]:
-        """
-        Split an overly-long sentence into multiple chunks that do not exceed max_tokens.
-
-        Args:
-            sentence: The sentence to split.
-            max_tokens: Maximum tokens per chunk.
-
-        Returns:
-            List of smaller text chunks.
-        """
-        chunks = []
-        current_chunk = []
-        current_count = 0
-        for word in sentence.split():
-            tokens = self._estimate_token_count(word, 0.0)
-            if current_count + tokens > max_tokens and current_chunk:
-                chunks.append(" ".join(current_chunk))
-                current_chunk = [word]
-                current_count = tokens
-            else:
-                current_chunk.append(word)
-                current_count += tokens
-        if current_chunk:
-            chunks.append(" ".join(current_chunk))
-        return chunks
-
-    @staticmethod
-    def _estimate_token_count(text: str, factor: float) -> int:
-        """
-        Estimate token count by splitting on whitespace and adding a factor.
-
-        Args:
-            text: The input text.
-            factor: Additional multiplier factor to approximate tokens.
-
-        Returns:
-            Approximate token count.
-        """
-        base_tokens = len(text.split())
-        return base_tokens + max(3, int(base_tokens * factor))
 
     def _filter_norwegian_pronouns(self, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -990,26 +891,6 @@ class GlinerEntityDetector(BaseEntityDetector):
                     continue
             filtered_entities.append(ent)
         return filtered_entities
-
-    def _convert_to_entity_dict(self, entity: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Convert a GLiNER entity to a standardized dictionary format.
-
-        Args:
-            entity: GLiNER entity dictionary
-
-        Returns:
-            Standardized entity dictionary
-        """
-        entity_dict = {
-            "entity_type": entity.get("entity_type", "UNKNOWN"),
-            "start": entity.get("start", 0),
-            "end": entity.get("end", 0),
-            "score": float(entity.get("score", 0.5))
-        }
-        if "original_text" in entity:
-            entity_dict["original_text"] = entity["original_text"]
-        return entity_dict
 
     def get_status(self) -> Dict[str, Any]:
         """
@@ -1043,10 +924,13 @@ class GlinerEntityDetector(BaseEntityDetector):
             "local_files_only": self.local_files_only,
             "model_dir_path": self.model_dir_path,
             "model_directory_exists": os.path.isdir(self.model_dir_path) if self.model_dir_path else False,
-            "model_files": os.listdir(self.model_dir_path) if self.model_dir_path and os.path.isdir(self.model_dir_path) else [],
+            "model_files": os.listdir(self.model_dir_path) if self.model_dir_path and os.path.isdir(
+                self.model_dir_path) else [],
             "config_files": {
-                CONFIG_FILENAME: os.path.exists(os.path.join(self.model_dir_path, CONFIG_FILENAME)) if self.model_dir_path else False,
-                GLINER_CONFIG_FILENAME: os.path.exists(os.path.join(self.model_dir_path, GLINER_CONFIG_FILENAME)) if self.model_dir_path else False
+                CONFIG_FILENAME: os.path.exists(
+                    os.path.join(self.model_dir_path, CONFIG_FILENAME)) if self.model_dir_path else False,
+                GLINER_CONFIG_FILENAME: os.path.exists(
+                    os.path.join(self.model_dir_path, GLINER_CONFIG_FILENAME)) if self.model_dir_path else False
             },
             "global_initializing": GlinerEntityDetector._global_initializing,
             "global_initialization_time": GlinerEntityDetector._global_initialization_time
