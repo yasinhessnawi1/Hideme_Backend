@@ -457,7 +457,7 @@ class HybridEntityDetector(EntityDetector):
     def detect_sensitive_data(
         self,
         extracted_data: Dict[str, Any],
-        requested_entities: Optional[List[str]] = None
+        requested_entities: Optional[List[str]] = None,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Detect sensitive entities using multiple detection engines (sync wrapper).
