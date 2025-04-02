@@ -5,7 +5,7 @@ This module provides functions to sanitize and standardize the output from
 entity detection engines, removing duplicate entities and ensuring consistent
 formatting for API responses.
 """
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import time
 from collections import defaultdict
 
@@ -211,3 +211,59 @@ def count_entities_per_page(redaction_mapping: Dict[str, Any]) -> Dict[str, int]
         page_counts[f"page_{page_num}"] = len(sensitive_items)
 
     return page_counts
+
+
+def replace_key_in_dict(d: dict, old_key: str, new_key: str, new_value: any) -> dict:
+    """
+    Creates a new dictionary replacing old_key with new_key (and new_value)
+    while preserving key order.
+    """
+    new_dict = {}
+    for current_key, current_val in d.items():
+        if current_key == old_key:
+            new_dict[new_key] = new_value
+        else:
+            new_dict[current_key] = current_val
+    return new_dict
+
+
+def process_item(item: dict, engine_name: str) -> dict:
+    """
+    Processes an individual dictionary. If 'original_text' exists,
+    replaces it with 'engine'; otherwise, adds the 'engine' key.
+    """
+    if "original_text" in item:
+        return replace_key_in_dict(item, "original_text", "engine", engine_name)
+    else:
+        new_item = dict(item)
+        new_item["engine"] = engine_name
+        return new_item
+
+
+def process_items_list(items: list, engine_name: str) -> list:
+    """
+    Processes a list of dictionaries (entities or sensitive items).
+    """
+    return [process_item(item, engine_name) for item in items]
+
+
+def process_pages_list(pages: list, engine_name: str) -> list:
+    """
+    Processes the pages in the redaction mapping by processing each sensitive item.
+    """
+    new_pages = []
+    for page in pages:
+        new_page = {}
+        for page_field, page_val in page.items():
+            if page_field == "sensitive" and isinstance(page_val, list):
+                new_page[page_field] = process_items_list(page_val, engine_name)
+            else:
+                new_page[page_field] = page_val
+        new_pages.append(new_page)
+    return new_pages
+
+
+def replace_original_text_in_redaction(redaction_mapping: dict, engine_name: str = "UNKNOWN") -> dict:
+    if isinstance(redaction_mapping.get("pages"), list):
+        redaction_mapping["pages"] = process_pages_list(redaction_mapping["pages"], engine_name)
+    return redaction_mapping

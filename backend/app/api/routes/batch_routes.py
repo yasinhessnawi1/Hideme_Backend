@@ -79,7 +79,7 @@ async def batch_search_text(
         files: List[UploadFile] = File(...),
         search_terms: str = Form(...),  # Now a single string parameter
         case_sensitive: bool = Form(False),
-        regex: bool = Form(False),
+        ai_search: bool = Form(False),
         max_parallel_files: Optional[int] = Form(4)
 ):
     """
@@ -99,7 +99,7 @@ async def batch_search_text(
             search_terms=search_terms,
             max_parallel_files=max_parallel_files,
             case_sensitive= case_sensitive,
-            regex= regex
+            ai_search= ai_search
         )
         return JSONResponse(content=result)
 
