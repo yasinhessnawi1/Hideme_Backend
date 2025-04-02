@@ -10,7 +10,7 @@ from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
-from backend.app.utils.validation.sanitize_utils import sanitize_detection_output
+from backend.app.utils.validation.sanitize_utils import sanitize_detection_output, replace_original_text_in_redaction
 from backend.app.services.base_detect_service import BaseDetectionService
 
 
@@ -94,6 +94,8 @@ class MashinLearningService(BaseDetectionService):
             success=True
         )
 
+
+        redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name= self.detector_type)
         # Prepare response.
         sanitized_response = sanitize_detection_output(entities, redaction_mapping, processing_times)
         sanitized_response["file_info"] = {

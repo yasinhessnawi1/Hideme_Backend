@@ -99,51 +99,57 @@ class GeminiHelper:
 
         return f"{GEMINI_PROMPT_HEADER}{entities_str}\n\n### **Text to Analyze:**\n{text}\n{GEMINI_PROMPT_FOOTER}"
 
-    async def send_request(self, text: str, requested_entities: Optional[List[str]] = None, max_retries: int = 3) -> \
-    Optional[str]:
+    async def send_request(
+            self,
+            text: str,
+            requested_entities: Optional[List[str]] = None,
+            max_retries: int = 3,
+            raw_prompt: bool = False,
+            system_instruction_override: Optional[str] = None
+    ) -> Optional[str]:
         """
         Send a request to the Gemini API with retry logic and exponential backoff.
 
         Args:
-            text: Text to analyze
-            requested_entities: List of entity types to detect
-            max_retries (int): The maximum number of retry attempts in case of failures.
-                               Defaults to 3.
+            text: Text to analyze.
+            requested_entities: List of entity types to detect.
+            max_retries: Maximum number of retry attempts.
+            raw_prompt: If True, use the provided text as the prompt without modification.
+            system_instruction_override: If provided, use this system instruction instead of the default.
 
         Returns:
-            Raw response text or an empty string if response is restricted (e.g. copyright),
-            or None if request completely failed.
+            Raw response text, an empty string for restricted responses, or None if request failed.
         """
-        prompt = self.create_prompt(text, requested_entities)
-        attempt = 0
+        sys_inst = system_instruction_override or SYSTEM_INSTRUCTION
+        prompt = text if raw_prompt else self.create_prompt(text, requested_entities)
         backoff = 1  # initial backoff in seconds
 
-        while attempt < max_retries:
+        for attempt in range(max_retries):
             try:
-                model = genai.GenerativeModel(
-                    self.model_name,
-                    system_instruction=SYSTEM_INSTRUCTION
-                )
+                model = genai.GenerativeModel(self.model_name, system_instruction=sys_inst)
                 response = await asyncio.to_thread(model.generate_content, prompt)
-                if response and response.text.strip():
-                    logger.info("✅ Successfully received response from Gemini API")
-                    return response.text.strip("`").strip()
-                logger.error("❌ Empty response from Gemini API")
-                return ""
-            except ConnectionError as e:
-                logger.error(f"❌ Network Error communicating with Gemini API: {e}")
+
+                # Invert the logic for checking an empty response to reduce nesting
+                if not response or not response.text.strip():
+                    logger.error("❌ Empty response from Gemini API")
+                    return ""
+
+                logger.info("✅ Successfully received response from Gemini API")
+                return response.text.strip("`").strip()
+
             except Exception as e:
-                message = str(e)
-                if "finish_reason" in message and "is 4" in message:
-                    logger.warning(
-                        "⚠️ Gemini refused content due to copyright filtering (finish_reason=4). Returning empty result.")
-                    return None  # Return None
-                logger.error(f"❌ Unexpected error communicating with Gemini API: {e}")
-            attempt += 1
-            if attempt < max_retries:
-                logger.info(f"Retrying after {backoff} seconds (attempt {attempt + 1} of {max_retries})...")
+                # Handle all exceptions here, then branch if needed
+                if isinstance(e, ConnectionError):
+                    logger.error(f"❌ Network Error communicating with Gemini API: {e}")
+                elif "finish_reason" in str(e) and "is 4" in str(e):
+                    logger.warning("⚠️ Gemini refused content due to copyright filtering. Returning empty result.")
+                    return None
+
+            if attempt < max_retries - 1:
+                logger.info(f"Retrying after {backoff} seconds (attempt {attempt + 2} of {max_retries})...")
                 time.sleep(backoff)
                 backoff *= 2
+
         return None
 
     def parse_response(self, response: Optional[str]) -> Optional[Dict[str, Any]]:
