@@ -12,70 +12,91 @@ from backend.app.configs.presidio_config import PRESIDIO_AVAILABLE_ENTITIES
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 
 
-def check_all_option(entity_list):
+# Utility functions for entity validation
+
+def check_all_option(entity_list: List[str], entity_type: str) -> List[str]:
+    """
+    Expand ALL options for the specified entity type.
+
+    Args:
+        entity_list: List of entities that may contain ALL options
+        entity_type: Type of entities ('presidio', 'gliner', or 'gemini')
+
+    Returns:
+        Expanded list with ALL options replaced by their respective entities
+    """
     new_list = []
     for entity in entity_list:
-        if entity == "ALL_PRESIDIO":
+        if entity == "ALL_PRESIDIO" and entity_type == "presidio":
             new_list.extend(PRESIDIO_AVAILABLE_ENTITIES)
-        elif entity == "ALL_GEMINI":
+        elif entity == "ALL_GEMINI" and entity_type == "gemini":
             new_list.extend(list(GEMINI_AVAILABLE_ENTITIES.keys()))
-        elif entity == "ALL_GLINER":
+        elif entity == "ALL_GLINER" and entity_type == "gliner":
             new_list.extend(GLINER_AVAILABLE_ENTITIES)
         else:
             new_list.append(entity)
     return new_list
 
 
-
 def validate_requested_entities(
-        requested_entities: Optional[str],
-        labels: Optional[List[str]] = None
-) -> List[str]:
+        requested_entities: Optional[str]
+) -> List[List[str]]:
     """
-    Validate and parse requested entities.
+    Validate and parse requested entities for all detector types.
 
     Args:
         requested_entities: JSON string of entity types to detect
-        labels: Optional list of valid entity labels for validation
+                           (combined for all detectors)
 
     Returns:
-        List of validated entity types
+        List of three lists: [presidio_entities, gliner_entities, gemini_entities]
 
     Raises:
         HTTPException: If validation fails
     """
     if not requested_entities:
-        log_warning("[OK]No specific entities requested, using defaults")
-        return []
+        log_warning("[OK] No specific entities requested, using defaults")
+        return [[], [], []]
 
     try:
         entity_list = json.loads(requested_entities)
-        entity_list = check_all_option(entity_list)
 
-        # If specific labels are provided, validate against them
-        if labels:
-            available_entities = labels
-            for entity in entity_list:
-                if entity not in available_entities:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Invalid entity type: {entity}. Available entities: {available_entities}"
-                    )
-        # Otherwise validate against standard entity lists
-        else:
-            available_entities = list(GEMINI_AVAILABLE_ENTITIES.keys()) + PRESIDIO_AVAILABLE_ENTITIES + GLINER_AVAILABLE_ENTITIES
-            for entity in entity_list:
-                if entity not in available_entities:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Invalid entity type: {entity}. Available entities: {available_entities}"
-                    )
+        # Initialize lists for each detector type
+        presidio_entities = []
+        gliner_entities = []
+        gemini_entities = []
 
-        log_info(f"[OK] Validated entity list: {entity_list}")
-        return entity_list
+        # Process and validate each entity
+        for entity in entity_list:
+            if entity in PRESIDIO_AVAILABLE_ENTITIES or entity == "ALL_PRESIDIO":
+                presidio_entities.append(entity)
+            elif entity in GLINER_AVAILABLE_ENTITIES or entity == "ALL_GLINER":
+                gliner_entities.append(entity)
+            elif entity in GEMINI_AVAILABLE_ENTITIES.keys() or entity == "ALL_GEMINI":
+                gemini_entities.append(entity)
+            else:
+                available_entities = (
+                        list(GEMINI_AVAILABLE_ENTITIES.keys()) +
+                        PRESIDIO_AVAILABLE_ENTITIES +
+                        GLINER_AVAILABLE_ENTITIES +
+                        ["ALL_PRESIDIO", "ALL_GLINER", "ALL_GEMINI"]
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid entity type: {entity}. Available entities: {available_entities}"
+                )
+
+        # Expand ALL options for each detector type
+        presidio_entities = check_all_option(presidio_entities, "presidio")
+        gliner_entities = check_all_option(gliner_entities, "gliner")
+        gemini_entities = check_all_option(gemini_entities, "gemini")
+
+        log_info(
+            f"[OK] Validated entity lists - Presidio: {presidio_entities}, GLiNER: {gliner_entities}, Gemini: {gemini_entities}")
+        return [presidio_entities, gliner_entities, gemini_entities]
 
     except json.JSONDecodeError:
-        log_error("[OK]Invalid JSON format in requested_entities")
+        log_error("[ERROR] Invalid JSON format in requested_entities")
         raise HTTPException(status_code=400, detail="Invalid JSON format in requested_entities")
 
 

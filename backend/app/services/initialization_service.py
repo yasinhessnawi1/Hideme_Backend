@@ -281,7 +281,7 @@ class InitializationService:
             self._update_usage_metrics_no_lock("gemini")
             return self._gemini_detector
         if engine == EntityDetectionEngine.GLINER:
-            key = self._get_gliner_cache_key(config.get("entities", []))
+            key = self._get_gliner_cache_key(GLINER_AVAILABLE_ENTITIES)
             if key in self._gliner_detectors:
                 self._update_usage_metrics_no_lock(f"gliner_{key}")
                 return self._gliner_detectors[key]
@@ -343,14 +343,14 @@ class InitializationService:
         Checks for an existing cache entry; if missing, initializes a new detector,
         evicts if the cache is full, updates usage, then returns it.
         """
-        entities = config.get("entities", [])
-        cache_key = self._get_gliner_cache_key(entities)
+
+        cache_key = self._get_gliner_cache_key(GLINER_AVAILABLE_ENTITIES)
         if cache_key in self._gliner_detectors:
             self._update_usage_metrics_no_lock(f"gliner_{cache_key}")
             return self._gliner_detectors[cache_key]
 
         model_name = config.get("model_name", GLINER_MODEL_NAME)
-        new_det = self._initialize_gliner_detector(model_name, entities)
+        new_det = self._initialize_gliner_detector(model_name, GLINER_AVAILABLE_ENTITIES)
         if len(self._gliner_detectors) >= self.max_cache_size:
             self._evict_least_recently_used("gliner")
 
@@ -392,11 +392,11 @@ class InitializationService:
             return self._initialize_gemini_detector()
 
         if engine == EntityDetectionEngine.GLINER:
-            key = self._get_gliner_cache_key(config.get("entities", []))
+            key = self._get_gliner_cache_key(GLINER_AVAILABLE_ENTITIES)
             if key in self._gliner_detectors:
                 return self._gliner_detectors[key]
             model_name = config.get("model_name", GLINER_MODEL_NAME)
-            return self._initialize_gliner_detector(model_name, config.get("entities", []))
+            return self._initialize_gliner_detector(model_name, GLINER_AVAILABLE_ENTITIES)
 
         if engine == EntityDetectionEngine.HYBRID:
             key = self._get_hybrid_cache_key(config)
@@ -490,7 +490,7 @@ class InitializationService:
 
     # 7) Additional Public APIs       #
 
-    def get_initialization_status(self) -> Dict[str, bool]:
+    def get_initialization_status(self) -> dict[str, bool] | None:
         """
         Get the initialization status for all detectors.
 
@@ -509,7 +509,7 @@ class InitializationService:
             log_warning(f"Lock acquisition failed in get_initialization_status: {str(exc)}")
             return dict(self._initialization_status)
 
-    def get_usage_metrics(self) -> Dict[str, Any]:
+    def get_usage_metrics(self) -> dict[str, dict[Any, Any]] | dict[str, dict[Any, Any]] | None:
         """
         Get usage metrics for all detectors.
 
@@ -537,7 +537,7 @@ class InitializationService:
             log_error(f"Error getting usage metrics: {str(exc)}")
             return {"presidio": {}, "gemini": {}, "gliner": {}}
 
-    def check_health(self) -> Dict[str, Any]:
+    def check_health(self) -> dict[str, str] | dict[str, str | int | None | dict[str, bool] | Any] | None:
         """
         Check the health status of all detector caches.
 

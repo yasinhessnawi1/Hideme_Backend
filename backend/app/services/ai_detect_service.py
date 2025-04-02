@@ -11,7 +11,7 @@ from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
-from backend.app.utils.validation.sanitize_utils import sanitize_detection_output
+from backend.app.utils.validation.sanitize_utils import sanitize_detection_output, replace_original_text_in_redaction
 from backend.app.services.base_detect_service import BaseDetectionService
 
 
@@ -82,8 +82,9 @@ class AIDetectService(BaseDetectionService):
             success=True
         )
 
-        # Prepare response.
+        redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name="gemini")
         response_payload = sanitize_detection_output(entities, redaction_mapping, processing_times)
+
         response_payload["file_info"] = {
             "filename": file.filename,
             "content_type": file.content_type,

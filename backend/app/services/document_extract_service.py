@@ -16,6 +16,7 @@ from backend.app.utils.validation.file_validation import validate_mime_type, val
 # Define maximum allowed PDF size (in bytes)
 MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024  # e.g. 10 MB
 
+
 class DocumentExtractService:
     """
     Service that encapsulates all steps for extracting text with positions from a PDF file.
@@ -54,6 +55,9 @@ class DocumentExtractService:
 
         # Step 6: Apply data minimization.
         extracted_data = minimize_extracted_data(extracted_data)
+
+        # Step 6.5: Remove the actual text from the extracted data.
+        extracted_data = self._remove_text_from_extracted_data(extracted_data)
 
         # Step 7: Add performance statistics.
         total_time = time.time() - start_time
@@ -106,7 +110,8 @@ class DocumentExtractService:
     @staticmethod
     def _validate_mime(file: UploadFile, operation_id: str) -> Optional[JSONResponse]:
         if not validate_mime_type(file.content_type, ["application/pdf"]):
-            log_warning(f"[SECURITY] Unsupported file type attempted: {file.content_type} [operation_id={operation_id}]")
+            log_warning(
+                f"[SECURITY] Unsupported file type attempted: {file.content_type} [operation_id={operation_id}]")
             return JSONResponse(status_code=415, content={"detail": "Only PDF files are supported"})
         return None
 
@@ -115,15 +120,16 @@ class DocumentExtractService:
         file_read_start = time.time()
         content = await file.read()
         elapsed = time.time() - file_read_start
-        log_info(f"[SECURITY] File read completed in {elapsed:.3f}s. Size: {len(content) / 1024 :.1f}KB [operation_id={operation_id}]")
+        log_info(
+            f"[SECURITY] File read completed in {elapsed:.3f}s. Size: {len(content) / 1024 :.1f}KB [operation_id={operation_id}]")
         return content, elapsed
 
     @staticmethod
     def _validate_file_size(content: bytes, operation_id: str) -> Optional[JSONResponse]:
         if len(content) > MAX_PDF_SIZE_BYTES:
             log_warning(
-                f"[SECURITY] PDF size exceeds limit: {len(content)/(1024*1024):.2f}MB > "
-                f"{MAX_PDF_SIZE_BYTES/(1024*1024)}MB [operation_id={operation_id}]"
+                f"[SECURITY] PDF size exceeds limit: {len(content) / (1024 * 1024):.2f}MB > "
+                f"{MAX_PDF_SIZE_BYTES / (1024 * 1024)}MB [operation_id={operation_id}]"
             )
             return JSONResponse(
                 status_code=413,
@@ -142,5 +148,16 @@ class DocumentExtractService:
             return extracted_data, None
         except Exception as e:
             log_error(f"[SECURITY] Error extracting text: {str(e)} [operation_id={operation_id}]")
-            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(e, "pdf_text_extraction", 500, filename)
+            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(e, "pdf_text_extraction",
+                                                                                              500, filename)
             return None, JSONResponse(status_code=status_code, content=error_response)
+
+    @staticmethod
+    def _remove_text_from_extracted_data(extracted_data: dict) -> dict:
+        """
+        Remove the actual text from each word in the extracted pages.
+        """
+        for page in extracted_data.get("pages", []):
+            for word in page.get("words", []):
+                word.pop("text", None)
+        return extracted_data

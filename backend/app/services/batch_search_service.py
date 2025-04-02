@@ -25,7 +25,7 @@ class BatchSearchService:
             search_terms: Union[str, List[str]],
             max_parallel_files: Optional[int] = None,
             case_sensitive: bool = False,
-            regex: bool = False
+            ai_search: bool = False
     ) -> Dict[str, Any]:
         """
         Extracts text from provided PDF files and searches for the given terms.
@@ -36,7 +36,7 @@ class BatchSearchService:
             search_terms: A string or list of strings with the search terms.
             max_parallel_files: Maximum number of files to process in parallel.
             case_sensitive: Whether the search should be case_sensitive.
-            regex: Whether to perform a regex-based search (placeholder for now).
+            ai_search : Whether to perform ai_search-based search (placeholder for now).
 
         Returns:
             A dictionary with batch_summary, file_results, and debug information.
@@ -77,8 +77,8 @@ class BatchSearchService:
         # Process each file's extraction result.
         for i, metadata in enumerate(file_metadata):
             try:
-                result_data, success_flag, fail_flag, match_count = BatchSearchService._process_single_file_result(
-                    i, metadata, pdf_indices, extraction_map, search_words, case_sensitive, regex
+                result_data, success_flag, fail_flag, match_count = await BatchSearchService._process_single_file_result(
+                    i, metadata, pdf_indices, extraction_map, search_words, case_sensitive, ai_search
                 )
                 file_results.append(result_data)
                 successful += success_flag
@@ -195,34 +195,15 @@ class BatchSearchService:
         return [w.strip() for w in s.split() if w.strip()]
 
     @staticmethod
-    def _process_single_file_result(
+    async def _process_single_file_result(
             index: int,
             metadata: Dict[str, Any],
             pdf_indices: List[int],
             extraction_map: Dict[int, Any],
             search_words: List[str],
             case_sensitive: bool,
-            regex: bool
+            ai_search: bool
     ) -> Tuple[Dict[str, Any], int, int, int]:
-        """
-        Processes a single file's extraction result.
-
-        Args:
-            index: The index of the file in the metadata list.
-            metadata: Metadata dictionary for the file.
-            pdf_indices: List of indices for files that were successfully read.
-            extraction_map: Mapping from file index to extraction result.
-            search_words: List of search words to look for.
-            case_sensitive: Whether the search is case_sensitive.
-            regex: Whether to use regex (placeholder for now).
-
-        Returns:
-            A tuple containing:
-              - The result dictionary for the file.
-              - Success flag (1 if successful, 0 otherwise).
-              - Failure flag (1 if failed, 0 otherwise).
-              - Total matches found in the file.
-        """
         if metadata.get("status") == "error":
             return ({
                         "file": metadata["original_name"],
@@ -245,8 +226,9 @@ class BatchSearchService:
                     }, 0, 1, 0)
         try:
             searcher = PDFSearcher(result)
-            # Pass the new parameters to the searcher.
-            search_result = searcher.search_terms(search_words, case_sensitive=case_sensitive, regex=regex)
+            # Await the async search_terms call.
+            search_result = await searcher.search_terms(search_words, case_sensitive=case_sensitive,
+                                                        ai_search=ai_search)
             return ({
                         "file": metadata["original_name"],
                         "status": "success",
