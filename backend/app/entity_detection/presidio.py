@@ -150,11 +150,11 @@ class PresidioEntityDetector(BaseEntityDetector):
             log_info(f"[DEBUG] Combined entities before filtering [Presidio]: {len(combined_entities)}")
 
             # 3. Filter the final entity list.
-            final_entities = BaseEntityDetector.filter_entities_by_score(combined_entities, threshold=0.85)
+            final_entities = BaseEntityDetector.filter_entities_by_score(combined_entities, threshold=0.5)
             log_info(f"[DEBUG] Final entities after filtering (score >= 0.85) [Presidio]: {len(final_entities)}")
 
             # 4. Also filter the redaction mapping.
-            redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping, threshold=0.85)
+            redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping, threshold=0.5)
 
             self._log_detection_performance(combined_entities, redaction_mapping, pages, total_time)
 

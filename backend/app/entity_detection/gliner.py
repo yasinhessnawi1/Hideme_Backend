@@ -556,11 +556,11 @@ class GlinerEntityDetector(BaseEntityDetector):
 
             log_info(f"[DEBUG] Combined entities before filtering [GLiNER]: {len(combined_results)}")
             # 3. Filter the final entity list.
-            filter_final_entities = BaseEntityDetector.filter_entities_by_score(combined_results, threshold=0.85)
+            filter_final_entities = BaseEntityDetector.filter_entities_by_score(combined_results, threshold=0.5)
             log_info(f"[DEBUG] Final entities after filtering (score >= 0.85) [GLiNER]: {len(filter_final_entities)}")
 
             # 4. Also filter the redaction mapping.
-            filter_final_redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping, threshold=0.85)
+            filter_final_redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping, threshold=0.5)
 
             return filter_final_entities, filter_final_redaction_mapping
 
