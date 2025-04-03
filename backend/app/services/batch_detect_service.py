@@ -5,15 +5,12 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from fastapi import UploadFile
 
-from backend.app.configs.gemini_config import GEMINI_AVAILABLE_ENTITIES
-from backend.app.configs.gliner_config import GLINER_AVAILABLE_ENTITIES
-from backend.app.configs.presidio_config import PRESIDIO_AVAILABLE_ENTITIES
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.base_detect_service import BaseDetectionService
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.helpers.json_helper import validate_requested_entities
-from backend.app.utils.logging.logger import log_info, log_error, log_warning
+from backend.app.utils.helpers.json_helper import validate_all_engines_requested_entities
+from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_batch_operation
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
@@ -65,7 +62,7 @@ class BatchDetectService(BaseDetectionService):
 
         # Validate and prepare the entity list.
         try:
-            entity_list = validate_requested_entities(requested_entities) if requested_entities else []
+            entity_list = validate_all_engines_requested_entities(requested_entities)
         except Exception as e:
             return SecurityAwareErrorHandler.handle_batch_processing_error(e, "entity_validation", len(files))
 
@@ -225,7 +222,7 @@ class BatchDetectService(BaseDetectionService):
             extracted: Dict[str, Any],
             filename: str,
             file_meta: Dict[str, Any],
-            entity_list: List[List[str]],
+            entity_list: List[str],
             detector: Any,
             detection_engine: EntityDetectionEngine,
             use_presidio: bool,
@@ -305,21 +302,19 @@ class BatchDetectService(BaseDetectionService):
                 "error": str(e)
             }
 
+    @staticmethod
     async def _process_hybrid_detection(
             minimized_extracted: Dict[str, Any],
-            entity_list: List[List[str]],
+            entity_list: List[str],
             detector: Any,
             remove_words: Optional[str] = None
     ) -> Tuple[List[Any], Dict[str, Any]]:
         """
         Process entity detection using a hybrid detection engine that utilizes multiple detectors concurrently.
 
-        This function has been updated to use the new entity list format (list of three lists) and
-        properly route entity lists to the correct detectors.
-
         Args:
             minimized_extracted: The minimized text extracted from a PDF.
-            entity_list: A combined list of entity types to detect.
+            entity_list: A list of entity types to detect.
             detector: A hybrid detector containing multiple individual detectors.
             remove_words: Optional string of words to remove from the detection output.
 
@@ -331,49 +326,20 @@ class BatchDetectService(BaseDetectionService):
         combined_entities = []
         combined_redaction_mapping = {"pages": []}
         try:
-            # Separate the entities by detector type
-            presidio_entities = entity_list[0]
-            gliner_entities = entity_list[1]
-            gemini_entities = entity_list[2]
-
-
-
-            # Build a list of (engine_name, task) tuples for each detector with its appropriate entity list
+            # Build a list of (engine_name, task) tuples for each detector.
             engine_tasks = []
             for individual_detector in detector.detectors:
                 engine_name = type(individual_detector).__name__.lower()
                 if engine_name.endswith("entitydetector"):
                     engine_name = engine_name.replace("entitydetector", "")
+                task = asyncio.to_thread(
+                    individual_detector.detect_sensitive_data,
+                    minimized_extracted,
+                    entity_list
+                )
+                engine_tasks.append((engine_name, task))
 
-                # Determine the appropriate entity list for this detector
-                if "presidio" in engine_name.lower():
-                    detector_entities = presidio_entities
-                    log_info(f"[INFO] Running Presidio detector with {len(detector_entities)} entities")
-                elif "gliner" in engine_name.lower():
-                    detector_entities = gliner_entities
-                    log_info(f"[INFO] Running GLiNER detector with {len(detector_entities)} entities")
-                elif "gemini" in engine_name.lower():
-                    detector_entities = gemini_entities
-                    log_info(f"[INFO] Running Gemini detector with {len(detector_entities)} entities")
-                else:
-                    # Default to an empty list if detector type is unknown
-                    detector_entities = []
-                    log_warning(f"[WARNING] Unknown detector type: {engine_name}")
-
-                # Only process if there are entities to detect for this engine
-                if detector_entities:
-                    task = asyncio.to_thread(
-                        individual_detector.detect_sensitive_data,
-                        minimized_extracted,
-                        detector_entities
-                    )
-                    engine_tasks.append((engine_name, task))
-
-            if not engine_tasks:
-                log_info("[INFO] No valid engine tasks created, no entities to detect")
-                return [], {"pages": []}
-
-            engines_used, tasks = zip(*engine_tasks)
+            engines_used, tasks = zip(*engine_tasks) if engine_tasks else ([], [])
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # Process each detector's result.
@@ -427,7 +393,7 @@ class BatchDetectService(BaseDetectionService):
     @staticmethod
     async def _process_single_detection(
             minimized_extracted: Dict[str, Any],
-            entity_list: List[List[str]],
+            entity_list: List[str],
             detector: Any,
             remove_words: Optional[str] = None
     ) -> Tuple[List[Any], Dict[str, Any]]:
@@ -471,7 +437,7 @@ class BatchDetectService(BaseDetectionService):
             use_presidio: bool = True,
             use_gemini: bool = False,
             use_gliner: bool = False,
-            entity_list: Optional[List[List[str]]] = None
+            entity_list: Optional[List[str]] = None
     ) -> Any:
         """
         Initialize and return an entity detection engine instance.
@@ -496,11 +462,13 @@ class BatchDetectService(BaseDetectionService):
                     "use_gemini": use_gemini,
                     "use_gliner": use_gliner
                 }
-
+                if entity_list:
+                    config["entities"] = entity_list
                 detector = initialization_service.get_detector(detection_engine, config)
             else:
                 if entity_list and detection_engine == EntityDetectionEngine.GLINER:
-                    detector = initialization_service.get_detector(detection_engine, None)
+                    config = {"entities": entity_list}
+                    detector = initialization_service.get_detector(detection_engine, config)
                 else:
                     detector = initialization_service.get_detector(detection_engine, None)
             if detector is None:
