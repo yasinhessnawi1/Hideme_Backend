@@ -132,7 +132,7 @@ variable "db_password" {
 variable "db_deletion_protection" {
   description = "Whether to enable deletion protection for the database"
   type        = bool
-  default     = false #todo: change it to true for production
+  default     = true
 }
 
 variable "alert_email" {
