@@ -8,7 +8,7 @@ from backend.app.configs.gemini_config import (
     AI_SEARCH_SYSTEM_INSTRUCTION,
     AI_SEARCH_GEMINI_AVAILABLE_ENTITIES
 )
-from backend.app.utils.helpers.gemini_helper import GeminiHelper
+from backend.app.utils.helpers.gemini_helper import gemini_helper
 from backend.app.utils.logging.logger import log_debug
 
 
@@ -37,7 +37,7 @@ class PDFSearcher:
             extracted_data (Dict[str, Any]): Extracted data containing pages, words, and metadata.
         """
         self.extracted_data = extracted_data
-        self.gemini_helper = GeminiHelper()
+        self.gemini_helper = gemini_helper
 
     @staticmethod
     def _build_search_set(search_terms: List[str], case_sensitive: bool) -> set:
