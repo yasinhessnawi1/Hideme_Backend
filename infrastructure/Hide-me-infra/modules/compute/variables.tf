@@ -80,6 +80,12 @@ variable "app_port" {
   default     = 8000
 }
 
+variable "go_port" {
+  description = "Port on which the Go application serves traffic"
+  type        = number
+  default     = 8080
+}
+
 variable "target_pools" {
   description = "List of target pool URLs to which instances in the group should be added"
   type        = list(string)
@@ -105,6 +111,12 @@ variable "db_password" {
   description = "Database user password"
   type        = string
   sensitive   = true
+}
+
+variable "db_host" {
+  description = "Database host address"
+  type        = string
+  default     = "localhost"
 }
 
 variable "github_ssh_key" {
@@ -134,6 +146,12 @@ variable "github_repo" {
   default     = "git@github.com:yasinhessnawi1/Hideme_Backend.git"
 }
 
+variable "go_github_repo" {
+  description = "GitHub repository URL for the Go backend code"
+  type        = string
+  default     = "git@github.com:yasinhessnawi1/Hideme_Backend.git"
+}
+
 variable "github_branch" {
   description = "GitHub branch to deploy"
   type        = string
@@ -155,6 +173,12 @@ variable "repo_owner" {
 variable "domain" {
   description = "Domain name for the application"
   type        = string
+}
+
+variable "go_domain" {
+  description = "Domain name for the Go application"
+  type        = string
+  default     = "goapi.hidemeai.com"
 }
 
 variable "ssl_email" {

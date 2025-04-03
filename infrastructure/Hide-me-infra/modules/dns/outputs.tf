@@ -24,6 +24,11 @@ output "api_dns_record" {
   value       = google_dns_record_set.api_a_record.name
 }
 
+output "go_api_dns_record" {
+  description = "The Go API DNS record"
+  value       = google_dns_record_set.go_api_a_record.name
+}
+
 output "apex_dns_record" {
   description = "The apex DNS record"
   value       = google_dns_record_set.apex_a_record.name

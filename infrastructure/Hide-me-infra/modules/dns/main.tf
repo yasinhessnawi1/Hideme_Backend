@@ -38,7 +38,7 @@ resource "google_dns_record_set" "apex_a_record" {
 
 # Create an A record for the API subdomain
 resource "google_dns_record_set" "api_a_record" {
-  name         = "${var.domain_name}."
+  name         = "api.${var.domain_name}."
   project      = var.project
   managed_zone = google_dns_managed_zone.main_zone.name
   type         = "A"
@@ -47,7 +47,16 @@ resource "google_dns_record_set" "api_a_record" {
   rrdatas = [var.load_balancer_ip]
 }
 
+# Create an A record for the Go API subdomain
+resource "google_dns_record_set" "go_api_a_record" {
+  name         = "goapi.${var.domain_name}."
+  project      = var.project
+  managed_zone = google_dns_managed_zone.main_zone.name
+  type         = "A"
+  ttl          = 300
 
+  rrdatas = [var.load_balancer_ip]
+}
 
 # Create MX records for email (if needed)
 resource "google_dns_record_set" "mx_records" {

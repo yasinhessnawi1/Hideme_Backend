@@ -44,7 +44,7 @@ def _init_middlewares(app: FastAPI) -> None:
         "allow_credentials": True,
         "allow_methods": ["POST", "GET"],
         "allow_headers": ["*"],
-        "max_age": 600,  # Cache preflight for 10 minutes
+        "max_age": 1800,  # Cache preflight for 10 minutes
     }
     if os.environ.get("ENVIRONMENT") == "production":
         cors_config["allow_origins"] = [origin for origin in ALLOWED_ORIGINS if
