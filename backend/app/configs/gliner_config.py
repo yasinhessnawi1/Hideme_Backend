@@ -23,14 +23,13 @@ GLINER_AVAILABLE_ENTITIES = [
     "address", "passport number", "email", "credit card number"
     , "date of birth", "bank account number",
     "medication", "tax identification number", "medical condition",
-    "identity card number", "national id number", "ip address", "email address", "iban",
-    "credit card expiration date", "username", "health insurance number", "registration number",
+    "identity card number", "national id number", "ip address", "iban",
+    "credit card expiration date", "username" , "registration number",
     "student id number", "insurance number"
     , "social media handle", "license plate number"
-    , "postal code", "passport_number", "serial number", "vehicle registration number",
-    "fax number", "visa number", "identity document number"
-    , "birth certificate number"
-    , "passport expiration date", "social_security_number"
+    , "postal code","vehicle registration number", "passport_number",
+    "fax number", "visa number"
+
 ]
 
 # Model initialization configuration

@@ -2,10 +2,11 @@ package server
 
 import (
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
 	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/middleware"
@@ -17,21 +18,18 @@ func (s *Server) SetupRoutes() {
 	// Create router
 	r := chi.NewRouter()
 
+	// Get allowed origins from environment or use default values
+	allowedOrigins := getAllowedOrigins()
+
+	// Custom CORS middleware that applies to all routes
+	// This ensures CORS headers are applied properly and consistently
+	r.Use(corsMiddleware(allowedOrigins))
+
 	// Base middleware
 	r.Use(chimiddleware.RequestID)
 	r.Use(middleware.Recovery())
 	r.Use(chimiddleware.RealIP)
 	r.Use(middleware.SecurityHeaders())
-
-	// CORS configuration
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   s.Config.CORS.AllowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Request-ID", "X-API-Key"},
-		ExposedHeaders:   []string{"Link", "X-Request-ID"},
-		AllowCredentials: s.Config.CORS.AllowCredentials,
-		MaxAge:           300, // Maximum value not caught in preflight requests
-	}))
 
 	// Health check and version routes (unprotected)
 	r.Group(func(r chi.Router) {
@@ -69,6 +67,10 @@ func (s *Server) SetupRoutes() {
 				r.Post("/refresh", s.Handlers.AuthHandler.RefreshToken)
 				r.Post("/logout", s.Handlers.AuthHandler.Logout)
 				r.Post("/validate-key", s.Handlers.AuthHandler.ValidateAPIKey)
+
+				// Explicitly handle OPTIONS preflight request for /verify endpoint
+				r.Options("/verify", handlePreflight(allowedOrigins))
+				r.Get("/verify", s.Handlers.AuthHandler.VerifyToken)
 			})
 
 			// Protected auth endpoints
@@ -168,4 +170,91 @@ func (s *Server) SetupRoutes() {
 // GetRouter returns the configured router
 func (s *Server) GetRouter() chi.Router {
 	return s.router.(chi.Router)
+}
+
+// handlePreflight is an explicit handler for OPTIONS preflight requests
+func handlePreflight(allowedOrigins []string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+
+		// Check if the origin is allowed
+		allowed := false
+		for _, allowedOrigin := range allowedOrigins {
+			if allowedOrigin == "*" || allowedOrigin == origin {
+				allowed = true
+				break
+			}
+		}
+
+		if allowed {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-CSRF-Token, X-Request-ID, X-API-Key")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Max-Age", "300")
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// corsMiddleware creates a custom CORS middleware with the specified allowed origins
+func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+
+			// Check if the request's origin is in our allowed list
+			for _, allowedOrigin := range allowedOrigins {
+				if allowedOrigin == "*" || allowedOrigin == origin {
+					// Set CORS headers for all responses, not just OPTIONS
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+
+					// These headers are essential for credentials mode
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+					// For non-OPTIONS requests, just set these headers and continue
+					if r.Method != "OPTIONS" {
+						next.ServeHTTP(w, r)
+						return
+					}
+
+					// Handle OPTIONS preflight requests
+					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+					w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-CSRF-Token, X-Request-ID, X-API-Key")
+					w.Header().Set("Access-Control-Max-Age", "300")
+
+					// Respond to preflight request
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+			}
+
+			// If origin is not allowed, continue without setting CORS headers
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// getAllowedOrigins reads allowed CORS origins from environment variable or falls back to default values
+func getAllowedOrigins() []string {
+	// Check if ALLOWED_ORIGINS is set in environment
+	allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
+
+	// If ALLOWED_ORIGINS is set, use it
+	if allowedOriginsEnv != "" {
+		// Split by comma and trim spaces
+		origins := strings.Split(allowedOriginsEnv, ",")
+		for i, origin := range origins {
+			origins[i] = strings.TrimSpace(origin)
+		}
+		log.Info().Strs("allowed_origins", origins).Msg("Using CORS allowed origins from environment")
+		return origins
+	}
+
+	// Default hardcoded values if environment variable is not set
+	// Include both HTTP and HTTPS for localhost to be safe
+	defaultOrigins := []string{"https://hidemeai.com", "http://localhost:5173", "https://localhost:5173"}
+	log.Info().Strs("allowed_origins", defaultOrigins).Msg("Using default CORS allowed origins")
+	return defaultOrigins
 }
