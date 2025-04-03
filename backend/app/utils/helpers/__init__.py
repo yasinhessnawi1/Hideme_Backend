@@ -6,7 +6,7 @@ document processing system.
 """
 from backend.app.utils.helpers.text_utils import TextUtils, EntityUtils
 from backend.app.utils.helpers.json_helper import (
-    validate_requested_entities,
+    validate_all_engines_requested_entities,
     convert_to_json,
     parse_json
 )
@@ -20,7 +20,7 @@ from backend.app.utils.helpers.gemini_helper import GeminiHelper
 __all__ = [
     "TextUtils",
     "EntityUtils",
-    "validate_requested_entities",
+    "validate_all_engines_requested_entities",
     "convert_to_json",
     "parse_json",
     "get_spacy_model",

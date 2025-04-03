@@ -14,7 +14,7 @@ from typing import Dict, Any, Optional, List
 from backend.app.configs.config_singleton import get_config
 from backend.app.configs.gdpr_config import MAX_DETECTOR_CACHE_SIZE
 from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_AVAILABLE_ENTITIES, GLINER_MODEL_PATH
-from backend.app.entity_detection import EntityDetectionEngine
+from backend.app.entity_detection import EntityDetectionEngine, GlinerEntityDetector
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority, AsyncTimeoutLock
@@ -177,7 +177,6 @@ class InitializationService:
         log_info(f"Initializing GLiNER detector with model {model_name} for entities: {entities}")
         start_time = time.time()
         try:
-            from backend.app.entity_detection.gliner import GlinerEntityDetector
             detector = GlinerEntityDetector(
                 model_name=model_name,
                 entities=entities or GLINER_AVAILABLE_ENTITIES,

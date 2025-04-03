@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from backend.app.document_processing.detection_updater import DetectionResultUpdater
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
-from backend.app.utils.helpers.json_helper import validate_requested_entities
+from backend.app.utils.helpers.json_helper import validate_all_engines_requested_entities
 from backend.app.utils.logging.logger import log_info
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.validation.file_validation import validate_mime_type, validate_file_content_async
@@ -52,18 +52,18 @@ class BaseDetectionService:
             return None, JSONResponse(status_code=status_code, content=error_response)
 
     @staticmethod
-    def process_requested_entities(requested_entities: Optional[str], operation_id: str) -> Tuple[Optional[Any], Optional[JSONResponse]]:
-        if requested_entities:
-            try:
-                entity_list = validate_requested_entities(requested_entities)
-                return entity_list, None
-            except Exception as e:
-                error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-                    e, "entity_validation", 400
-                )
-                error_response["operation_id"] = operation_id
-                return None, JSONResponse(status_code=status_code, content=error_response)
-        return None, None
+    def process_requested_entities(requested_entities: Optional[str], operation_id: str) -> Tuple[
+        Optional[Any], Optional[JSONResponse]]:
+        try:
+            # Call the validator regardless of whether requested_entities is provided.
+            entity_list = validate_all_engines_requested_entities(requested_entities)
+            return entity_list, None
+        except Exception as e:
+            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+                e, "entity_validation", 400
+            )
+            error_response["operation_id"] = operation_id
+            return None, JSONResponse(status_code=status_code, content=error_response)
 
     @classmethod
     def validate_mime(cls, file, operation_id: str) -> Optional[JSONResponse]:
@@ -123,7 +123,6 @@ class BaseDetectionService:
         entity_list, entity_error = BaseDetectionService.process_requested_entities(requested_entities, operation_id)
         if entity_error:
             return None, None, None, None, entity_error
-
         # Step 3: Read file content.
         file_content, read_time = await BaseDetectionService.read_file_content(file, operation_id)
         processing_times["file_read_time"] = read_time

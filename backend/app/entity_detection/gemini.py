@@ -6,10 +6,12 @@ with improved security features, GDPR compliance, and standardized error handlin
 """
 import asyncio
 import time
+import json
 from typing import Dict, Any, List, Optional, Tuple
 
 from backend.app.entity_detection.base import BaseEntityDetector
 from backend.app.utils.parallel.core import ParallelProcessingCore
+from backend.app.utils.helpers.json_helper import validate_gemini_requested_entities
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.helpers.gemini_helper import GeminiHelper
@@ -19,6 +21,7 @@ from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.system_utils.synchronization_utils import AsyncTimeoutLock, LockPriority
+
 
 
 class GeminiEntityDetector(BaseEntityDetector):
@@ -47,9 +50,9 @@ class GeminiEntityDetector(BaseEntityDetector):
         return self._api_lock
 
     async def detect_sensitive_data_async(
-        self,
-        extracted_data: Dict[str, Any],
-        requested_entities: Optional[List[str]] = None
+            self,
+            extracted_data: Dict[str, Any],
+            requested_entities: Optional[List[str]] = None
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Detect sensitive entities in extracted text using the Gemini API
@@ -69,9 +72,53 @@ class GeminiEntityDetector(BaseEntityDetector):
             Tuple of (results_json, redaction_mapping).
         """
         start_time = time.time()
-        minimized_data = minimize_extracted_data(extracted_data)
         operation_type = "gemini_detection"
         document_type = "document"
+
+        # If no specific entities are requested, log a warning and return empty results.
+        if requested_entities is None:
+            log_warning("[Gemini] No specific entities requested, returning empty results")
+            record_keeper.record_processing(
+                operation_type=operation_type,
+                document_type=document_type,
+                entity_types_processed=[],
+                processing_time=0.0,
+                entity_count=0,
+                success=False
+            )
+            return [], {"pages": []}
+
+        # Validate the requested_entities using the Gemini-specific validator.
+        # The validator expects a JSON string; convert the list.
+        try:
+            requested_entities_json = json.dumps(requested_entities)
+            validated_entities = validate_gemini_requested_entities(requested_entities_json)
+        except Exception as e:
+            log_error("[Gemini] Entity validation failed: " + str(e))
+            record_keeper.record_processing(
+                operation_type=operation_type,
+                document_type=document_type,
+                entity_types_processed=requested_entities,
+                processing_time=time.time() - start_time,
+                entity_count=0,
+                success=False
+            )
+            return [], {"pages": []}
+
+        # If after filtering there are no valid Gemini entities, short-circuit processing.
+        if not validated_entities:
+            log_warning("[Gemini] No valid entities remain after filtering, returning empty results")
+            record_keeper.record_processing(
+                operation_type=operation_type,
+                document_type=document_type,
+                entity_types_processed=[],
+                processing_time=time.time() - start_time,
+                entity_count=0,
+                success=False
+            )
+            return [], {"pages": []}
+
+        minimized_data = minimize_extracted_data(extracted_data)
 
         try:
             # 1. Prepare pages and their text mappings.
@@ -83,7 +130,7 @@ class GeminiEntityDetector(BaseEntityDetector):
             combined_entities = await self._process_all_pages_in_parallel(
                 pages,
                 page_texts_and_mappings,
-                requested_entities,
+                validated_entities,
                 redaction_mapping
             )
 
@@ -92,7 +139,7 @@ class GeminiEntityDetector(BaseEntityDetector):
                 pages=pages,
                 combined_entities=combined_entities,
                 redaction_mapping=redaction_mapping,
-                requested_entities=requested_entities,
+                requested_entities=validated_entities,
                 operation_type=operation_type,
                 document_type=document_type,
                 start_time=start_time
@@ -100,12 +147,13 @@ class GeminiEntityDetector(BaseEntityDetector):
 
             log_info(f"[DEBUG] Combined entities before filtering [Gemini]: {len(final_results)}")
 
-            # 3. Filter the final entity list.
+            # 4. Filter the final entity list.
             filter_final_entities = BaseEntityDetector.filter_entities_by_score(final_results, threshold=0.85)
             log_info(f"[DEBUG] Final entities after filtering (score >= 0.85) [Gemini]: {len(filter_final_entities)}")
 
-            # 4. Also filter the redaction mapping.
-            filter_final_redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(final_redaction_mapping, threshold=0.85)
+            # 5. Also filter the redaction mapping.
+            filter_final_redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(
+                final_redaction_mapping, threshold=0.85)
 
             return filter_final_entities, filter_final_redaction_mapping
 

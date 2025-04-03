@@ -6,6 +6,7 @@ improved initialization, GDPR compliance, and standardized error handling.
 """
 
 import asyncio
+import json
 import os
 import shutil
 import time
@@ -15,6 +16,7 @@ from typing import Dict, Any, List, Optional, Tuple
 import torch
 
 from backend.app.utils.helpers.gliner_helper import GLiNERHelper
+from backend.app.utils.helpers.json_helper import validate_gliner_requested_entities
 
 # Attempt to import GLiNER with error handling
 try:
@@ -513,6 +515,38 @@ class GlinerEntityDetector(BaseEntityDetector):
         self._total_calls += 1
         self._last_used = time.time()
 
+        # Validate requested entities if provided; otherwise, use the default for GLiNER.
+        try:
+            if requested_entities is not None:
+                requested_entities_json = json.dumps(requested_entities)
+                validated_entities = validate_gliner_requested_entities(requested_entities_json)
+            else:
+                validated_entities = self.default_entities  # Assume self.default_entities is defined.
+        except Exception as e:
+            log_error("[GLiNER] Entity validation failed: " + str(e))
+            record_keeper.record_processing(
+                operation_type="gliner_detection",
+                document_type="document",
+                entity_types_processed=requested_entities or [],
+                processing_time=time.time() - start_time,
+                entity_count=0,
+                success=False
+            )
+            return [], {"pages": []}
+
+        # If no valid GLiNER entities remain, short-circuit processing.
+        if not validated_entities:
+            log_warning("[GLiNER] No valid entities remain after filtering, returning empty results")
+            record_keeper.record_processing(
+                operation_type="gliner_detection",
+                document_type="document",
+                entity_types_processed=[],
+                processing_time=time.time() - start_time,
+                entity_count=0,
+                success=False
+            )
+            return [], {"pages": []}
+
         try:
             pages = minimized_data.get("pages", [])
             if not pages:
@@ -522,12 +556,9 @@ class GlinerEntityDetector(BaseEntityDetector):
             if not page_texts_and_mappings:
                 return [], {"pages": []}
 
-            local_entities = requested_entities or self.default_entities
+            # Process pages in parallel with GLiNER's asynchronous method.
+            page_results = await self._process_pages_gliner_async(pages, page_texts_and_mappings, validated_entities)
 
-            # Process pages in parallel
-            page_results = await self._process_pages_gliner_async(pages, page_texts_and_mappings, local_entities)
-
-            # Combine results
             combined_results = []
             for local_page_number, (local_page_redaction_info, local_processed_entities) in page_results:
                 if local_page_redaction_info:
@@ -539,12 +570,11 @@ class GlinerEntityDetector(BaseEntityDetector):
             combined_results = self.sanitize_entities(combined_results)
             redaction_mapping["pages"].sort(key=lambda x: x.get("page", 0))
 
-            # Record processing for GDPR compliance
             total_time = time.time() - start_time
             record_keeper.record_processing(
                 operation_type="gliner_detection",
                 document_type="document",
-                entity_types_processed=local_entities,
+                entity_types_processed=validated_entities,
                 processing_time=total_time,
                 entity_count=len(combined_results),
                 success=True
@@ -553,14 +583,13 @@ class GlinerEntityDetector(BaseEntityDetector):
             log_info(f"[PERF] GLiNER detection completed in {total_time:.2f}s")
             log_info(f"[PERF] Found {len(combined_results)} entities across {len(pages)} pages")
             log_sensitive_operation("GLiNER Detection", len(combined_results), total_time, pages=len(pages))
-
             log_info(f"[DEBUG] Combined entities before filtering [GLiNER]: {len(combined_results)}")
-            # 3. Filter the final entity list.
-            filter_final_entities = BaseEntityDetector.filter_entities_by_score(combined_results, threshold=0.85)
-            log_info(f"[DEBUG] Final entities after filtering (score >= 0.85) [GLiNER]: {len(filter_final_entities)}")
 
-            # 4. Also filter the redaction mapping.
-            filter_final_redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping, threshold=0.85)
+            # Filter final results.
+            filter_final_entities = BaseEntityDetector.filter_entities_by_score(combined_results, threshold=0.50)
+            log_info(f"[DEBUG] Final entities after filtering (score >= 0.50) [GLiNER]: {len(filter_final_entities)}")
+            filter_final_redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping,
+                                                                                                  threshold=0.50)
 
             return filter_final_entities, filter_final_redaction_mapping
 
@@ -569,7 +598,7 @@ class GlinerEntityDetector(BaseEntityDetector):
             record_keeper.record_processing(
                 operation_type="gliner_detection",
                 document_type="document",
-                entity_types_processed=requested_entities or [],
+                entity_types_processed=validated_entities,
                 processing_time=error_time,
                 entity_count=0,
                 success=False
@@ -849,7 +878,7 @@ class GlinerEntityDetector(BaseEntityDetector):
             group_entities = self.model.predict_entities(group_text, requested_entities, threshold=0.5)
             for entity in group_entities:
                 entity_dict = {
-                    "entity_type": entity.get("label", "UNKNOWN").upper(),
+                    "entity_type": entity.get("label", "UNKNOWN"),
                     "start": absolute_offset + entity.get("start", 0),
                     "end": absolute_offset + entity.get("end", 0),
                     "score": entity.get("score", 0.5),
@@ -880,14 +909,14 @@ class GlinerEntityDetector(BaseEntityDetector):
         filtered_entities = []
         for ent in entities:
             etype = ent["entity_type"]
-            if etype in {"PERSON", "PER"}:
+            if etype in {"person", "per"}:
                 text_val = ent.get("original_text", "").strip()
                 text_words = text_val.split()
                 if len(text_words) == 1 and text_words[0].lower() in self.norwegian_pronouns:
-                    log_info("[FILTER] Removed Norwegian pronoun incorrectly detected as PERSON")
+                    log_info("[FILTER] Removed Norwegian pronoun incorrectly detected as person")
                     continue
                 if len(text_words) > 1 and all(w.lower() in self.norwegian_pronouns for w in text_words):
-                    log_info("[FILTER] Removed compound Norwegian pronoun incorrectly detected as PERSON")
+                    log_info("[FILTER] Removed compound Norwegian pronoun incorrectly detected as person")
                     continue
             filtered_entities.append(ent)
         return filtered_entities

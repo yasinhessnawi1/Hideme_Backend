@@ -524,7 +524,7 @@ class BaseEntityDetector(EntityDetector, ABC):
         # If the entity is a dict, use dict methods.
         if isinstance(entity, dict):
             result = {
-                "entity_type": entity.get("entity_type", "UNKNOWN").upper(),
+                "entity_type": entity.get("entity_type", "UNKNOWN"),
                 "start": entity.get("start", 0),
                 "end": entity.get("end", 0),
                 "score": float(entity.get("score", 0.5))
@@ -536,7 +536,7 @@ class BaseEntityDetector(EntityDetector, ABC):
         # If the entity has attributes (e.g., a Presidio RecognizerResult), use them.
         if hasattr(entity, "entity_type"):
             return {
-                "entity_type": getattr(entity, "entity_type", "UNKNOWN").upper(),
+                "entity_type": getattr(entity, "entity_type", "UNKNOWN"),
                 "start": getattr(entity, "start", 0),
                 "end": getattr(entity, "end", 0),
                 "score": float(getattr(entity, "score", 0.5))
@@ -545,7 +545,7 @@ class BaseEntityDetector(EntityDetector, ABC):
         # Fallback: attempt to extract attributes generically.
         try:
             return {
-                "entity_type": getattr(entity, "entity_type", "UNKNOWN").upper(),
+                "entity_type": getattr(entity, "entity_type", "UNKNOWN"),
                 "start": getattr(entity, "start", 0),
                 "end": getattr(entity, "end", 0),
                 "score": float(getattr(entity, "score", 0.5))

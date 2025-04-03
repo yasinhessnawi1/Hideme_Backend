@@ -9,7 +9,7 @@ from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.base_detect_service import BaseDetectionService
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.helpers.json_helper import validate_requested_entities
+from backend.app.utils.helpers.json_helper import validate_all_engines_requested_entities
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_batch_operation
 from backend.app.utils.security.processing_records import record_keeper
@@ -62,7 +62,7 @@ class BatchDetectService(BaseDetectionService):
 
         # Validate and prepare the entity list.
         try:
-            entity_list = validate_requested_entities(requested_entities) if requested_entities else []
+            entity_list = validate_all_engines_requested_entities(requested_entities)
         except Exception as e:
             return SecurityAwareErrorHandler.handle_batch_processing_error(e, "entity_validation", len(files))
 
