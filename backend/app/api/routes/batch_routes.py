@@ -186,6 +186,11 @@ async def batch_hybrid_detect_sensitive(
                 status_code=400,
                 content={"detail": "At least one detection engine must be selected"}
             )
+        if not requested_entities:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "At least one entity should be specified or ALL_GEMINI, ALL_GLINER, ALL_PRESIDIO"}
+            )
 
         # Process using the batch processing service
         result = await BatchDetectService.detect_entities_in_files(

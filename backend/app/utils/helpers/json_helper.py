@@ -54,7 +54,7 @@ def validate_requested_entities(
     Raises:
         HTTPException: If validation fails
     """
-    if not requested_entities:
+    if not requested_entities or len(requested_entities) == 0:
         log_warning("[OK] No specific entities requested, using defaults")
         return [[], [], []]
 

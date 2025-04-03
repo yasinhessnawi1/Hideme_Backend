@@ -44,7 +44,7 @@ class AIDetectService(BaseDetectionService):
 
         # Perform detection.
         detection_start = time.time()
-        detection_result, detection_error = await self.perform_detection(detector, minimized_data, entity_list,
+        detection_result, detection_error = await self.perform_detection(detector, minimized_data, entity_list[2] if entity_list else  [],
                                                                          detection_timeout, operation_id)
         if detection_error:
             return detection_error

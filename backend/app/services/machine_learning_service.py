@@ -1,5 +1,5 @@
 import time
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
@@ -38,21 +38,24 @@ class MashinLearningService(BaseDetectionService):
 
         # Minimize extracted data.
         minimized_data = minimize_extracted_data(extracted_data)
-
         # Initialize detector.
         if self.detector_type == "presidio" and hasattr(initialization_service, "get_presidio_detector"):
             detector = initialization_service.get_presidio_detector()
+            detector_entities = entity_list[0] if entity_list else  []
         elif self.detector_type == "gliner" and hasattr(initialization_service, "get_gliner_detector"):
             detector = initialization_service.get_gliner_detector(entity_list)
+            detector_entities = entity_list[1] if entity_list else  []
+
         else:
             return JSONResponse(
                 status_code=400,
                 content={"detail": f"Unsupported detector type: {self.detector_type}"}
             )
 
+
         # Perform detection.
         detection_start = time.time()
-        detection_result, detection_error = await self.perform_detection(detector, minimized_data, entity_list,
+        detection_result, detection_error = await self.perform_detection(detector, minimized_data, detector_entities,
                                                                          detection_timeout=600,
                                                                          operation_id=operation_id)
         if detection_error:
