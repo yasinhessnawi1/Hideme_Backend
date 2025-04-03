@@ -22,12 +22,7 @@ services:
     volumes:
       - ../gobackend/configs:/Hideme_Backend/gobackend/configs
       - goapp_logs:/var/log/hideapp
-    networks:
-      - hideme-network
+
 
 volumes:
   goapp_logs:
-
-networks:
-  hideme-network:
-    driver: bridge

@@ -15,15 +15,6 @@ services:
     # For development, you might mount the code. For production, you might remove or adjust this.
     volumes:
       - .:/Hideme_Backend/backend
-    networks:
-      - hideme-network
-      # Set resource limits to handle larger workloads
-    deploy:
-      resources:
-        limits:
-          memory: 12G  # Increase memory limit to handle large payloads
-        reservations:
-          memory: 512M
       # Configure healthcheck with longer intervals to account for long processing
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/status" ]
