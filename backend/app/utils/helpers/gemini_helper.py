@@ -306,3 +306,5 @@ class GeminiHelper:
             self.cache[key] = result
 
         return result
+
+gemini_helper = GeminiHelper()

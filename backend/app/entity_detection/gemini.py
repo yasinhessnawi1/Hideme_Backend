@@ -14,7 +14,7 @@ from backend.app.utils.parallel.core import ParallelProcessingCore
 from backend.app.utils.helpers.json_helper import validate_gemini_requested_entities
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.helpers.gemini_helper import GeminiHelper
+from backend.app.utils.helpers.gemini_helper import gemini_helper
 from backend.app.utils.helpers.gemini_usage_manager import gemini_usage_manager
 from backend.app.utils.helpers.text_utils import TextUtils
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
@@ -33,7 +33,7 @@ class GeminiEntityDetector(BaseEntityDetector):
     def __init__(self):
         """Initialize the Gemini entity detector."""
         super().__init__()
-        self.gemini_helper = GeminiHelper()
+        self.gemini_helper = gemini_helper
         # Do not create the API lock here; instead, create it lazily to bind it to the correct event loop.
         self._api_lock: Optional[AsyncTimeoutLock] = None
 

@@ -6,6 +6,7 @@ with improved security features, GDPR compliance, and standardized error handlin
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import time
@@ -45,6 +46,7 @@ class PresidioEntityDetector(BaseEntityDetector):
         self._analyzer_lock: Optional[TimeoutLock] = None
         self.analyzer: Optional[AnalyzerEngine] = None
         self.anonymizer: Optional[AnonymizerEngine] = None
+        self.cache = {}  # Add an internal cache for analysis results
 
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         config_dir = os.path.join(base_dir, "configs")
@@ -67,6 +69,12 @@ class PresidioEntityDetector(BaseEntityDetector):
                 timeout=30.0
             )
         return self._analyzer_lock
+
+    @staticmethod
+    def _cache_key(text: str, entities: List[str]) -> str:
+        key_data = text + '|' + ','.join(sorted(entities))
+        return hashlib.md5(key_data.encode('utf-8')).hexdigest()
+
 
     def _initialize_presidio(self) -> None:
         """
@@ -352,6 +360,12 @@ class PresidioEntityDetector(BaseEntityDetector):
         Returns:
             List of recognized entities
         """
+        # Compute a unique cache key based on text and entities.
+        key = self._cache_key(text, entities)
+        if key in self.cache:
+            log_info("[Presidio] ✅ Using cached analysis result")
+            return self.cache[key]
+
         lock = self._get_analyzer_lock()
         acquired = lock.acquire(timeout=30.0)
         if not acquired:
@@ -362,7 +376,11 @@ class PresidioEntityDetector(BaseEntityDetector):
             if self.analyzer is None:
                 log_warning("[WARNING] Presidio analyzer not initialized, returning empty result")
                 return []
-            return self.analyzer.analyze(text=text, language=language, entities=entities)
+                # Run the analysis.
+            result = self.analyzer.analyze(text=text, language=language, entities=entities)
+            # Store the result in the cache.
+            self.cache[key] = result
+            return result
         except Exception as analyze_exc:
             SecurityAwareErrorHandler.log_processing_error(analyze_exc, "presidio_analysis")
             return []

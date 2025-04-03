@@ -758,6 +758,13 @@ class GlinerEntityDetector(BaseEntityDetector):
         Returns:
             List of detected entities
         """
+        # Generate cache key using the helper's method
+        key = GLiNERHelper.get_cache_key(text, requested_entities)
+        cached = GLiNERHelper.get_cached_result(key)
+        if cached is not None:
+            log_info("✅ Using cached GLiNER result")
+            return cached
+
         start_time = time.time()
         if not text or len(text.strip()) < 3:
             return []
@@ -792,6 +799,9 @@ class GlinerEntityDetector(BaseEntityDetector):
         filtered_entities = self._filter_norwegian_pronouns(deduplicated_entities)
         processing_time = time.time() - start_time
         self.total_processing_time += processing_time
+
+        # Store the processed result using the public setter
+        GLiNERHelper.set_cached_result(key, filtered_entities)
         return filtered_entities
 
     def _process_paragraph_batch(
