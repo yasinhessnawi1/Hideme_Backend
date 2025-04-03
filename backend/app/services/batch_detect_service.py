@@ -225,7 +225,7 @@ class BatchDetectService(BaseDetectionService):
             extracted: Dict[str, Any],
             filename: str,
             file_meta: Dict[str, Any],
-            entity_list: List[str],
+            entity_list: List[List[str]],
             detector: Any,
             detection_engine: EntityDetectionEngine,
             use_presidio: bool,
@@ -427,7 +427,7 @@ class BatchDetectService(BaseDetectionService):
     @staticmethod
     async def _process_single_detection(
             minimized_extracted: Dict[str, Any],
-            entity_list: List[str],
+            entity_list: List[List[str]],
             detector: Any,
             remove_words: Optional[str] = None
     ) -> Tuple[List[Any], Dict[str, Any]]:
