@@ -18,6 +18,7 @@ from backend.app.api.routes import (
 )
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.logging.logger import log_info, log_error
+from backend.app.utils.security.caching_middleware import CacheMiddleware
 from backend.app.utils.security.retention_management import retention_manager
 from backend.app.utils.security.rate_limiting import RateLimitingMiddleware, get_rate_limit_config
 
@@ -140,6 +141,9 @@ def create_app() -> FastAPI:
 
     _init_middlewares(app)
     _init_rate_limiting(app)
+
+    # Add the caching middleware for specific paths, now handling POST as well
+    app.add_middleware(CacheMiddleware, paths=["/ai", "/ml", "/batch", "/pdf"], ttl=300)
 
     app.include_router(status_router, tags=["Status"])
     app.include_router(pdf_router, prefix="/pdf", tags=["PDF Processing"])
