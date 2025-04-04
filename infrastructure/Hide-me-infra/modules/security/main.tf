@@ -124,7 +124,7 @@ resource "google_compute_firewall" "allow_backend" {
 
   allow {
     protocol = "tcp"
-    ports    = [var.backend_port]
+    ports    = [var.backend_port, var.go_backend_port]
   }
 
   # Load balancer IP ranges - using Google's documented LB ranges

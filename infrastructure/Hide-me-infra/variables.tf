@@ -79,6 +79,12 @@ variable "backend_port" {
   default     = 8000
 }
 
+variable "go_backend_port" {
+  description = "Port on which the Go backend serves HTTP traffic"
+  type        = number
+  default     = 8080
+}
+
 variable "health_check_port" {
   description = "Port for health checks"
   type        = number
@@ -155,6 +161,12 @@ variable "github_repo" {
   default     = "git@github.com:yasinhessnawi1/Hideme_Backend.git"
 }
 
+variable "go_github_repo" {
+  description = "GitHub repository URL for the Go backend code"
+  type        = string
+  default     = "git@github.com:yasinhessnawi1/Hideme_Backend.git"
+}
+
 variable "github_branch" {
   description = "GitHub branch to deploy"
   type        = string
@@ -185,6 +197,12 @@ variable "domain" {
   type        = string
 }
 
+variable "go_domain" {
+  description = "Domain name for the Go application"
+  type        = string
+  default     = "goapi.hidemeai.com"
+}
+
 variable "ssl_email" {
   description = "Email address for SSL certificate notifications"
   type        = string
@@ -198,5 +216,5 @@ variable "static_ip_name" {
 variable "domain_name" {
   description = "Domain name for the Google-managed SSL certificate"
   type        = string
-  default     = "api.hidemeai.com"
+  default     = "hidemeai.com"
 }

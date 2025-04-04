@@ -100,6 +100,7 @@ output "gemini_api_key_secret_id" {
 }
 
 # Load Balancer Outputs
+# Load Balancer Outputs
 output "load_balancer_ip" {
   description = "The static IP address of the load balancer"
   value       = module.load_balancer.lb_external_ip
@@ -113,8 +114,10 @@ output "load_balancer_name" {
 output "load_balancer_url" {
   description = "The URLs to access the application"
   value = {
-    api_http  = "http://${var.domain}"
-    api_https = "https://${var.domain}"
+    api_http      = "http://${var.domain}"
+    api_https     = "https://${var.domain}"
+    go_api_http   = "http://${var.go_domain}"
+    go_api_https  = "https://${var.go_domain}"
   }
 }
 
@@ -136,6 +139,7 @@ output "server_setup_instructions" {
 }
 
 # Deployment Instructions
+# Deployment Instructions
 output "deployment_instructions" {
   description = "Instructions for connecting your domain to the load balancer"
   value       = <<-EOT
@@ -149,9 +153,9 @@ output "deployment_instructions" {
     3. Once DNS propagation is complete, SSL certificates will be automatically provisioned by Google
 
     4. Your application will be available at:
-       - https://${var.domain} (main site)
+       - https://${var.domain} (main API)
        - https://www.${var.domain} (www subdomain)
-       - https://api.${var.domain} (API endpoint)
+       - https://${var.go_domain} (Go API endpoint)
 
     Note: Certificate provisioning may take up to 24 hours after DNS changes have propagated.
   EOT
