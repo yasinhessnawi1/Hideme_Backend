@@ -179,6 +179,7 @@ variable "repo_owner" {
 variable "domain" {
   description = "Domain name for the application"
   type        = string
+  default = "api.hidemeai.com"
 }
 
 variable "go_domain" {

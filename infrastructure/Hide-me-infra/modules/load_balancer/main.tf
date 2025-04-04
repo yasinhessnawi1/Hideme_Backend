@@ -13,7 +13,6 @@ resource "google_compute_global_address" "lb_static_ip" {
 }
 
 
-
 # Create a Google-managed SSL certificate for the API subdomain
 resource "google_compute_managed_ssl_certificate" "api_certificate" {
   name    = "hide-me-api-ssl-cert-${var.environment}"
@@ -51,12 +50,12 @@ resource "google_compute_health_check" "lb_health_check" {
 
 # Create a backend service for the load balancer
 resource "google_compute_backend_service" "lb_backend_service" {
-  name                  = "hide-me-backend-service-${var.environment}"
-  project               = var.project
-  protocol              = "HTTP"
-  port_name             = "http"
-  timeout_sec           = 1800  # 30 minutes for long-running requests
-  health_checks         = [google_compute_health_check.lb_health_check.id]
+  name      = "hide-me-backend-service-${var.environment}"
+  project   = var.project
+  protocol  = "HTTP"
+  port_name = "http"
+  timeout_sec = 1800  # 30 minutes for long-running requests
+  health_checks = [google_compute_health_check.lb_health_check.id]
   load_balancing_scheme = "EXTERNAL_MANAGED"
 
   # Attach security policy if provided
@@ -73,6 +72,27 @@ resource "google_compute_backend_service" "lb_backend_service" {
   # Configure connection draining with longer timeout
   connection_draining_timeout_sec = 1200  # 10 minutes
 }
+# Create a backend service for the Go API
+resource "google_compute_backend_service" "go_backend_service" {
+  name                  = "hide-me-go-backend-service-${var.environment}"
+  project               = var.project
+  protocol              = "HTTP"
+  port_name = "gohttp"  # This needs to match the named port in your instance group
+  timeout_sec           = 300
+  health_checks = [google_compute_health_check.lb_health_check.id]
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+
+  security_policy = var.security_policy_name != "" ? var.security_policy_name : null
+
+  backend {
+    group           = var.instance_group
+    balancing_mode  = "UTILIZATION"
+    capacity_scaler = 1.0
+    max_utilization = 0.8
+  }
+
+  connection_draining_timeout_sec = 600
+}
 
 # Create host rules and path matchers for different domains
 resource "google_compute_url_map" "lb_url_map" {
@@ -82,20 +102,14 @@ resource "google_compute_url_map" "lb_url_map" {
 
   # Host rule for the API subdomain
   host_rule {
-    hosts        = ["api.${var.domain_name}"]
+    hosts = ["api.${var.domain_name}"]
     path_matcher = "api-paths"
   }
 
   # Host rule for the Go API subdomain
   host_rule {
-    hosts        = ["goapi.${var.domain_name}"]
+    hosts = ["goapi.${var.domain_name}"]
     path_matcher = "go-api-paths"
-  }
-
-  # Host rule for the root domain and www
-  host_rule {
-    hosts        = [var.domain_name, "www.${var.domain_name}"]
-    path_matcher = "root-paths"
   }
 
   # Path matcher for the API subdomain
@@ -107,14 +121,9 @@ resource "google_compute_url_map" "lb_url_map" {
   # Path matcher for the Go API subdomain
   path_matcher {
     name            = "go-api-paths"
-    default_service = google_compute_backend_service.lb_backend_service.id
+    default_service = google_compute_backend_service.go_backend_service.id
   }
 
-  # Path matcher for the root domain
-  path_matcher {
-    name            = "root-paths"
-    default_service = google_compute_backend_service.lb_backend_service.id
-  }
 }
 
 # Create an HTTP target proxy
@@ -126,9 +135,9 @@ resource "google_compute_target_http_proxy" "lb_http_proxy" {
 
 # Create a combined HTTPS target proxy with all certificates
 resource "google_compute_target_https_proxy" "lb_https_proxy" {
-  name             = "hide-me-https-proxy-${var.environment}"
-  project          = var.project
-  url_map          = google_compute_url_map.lb_url_map.id
+  name    = "hide-me-https-proxy-${var.environment}"
+  project = var.project
+  url_map = google_compute_url_map.lb_url_map.id
   ssl_certificates = [
     google_compute_managed_ssl_certificate.api_certificate.id,
     google_compute_managed_ssl_certificate.go_api_certificate.id

@@ -48,6 +48,7 @@ variable "static_ip_name" {
 variable "domain_name" {
   description = "Root domain name without trailing dot (e.g., hidemeai.com)"
   type        = string
+  default = "hidemeai.com"
 }
 
 
