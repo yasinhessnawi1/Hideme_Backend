@@ -173,6 +173,36 @@ def deduplicate_redaction_mapping(redaction_mapping: Dict[str, Any]) -> Dict[str
 
     return sanitized_mapping
 
+def deduplicate_bbox(search_results: List[Dict[str, Any]], precision: int = 1) -> List[Dict[str, Any]]:
+    """
+    Remove duplicate search results based on the bounding box coordinates.
+
+    Two results are considered duplicates if their bounding boxes (x0, y0, x1, y1) are the same
+    (after rounding to a specified precision).
+
+    Args:
+        search_results (List[Dict[str, Any]]): A list of dictionaries, each containing a "bbox" key.
+        precision (int): The number of decimal places to round the coordinates. Default is 1.
+
+    Returns:
+        List[Dict[str, Any]]: A list of deduplicated search result dictionaries.
+    """
+    unique_results = {}
+    for result in search_results:
+        bbox = result.get("bbox")
+        if bbox:
+            # Create a normalized key for the bounding box.
+            bbox_key = (
+                round(float(bbox.get("x0", 0)), precision),
+                round(float(bbox.get("y0", 0)), precision),
+                round(float(bbox.get("x1", 0)), precision),
+                round(float(bbox.get("y1", 0)), precision)
+            )
+            # Only add the result if this bbox_key hasn't been seen yet.
+            if bbox_key not in unique_results:
+                unique_results[bbox_key] = result
+    return list(unique_results.values())
+
 
 def organize_entities_by_type(entities: List[Dict[str, Any]]) -> Dict[str, int]:
     """
