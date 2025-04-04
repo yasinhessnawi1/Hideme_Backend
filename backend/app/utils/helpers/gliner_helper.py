@@ -1,4 +1,5 @@
-from typing import List
+import hashlib
+from typing import List, Optional, Any, Dict
 
 
 class GLiNERHelper:
@@ -9,6 +10,32 @@ class GLiNERHelper:
     and chunk overly long sentences based on a maximum character limit. All methods are designed
     to work with character counts (e.g. maximum group length of 800 characters) rather than word counts.
     """
+    # Global cache for processed text results (module-level)
+    _cache: Dict[str, Any] = {}  # protected cache
+
+    @staticmethod
+    def get_cache_key(text: str, requested_entities: Optional[List[str]] = None) -> str:
+        """
+        Generate a unique cache key based on the input text and requested entities.
+        """
+        key_data = text
+        if requested_entities:
+            key_data += '|' + ','.join(sorted(requested_entities))
+        return hashlib.md5(key_data.encode('utf-8')).hexdigest()
+
+    @staticmethod
+    def get_cached_result(key: str) -> Optional[Any]:
+        """
+        Retrieve a cached result by key.
+        """
+        return GLiNERHelper._cache.get(key)
+
+    @staticmethod
+    def set_cached_result(key: str, value: Any) -> None:
+        """
+        Store a result in the cache with the given key.
+        """
+        GLiNERHelper._cache[key] = value
 
     @staticmethod
     def estimate_char_count(text: str) -> int:

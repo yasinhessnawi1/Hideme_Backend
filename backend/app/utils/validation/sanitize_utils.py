@@ -5,9 +5,9 @@ This module provides functions to sanitize and standardize the output from
 entity detection engines, removing duplicate entities and ensuring consistent
 formatting for API responses.
 """
-from typing import Dict, Any, List, Optional, Tuple
 import time
 from collections import defaultdict
+from typing import Dict, Any, List, Optional
 
 from backend.app.utils.logging.logger import log_info
 

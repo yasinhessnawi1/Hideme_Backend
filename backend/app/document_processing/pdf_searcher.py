@@ -8,7 +8,7 @@ from backend.app.configs.gemini_config import (
     AI_SEARCH_SYSTEM_INSTRUCTION,
     AI_SEARCH_GEMINI_AVAILABLE_ENTITIES
 )
-from backend.app.utils.helpers.gemini_helper import GeminiHelper
+from backend.app.utils.helpers.gemini_helper import gemini_helper
 from backend.app.utils.logging.logger import log_debug
 
 
@@ -37,7 +37,7 @@ class PDFSearcher:
             extracted_data (Dict[str, Any]): Extracted data containing pages, words, and metadata.
         """
         self.extracted_data = extracted_data
-        self.gemini_helper = GeminiHelper()
+        self.gemini_helper = gemini_helper
 
     @staticmethod
     def _build_search_set(search_terms: List[str], case_sensitive: bool) -> set:
@@ -154,10 +154,15 @@ class PDFSearcher:
             page_number = page.get("page")
             words = page.get("words", [])
             mapping, page_text = self._build_page_text_and_mapping(words)
-            prompt = self._build_ai_prompt(search_terms, page_text)
+            # Combine individual search terms into one sentence.
+            combined_query = " ".join(search_terms)
+
+            # Build the prompt using the combined query.
+            prompt = self._build_ai_prompt([combined_query], page_text)
+            # Pass the combined query as a single-element list to requested_entities.
             response = await self.gemini_helper.send_request(
                 prompt,
-                requested_entities=search_terms,
+                requested_entities=[combined_query],
                 raw_prompt=True,
                 system_instruction_override=AI_SEARCH_SYSTEM_INSTRUCTION
             )
@@ -165,7 +170,9 @@ class PDFSearcher:
             page_matches = []
             if parsed_response and "pages" in parsed_response:
                 page_matches = [
-                    {"bbox": token_entity["bbox"]}
+                    {
+                        "bbox": token_entity["bbox"],
+                    }
                     for page_data in parsed_response["pages"]
                     for text_obj in page_data.get("text", [])
                     for entity in text_obj.get("entities", [])
@@ -305,5 +312,5 @@ class PDFSearcher:
                         "score": entity.get("score"),
                         "case_sensitive": case_sensitive
                     })
-                    break
+
         return token_entities
