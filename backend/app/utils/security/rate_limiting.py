@@ -19,7 +19,7 @@ class RateLimitConfig:
             requests_per_minute: int = 60,
             admin_requests_per_minute: int = 120,
             anonymous_requests_per_minute: int = 30,
-            burst_allowance: int = 10,
+            burst_allowance: int = 30,
             redis_url: Optional[str] = None
     ):
         self.requests_per_minute = requests_per_minute
@@ -36,7 +36,7 @@ def get_rate_limit_config() -> RateLimitConfig:
         requests_per_minute=int(os.getenv("RATE_LIMIT_RPM", "60")),
         admin_requests_per_minute=int(os.getenv("ADMIN_RATE_LIMIT_RPM", "120")),
         anonymous_requests_per_minute=int(os.getenv("ANON_RATE_LIMIT_RPM", "30")),
-        burst_allowance=int(os.getenv("RATE_LIMIT_BURST", "10")),
+        burst_allowance=int(os.getenv("RATE_LIMIT_BURST", "30")),
         redis_url=os.getenv("REDIS_URL")
     )
 
