@@ -99,7 +99,7 @@ module "compute" {
   db_connection_name    = module.database.connection_name
   db_name               = var.db_name
   db_user               = var.db_user
-  db_host               = module.database.database_host == "" ? module.database.database_host : var.db_host
+  db_host               = var.db_host
   db_port               = var.db_port
   db_password           = var.db_password
   min_instances         = var.min_instances
