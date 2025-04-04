@@ -51,7 +51,7 @@ resource "google_compute_instance_template" "app_template" {
       dbuser         = var.db_user
       dbpass         = var.db_password
       dbname         = var.db_name
-      dbport         = "3306"
+      dbport         = var.db_port
       dbhost         = var.db_host
       dbconn         = var.db_connection_name
       gemini_api_key = var.gemini_api_key

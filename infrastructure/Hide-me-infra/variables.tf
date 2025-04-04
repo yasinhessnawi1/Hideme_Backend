@@ -49,6 +49,11 @@ variable "disk_size" {
   type        = number
 }
 
+variable "db_port" {
+  description = "Database port"
+  type        = number
+  default = 5432
+}
 variable "db_disk_size" {
   description = "Boot disk size in GB"
   type        = number

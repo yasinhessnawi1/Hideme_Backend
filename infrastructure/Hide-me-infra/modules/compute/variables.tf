@@ -119,6 +119,12 @@ variable "db_host" {
   default     = "localhost"
 }
 
+variable "db_port" {
+  description = "Database port name"
+  type        = string
+
+}
+
 variable "github_ssh_key" {
   description = "SSH private key for GitHub repository access"
   type        = string

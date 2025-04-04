@@ -29,7 +29,6 @@ RUN apk --no-cache add ca-certificates tzdata
 
 # Copy binary from build stage
 COPY --from=builder /Hideme_Backend/gobackend/hideapp .
-COPY --from=builder /Hideme_Backend/gobackend/internal/config ./config
 
 # Create directory for logs
 RUN mkdir -p /var/log/hideapp

@@ -13,6 +13,7 @@ resource "google_compute_global_address" "private_ip_address" {
   address_type  = "INTERNAL"
   prefix_length = 16
   network       = var.network_id
+
 }
 
 # Create a service networking connection for private IP
@@ -38,7 +39,6 @@ resource "google_sql_database_instance" "postgres" {
     disk_size         = var.db_disk_size
     disk_type         = "PD_SSD"
     disk_autoresize   = true
-
     # Backup configuration
     backup_configuration {
       enabled                        = true
