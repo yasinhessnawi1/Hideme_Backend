@@ -59,13 +59,8 @@ resource "google_sql_database_instance" "postgres" {
     ip_configuration {
       ipv4_enabled    = false
       private_network = var.network_id
-      require_ssl     = true
+      require_ssl     = false
 
-      # Do not explicitly add the private subnet CIDR as it's automatically included
-      # authorized_networks {
-      #   name  = "private-subnet"
-      #   value = var.private_subnet_cidr
-      # }
     }
 
     # Database flags
