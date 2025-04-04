@@ -243,6 +243,231 @@ class ResponseCache:
         return self.delete(key)
 
 
+class CacheMiddleware(BaseHTTPMiddleware):
+    """
+    Enhanced middleware for caching GET and POST responses with ETag support and optimized invalidation.
+
+    This middleware intercepts requests whose URL paths start with specified prefixes (e.g., /ai, /ml, /batch, /pdf)
+    and caches the corresponding responses. For POST requests, it builds an asynchronous cache key that normalizes
+    the file content and text fields from multipart/form-data. The middleware supports both GET and POST methods,
+    and caches responses that include content, status code, headers, and media type, all of which expire after a
+    specified TTL (time-to-live).
+
+    Key features:
+      - Generates a unique cache key based on request method, URL, query parameters, and (for POST) request body or
+        normalized multipart form data.
+      - Supports ETag validation: if the client sends an "If-None-Match" header matching the cached ETag, a 304 response
+        is returned immediately.
+      - Uses a thread-safe, lazy-initialized global cache (ResponseCache) to store and retrieve cached responses.
+      - Periodically cleans up expired entries in a background thread.
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        paths: List[str],
+        ttl: int = 300,
+        cache_key_builder: Optional[Callable[[Request], str]] = None,
+        content_hashing: bool = True
+    ):
+        """
+        Initialize the CacheMiddleware.
+
+        Args:
+            app: The FastAPI/Starlette application.
+            paths: List of URL path prefixes for which responses should be cached.
+            ttl: Default time-to-live (in seconds) for cached responses.
+            cache_key_builder: Optional function to build a custom cache key. If not provided, uses
+                               custom_file_cache_key_builder.
+            content_hashing: If True, computes a hash of the response content for ETag generation.
+        """
+        super().__init__(app)
+        self.paths = paths
+        self.ttl = ttl
+        # Use our custom cache key builder for file uploads and text.
+        self.cache_key_builder = cache_key_builder or custom_file_cache_key_builder
+        self.content_hashing = content_hashing
+        self._logger = logging.getLogger("cache_middleware")
+        self._schedule_cleanup()
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        """
+        Intercept the request, attempt to serve a cached response if available, or cache the downstream response.
+
+        For GET and POST requests on the configured path prefixes:
+          - Uses the cache key builder to generate a unique key.
+          - Checks if an ETag from the client matches a cached ETag; if so, returns a 304 Not Modified response.
+          - If a cached response exists and is valid, returns it.
+          - Otherwise, forwards the request to the next handler, caches the successful response,
+            and returns it.
+
+        Args:
+            request: The incoming request.
+            call_next: The next middleware/endpoint callable.
+
+        Returns:
+            A Response object, either from cache or freshly generated.
+        """
+        # Only cache GET and POST methods on specified paths.
+        if request.method not in ["GET", "POST"] or not self._should_cache_path(request.url.path):
+            return await call_next(request)
+
+        try:
+            cache_key = await self.cache_key_builder(request)
+        except Exception as e:
+            self._logger.error(f"Error generating cache key: {e}")
+            return await call_next(request)
+
+        # Check if the client's If-None-Match header matches the cached ETag.
+        if_none_match = request.headers.get("If-None-Match")
+        if if_none_match and response_cache.etags.get(cache_key) == if_none_match:
+            self._logger.debug(f"ETag match for {cache_key}, returning 304 Not Modified")
+            return Response(status_code=304, headers={"ETag": if_none_match})
+
+        cached_response = response_cache.get(cache_key)
+        if cached_response:
+            etag = response_cache.etags.get(cache_key)
+            response = Response(
+                content=cached_response["content"],
+                status_code=cached_response["status_code"],
+                headers=cached_response["headers"],
+                media_type=cached_response["media_type"]
+            )
+            if etag:
+                response.headers["ETag"] = etag
+            self._logger.info("✅ Cache hit")
+            return response
+
+        # Process the request normally.
+        response = await call_next(request)
+        if 200 <= response.status_code < 400:
+            response_body = b""
+            async for chunk in response.body_iterator:
+                response_body += chunk
+
+            content_hash = None
+            if self.content_hashing:
+                content_hash = hashlib.sha256(response_body).hexdigest()
+
+            # Cache the response details.
+            response_cache.set(
+                cache_key,
+                {
+                    "content": response_body,
+                    "status_code": response.status_code,
+                    "headers": dict(response.headers),
+                    "media_type": response.media_type
+                },
+                ttl=self.ttl,
+                content_hash=content_hash
+            )
+
+            new_response = Response(
+                content=response_body,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type=response.media_type
+            )
+            if content_hash:
+                new_response.headers["ETag"] = content_hash
+
+            self._logger.debug(f"Cached new response for {cache_key}")
+            return new_response
+
+        return response
+
+    def _should_cache_path(self, path: str) -> bool:
+        """
+        Determine if the request path should be cached.
+
+        Args:
+            path: The request URL path.
+
+        Returns:
+            True if the path starts with any of the configured prefixes; otherwise, False.
+        """
+        return any(path.startswith(prefix) for prefix in self.paths)
+
+    def _schedule_cleanup(self) -> None:
+        """
+        Schedule periodic cleanup of expired cache entries in a background thread.
+
+        This method starts a daemon thread that sleeps for 60 seconds between cleanups.
+        """
+        import threading
+
+        def cleanup_loop():
+            while True:
+                time.sleep(60)  # Run cleanup every minute.
+                removed = response_cache.cleanup_expired()
+                self._logger.debug(f"Cache cleanup removed {removed} expired items")
+
+        cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
+        cleanup_thread.start()
+
+
+async def custom_file_cache_key_builder(request: Request) -> str:
+    """
+    Custom asynchronous cache key builder that handles multipart/form-data.
+
+    If the request is a POST with multipart/form-data, it extracts file fields and text fields,
+    normalizes them, and computes a hash based on those values. It then resets the request body
+    so that downstream processing can still access it.
+
+    Args:
+        request: The incoming request.
+
+    Returns:
+        A SHA-256 hex digest string representing the cache key.
+    """
+    logger = logging.getLogger("cache_middleware")
+    key_components = [
+        request.method,
+        request.url.path,
+        str(sorted(request.query_params.items())),
+        request.headers.get("Accept", "*/*"),
+        request.headers.get("Accept-Encoding", "identity")
+    ]
+    content_type = request.headers.get("content-type", "")
+    if request.method == "POST" and "multipart/form-data" in content_type.lower():
+        try:
+            # First, read the raw body bytes.
+            raw_body = await request.body()
+            # Parse the form from the raw body.
+            form = await request.form()
+            # Process form fields in sorted order.
+            fields = sorted(form.keys())
+            field_components = []
+            for field in fields:
+                value = form.get(field)
+                if hasattr(value, "filename"):
+                    # It's a file upload: read file content and hash it.
+                    file_content = await value.read()
+                    file_hash = hashlib.sha256(file_content).hexdigest()
+                    field_components.append(f"{field}:{file_hash}")
+                    # Reset the file pointer for downstream usage.
+                    value.file.seek(0)
+                else:
+                    # It's a normal field; use its trimmed string value.
+                    field_components.append(f"{field}:{str(value).strip()}")
+            key_components.append(field_components)
+            # Reset the raw body on the request so downstream handlers can access it.
+            request._body = raw_body
+        except Exception as e:
+            logger.error(f"Error processing multipart form for cache key: {e}")
+            key_components.append("")
+    else:
+        try:
+            body = await request.body()
+            key_components.append(body.hex())
+            request._body = body
+        except Exception as e:
+            logger.error(f"Error reading request body for cache key: {e}")
+            key_components.append("")
+    key_str = json.dumps(key_components, sort_keys=True)
+    key = hashlib.sha256(key_str.encode()).hexdigest()
+    return key
+
 def get_cached_response(key: str) -> Optional[Any]:
     """
     Retrieve a cached response.
@@ -282,164 +507,6 @@ def clear_cached_response(key: str) -> bool:
         True if the entry was cleared; otherwise, False.
     """
     return response_cache.delete(key)
-
-
-class CacheMiddleware(BaseHTTPMiddleware):
-    """
-    Enhanced middleware for caching GET responses with ETag support and optimized invalidation.
-    """
-
-    def __init__(
-        self,
-        app: ASGIApp,
-        paths: List[str],
-        ttl: int = 300,
-        cache_key_builder: Optional[Callable[[Request], str]] = None,
-        content_hashing: bool = True
-    ):
-        """
-        Initialize the cache middleware.
-
-        Args:
-            app: The FastAPI/Starlette application.
-            paths: List of path prefixes to apply caching.
-            ttl: Default TTL in seconds for cached responses.
-            cache_key_builder: Optional function to build custom cache keys.
-            content_hashing: If True, compute a content-based hash for ETag generation.
-        """
-        super().__init__(app)
-        self.paths = paths
-        self.ttl = ttl
-        self.cache_key_builder = cache_key_builder or self._default_cache_key_builder
-        self.content_hashing = content_hashing
-        self._logger = logging.getLogger("cache_middleware")
-        self._schedule_cleanup()
-
-    async def dispatch(self, request: Request, call_next):
-        """
-        Process the request and serve from cache when appropriate.
-
-        For GET requests on configured paths:
-          - If the "If-None-Match" header matches the cached ETag, return 304.
-          - Otherwise, return the cached response if available.
-          - If not cached, call the downstream handler, cache the response if successful, and return it.
-
-        Args:
-            request: The incoming request.
-            call_next: The next middleware/endpoint callable.
-
-        Returns:
-            A Response object.
-        """
-        if request.method != "GET" or not self._should_cache_path(request.url.path):
-            return await call_next(request)
-
-        cache_key = self.cache_key_builder(request)
-        # ETag check: return 304 if client cache is valid.
-        if_none_match = request.headers.get("If-None-Match")
-        if if_none_match and response_cache.etags.get(cache_key) == if_none_match:
-            self._logger.debug(f"ETag match for {cache_key}, returning 304 Not Modified")
-            return Response(status_code=304, headers={"ETag": if_none_match})
-
-        cached_response = response_cache.get(cache_key)
-        if cached_response:
-            etag = response_cache.etags.get(cache_key)
-            response = Response(
-                content=cached_response["content"],
-                status_code=cached_response["status_code"],
-                headers=cached_response["headers"],
-                media_type=cached_response["media_type"]
-            )
-            if etag:
-                response.headers["ETag"] = etag
-            self._logger.debug(f"Cache hit for {cache_key}")
-            return response
-
-        response = await call_next(request)
-        if 200 <= response.status_code < 400:
-            response_body = b""
-            async for chunk in response.body_iterator:
-                response_body += chunk
-
-            content_hash = None
-            if self.content_hashing:
-                content_hash = hashlib.sha256(response_body).hexdigest()
-
-            response_cache.set(
-                cache_key,
-                {
-                    "content": response_body,
-                    "status_code": response.status_code,
-                    "headers": dict(response.headers),
-                    "media_type": response.media_type
-                },
-                ttl=self.ttl,
-                content_hash=content_hash
-            )
-
-            new_response = Response(
-                content=response_body,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type=response.media_type
-            )
-            if content_hash:
-                new_response.headers["ETag"] = content_hash
-
-            self._logger.debug(f"Cached new response for {cache_key}")
-            return new_response
-
-        return response
-
-    def _should_cache_path(self, path: str) -> bool:
-        """
-        Determine if the given request path should be cached.
-
-        Args:
-            path: The request path.
-
-        Returns:
-            True if the path starts with any of the configured prefixes; otherwise, False.
-        """
-        return any(path.startswith(prefix) for prefix in self.paths)
-
-    @staticmethod
-    def _default_cache_key_builder(request: Request) -> str:
-        """
-        Build a default cache key from a request.
-
-        Uses the method, path, sorted query parameters, Accept header, and Accept-Encoding header.
-
-        Args:
-            request: The incoming request.
-
-        Returns:
-            A SHA-256 hex digest string representing the cache key.
-        """
-        key_components = [
-            request.method,
-            request.url.path,
-            str(sorted(request.query_params.items())),
-            request.headers.get("Accept", "*/*"),
-            request.headers.get("Accept-Encoding", "identity")
-        ]
-        return hashlib.sha256(json.dumps(key_components).encode()).hexdigest()
-
-    def _schedule_cleanup(self) -> None:
-        """
-        Schedule periodic cleanup of expired cache entries in a background thread.
-        """
-        import threading
-
-        def cleanup_loop():
-            while True:
-                time.sleep(60)  # Run cleanup every minute.
-                removed = response_cache.cleanup_expired()
-                self._logger.debug(f"Cache cleanup removed {removed} expired items")
-
-        cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
-        cleanup_thread.start()
-
 
 def _get_keys_by_prefix(cache: ResponseCache, prefix: str, timeout: float = 3.0) -> List[str]:
     """
