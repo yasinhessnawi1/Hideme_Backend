@@ -137,7 +137,7 @@ variable "db_password" {
 variable "db_deletion_protection" {
   description = "Whether to enable deletion protection for the database"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "alert_email" {
