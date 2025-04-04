@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // Import MySQL driver
@@ -27,7 +28,12 @@ var (
 func Connect(cfg *config.AppConfig) (*Pool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
+	// load configuration from .env file
+	db_host := os.Getenv("DB_HOST")
+	db_port := os.Getenv("DB_PORT")
+	db_user := os.Getenv("DB_USER")
+	db_password := os.Getenv("DB_PASSWORD")
+	db_name := os.Getenv("DB_NAME")
 	log.Info().
 		Str("host", cfg.Database.Host).
 		Int("port", cfg.Database.Port).
@@ -37,11 +43,11 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 
 	// First, connect without specifying a database
 	rootDSN := fmt.Sprintf(
-		"%s:%s@tcp(%s:%d)/",
-		cfg.Database.User,
-		cfg.Database.Password,
-		cfg.Database.Host,
-		cfg.Database.Port,
+		"%s:%s@tcp(%s:%s)/",
+		db_user,
+		db_password,
+		db_host,
+		db_port,
 	)
 
 	rootDB, err := sql.Open("mysql", rootDSN)
@@ -51,7 +57,7 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 	defer rootDB.Close()
 
 	// Try to create the database if it doesn't exist
-	_, err = rootDB.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", cfg.Database.Name))
+	_, err = rootDB.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", db_name))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create database: %w", err)
 	}

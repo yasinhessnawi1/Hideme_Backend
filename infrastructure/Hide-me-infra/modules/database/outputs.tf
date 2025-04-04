@@ -24,6 +24,11 @@ output "private_ip_address" {
   value       = google_sql_database_instance.postgres.private_ip_address
 }
 
+output "database_port" {
+  value = "${google_sql_database_instance.postgres.}:${var.health_check_port}"
+  description = "The port for the database instance"
+}
+
 output "db_name" {
   description = "The name of the database"
   value       = google_sql_database.database.name
