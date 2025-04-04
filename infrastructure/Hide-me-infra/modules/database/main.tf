@@ -114,7 +114,7 @@ resource "google_sql_database_instance" "postgres" {
 
   # Fixed lifecycle block with static value
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 

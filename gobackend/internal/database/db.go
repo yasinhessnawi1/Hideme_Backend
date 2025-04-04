@@ -2,91 +2,100 @@
 package database
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
-	"os"
-	"time"
+    "context"
+    "database/sql"
+    "fmt"
+    "os"
+    "time"
 
-	_ "github.com/go-sql-driver/mysql" // Import MySQL driver
-	"github.com/rs/zerolog/log"
+    _ "github.com/lib/pq" // Import PostgreSQL driver
+    "github.com/rs/zerolog/log"
 
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
+    "github.com/yasinhessnawi1/Hideme_Backend/internal/config"
 )
 
 // Pool represents a database connection pool
 type Pool struct {
-	*sql.DB
+    *sql.DB
 }
 
 var (
-	// dbPool is the global database connection pool
-	dbPool *Pool
+    // dbPool is the global database connection pool
+    dbPool *Pool
 )
 
 // Connect creates a new database connection pool
 func Connect(cfg *config.AppConfig) (*Pool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	// load configuration from .env file
-	db_host := os.Getenv("DB_HOST")
-	db_port := os.Getenv("DB_PORT")
-	db_user := os.Getenv("DB_USER")
-	db_password := os.Getenv("DB_PASSWORD")
-	db_name := os.Getenv("DB_NAME")
-	log.Info().
-		Str("host", cfg.Database.Host).
-		Int("port", cfg.Database.Port).
-		Str("database", cfg.Database.Name).
-		Str("user", cfg.Database.User).
-		Msg("Connecting to database")
+    // Use a longer timeout for database operations
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
 
-	// First, connect without specifying a database
-	rootDSN := fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/",
-		db_user,
-		db_password,
-		db_host,
-		db_port,
-	)
+    // Get connection details from environment variables with fallbacks to config
+    db_host := os.Getenv("DB_HOST")
+    if db_host == "" {
+        db_host = cfg.Database.Host
+    }
 
-	rootDB, err := sql.Open("mysql", rootDSN)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to root database: %w", err)
-	}
-	defer rootDB.Close()
+    db_port := os.Getenv("DB_PORT")
+    if db_port == "" {
+        db_port = fmt.Sprintf("%d", cfg.Database.Port)
+    }
 
-	// Try to create the database if it doesn't exist
-	_, err = rootDB.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", db_name))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create database: %w", err)
-	}
+    db_user := os.Getenv("DB_USER")
+    if db_user == "" {
+        db_user = cfg.Database.User
+    }
 
-	log.Info().Msgf("Ensured database '%s' exists", cfg.Database.Name)
+    db_password := os.Getenv("DB_PASSWORD")
+    if db_password == "" {
+        db_password = cfg.Database.Password
+    }
 
-	// Now connect to the actual database
-	db, err := sql.Open("mysql", cfg.Database.ConnectionString())
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
+    db_name := os.Getenv("DB_NAME")
+    if db_name == "" {
+        db_name = cfg.Database.Name
+    }
 
-	// Configure connection pool
-	db.SetMaxOpenConns(cfg.Database.MaxConns)
-	db.SetMaxIdleConns(cfg.Database.MinConns)
-	db.SetConnMaxLifetime(1 * time.Hour)
-	db.SetConnMaxIdleTime(30 * time.Minute)
+    log.Info().
+        Str("host", db_host).
+        Str("port", db_port).
+        Str("database", db_name).
+        Str("user", db_user).
+        Msg("Connecting to database")
 
-	// Verify connection
-	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
+    // PostgreSQL connection string
+    connStr := fmt.Sprintf(
+        "host=%s port=%s user=%s password=%s dbname=%s sslmode=disable connect_timeout=15",
+        db_host,
+        db_port,
+        db_user,
+        db_password,
+        db_name,
+    )
 
-	log.Info().Msg("Successfully connected to database")
+    // Connect to the database
+    db, err := sql.Open("postgres", connStr)
+    if err != nil {
+        return nil, fmt.Errorf("failed to connect to database: %w", err)
+    }
 
-	// Create and store the global database pool
-	dbPool = &Pool{DB: db}
-	return dbPool, nil
+    // Configure connection pool
+    db.SetMaxOpenConns(25)
+    db.SetMaxIdleConns(5)
+    db.SetConnMaxLifetime(1 * time.Hour)
+    db.SetConnMaxIdleTime(30 * time.Minute)
+
+    // Verify connection
+    if err := db.PingContext(ctx); err != nil {
+        db.Close()
+        return nil, fmt.Errorf("failed to ping database: %w", err)
+    }
+
+    log.Info().Msg("Successfully connected to database")
+
+    // Create and store the global database pool
+    dbPool = &Pool{DB: db}
+    return dbPool, nil
 }
 
 // Get returns the global database connection pool
