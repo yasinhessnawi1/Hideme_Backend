@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
@@ -28,20 +29,20 @@ type BanListRepository interface {
 	WordExists(ctx context.Context, banListID int64, word string) (bool, error)
 }
 
-// MysqlBanListRepository is a MySQL implementation of BanListRepository
-type MysqlBanListRepository struct {
+// PostgresBanListRepository is a PostgreSQL implementation of BanListRepository
+type PostgresBanListRepository struct {
 	db *database.Pool
 }
 
 // NewBanListRepository creates a new BanListRepository
 func NewBanListRepository(db *database.Pool) BanListRepository {
-	return &MysqlBanListRepository{
+	return &PostgresBanListRepository{
 		db: db,
 	}
 }
 
 // GetByID retrieves a ban list by ID
-func (r *MysqlBanListRepository) GetByID(ctx context.Context, id int64) (*models.BanList, error) {
+func (r *PostgresBanListRepository) GetByID(ctx context.Context, id int64) (*models.BanList, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -49,7 +50,7 @@ func (r *MysqlBanListRepository) GetByID(ctx context.Context, id int64) (*models
 	query := `
         SELECT ban_id, setting_id
         FROM ban_lists
-        WHERE ban_id = ?
+        WHERE ban_id = $1
     `
 
 	// Execute the query
@@ -78,7 +79,7 @@ func (r *MysqlBanListRepository) GetByID(ctx context.Context, id int64) (*models
 }
 
 // GetBySettingID retrieves a ban list by setting ID
-func (r *MysqlBanListRepository) GetBySettingID(ctx context.Context, settingID int64) (*models.BanList, error) {
+func (r *PostgresBanListRepository) GetBySettingID(ctx context.Context, settingID int64) (*models.BanList, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -86,7 +87,7 @@ func (r *MysqlBanListRepository) GetBySettingID(ctx context.Context, settingID i
 	query := `
         SELECT ban_id, setting_id
         FROM ban_lists
-        WHERE setting_id = ?
+        WHERE setting_id = $1
     `
 
 	// Execute the query
@@ -115,18 +116,20 @@ func (r *MysqlBanListRepository) GetBySettingID(ctx context.Context, settingID i
 }
 
 // CreateBanList creates a new ban list for a setting
-func (r *MysqlBanListRepository) CreateBanList(ctx context.Context, settingID int64) (*models.BanList, error) {
+func (r *PostgresBanListRepository) CreateBanList(ctx context.Context, settingID int64) (*models.BanList, error) {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
 	query := `
         INSERT INTO ban_lists (setting_id)
-        VALUES (?)
+        VALUES ($1)
+        RETURNING ban_id
     `
 
 	// Execute the query
-	result, err := r.db.ExecContext(ctx, query, settingID)
+	var banID int64
+	err := r.db.QueryRowContext(ctx, query, settingID).Scan(&banID)
 
 	// Log the query execution
 	utils.LogDBQuery(
@@ -138,16 +141,13 @@ func (r *MysqlBanListRepository) CreateBanList(ctx context.Context, settingID in
 
 	if err != nil {
 		// Check for unique constraint violations
-		if utils.IsDuplicateKeyError(err) {
-			return nil, utils.NewDuplicateError("BanList", "setting_id", settingID)
+		if pqErr, ok := err.(*pq.Error); ok {
+			// 23505 is the PostgreSQL error code for unique_violation
+			if pqErr.Code == "23505" {
+				return nil, utils.NewDuplicateError("BanList", "setting_id", settingID)
+			}
 		}
 		return nil, fmt.Errorf("failed to create ban list: %w", err)
-	}
-
-	// Get the last insert ID
-	banID, err := result.LastInsertId()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get last insert ID: %w", err)
 	}
 
 	banList := &models.BanList{
@@ -164,21 +164,21 @@ func (r *MysqlBanListRepository) CreateBanList(ctx context.Context, settingID in
 }
 
 // Delete removes a ban list and all its words
-func (r *MysqlBanListRepository) Delete(ctx context.Context, id int64) error {
+func (r *PostgresBanListRepository) Delete(ctx context.Context, id int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Execute delete within a transaction to cascade properly
 	return r.db.Transaction(ctx, func(tx *sql.Tx) error {
 		// First delete all words in the ban list
-		wordQuery := "DELETE FROM ban_list_words WHERE ban_id = ?"
+		wordQuery := "DELETE FROM ban_list_words WHERE ban_id = $1"
 		_, err := tx.ExecContext(ctx, wordQuery, id)
 		if err != nil {
 			return fmt.Errorf("failed to delete ban list words: %w", err)
 		}
 
 		// Then delete the ban list itself
-		listQuery := "DELETE FROM ban_lists WHERE ban_id = ?"
+		listQuery := "DELETE FROM ban_lists WHERE ban_id = $1"
 		result, err := tx.ExecContext(ctx, listQuery, id)
 
 		// Log the query execution
@@ -212,7 +212,7 @@ func (r *MysqlBanListRepository) Delete(ctx context.Context, id int64) error {
 }
 
 // GetBanListWords retrieves all words in a ban list
-func (r *MysqlBanListRepository) GetBanListWords(ctx context.Context, banListID int64) ([]string, error) {
+func (r *PostgresBanListRepository) GetBanListWords(ctx context.Context, banListID int64) ([]string, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -220,7 +220,7 @@ func (r *MysqlBanListRepository) GetBanListWords(ctx context.Context, banListID 
 	query := `
         SELECT word
         FROM ban_list_words
-        WHERE ban_id = ?
+        WHERE ban_id = $1
         ORDER BY word
     `
 
@@ -262,7 +262,7 @@ func (r *MysqlBanListRepository) GetBanListWords(ctx context.Context, banListID 
 }
 
 // AddWords adds words to a ban list
-func (r *MysqlBanListRepository) AddWords(ctx context.Context, banListID int64, words []string) error {
+func (r *PostgresBanListRepository) AddWords(ctx context.Context, banListID int64, words []string) error {
 	if len(words) == 0 {
 		return nil
 	}
@@ -272,11 +272,11 @@ func (r *MysqlBanListRepository) AddWords(ctx context.Context, banListID int64, 
 
 	// Execute within a transaction
 	return r.db.Transaction(ctx, func(tx *sql.Tx) error {
-		// Define the query
+		// Define the query - PostgreSQL version uses ON CONFLICT for upsert
 		query := `
             INSERT INTO ban_list_words (ban_id, word)
-            VALUES (?, ?)
-            ON DUPLICATE KEY UPDATE word = VALUES(word)
+            VALUES ($1, $2)
+            ON CONFLICT (ban_id, word) DO UPDATE SET word = EXCLUDED.word
         `
 
 		// Insert each word individually
@@ -305,7 +305,7 @@ func (r *MysqlBanListRepository) AddWords(ctx context.Context, banListID int64, 
 }
 
 // RemoveWords removes words from a ban list
-func (r *MysqlBanListRepository) RemoveWords(ctx context.Context, banListID int64, words []string) error {
+func (r *PostgresBanListRepository) RemoveWords(ctx context.Context, banListID int64, words []string) error {
 	if len(words) == 0 {
 		return nil
 	}
@@ -318,7 +318,7 @@ func (r *MysqlBanListRepository) RemoveWords(ctx context.Context, banListID int6
 		// Define the query
 		query := `
             DELETE FROM ban_list_words
-            WHERE ban_id = ? AND word = ?
+            WHERE ban_id = $1 AND word = $2
         `
 
 		// Delete each word individually
@@ -347,7 +347,7 @@ func (r *MysqlBanListRepository) RemoveWords(ctx context.Context, banListID int6
 }
 
 // WordExists checks if a word exists in a ban list
-func (r *MysqlBanListRepository) WordExists(ctx context.Context, banListID int64, word string) (bool, error) {
+func (r *PostgresBanListRepository) WordExists(ctx context.Context, banListID int64, word string) (bool, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -355,7 +355,7 @@ func (r *MysqlBanListRepository) WordExists(ctx context.Context, banListID int64
 	query := `
         SELECT EXISTS(
             SELECT 1 FROM ban_list_words
-            WHERE ban_id = ? AND word = ?
+            WHERE ban_id = $1 AND word = $2
         )
     `
 

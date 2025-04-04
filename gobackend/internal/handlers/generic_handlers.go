@@ -152,7 +152,7 @@ func (h *GenericHandler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		i++
 	}
 
-	// Construct the full query
+	// Construct the full query for PostgreSQL with RETURNING
 	query += "(" + utils.JoinStrings(columns, ", ") + ") VALUES (" + utils.JoinStrings(placeholders, ", ") + ") RETURNING *"
 
 	// Execute the query
@@ -234,11 +234,11 @@ func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 		i++
 	}
 
-	// Add the WHERE clause
+	// Add the WHERE clause (PostgreSQL uses $1, $2, etc.)
 	query += utils.JoinStrings(setClauses, ", ") + " WHERE " + idColumn + " = $" + strconv.Itoa(i)
 	values = append(values, id)
 
-	// Add RETURNING clause
+	// Add RETURNING clause for PostgreSQL
 	query += " RETURNING *"
 
 	// Execute the query
@@ -294,7 +294,7 @@ func (h *GenericHandler) DeleteRecord(w http.ResponseWriter, r *http.Request) {
 		id = intID
 	}
 
-	// Execute the query
+	// Execute the query - PostgreSQL uses $1, $2, etc.
 	query := "DELETE FROM " + table + " WHERE " + idColumn + " = $1"
 
 	// Execute the query

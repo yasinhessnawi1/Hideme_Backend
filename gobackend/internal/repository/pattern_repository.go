@@ -24,37 +24,38 @@ type PatternRepository interface {
 	DeleteBySettingID(ctx context.Context, settingID int64) error
 }
 
-// MysqlPatternRepository is a MySQL implementation of PatternRepository
-type MysqlPatternRepository struct {
+// PostgresPatternRepository is a PostgreSQL implementation of PatternRepository
+type PostgresPatternRepository struct {
 	db *database.Pool
 }
 
 // NewPatternRepository creates a new PatternRepository
 func NewPatternRepository(db *database.Pool) PatternRepository {
-	return &MysqlPatternRepository{
+	return &PostgresPatternRepository{
 		db: db,
 	}
 }
 
 // Create adds a new search pattern to the database
-func (r *MysqlPatternRepository) Create(ctx context.Context, pattern *models.SearchPattern) error {
+func (r *PostgresPatternRepository) Create(ctx context.Context, pattern *models.SearchPattern) error {
 	// Start query timer
 	startTime := time.Now()
 
-	// Define the query
+	// Define the query with RETURNING for PostgreSQL
 	query := `
 		INSERT INTO search_patterns (setting_id, pattern_type, pattern_text)
-		VALUES (?, ?, ?)
+		VALUES ($1, $2, $3)
+		RETURNING pattern_id
 	`
 
 	// Execute the query
-	result, err := r.db.ExecContext(
+	err := r.db.QueryRowContext(
 		ctx,
 		query,
 		pattern.SettingID,
 		pattern.PatternType,
 		pattern.PatternText,
-	)
+	).Scan(&pattern.ID)
 
 	// Log the query execution
 	utils.LogDBQuery(
@@ -68,17 +69,8 @@ func (r *MysqlPatternRepository) Create(ctx context.Context, pattern *models.Sea
 		return fmt.Errorf("failed to create search pattern: %w", err)
 	}
 
-	// Get the last insert ID
-	patternID, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("failed to get pattern ID: %w", err)
-	}
-
-	// Set the pattern ID
-	pattern.ID = patternID
-
 	log.Info().
-		Int64("pattern_id", patternID).
+		Int64("pattern_id", pattern.ID).
 		Int64("setting_id", pattern.SettingID).
 		Str("pattern_type", string(pattern.PatternType)).
 		Msg("Search pattern created")
@@ -87,7 +79,7 @@ func (r *MysqlPatternRepository) Create(ctx context.Context, pattern *models.Sea
 }
 
 // GetByID retrieves a search pattern by ID
-func (r *MysqlPatternRepository) GetByID(ctx context.Context, id int64) (*models.SearchPattern, error) {
+func (r *PostgresPatternRepository) GetByID(ctx context.Context, id int64) (*models.SearchPattern, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -95,7 +87,7 @@ func (r *MysqlPatternRepository) GetByID(ctx context.Context, id int64) (*models
 	query := `
 		SELECT pattern_id, setting_id, pattern_type, pattern_text
 		FROM search_patterns
-		WHERE pattern_id = ?
+		WHERE pattern_id = $1
 	`
 
 	// Execute the query
@@ -130,7 +122,7 @@ func (r *MysqlPatternRepository) GetByID(ctx context.Context, id int64) (*models
 }
 
 // GetBySettingID retrieves all search patterns for a setting
-func (r *MysqlPatternRepository) GetBySettingID(ctx context.Context, settingID int64) ([]*models.SearchPattern, error) {
+func (r *PostgresPatternRepository) GetBySettingID(ctx context.Context, settingID int64) ([]*models.SearchPattern, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -138,7 +130,7 @@ func (r *MysqlPatternRepository) GetBySettingID(ctx context.Context, settingID i
 	query := `
 		SELECT pattern_id, setting_id, pattern_type, pattern_text
 		FROM search_patterns
-		WHERE setting_id = ?
+		WHERE setting_id = $1
 		ORDER BY pattern_id
 	`
 
@@ -187,15 +179,15 @@ func (r *MysqlPatternRepository) GetBySettingID(ctx context.Context, settingID i
 }
 
 // Update updates a search pattern in the database
-func (r *MysqlPatternRepository) Update(ctx context.Context, pattern *models.SearchPattern) error {
+func (r *PostgresPatternRepository) Update(ctx context.Context, pattern *models.SearchPattern) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
 	query := `
 		UPDATE search_patterns
-		SET pattern_type = ?, pattern_text = ?
-		WHERE pattern_id = ?
+		SET pattern_type = $1, pattern_text = $2
+		WHERE pattern_id = $3
 	`
 
 	// Execute the query
@@ -238,12 +230,12 @@ func (r *MysqlPatternRepository) Update(ctx context.Context, pattern *models.Sea
 }
 
 // Delete removes a search pattern from the database
-func (r *MysqlPatternRepository) Delete(ctx context.Context, id int64) error {
+func (r *PostgresPatternRepository) Delete(ctx context.Context, id int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM search_patterns WHERE pattern_id = ?`
+	query := `DELETE FROM search_patterns WHERE pattern_id = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, id)
@@ -278,12 +270,12 @@ func (r *MysqlPatternRepository) Delete(ctx context.Context, id int64) error {
 }
 
 // DeleteBySettingID removes all search patterns for a setting
-func (r *MysqlPatternRepository) DeleteBySettingID(ctx context.Context, settingID int64) error {
+func (r *PostgresPatternRepository) DeleteBySettingID(ctx context.Context, settingID int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM search_patterns WHERE setting_id = ?`
+	query := `DELETE FROM search_patterns WHERE setting_id = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, settingID)

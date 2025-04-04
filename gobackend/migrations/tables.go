@@ -199,13 +199,13 @@ func createBanListTable() Migration {
 		TableName:   "ban_lists",
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
-				CREATE TABLE IF NOT EXISTS ban_lists (
-					ban_id BIGSERIAL PRIMARY KEY,
-					setting_id BIGINT NOT NULL,
-					CONSTRAINT fk_setting FOREIGN KEY (setting_id) REFERENCES user_settings(setting_id) ON DELETE CASCADE,
-					CONSTRAINT idx_setting_id UNIQUE (setting_id)
-				)
-			`
+                CREATE TABLE IF NOT EXISTS ban_lists (
+                    ban_id BIGSERIAL PRIMARY KEY,
+                    setting_id BIGINT NOT NULL,
+                    CONSTRAINT fk_ban_lists_setting FOREIGN KEY (setting_id) REFERENCES user_settings(setting_id) ON DELETE CASCADE,
+                    CONSTRAINT uq_ban_lists_setting_id UNIQUE (setting_id)
+                )
+            `
 			_, err := tx.ExecContext(ctx, query)
 			return err
 		},
