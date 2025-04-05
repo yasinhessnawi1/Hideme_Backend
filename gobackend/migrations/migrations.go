@@ -143,7 +143,7 @@ func (m *Migrator) runMigration(ctx context.Context, migration Migration) error 
 		}
 
 		// Record the migrations
-		query := `INSERT INTO migrations (name, description) VALUES (?, ?)`
+		query := `INSERT INTO migrations (name, description) VALUES ($1, $2)`
 		_, err := tx.ExecContext(ctx, query, migration.Name, migration.Description)
 		if err != nil {
 			return fmt.Errorf("failed to record migrations: %w", err)
@@ -153,30 +153,9 @@ func (m *Migrator) runMigration(ctx context.Context, migration Migration) error 
 	})
 }
 
-// createBanListTable creates the ban_lists table
-func createBanListTable() Migration {
-	return Migration{
-		Name:        "create_ban_lists_table",
-		Description: "Creates the ban_lists table",
-		TableName:   "ban_lists",
-		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
-			query := `
-				CREATE TABLE IF NOT EXISTS ban_lists (
-					ban_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-					setting_id BIGINT NOT NULL,
-					FOREIGN KEY (setting_id) REFERENCES user_settings(setting_id) ON DELETE CASCADE,
-					UNIQUE KEY idx_setting_id (setting_id)
-				)
-			`
-			_, err := tx.ExecContext(ctx, query)
-			return err
-		},
-	}
-}
-
 // recordMigration records a migrations as completed without running the SQL
 func (m *Migrator) recordMigration(ctx context.Context, name, description string) error {
-	query := `INSERT INTO migrations (name, description) VALUES (?, ?)`
+	query := `INSERT INTO migrations (name, description) VALUES ($1, $2)`
 	_, err := m.db.ExecContext(ctx, query, name, description)
 	if err != nil {
 		return fmt.Errorf("failed to record migrations: %w", err)
@@ -189,8 +168,8 @@ func (m *Migrator) tableExists(ctx context.Context, tableName string) (bool, err
 	query := `
 		SELECT COUNT(*)
 		FROM information_schema.tables
-		WHERE table_schema = DATABASE()
-		AND table_name = ?
+		WHERE table_schema = current_schema()
+		AND table_name = $1
 	`
 	var count int
 	err := m.db.QueryRowContext(ctx, query, tableName).Scan(&count)
