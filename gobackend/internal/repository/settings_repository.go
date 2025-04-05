@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
@@ -25,20 +24,20 @@ type SettingsRepository interface {
 	EnsureDefaultSettings(ctx context.Context, userID int64) (*models.UserSetting, error)
 }
 
-// PostgresSettingsRepository is a PostgreSQL implementation of SettingsRepository
-type PostgresSettingsRepository struct {
+// MysqlSettingsRepository is a MySQL implementation of SettingsRepository
+type MysqlSettingsRepository struct {
 	db *database.Pool
 }
 
 // NewSettingsRepository creates a new SettingsRepository
 func NewSettingsRepository(db *database.Pool) SettingsRepository {
-	return &PostgresSettingsRepository{
+	return &MysqlSettingsRepository{
 		db: db,
 	}
 }
 
 // Create adds new user settings to the database
-func (r *PostgresSettingsRepository) Create(ctx context.Context, settings *models.UserSetting) error {
+func (r *MysqlSettingsRepository) Create(ctx context.Context, settings *models.UserSetting) error {
 	// Start query timer
 	startTime := time.Now()
 
@@ -47,64 +46,71 @@ func (r *PostgresSettingsRepository) Create(ctx context.Context, settings *model
 	settings.CreatedAt = now
 	settings.UpdatedAt = now
 
-	// Define the query with RETURNING for PostgreSQL
+	// Define the query
 	query := `
-		INSERT INTO user_settings (user_id, remove_images, created_at, updated_at)
-		VALUES ($1, $2, $3, $4)
-		RETURNING setting_id
-	`
+        INSERT INTO user_settings (user_id, remove_images, theme, auto_processing, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `
 
 	// Execute the query
-	err := r.db.QueryRowContext(
+	result, err := r.db.ExecContext(
 		ctx,
 		query,
 		settings.UserID,
 		settings.RemoveImages,
+		settings.Theme,
+		settings.AutoProcessing,
 		settings.CreatedAt,
 		settings.UpdatedAt,
-	).Scan(&settings.ID)
+	)
 
 	// Log the query execution
 	utils.LogDBQuery(
 		query,
-		[]interface{}{settings.UserID, settings.RemoveImages, settings.CreatedAt, settings.UpdatedAt},
+		[]interface{}{settings.UserID, settings.RemoveImages, settings.Theme, settings.AutoProcessing, settings.CreatedAt, settings.UpdatedAt},
 		time.Since(startTime),
 		err,
 	)
 
 	if err != nil {
 		// Check for unique constraint violations
-		if pqErr, ok := err.(*pq.Error); ok {
-			// 23505 is the PostgreSQL error code for unique_violation
-			if pqErr.Code == "23505" {
-				if pqErr.Constraint == "idx_user_id" || pqErr.Constraint == "user_settings_user_id_key" {
-					return utils.NewDuplicateError("UserSetting", "user_id", settings.UserID)
-				}
-			}
+		if utils.IsDuplicateKeyError(err) {
+			return utils.NewDuplicateError("UserSetting", "user_id", settings.UserID)
 		}
 		return fmt.Errorf("failed to create user settings: %w", err)
 	}
 
+	// Get the setting ID
+	settingID, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("failed to get setting ID: %w", err)
+	}
+
+	// Set the setting ID
+	settings.ID = settingID
+
 	log.Info().
-		Int64("setting_id", settings.ID).
+		Int64("setting_id", settingID).
 		Int64("user_id", settings.UserID).
 		Bool("remove_images", settings.RemoveImages).
+		Str("theme", settings.Theme).
+		Bool("auto_processing", settings.AutoProcessing).
 		Msg("User settings created")
 
 	return nil
 }
 
 // GetByUserID retrieves user settings by user ID
-func (r *PostgresSettingsRepository) GetByUserID(ctx context.Context, userID int64) (*models.UserSetting, error) {
+func (r *MysqlSettingsRepository) GetByUserID(ctx context.Context, userID int64) (*models.UserSetting, error) {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
 	query := `
-		SELECT setting_id, user_id, remove_images, created_at, updated_at
-		FROM user_settings
-		WHERE user_id = $1
-	`
+        SELECT setting_id, user_id, remove_images, theme, auto_processing, created_at, updated_at
+        FROM user_settings
+        WHERE user_id = ?
+    `
 
 	// Execute the query
 	settings := &models.UserSetting{}
@@ -112,6 +118,8 @@ func (r *PostgresSettingsRepository) GetByUserID(ctx context.Context, userID int
 		&settings.ID,
 		&settings.UserID,
 		&settings.RemoveImages,
+		&settings.Theme,
+		&settings.AutoProcessing,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
 	)
@@ -135,7 +143,7 @@ func (r *PostgresSettingsRepository) GetByUserID(ctx context.Context, userID int
 }
 
 // Update updates user settings in the database
-func (r *PostgresSettingsRepository) Update(ctx context.Context, settings *models.UserSetting) error {
+func (r *MysqlSettingsRepository) Update(ctx context.Context, settings *models.UserSetting) error {
 	// Start query timer
 	startTime := time.Now()
 
@@ -144,16 +152,18 @@ func (r *PostgresSettingsRepository) Update(ctx context.Context, settings *model
 
 	// Define the query
 	query := `
-		UPDATE user_settings
-		SET remove_images = $1, updated_at = $2
-		WHERE setting_id = $3
-	`
+        UPDATE user_settings
+        SET remove_images = ?, theme = ?, auto_processing = ?, updated_at = ?
+        WHERE setting_id = ?
+    `
 
 	// Execute the query
 	result, err := r.db.ExecContext(
 		ctx,
 		query,
 		settings.RemoveImages,
+		settings.Theme,
+		settings.AutoProcessing,
 		settings.UpdatedAt,
 		settings.ID,
 	)
@@ -161,7 +171,7 @@ func (r *PostgresSettingsRepository) Update(ctx context.Context, settings *model
 	// Log the query execution
 	utils.LogDBQuery(
 		query,
-		[]interface{}{settings.RemoveImages, settings.UpdatedAt, settings.ID},
+		[]interface{}{settings.RemoveImages, settings.Theme, settings.AutoProcessing, settings.UpdatedAt, settings.ID},
 		time.Since(startTime),
 		err,
 	)
@@ -184,18 +194,20 @@ func (r *PostgresSettingsRepository) Update(ctx context.Context, settings *model
 		Int64("setting_id", settings.ID).
 		Int64("user_id", settings.UserID).
 		Bool("remove_images", settings.RemoveImages).
+		Str("theme", settings.Theme).
+		Bool("auto_processing", settings.AutoProcessing).
 		Msg("User settings updated")
 
 	return nil
 }
 
 // Delete removes user settings from the database
-func (r *PostgresSettingsRepository) Delete(ctx context.Context, id int64) error {
+func (r *MysqlSettingsRepository) Delete(ctx context.Context, id int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM user_settings WHERE setting_id = $1`
+	query := `DELETE FROM user_settings WHERE setting_id = ?`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, id)
@@ -230,12 +242,12 @@ func (r *PostgresSettingsRepository) Delete(ctx context.Context, id int64) error
 }
 
 // DeleteByUserID removes user settings for a specific user
-func (r *PostgresSettingsRepository) DeleteByUserID(ctx context.Context, userID int64) error {
+func (r *MysqlSettingsRepository) DeleteByUserID(ctx context.Context, userID int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM user_settings WHERE user_id = $1`
+	query := `DELETE FROM user_settings WHERE user_id = ?`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, userID)
@@ -270,7 +282,7 @@ func (r *PostgresSettingsRepository) DeleteByUserID(ctx context.Context, userID 
 }
 
 // EnsureDefaultSettings ensures that default settings exist for a user, creating them if necessary
-func (r *PostgresSettingsRepository) EnsureDefaultSettings(ctx context.Context, userID int64) (*models.UserSetting, error) {
+func (r *MysqlSettingsRepository) EnsureDefaultSettings(ctx context.Context, userID int64) (*models.UserSetting, error) {
 	// Try to get existing settings
 	settings, err := r.GetByUserID(ctx, userID)
 	if err != nil {

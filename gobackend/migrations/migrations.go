@@ -10,7 +10,7 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
 )
 
-// Migration represents a database migration
+// Migration represents a database migrations
 type Migration struct {
 	Name        string
 	Description string
@@ -52,7 +52,7 @@ func (m *Migrator) RunMigrations(ctx context.Context) error {
 
 	for _, migration := range migrations {
 		if _, ok := executedMigrations[migration.Name]; !ok {
-			// Check if the table already exists before running the migration
+			// Check if the table already exists before running the migrations
 			exists, err := m.tableExists(ctx, migration.TableName)
 			if err != nil {
 				return fmt.Errorf("failed to check if table %s exists: %w", migration.TableName, err)
@@ -60,19 +60,19 @@ func (m *Migrator) RunMigrations(ctx context.Context) error {
 
 			if exists {
 				log.Info().
-					Str("migration", migration.Name).
+					Str("migrations", migration.Name).
 					Str("table", migration.TableName).
-					Msg("Table already exists, recording migration as completed")
+					Msg("Table already exists, recording migrations as completed")
 
-				// Record the migration as completed without running the SQL
+				// Record the migrations as completed without running the SQL
 				if err := m.recordMigration(ctx, migration.Name, migration.Description); err != nil {
-					return fmt.Errorf("failed to record existing migration: %w", err)
+					return fmt.Errorf("failed to record existing migrations: %w", err)
 				}
 			} else {
 				log.Info().
-					Str("migration", migration.Name).
+					Str("migrations", migration.Name).
 					Str("table", migration.TableName).
-					Msg("Running migration")
+					Msg("Running migrations")
 
 				if err := m.runMigration(ctx, migration); err != nil {
 					return err
@@ -81,7 +81,7 @@ func (m *Migrator) RunMigrations(ctx context.Context) error {
 			}
 		} else {
 			log.Debug().
-				Str("migration", migration.Name).
+				Str("migrations", migration.Name).
 				Msg("Migration already executed")
 		}
 	}
@@ -134,31 +134,52 @@ func (m *Migrator) getExecutedMigrations(ctx context.Context) (map[string]bool, 
 	return migrations, rows.Err()
 }
 
-// runMigration runs a migration within a transaction
+// runMigration runs a migrations within a transaction
 func (m *Migrator) runMigration(ctx context.Context, migration Migration) error {
 	return m.db.Transaction(ctx, func(tx *sql.Tx) error {
-		// Run the migration
+		// Run the migrations
 		if err := migration.RunSQL(ctx, tx); err != nil {
-			return fmt.Errorf("migration %s failed: %w", migration.Name, err)
+			return fmt.Errorf("migrations %s failed: %w", migration.Name, err)
 		}
 
-		// Record the migration
-		query := `INSERT INTO migrations (name, description) VALUES ($1, $2)`
+		// Record the migrations
+		query := `INSERT INTO migrations (name, description) VALUES (?, ?)`
 		_, err := tx.ExecContext(ctx, query, migration.Name, migration.Description)
 		if err != nil {
-			return fmt.Errorf("failed to record migration: %w", err)
+			return fmt.Errorf("failed to record migrations: %w", err)
 		}
 
 		return nil
 	})
 }
 
-// recordMigration records a migration as completed without running the SQL
+// createBanListTable creates the ban_lists table
+func createBanListTable() Migration {
+	return Migration{
+		Name:        "create_ban_lists_table",
+		Description: "Creates the ban_lists table",
+		TableName:   "ban_lists",
+		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
+			query := `
+				CREATE TABLE IF NOT EXISTS ban_lists (
+					ban_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+					setting_id BIGINT NOT NULL,
+					FOREIGN KEY (setting_id) REFERENCES user_settings(setting_id) ON DELETE CASCADE,
+					UNIQUE KEY idx_setting_id (setting_id)
+				)
+			`
+			_, err := tx.ExecContext(ctx, query)
+			return err
+		},
+	}
+}
+
+// recordMigration records a migrations as completed without running the SQL
 func (m *Migrator) recordMigration(ctx context.Context, name, description string) error {
-	query := `INSERT INTO migrations (name, description) VALUES ($1, $2)`
+	query := `INSERT INTO migrations (name, description) VALUES (?, ?)`
 	_, err := m.db.ExecContext(ctx, query, name, description)
 	if err != nil {
-		return fmt.Errorf("failed to record migration: %w", err)
+		return fmt.Errorf("failed to record migrations: %w", err)
 	}
 	return nil
 }
@@ -168,8 +189,8 @@ func (m *Migrator) tableExists(ctx context.Context, tableName string) (bool, err
 	query := `
 		SELECT COUNT(*)
 		FROM information_schema.tables
-		WHERE table_schema = current_schema()
-		AND table_name = $1
+		WHERE table_schema = DATABASE()
+		AND table_name = ?
 	`
 	var count int
 	err := m.db.QueryRowContext(ctx, query, tableName).Scan(&count)
