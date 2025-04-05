@@ -112,7 +112,7 @@ func (s *Seeder) runSeed(ctx context.Context, name string, seedFunc func(ctx con
 		}
 
 		// Record the seed
-		query := `INSERT INTO seeds (name) VALUES (?)`
+		query := `INSERT INTO seeds (name) VALUES ($1)` // PostgreSQL syntax
 		_, err := tx.ExecContext(ctx, query, name)
 		if err != nil {
 			return fmt.Errorf("failed to record seed: %w", err)
@@ -138,9 +138,9 @@ func (s *Seeder) seedDetectionMethods(ctx context.Context, tx *sql.Tx) error {
 
 		for _, method := range methods {
 			query := `
-				INSERT INTO detection_methods (method_name, highlight_color)
-				VALUES (?, ?)
-			`
+                INSERT INTO detection_methods (method_name, highlight_color)
+                VALUES ($1, $2)
+            `
 			_, err := tx.ExecContext(ctx, query, method.MethodName, method.HighlightColor)
 			if err != nil {
 				return err

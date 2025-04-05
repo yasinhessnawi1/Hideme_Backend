@@ -49,6 +49,11 @@ variable "disk_size" {
   type        = number
 }
 
+variable "db_port" {
+  description = "Database port"
+  type        = number
+  default = 5432
+}
 variable "db_disk_size" {
   description = "Boot disk size in GB"
   type        = number
@@ -132,7 +137,7 @@ variable "db_password" {
 variable "db_deletion_protection" {
   description = "Whether to enable deletion protection for the database"
   type        = bool
-  default     = false #todo: change it to true for production
+  default     = false
 }
 
 variable "alert_email" {
@@ -197,6 +202,11 @@ variable "domain" {
   type        = string
 }
 
+variable "db_host" {
+  description = "Database IP address to associate with the database"
+  type        = string
+  default     = "10.25.0.2"
+}
 variable "go_domain" {
   description = "Domain name for the Go application"
   type        = string

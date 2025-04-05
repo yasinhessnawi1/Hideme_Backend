@@ -254,7 +254,7 @@ func getAllowedOrigins() []string {
 
 	// Default hardcoded values if environment variable is not set
 	// Include both HTTP and HTTPS for localhost to be safe
-	defaultOrigins := []string{"https://hidemeai.com", "http://localhost:5173", "https://localhost:5173"}
+	defaultOrigins := []string{"https://www.hidemeai.com",  "https://hidemeai.com","http://localhost:5173", "https://localhost:5173"}
 	log.Info().Strs("allowed_origins", defaultOrigins).Msg("Using default CORS allowed origins")
 	return defaultOrigins
 }

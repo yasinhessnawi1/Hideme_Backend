@@ -140,7 +140,7 @@ func (s *DatabaseService) GetTableData(ctx context.Context, table string, condit
 
 	paramIndex := 1
 	for key, value := range conditions {
-		where = append(where, fmt.Sprintf("%s = ?", key))
+		where = append(where, fmt.Sprintf("%s = $%d", key, paramIndex))
 		params = append(params, value)
 		paramIndex++
 	}
@@ -160,9 +160,7 @@ func (s *DatabaseService) GetRecordByID(ctx context.Context, table string, id in
 		return nil, err
 	}
 
-	// TODO duw to database table mismatch when i created the tables
-	// TODO in the detection_methods table have an id column called method_id
-	// TODO but here is called detection_method so its just a table name mismatch
+	// Handle table-specific ID column names
 	var idColumn string
 	if table == "detection_methods" {
 		idColumn = "method_id" // Use correct column name for this table
@@ -171,7 +169,7 @@ func (s *DatabaseService) GetRecordByID(ctx context.Context, table string, id in
 	}
 
 	// Build query
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = ?", table, idColumn)
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = $1", table, idColumn)
 
 	// Execute the query
 	results, err := s.ExecuteQuery(ctx, query, []interface{}{id}, 0)
@@ -200,7 +198,7 @@ func (s *DatabaseService) CountTableRecords(ctx context.Context, table string, c
 
 	paramIndex := 1
 	for key, value := range conditions {
-		where = append(where, fmt.Sprintf("%s = ?", key))
+		where = append(where, fmt.Sprintf("%s = $%d", key, paramIndex))
 		params = append(params, value)
 		paramIndex++
 	}
@@ -225,7 +223,7 @@ func (s *DatabaseService) GetTableSchema(ctx context.Context, table string) ([]m
 		return nil, err
 	}
 
-	// Build query to get column information
+	// Build query to get column information for PostgreSQL
 	query := `
 		SELECT 
 			column_name, 
@@ -235,7 +233,8 @@ func (s *DatabaseService) GetTableSchema(ctx context.Context, table string) ([]m
 		FROM 
 			information_schema.columns
 		WHERE 
-			table_name = ?
+			table_name = $1
+			AND table_schema = current_schema()
 		ORDER BY 
 			ordinal_position
 	`

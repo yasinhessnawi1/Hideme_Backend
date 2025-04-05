@@ -99,10 +99,13 @@ module "compute" {
   db_connection_name    = module.database.connection_name
   db_name               = var.db_name
   db_user               = var.db_user
+  db_host               = var.db_host
+  db_port               = var.db_port
   db_password           = var.db_password
   min_instances         = var.min_instances
   max_instances         = var.max_instances
   app_port              = var.backend_port
+  go_port               = var.go_backend_port
   zones = ["${var.region}-a", "${var.region}-b", "${var.region}-c"]
   github_ssh_key        = var.github_ssh_key
   gemini_api_key        = var.gemini_api_key
@@ -114,6 +117,7 @@ module "compute" {
   repo_name             = var.repo_name
   domain                = var.domain
   ssl_email             = var.ssl_email
+
 }
 
 # Load Balancer Module
@@ -124,7 +128,7 @@ module "load_balancer" {
   instance_group       = module.compute.instance_group
   health_check_port    = var.health_check_port
   static_ip_name       = var.static_ip_name
-  domain_name = var.domain # Using root domain variable
+  domain_name = var.domain_name # Using root domain variable
   security_policy_name = module.security.security_policy_name
   depends_on = [module.vpc, module.compute]
 }
@@ -134,7 +138,7 @@ module "dns" {
   source           = "./modules/dns"
   project          = var.project
   environment      = var.environment
-  domain_name = var.domain # Using root domain variable for DNS zone
+  domain_name = var.domain_name # Using root domain variable for DNS zone
   load_balancer_ip = module.load_balancer.lb_external_ip
   depends_on = [module.load_balancer]
 }

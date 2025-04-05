@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
@@ -28,20 +29,20 @@ type SessionRepository interface {
 	IsValidSession(ctx context.Context, jwtID string) (bool, error)
 }
 
-// MysqlSessionRepository is a MySQL implementation of SessionRepository
-type MysqlSessionRepository struct {
+// PostgresSessionRepository is a PostgreSQL implementation of SessionRepository
+type PostgresSessionRepository struct {
 	db *database.Pool
 }
 
 // NewSessionRepository creates a new SessionRepository
 func NewSessionRepository(db *database.Pool) SessionRepository {
-	return &MysqlSessionRepository{
+	return &PostgresSessionRepository{
 		db: db,
 	}
 }
 
 // Create adds a new session to the database
-func (r *MysqlSessionRepository) Create(ctx context.Context, session *models.Session) error {
+func (r *PostgresSessionRepository) Create(ctx context.Context, session *models.Session) error {
 	// Start query timer
 	startTime := time.Now()
 
@@ -53,7 +54,7 @@ func (r *MysqlSessionRepository) Create(ctx context.Context, session *models.Ses
 	// Define the query
 	query := `
 		INSERT INTO sessions (session_id, user_id, jwt_id, expires_at, created_at)
-		VALUES (?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5)
 	`
 
 	// Execute the query
@@ -76,6 +77,18 @@ func (r *MysqlSessionRepository) Create(ctx context.Context, session *models.Ses
 	)
 
 	if err != nil {
+		// Check for unique constraint violations
+		if pqErr, ok := err.(*pq.Error); ok {
+			// 23505 is the PostgreSQL error code for unique_violation
+			if pqErr.Code == "23505" {
+				if pqErr.Constraint == "sessions_pkey" {
+					return utils.NewDuplicateError("Session", "id", session.ID)
+				}
+				if pqErr.Constraint == "idx_jwt_id" {
+					return utils.NewDuplicateError("Session", "jwt_id", session.JWTID)
+				}
+			}
+		}
 		return fmt.Errorf("failed to create session: %w", err)
 	}
 
@@ -90,7 +103,7 @@ func (r *MysqlSessionRepository) Create(ctx context.Context, session *models.Ses
 }
 
 // GetByID retrieves a session by ID
-func (r *MysqlSessionRepository) GetByID(ctx context.Context, id string) (*models.Session, error) {
+func (r *PostgresSessionRepository) GetByID(ctx context.Context, id string) (*models.Session, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -98,7 +111,7 @@ func (r *MysqlSessionRepository) GetByID(ctx context.Context, id string) (*model
 	query := `
 		SELECT session_id, user_id, jwt_id, expires_at, created_at
 		FROM sessions
-		WHERE session_id = ?
+		WHERE session_id = $1
 	`
 
 	// Execute the query
@@ -130,7 +143,7 @@ func (r *MysqlSessionRepository) GetByID(ctx context.Context, id string) (*model
 }
 
 // GetByJWTID retrieves a session by JWT ID
-func (r *MysqlSessionRepository) GetByJWTID(ctx context.Context, jwtID string) (*models.Session, error) {
+func (r *PostgresSessionRepository) GetByJWTID(ctx context.Context, jwtID string) (*models.Session, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -138,7 +151,7 @@ func (r *MysqlSessionRepository) GetByJWTID(ctx context.Context, jwtID string) (
 	query := `
 		SELECT session_id, user_id, jwt_id, expires_at, created_at
 		FROM sessions
-		WHERE jwt_id = ?
+		WHERE jwt_id = $1
 	`
 
 	// Execute the query
@@ -170,7 +183,7 @@ func (r *MysqlSessionRepository) GetByJWTID(ctx context.Context, jwtID string) (
 }
 
 // GetActiveByUserID retrieves all active sessions for a user
-func (r *MysqlSessionRepository) GetActiveByUserID(ctx context.Context, userID int64) ([]*models.Session, error) {
+func (r *PostgresSessionRepository) GetActiveByUserID(ctx context.Context, userID int64) ([]*models.Session, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -178,7 +191,7 @@ func (r *MysqlSessionRepository) GetActiveByUserID(ctx context.Context, userID i
 	query := `
 		SELECT session_id, user_id, jwt_id, expires_at, created_at
 		FROM sessions
-		WHERE user_id = ? AND expires_at > ?
+		WHERE user_id = $1 AND expires_at > $2
 		ORDER BY created_at DESC
 	`
 
@@ -228,12 +241,12 @@ func (r *MysqlSessionRepository) GetActiveByUserID(ctx context.Context, userID i
 }
 
 // Delete removes a session from the database
-func (r *MysqlSessionRepository) Delete(ctx context.Context, id string) error {
+func (r *PostgresSessionRepository) Delete(ctx context.Context, id string) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM sessions WHERE session_id = ?`
+	query := `DELETE FROM sessions WHERE session_id = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, id)
@@ -268,12 +281,12 @@ func (r *MysqlSessionRepository) Delete(ctx context.Context, id string) error {
 }
 
 // DeleteByJWTID removes a session by JWT ID
-func (r *MysqlSessionRepository) DeleteByJWTID(ctx context.Context, jwtID string) error {
+func (r *PostgresSessionRepository) DeleteByJWTID(ctx context.Context, jwtID string) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM sessions WHERE jwt_id = ?`
+	query := `DELETE FROM sessions WHERE jwt_id = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, jwtID)
@@ -308,12 +321,12 @@ func (r *MysqlSessionRepository) DeleteByJWTID(ctx context.Context, jwtID string
 }
 
 // DeleteByUserID removes all sessions for a user
-func (r *MysqlSessionRepository) DeleteByUserID(ctx context.Context, userID int64) error {
+func (r *PostgresSessionRepository) DeleteByUserID(ctx context.Context, userID int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM sessions WHERE user_id = ?`
+	query := `DELETE FROM sessions WHERE user_id = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, userID)
@@ -341,12 +354,12 @@ func (r *MysqlSessionRepository) DeleteByUserID(ctx context.Context, userID int6
 }
 
 // DeleteExpired removes all expired sessions
-func (r *MysqlSessionRepository) DeleteExpired(ctx context.Context) (int64, error) {
+func (r *PostgresSessionRepository) DeleteExpired(ctx context.Context) (int64, error) {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM sessions WHERE expires_at < ?`
+	query := `DELETE FROM sessions WHERE expires_at < $1`
 
 	// Execute the query
 	now := time.Now()
@@ -378,7 +391,7 @@ func (r *MysqlSessionRepository) DeleteExpired(ctx context.Context) (int64, erro
 }
 
 // IsValidSession checks if a session with the given JWT ID exists and is not expired
-func (r *MysqlSessionRepository) IsValidSession(ctx context.Context, jwtID string) (bool, error) {
+func (r *PostgresSessionRepository) IsValidSession(ctx context.Context, jwtID string) (bool, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -386,7 +399,7 @@ func (r *MysqlSessionRepository) IsValidSession(ctx context.Context, jwtID strin
 	query := `
 		SELECT EXISTS(
 			SELECT 1 FROM sessions 
-			WHERE jwt_id = ? AND expires_at > ?
+			WHERE jwt_id = $1 AND expires_at > $2
 		)
 	`
 
