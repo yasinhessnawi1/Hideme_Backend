@@ -32,6 +32,7 @@ func createUsersTable() Migration {
 }
 
 // createUserSettingsTable creates the user_settings table
+// createUserSettingsTable creates the user_settings table
 func createUserSettingsTable() Migration {
 	return Migration{
 		Name:        "create_user_settings_table",
@@ -39,16 +40,18 @@ func createUserSettingsTable() Migration {
 		TableName:   "user_settings",
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
-				CREATE TABLE IF NOT EXISTS user_settings (
-					setting_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-					user_id BIGINT NOT NULL,
-					remove_images BOOLEAN DEFAULT FALSE,
-					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-					FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-					UNIQUE KEY idx_user_id (user_id)
-				)
-			`
+                CREATE TABLE IF NOT EXISTS user_settings (
+                    setting_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    user_id BIGINT NOT NULL,
+                    remove_images BOOLEAN DEFAULT FALSE,
+                    theme ENUM('system', 'light', 'dark') DEFAULT 'system',
+                    auto_processing BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                    UNIQUE KEY idx_user_id (user_id)
+                )
+            `
 			_, err := tx.ExecContext(ctx, query)
 			return err
 		},
@@ -79,6 +82,29 @@ func createDocumentsTable() Migration {
 	}
 }
 
+// createSearchPatternsTable creates the search_patterns table
+func createSearchPatternsTable() Migration {
+	return Migration{
+		Name:        "create_search_patterns_table",
+		Description: "Creates the search_patterns table",
+		TableName:   "search_patterns",
+		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
+			query := `
+                CREATE TABLE IF NOT EXISTS search_patterns (
+                    pattern_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    setting_id BIGINT NOT NULL,
+                    pattern_type ENUM('ai_search', 'Normal', 'case_sensitive') NOT NULL DEFAULT 'Normal',
+                    pattern_text TEXT NOT NULL DEFAULT '',
+                    FOREIGN KEY (setting_id) REFERENCES user_settings(setting_id) ON DELETE CASCADE,
+                    INDEX idx_setting_id (setting_id)
+                )
+            `
+			_, err := tx.ExecContext(ctx, query)
+			return err
+		},
+	}
+}
+
 // createDetectionMethodsTable creates the detection_methods table
 func createDetectionMethodsTable() Migration {
 	return Migration{
@@ -87,13 +113,13 @@ func createDetectionMethodsTable() Migration {
 		TableName:   "detection_methods",
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
-				CREATE TABLE IF NOT EXISTS detection_methods (
-					method_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-					method_name VARCHAR(50) NOT NULL,
-					highlight_color VARCHAR(20) NOT NULL,
-					UNIQUE KEY idx_method_name (method_name)
-				)
-			`
+                CREATE TABLE IF NOT EXISTS detection_methods (
+                    method_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    method_name VARCHAR(50) NOT NULL DEFAULT '',
+                    highlight_color VARCHAR(20) NOT NULL DEFAULT '#FFFFFF',
+                    UNIQUE KEY idx_method_name (method_name)
+                )
+            `
 			_, err := tx.ExecContext(ctx, query)
 			return err
 		},
@@ -108,20 +134,20 @@ func createDetectedEntitiesTable() Migration {
 		TableName:   "detected_entities",
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
-				CREATE TABLE IF NOT EXISTS detected_entities (
-					entity_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-					document_id BIGINT NOT NULL,
-					method_id BIGINT NOT NULL,
-					entity_name VARCHAR(255) NOT NULL,
-					redaction_schema JSON NOT NULL,
-					detected_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-					FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
-					FOREIGN KEY (method_id) REFERENCES detection_methods(method_id),
-					INDEX idx_document_id (document_id),
-					INDEX idx_method_id (method_id),
-					INDEX idx_entity_name (entity_name)
-				)
-			`
+                CREATE TABLE IF NOT EXISTS detected_entities (
+                    entity_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    document_id BIGINT NOT NULL,
+                    method_id BIGINT NOT NULL,
+                    entity_name VARCHAR(255) NOT NULL DEFAULT '',
+                    redaction_schema JSON NOT NULL DEFAULT ('{}'),
+                    detected_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
+                    FOREIGN KEY (method_id) REFERENCES detection_methods(method_id),
+                    INDEX idx_document_id (document_id),
+                    INDEX idx_method_id (method_id),
+                    INDEX idx_entity_name (entity_name)
+                )
+            `
 			_, err := tx.ExecContext(ctx, query)
 			return err
 		},
@@ -136,61 +162,17 @@ func createModelEntitiesTable() Migration {
 		TableName:   "model_entities",
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
-				CREATE TABLE IF NOT EXISTS model_entities (
-					model_entity_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-					setting_id BIGINT NOT NULL,
-					method_id BIGINT NOT NULL,
-					entity_text VARCHAR(255) NOT NULL,
-					FOREIGN KEY (setting_id) REFERENCES user_settings(setting_id) ON DELETE CASCADE,
-					FOREIGN KEY (method_id) REFERENCES detection_methods(method_id),
-					INDEX idx_setting_id (setting_id),
-					INDEX idx_method_id (method_id)
-				)
-			`
-			_, err := tx.ExecContext(ctx, query)
-			return err
-		},
-	}
-}
-
-// createSearchPatternsTable creates the search_patterns table
-func createSearchPatternsTable() Migration {
-	return Migration{
-		Name:        "create_search_patterns_table",
-		Description: "Creates the search_patterns table",
-		TableName:   "search_patterns",
-		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
-			query := `
-				CREATE TABLE IF NOT EXISTS search_patterns (
-					pattern_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-					setting_id BIGINT NOT NULL,
-					pattern_type ENUM('Regex', 'Normal') NOT NULL,
-					pattern_text TEXT NOT NULL,
-					FOREIGN KEY (setting_id) REFERENCES user_settings(setting_id) ON DELETE CASCADE,
-					INDEX idx_setting_id (setting_id)
-				)
-			`
-			_, err := tx.ExecContext(ctx, query)
-			return err
-		},
-	}
-}
-
-// createBanListTable creates the ban_lists table
-func createBanListTable() Migration {
-	return Migration{
-		Name:        "create_ban_lists_table",
-		Description: "Creates the ban_lists table",
-		TableName:   "ban_lists",
-		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
-			query := `
-				CREATE TABLE IF NOT EXISTS ban_lists (
-					ban_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-					setting_id BIGINT NOT NULL,
-					FOREIGN KEY (setting_id) REFERENCES user_settings(setting_id) ON DELETE CASCADE,
-					UNIQUE KEY idx_setting_id (setting_id)
-				)
-			`
+                CREATE TABLE IF NOT EXISTS model_entities (
+                    model_entity_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    setting_id BIGINT NOT NULL,
+                    method_id BIGINT NOT NULL,
+                    entity_text VARCHAR(255) NOT NULL DEFAULT '',
+                    FOREIGN KEY (setting_id) REFERENCES user_settings(setting_id) ON DELETE CASCADE,
+                    FOREIGN KEY (method_id) REFERENCES detection_methods(method_id),
+                    INDEX idx_setting_id (setting_id),
+                    INDEX idx_method_id (method_id)
+                )
+            `
 			_, err := tx.ExecContext(ctx, query)
 			return err
 		},
@@ -205,16 +187,16 @@ func createBanListWordsTable() Migration {
 		TableName:   "ban_list_words",
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
-				CREATE TABLE IF NOT EXISTS ban_list_words (
-					ban_word_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-					ban_id BIGINT NOT NULL,
-					word VARCHAR(255) NOT NULL,
-					FOREIGN KEY (ban_id) REFERENCES ban_lists(ban_id) ON DELETE CASCADE,
-					INDEX idx_ban_id (ban_id),
-					INDEX idx_word (word),
-					UNIQUE KEY idx_ban_word (ban_id, word)
-				)
-			`
+                CREATE TABLE IF NOT EXISTS ban_list_words (
+                    ban_word_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    ban_id BIGINT NOT NULL,
+                    word VARCHAR(255) NOT NULL DEFAULT '',
+                    FOREIGN KEY (ban_id) REFERENCES ban_lists(ban_id) ON DELETE CASCADE,
+                    INDEX idx_ban_id (ban_id),
+                    INDEX idx_word (word),
+                    UNIQUE KEY idx_ban_word (ban_id, word)
+                )
+            `
 			_, err := tx.ExecContext(ctx, query)
 			return err
 		},
