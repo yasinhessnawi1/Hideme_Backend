@@ -15,7 +15,7 @@ resource "google_compute_instance_template" "app_template" {
 
   # Use a service account with minimal permissions
   service_account {
-    email  = var.service_account_email
+    email = var.service_account_email
     scopes = ["cloud-platform"]
   }
 
@@ -43,7 +43,7 @@ resource "google_compute_instance_template" "app_template" {
   metadata = {
     startup-script = templatefile("${path.module}/scripts/startup.sh", {
       port           = var.app_port
-      go_port = var.go_port
+      go_port        = var.go_port
       env            = var.environment
       repo           = var.github_repo
       go_repo        = var.go_github_repo
@@ -51,7 +51,7 @@ resource "google_compute_instance_template" "app_template" {
       dbuser         = var.db_user
       dbpass         = var.db_password
       dbname         = var.db_name
-      dbport         = "3306"
+      dbport         = var.db_port
       dbhost         = var.db_host
       dbconn         = var.db_connection_name
       gemini_api_key = var.gemini_api_key
@@ -136,6 +136,11 @@ resource "google_compute_region_instance_group_manager" "app_instance_group" {
   named_port {
     name = "http"
     port = var.app_port
+  }
+
+  named_port {
+    name = "gohttp"
+    port = var.go_port
   }
 
   # Add target pools if needed

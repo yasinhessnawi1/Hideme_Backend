@@ -13,6 +13,7 @@ resource "google_compute_global_address" "private_ip_address" {
   address_type  = "INTERNAL"
   prefix_length = 16
   network       = var.network_id
+
 }
 
 # Create a service networking connection for private IP
@@ -38,7 +39,6 @@ resource "google_sql_database_instance" "postgres" {
     disk_size         = var.db_disk_size
     disk_type         = "PD_SSD"
     disk_autoresize   = true
-
     # Backup configuration
     backup_configuration {
       enabled                        = true
@@ -59,13 +59,8 @@ resource "google_sql_database_instance" "postgres" {
     ip_configuration {
       ipv4_enabled    = false
       private_network = var.network_id
-      require_ssl     = true
+      require_ssl     = false
 
-      # Do not explicitly add the private subnet CIDR as it's automatically included
-      # authorized_networks {
-      #   name  = "private-subnet"
-      #   value = var.private_subnet_cidr
-      # }
     }
 
     # Database flags
@@ -114,7 +109,7 @@ resource "google_sql_database_instance" "postgres" {
 
   # Fixed lifecycle block with static value
   lifecycle {
-    prevent_destroy = false #todo: change to true
+    prevent_destroy = false
   }
 }
 

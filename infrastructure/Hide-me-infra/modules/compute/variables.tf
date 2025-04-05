@@ -116,7 +116,13 @@ variable "db_password" {
 variable "db_host" {
   description = "Database host address"
   type        = string
-  default     = "localhost"
+  default     = "10.25.0.2"
+}
+
+variable "db_port" {
+  description = "Database port name"
+  type        = string
+
 }
 
 variable "github_ssh_key" {
@@ -173,6 +179,7 @@ variable "repo_owner" {
 variable "domain" {
   description = "Domain name for the application"
   type        = string
+  default = "api.hidemeai.com"
 }
 
 variable "go_domain" {

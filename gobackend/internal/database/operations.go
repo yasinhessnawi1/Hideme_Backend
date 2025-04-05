@@ -37,6 +37,7 @@ func (c *CRUD) Create(ctx context.Context, model Table) error {
 	var placeholders []string
 	var values []interface{}
 	var idField reflect.Value
+	var idColumn string
 
 	for i := 0; i < modelType.NumField(); i++ {
 		field := modelType.Field(i)
@@ -52,21 +53,34 @@ func (c *CRUD) Create(ctx context.Context, model Table) error {
 		if strings.HasSuffix(dbTag, "_id") && isZeroValue(fieldValue) {
 			// Remember the ID field for later
 			idField = fieldValue
+			idColumn = dbTag
 			continue
 		}
 
 		fields = append(fields, dbTag)
-		placeholders = append(placeholders, "?") // MySQL uses ? for placeholders
+		placeholders = append(placeholders, fmt.Sprintf("$%d", len(placeholders)+1)) // PostgreSQL uses $1, $2, etc.
 		values = append(values, fieldValue.Interface())
 	}
 
 	// Build the query
-	query := fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s)",
-		model.TableName(),
-		strings.Join(fields, ", "),
-		strings.Join(placeholders, ", "),
-	)
+	var query string
+	if idField.IsValid() {
+		// For PostgreSQL, use RETURNING to get the ID
+		query = fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s) RETURNING %s",
+			model.TableName(),
+			strings.Join(fields, ", "),
+			strings.Join(placeholders, ", "),
+			idColumn,
+		)
+	} else {
+		query = fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s)",
+			model.TableName(),
+			strings.Join(fields, ", "),
+			strings.Join(placeholders, ", "),
+		)
+	}
 
 	// Log the query
 	log.Debug().
@@ -77,20 +91,15 @@ func (c *CRUD) Create(ctx context.Context, model Table) error {
 
 	// Execute the query
 	if idField.IsValid() {
-		// MySQL implementation using LastInsertId
-		result, err := c.DB.ExecContext(ctx, query, values...)
+		// PostgreSQL implementation using RETURNING
+		var id interface{}
+		err := c.DB.QueryRowContext(ctx, query, values...).Scan(&id)
 		if err != nil {
 			return fmt.Errorf("failed to create record in %s: %w", model.TableName(), err)
 		}
 
-		// Get the last inserted ID
-		lastID, err := result.LastInsertId()
-		if err != nil {
-			return fmt.Errorf("failed to get last insert ID: %w", err)
-		}
-
 		// Set the ID field in the model
-		idField.Set(reflect.ValueOf(lastID).Convert(idField.Type()))
+		idField.Set(reflect.ValueOf(id).Convert(idField.Type()))
 	} else {
 		if _, err := c.DB.ExecContext(ctx, query, values...); err != nil {
 			return fmt.Errorf("failed to create record in %s: %w", model.TableName(), err)
@@ -133,7 +142,7 @@ func (c *CRUD) GetByID(ctx context.Context, model Table, id interface{}) error {
 
 	// Build the query
 	query := fmt.Sprintf(
-		"SELECT %s FROM %s WHERE %s = ?",
+		"SELECT %s FROM %s WHERE %s = $1",
 		strings.Join(fields, ", "),
 		model.TableName(),
 		idColumn,
@@ -184,6 +193,8 @@ func (c *CRUD) Update(ctx context.Context, model Table) error {
 	var idValue interface{}
 	var idColumn string
 
+	paramCount := 1 // For PostgreSQL's $1, $2, etc.
+
 	for i := 0; i < modelType.NumField(); i++ {
 		field := modelType.Field(i)
 		fieldValue := modelValue.Field(i)
@@ -201,7 +212,8 @@ func (c *CRUD) Update(ctx context.Context, model Table) error {
 			continue
 		}
 
-		fields = append(fields, fmt.Sprintf("%s = ?", dbTag))
+		fields = append(fields, fmt.Sprintf("%s = $%d", dbTag, paramCount))
+		paramCount++
 		values = append(values, fieldValue.Interface())
 	}
 
@@ -210,10 +222,11 @@ func (c *CRUD) Update(ctx context.Context, model Table) error {
 
 	// Build the query
 	query := fmt.Sprintf(
-		"UPDATE %s SET %s WHERE %s = ?",
+		"UPDATE %s SET %s WHERE %s = $%d",
 		model.TableName(),
 		strings.Join(fields, ", "),
 		idColumn,
+		paramCount,
 	)
 
 	// Log the query
@@ -261,7 +274,7 @@ func (c *CRUD) Delete(ctx context.Context, model Table, id interface{}) error {
 
 	// Build the query
 	query := fmt.Sprintf(
-		"DELETE FROM %s WHERE %s = ?",
+		"DELETE FROM %s WHERE %s = $1",
 		model.TableName(),
 		idColumn,
 	)
@@ -318,10 +331,12 @@ func (c *CRUD) List(ctx context.Context, model Table, dest interface{}, conditio
 	// Add WHERE clause if conditions are provided
 	var where []string
 	var params []interface{}
+	paramCount := 1 // For PostgreSQL's $1, $2, etc.
 
 	for key, value := range conditions {
-		where = append(where, fmt.Sprintf("%s = ?", key))
+		where = append(where, fmt.Sprintf("%s = $%d", key, paramCount))
 		params = append(params, value)
+		paramCount++
 	}
 
 	if len(where) > 0 {
@@ -392,10 +407,12 @@ func (c *CRUD) Count(ctx context.Context, model Table, conditions map[string]int
 	// Add WHERE clause if conditions are provided
 	var where []string
 	var params []interface{}
+	paramCount := 1 // For PostgreSQL's $1, $2, etc.
 
 	for key, value := range conditions {
-		where = append(where, fmt.Sprintf("%s = ?", key))
+		where = append(where, fmt.Sprintf("%s = $%d", key, paramCount))
 		params = append(params, value)
+		paramCount++
 	}
 
 	if len(where) > 0 {

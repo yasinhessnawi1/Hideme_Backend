@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
@@ -25,27 +26,27 @@ type APIKeyRepository interface {
 	DeleteExpired(ctx context.Context) (int64, error)
 }
 
-// MysqlAPIKeyRepository is a MySQL implementation of APIKeyRepository
-type MysqlAPIKeyRepository struct {
+// PostgresAPIKeyRepository is a PostgreSQL implementation of APIKeyRepository
+type PostgresAPIKeyRepository struct {
 	db *database.Pool
 }
 
 // NewAPIKeyRepository creates a new APIKeyRepository
 func NewAPIKeyRepository(db *database.Pool) APIKeyRepository {
-	return &MysqlAPIKeyRepository{
+	return &PostgresAPIKeyRepository{
 		db: db,
 	}
 }
 
 // Create adds a new API key to the database
-func (r *MysqlAPIKeyRepository) Create(ctx context.Context, apiKey *models.APIKey) error {
+func (r *PostgresAPIKeyRepository) Create(ctx context.Context, apiKey *models.APIKey) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
 	query := `
 		INSERT INTO api_keys (key_id, user_id, api_key_hash, name, expires_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
 	// Execute the query
@@ -69,6 +70,13 @@ func (r *MysqlAPIKeyRepository) Create(ctx context.Context, apiKey *models.APIKe
 	)
 
 	if err != nil {
+		// Handle PostgreSQL specific errors
+		if pqErr, ok := err.(*pq.Error); ok {
+			// 23505 is the PostgreSQL error code for unique_violation
+			if pqErr.Code == "23505" {
+				return utils.NewDuplicateError("APIKey", "id", apiKey.ID)
+			}
+		}
 		return fmt.Errorf("failed to create API key: %w", err)
 	}
 
@@ -83,7 +91,7 @@ func (r *MysqlAPIKeyRepository) Create(ctx context.Context, apiKey *models.APIKe
 }
 
 // GetByID retrieves an API key by ID
-func (r *MysqlAPIKeyRepository) GetByID(ctx context.Context, id string) (*models.APIKey, error) {
+func (r *PostgresAPIKeyRepository) GetByID(ctx context.Context, id string) (*models.APIKey, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -91,7 +99,7 @@ func (r *MysqlAPIKeyRepository) GetByID(ctx context.Context, id string) (*models
 	query := `
 		SELECT key_id, user_id, api_key_hash, name, expires_at, created_at
 		FROM api_keys
-		WHERE key_id = ?
+		WHERE key_id = $1
 	`
 
 	// Execute the query
@@ -124,7 +132,7 @@ func (r *MysqlAPIKeyRepository) GetByID(ctx context.Context, id string) (*models
 }
 
 // GetByUserID retrieves all API keys for a user
-func (r *MysqlAPIKeyRepository) GetByUserID(ctx context.Context, userID int64) ([]*models.APIKey, error) {
+func (r *PostgresAPIKeyRepository) GetByUserID(ctx context.Context, userID int64) ([]*models.APIKey, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -132,7 +140,7 @@ func (r *MysqlAPIKeyRepository) GetByUserID(ctx context.Context, userID int64) (
 	query := `
 		SELECT key_id, user_id, api_key_hash, name, expires_at, created_at
 		FROM api_keys
-		WHERE user_id = ?
+		WHERE user_id = $1
 		ORDER BY created_at DESC
 	`
 
@@ -182,7 +190,7 @@ func (r *MysqlAPIKeyRepository) GetByUserID(ctx context.Context, userID int64) (
 }
 
 // VerifyKey verifies an API key by its ID and hash
-func (r *MysqlAPIKeyRepository) VerifyKey(ctx context.Context, keyID, keyHash string) (*models.APIKey, error) {
+func (r *PostgresAPIKeyRepository) VerifyKey(ctx context.Context, keyID, keyHash string) (*models.APIKey, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -190,7 +198,7 @@ func (r *MysqlAPIKeyRepository) VerifyKey(ctx context.Context, keyID, keyHash st
 	query := `
 		SELECT key_id, user_id, api_key_hash, name, expires_at, created_at
 		FROM api_keys
-		WHERE key_id = ? AND api_key_hash = ? AND expires_at > ?
+		WHERE key_id = $1 AND api_key_hash = $2 AND expires_at > $3
 	`
 
 	// Execute the query
@@ -216,7 +224,7 @@ func (r *MysqlAPIKeyRepository) VerifyKey(ctx context.Context, keyID, keyHash st
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// Check if the key exists but is expired
-			expiredQuery := `SELECT expires_at FROM api_keys WHERE key_id = ?`
+			expiredQuery := `SELECT expires_at FROM api_keys WHERE key_id = $1`
 			var expiresAt time.Time
 			expiredErr := r.db.QueryRowContext(ctx, expiredQuery, keyID).Scan(&expiresAt)
 
@@ -239,12 +247,12 @@ func (r *MysqlAPIKeyRepository) VerifyKey(ctx context.Context, keyID, keyHash st
 }
 
 // Delete removes an API key from the database
-func (r *MysqlAPIKeyRepository) Delete(ctx context.Context, id string) error {
+func (r *PostgresAPIKeyRepository) Delete(ctx context.Context, id string) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM api_keys WHERE key_id = ?`
+	query := `DELETE FROM api_keys WHERE key_id = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, id)
@@ -279,12 +287,12 @@ func (r *MysqlAPIKeyRepository) Delete(ctx context.Context, id string) error {
 }
 
 // DeleteByUserID removes all API keys for a user
-func (r *MysqlAPIKeyRepository) DeleteByUserID(ctx context.Context, userID int64) error {
+func (r *PostgresAPIKeyRepository) DeleteByUserID(ctx context.Context, userID int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM api_keys WHERE user_id = ?`
+	query := `DELETE FROM api_keys WHERE user_id = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, userID)
@@ -312,12 +320,12 @@ func (r *MysqlAPIKeyRepository) DeleteByUserID(ctx context.Context, userID int64
 }
 
 // DeleteExpired removes all expired API keys
-func (r *MysqlAPIKeyRepository) DeleteExpired(ctx context.Context) (int64, error) {
+func (r *PostgresAPIKeyRepository) DeleteExpired(ctx context.Context) (int64, error) {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM api_keys WHERE expires_at < ?`
+	query := `DELETE FROM api_keys WHERE expires_at < $1`
 
 	// Execute the query
 	now := time.Now()

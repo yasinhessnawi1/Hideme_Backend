@@ -8,7 +8,7 @@ WORKDIR /build
 COPY . .
 
 # Switch to the gobackend directory for building
-WORKDIR /build/gobackend
+WORKDIR /Hideme_Backend/gobackend
 COPY go.mod go.sum ./
 # Download Go modules
 RUN go mod download
@@ -16,7 +16,7 @@ COPY . .
 RUN ls -la && find . -type f -name "*.go" | sort
 
 # Build the application with proper path
-RUN CGO_ENABLED=0 GOOS=linux go build -o hideapp ./main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o hideapp ./cmd/api/main.go
 
 # Runtime stage
 FROM alpine:latest
@@ -28,8 +28,7 @@ WORKDIR /app
 RUN apk --no-cache add ca-certificates tzdata
 
 # Copy binary from build stage
-COPY --from=builder /build/hideapp .
-COPY --from=builder /build/configs ./configs
+COPY --from=builder /Hideme_Backend/gobackend/hideapp .
 
 # Create directory for logs
 RUN mkdir -p /var/log/hideapp
