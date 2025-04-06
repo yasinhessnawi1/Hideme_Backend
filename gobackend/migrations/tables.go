@@ -98,7 +98,7 @@ func createSearchPatternsTable() Migration {
                 CREATE TABLE IF NOT EXISTS search_patterns (
                     pattern_id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
                     setting_id BIGINT NOT NULL,
-                    pattern_type VARCHAR(15) NOT NULL DEFAULT 'Normal' CHECK (pattern_type IN ('ai_search', 'Normal', 'case_sensitive')),
+                    pattern_type VARCHAR(15) NOT NULL DEFAULT 'Normal' CHECK (pattern_type IN ('ai_search', 'normal', 'case_sensitive')),
                     pattern_text TEXT NOT NULL DEFAULT '',
                     CONSTRAINT fk_setting FOREIGN KEY (setting_id) REFERENCES user_settings(setting_id) ON DELETE CASCADE
                 )

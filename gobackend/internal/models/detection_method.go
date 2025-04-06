@@ -15,25 +15,20 @@ func (dm *DetectionMethod) TableName() string {
 
 // Predefined detection methods for use within the application.
 const (
-	DetectionMethodManual      = "Manual"
-	DetectionMethodRegexSearch = "RegexSearch"
-	DetectionMethodMLModel1    = "MLModel1"
-	DetectionMethodMLModel2    = "MLModel2"
-	DetectionMethodAIModel     = "AIModel"
+	DetectionMethodManual        = "Manual"
+	DetectionMethodSearch        = "Search"
+	DetectionMethodAiSearch      = "AiSearch"
+	DetectionMethodCaseSensitive = "CaseSensitive"
+	DetectionMethodMLModel1      = "MLModel1"
+	DetectionMethodMLModel2      = "MLModel2"
+	DetectionMethodAIModel       = "AIModel"
 )
 
 // DefaultDetectionMethods returns the default detection methods used by the application.
 // These will be seeded in the database during initial setup.
 func DefaultDetectionMethods() []DetectionMethod {
 	return []DetectionMethod{
-		{
-			MethodName:     DetectionMethodManual,
-			HighlightColor: "#FF5733", // Orange-red
-		},
-		{
-			MethodName:     DetectionMethodRegexSearch,
-			HighlightColor: "#33A8FF", // Blue
-		},
+
 		{
 			MethodName:     DetectionMethodMLModel1,
 			HighlightColor: "#33FF57", // Green
@@ -45,6 +40,22 @@ func DefaultDetectionMethods() []DetectionMethod {
 		{
 			MethodName:     DetectionMethodAIModel,
 			HighlightColor: "#FFFF33", // Yellow
+		},
+		{
+			MethodName:     DetectionMethodAiSearch,
+			HighlightColor: "#33A8FF", // Blue
+		},
+		{
+			MethodName:     DetectionMethodCaseSensitive,
+			HighlightColor: "#33A8FF", // Blue
+		},
+		{
+			MethodName:     DetectionMethodSearch,
+			HighlightColor: "#33A8FF", // Blue
+		},
+		{
+			MethodName:     DetectionMethodManual,
+			HighlightColor: "#FF5733", // Orange-red
 		},
 	}
 }

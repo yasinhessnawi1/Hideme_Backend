@@ -8,7 +8,7 @@ const (
 	// AISearch represents an AI-powered search pattern
 	AISearch PatternType = "ai_search"
 	// Normal represents a basic search pattern
-	Normal PatternType = "Normal"
+	Normal PatternType = "normal"
 	// CaseSensitive represents a case-sensitive search pattern
 	CaseSensitive PatternType = "case_sensitive"
 )
@@ -43,13 +43,13 @@ func ValidatePatternType(patternType PatternType) bool {
 
 // SearchPatternCreate represents a request to create a new search pattern.
 type SearchPatternCreate struct {
-	PatternType string `json:"pattern_type" validate:"required,oneof=Regex Normal"`
+	PatternType string `json:"pattern_type" validate:"required,oneof=ai_search normal case_sensitive"`
 	PatternText string `json:"pattern_text" validate:"required,min=1"`
 }
 
 // SearchPatternUpdate represents a request to update an existing search pattern.
 type SearchPatternUpdate struct {
-	PatternType string `json:"pattern_type" validate:"omitempty,oneof=Regex Normal"`
+	PatternType string `json:"pattern_type" validate:"omitempty,oneof=ai_search normal case_sensitive"`
 	PatternText string `json:"pattern_text" validate:"omitempty,min=1"`
 }
 
