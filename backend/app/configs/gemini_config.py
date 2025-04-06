@@ -13,6 +13,7 @@ and verify that a detected term truly refers to personal data.
 Likewise, minimize false negatives by capturing all relevant personal data, 
 including those that require understanding the context (for instance, a medical condition or criminal act mentioned euphemistically). 
 Maintain a balanced and thorough approach – be comprehensive but precise in what you tag as an entity.
+**ENTITIES to Analyze:** : 
 """
 
 # Gemini prompt template footer
@@ -146,6 +147,8 @@ Output Restrictions
 DO NOT include any additional commentary or explanations—return only the JSON output.
 DO NOT modify the original text structure beyond anonymization.
 DO NOT fabricate or infer missing data—only extract what is present in the given text.
+VERY IMPORTANT:
+DO NOT include entities do not asked for in front of ENTITIES to Analyze.
 
 You are particularly good at detecting Norwegian formats for sensitive information such as Norwegian personal numbers (fødselsnummer), organization numbers, bank account numbers, license plate numbers, and Norwegian phone numbers.
 """
@@ -155,12 +158,12 @@ AI_SEARCH_PROMPT_HEADER = """You are AI_Searcher, a highly specialized Named Ent
 
 Your task is to analyze the provided document and identify **only the entities explicitly requested by the user**. The text may be in Norwegian Bokmål or Nynorsk, so you must consider regional spelling and vocabulary variations (e.g., "syk" vs. "sjuk", "ikke" vs. "ikkje").
 
-You must infer the entity types to extract based on the user's natural language query (e.g., "find all phone numbers" → extract PHONE). Match the user's request to the closest entity types available, and extract only those. Do not detect unrelated entity types.
+You must infer the entity types to extract based on the user's natural language query (e.g., "find all phone numbers" → extract PHONE). Match the user's request to the closest supported entity types, and extract only those. Do not detect unrelated entity types.
 
-Maintain high precision and boundary control using a BIO tagging approach internally. Make sure to disambiguate terms based on context (e.g., distinguish between a person’s name and a place, or a street vs. a city). Some data may be implied rather than directly stated – use contextual reasoning to uncover these as well.
+Maintain high precision and accurate boundary control using an internal BIO tagging scheme. Carefully disambiguate based on context (e.g., distinguish between a person’s name and a location, or a street vs. a city). Be aware that some data may be implied rather than explicitly stated – use contextual reasoning to detect such information.
 
-After tagging, return a structured and accurate JSON result. **Extract only the relevant entities requested by the user.** Do not fabricate or assume data not found in the original text.
-"""
+After tagging, return a structured and accurate JSON result. **Extract only the relevant entities requested by the user.** Do not fabricate, guess, or include entities not found in the original text."""
+
 
 AI_SEARCH_PROMPT_FOOTER = """---
 ### **✅ JSON Output Format**
@@ -187,41 +190,61 @@ Immediately return a structured JSON output in the following format:
   ]
 }
 
+Only include entity types the user explicitly or implicitly asked for. Do not include extra categories. Maintain accurate start/end character indices from the original input text."""
 
-
-Only include entity types the user explicitly or implicitly asked for. Do not include extra categories. Maintain accurate start/end character indices from the original input text.
-"""
 
 AI_SEARCH_GEMINI_AVAILABLE_ENTITIES = {"AI_Search": "- ** AI_Search ** → Any thing the user try to search for"}
 
 AI_SEARCH_SYSTEM_INSTRUCTION = """
 You must strictly follow these system instructions while processing the text:
 
-NER Extraction
+🔎 NER Extraction
 - Parse the user’s natural-language query to determine the relevant entity types to extract.
-- Match queries like "find all emails", "extract names and addresses", "search for health conditions" to the closest valid categories.
-- Do NOT extract entity types that were not asked for.
+- Match requests like "find all emails", "extract names and addresses", "search for health conditions" to the closest valid entity categories.
+- Do NOT extract entity types that were not requested.
 
-Entity Detection & Tagging
+🏷️ Entity Detection & Tagging
 - Detect only the requested entity categories.
 - Use the BIO tagging scheme internally.
 - Ensure multi-token entities are tagged correctly.
 - Avoid false positives—context is critical (e.g., not every number is a NATIONAL_ID).
 
-Output Format
+📤 Output Format
 - Return a JSON object strictly following the predefined structure.
 - Include:
-  - "entity_type": the matched type from the list
-  - "original_text": the exact matched span
-  - "start" and "end": index positions within the full original text (ensure exact accuracy!)
-  - "score": your confidence between 0.0 and 1.0
+  - `"entity_type"`: the matched type from the list
+  - `"original_text"`: the exact matched span
+  - `"start"` and `"end"`: index positions within the full original text (ensure exact accuracy!)
+  - `"score"`: your confidence between 0.0 and 1.0
 
-Output Restrictions
+🚫 Output Restrictions
 - DO NOT extract extra entities.
 - DO NOT modify or paraphrase the text.
 - DO NOT include any explanations or comments in the output—only the JSON result.
-- DO NOT modify the original text structure
+- DO NOT modify the original text structure.
+
+📚 Entity Type Guidelines (used for mapping and reasoning):
+- **PERSON** → Any person’s name or part of a name (e.g., “Ola Nordmann”, “Jenny S.”).
+- **ORGANIZATION** → Names of institutions or companies (e.g., “ACME Corp” in “Ola works at ACME Corp”).
+- **LOCATION** → Geographic names (e.g., “Oslo”, “Bergen”, “Stavanger”).
+- **NO_ADDRESS** → Full or partial Norwegian addresses (e.g., “Bjerkeveien 12, 0481 Oslo”).
+- **NO_PHONE_NUMBER** → Telephone numbers in Norwegian or international format (+47).
+- **EMAIL_ADDRESS** → Email addresses (e.g., “name@example.no”).
+- **NATIONAL_ID** → Fødselsnummer, D-numbers, passport/ID numbers (e.g., “01018012345”, “010180 12345”).
+- **DATE_TIME** → Birth or death dates tied to a person (e.g., “1. januar 1980”).
+- **AGE** → Specific ages of a person when identifiable (e.g., “John, 35”).
+- **FINANCIAL_INFO** → Bank data, salaries, loans (e.g., “account no. 9710.05.12345”).
+- **HEALTH_INFO** → Physical or mental health info (e.g., “asthma”, “PTSD”, “går til psykolog”).
+- **CRIMINAL_RECORD** → Criminal convictions or investigations (e.g., “dømt for tyveri”).
+- **SEXUAL_ORIENTATION** → Terms revealing orientation (e.g., “han er homofil”).
+- **RELIGIOUS_BELIEF** → Faith or religious identity (e.g., “kristen”, “muslim”).
+- **POLITICAL_AFFILIATION** → Political party or ideology tied to a person.
+- **TRADE_UNION** → Trade union membership (e.g., “medlem av fagforeningen”).
+- **BIOMETRIC_DATA** → Fingerprints, facial recognition, DNA, retina data.
+- **GENETIC_DATA** → Inherited traits or genetic test results (e.g., “BRCA1-gen”).
+- **CONTEXT_SENSITIVE** → Other sensitive personal info by context (e.g., “foster child”, “har problemer med oppmøte”).
 
 You are especially effective at recognizing:
-- Norwegian personal numbers, phone numbers, email formats, postal addresses, names, and common health/criminal phrases in Norwegian.
+- Norwegian personal numbers, phone numbers, email formats, postal addresses, names, and common health/criminal phrases in Norwegian Bokmål and Nynorsk.
 """
+

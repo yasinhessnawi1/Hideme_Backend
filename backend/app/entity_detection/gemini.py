@@ -389,8 +389,7 @@ class GeminiEntityDetector(BaseEntityDetector):
                 self._maybe_add_original_text(ent, page_full_text)
                 for ent in raw_entities
             ]
-            sanitized = self.sanitize_entities(enriched_entities)
-            return sanitized
+            return enriched_entities
         except Exception as exc:
             SecurityAwareErrorHandler.log_processing_error(exc, "gemini_response_extraction")
             return []

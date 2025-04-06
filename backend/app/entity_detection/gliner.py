@@ -566,8 +566,6 @@ class GlinerEntityDetector(BaseEntityDetector):
                 if local_processed_entities:
                     combined_results.extend(local_processed_entities)
 
-            # Deduplicate final results
-            combined_results = self.sanitize_entities(combined_results)
             redaction_mapping["pages"].sort(key=lambda x: x.get("page", 0))
 
             total_time = time.time() - start_time

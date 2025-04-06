@@ -146,12 +146,9 @@ class BaseEntityDetector(EntityDetector, ABC):
         # 1. Standardize raw entities (convert them to a consistent dict format, etc.)
         standardized_entities = self._standardize_raw_entities(entities, full_text)
 
-        # 2. Sanitize entities (merge overlapping and remove duplicates).
-        sanitized_entities = self.sanitize_entities(standardized_entities)
-
         # 3. Process sanitized entities to find bounding boxes and positions.
         processed_entities, page_sensitive = self._process_sanitized_entities(
-            sanitized_entities,
+            standardized_entities,
             full_text,
             mapping
         )
@@ -240,10 +237,10 @@ class BaseEntityDetector(EntityDetector, ABC):
         return processed_entities, page_sensitive
 
     def _process_single_entity(
-        self,
-        sanitized_entity: Dict[str, Any],
-        full_text: str,
-        mapping: List[Tuple[Dict[str, Any], int, int]]
+            self,
+            sanitized_entity: Dict[str, Any],
+            full_text: str,
+            mapping: List[Tuple[Dict[str, Any], int, int]]
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         For a single sanitized entity, find all occurrences in the text,
@@ -272,24 +269,40 @@ class BaseEntityDetector(EntityDetector, ABC):
             log_warning("[WARNING] No matches found for entity '{0}', skipping".format(entity_text))
             return local_processed, local_sensitive
 
+        # Deduplicate matches based on (start, end) offsets.
+        unique_matches = {}
         for start_offset, end_offset in matches:
-            mapped_bboxes = TextUtils.map_offsets_to_bboxes(full_text, mapping, (start_offset, end_offset))
-            if not mapped_bboxes:
+            key = (start_offset, end_offset)
+            if key not in unique_matches:
+                unique_matches[key] = (start_offset, end_offset)
+
+        # Process each unique occurrence.
+        for start_offset, end_offset in unique_matches.values():
+            bboxes = TextUtils.map_offsets_to_bboxes(full_text, mapping, (start_offset, end_offset))
+            if not bboxes:
                 continue
 
-            # Build local_sensitive data
-            for bbox in mapped_bboxes:
-                sensitive_item = {
-                    "original_text": full_text[start_offset:end_offset],
-                    "entity_type": sanitized_entity["entity_type"],
-                    "start": start_offset,
-                    "end": end_offset,
-                    "score": sanitized_entity["score"],
-                    "bbox": bbox
+            # Merge multiple bounding boxes for a single occurrence.
+            if len(bboxes) > 1:
+                merged_bbox = {
+                    "x0": min(b["x0"] for b in bboxes),
+                    "y0": min(b["y0"] for b in bboxes),
+                    "x1": max(b["x1"] for b in bboxes),
+                    "y1": max(b["y1"] for b in bboxes)
                 }
-                local_sensitive.append(sensitive_item)
+            else:
+                merged_bbox = bboxes[0]
 
-            # Build local_processed data
+            sensitive_item = {
+                "original_text": full_text[start_offset:end_offset],
+                "entity_type": sanitized_entity["entity_type"],
+                "start": start_offset,
+                "end": end_offset,
+                "score": sanitized_entity["score"],
+                "bbox": merged_bbox
+            }
+            local_sensitive.append(sensitive_item)
+
             local_processed.append({
                 "entity_type": sanitized_entity["entity_type"],
                 "start": start_offset,
@@ -440,36 +453,6 @@ class BaseEntityDetector(EntityDetector, ABC):
         finally:
             if acquired:
                 lock.release()
-
-    def sanitize_entities(self, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Sanitizes the detected entities by:
-        1. Merging overlapping entities
-        2. Removing duplicates with the same start and end indices
-
-        This method ensures that the entity detection results are clean and
-        without redundancy before further processing.
-
-        Args:
-            entities: List of entity dictionaries
-
-        Returns:
-            Sanitized list of entities
-        """
-        entity_dicts = []
-        for ent in entities:
-            if isinstance(ent, dict):
-                entity_dicts.append(ent)
-            else:
-                entity_dicts.append(self._convert_to_entity_dict(ent))
-
-        # Import here to avoid circular imports
-        from backend.app.utils.helpers.text_utils import EntityUtils
-
-        merged_entities = EntityUtils.merge_overlapping_entity_dicts(entity_dicts)
-        deduplicated_entities = EntityUtils.remove_duplicate_entities(merged_entities)
-
-        return deduplicated_entities
 
     @staticmethod
     def filter_entities_by_score(entities: List[Dict[str, Any]], threshold: float = 0.85) -> List[Dict[str, Any]]:

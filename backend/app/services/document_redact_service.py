@@ -6,19 +6,16 @@ from fastapi import UploadFile
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from backend.app.document_processing.pdf_redactor import PDFRedactionService
-from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.logging.logger import log_info, log_error, log_warning
+from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
-from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.security.processing_records import record_keeper
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.validation.file_validation import (
-    MAX_PDF_SIZE_BYTES,
-    validate_file_content_async,
-    validate_mime_type
+    read_and_validate_file
 )
 
 CHUNK_SIZE = 64 * 1024  # 64KB
-
 
 class DocumentRedactionService:
     """
@@ -54,27 +51,11 @@ class DocumentRedactionService:
         operation_id = f"pdf_redact_{time.time()}"
         log_info(f"[SECURITY] Starting PDF redaction processing [operation_id={operation_id}]")
 
-        # Validate file type.
-        mime_error = self._validate_mime(file, operation_id)
-        if mime_error:
-            return mime_error
-
         try:
-            # Read the file content.
-            contents, _ = await self._read_file_content(file, operation_id)
-
-            # Validate file size.
-            size_error = self._validate_file_size(contents, operation_id)
-            if size_error:
-                return size_error
-
-            # Validate PDF content.
-            is_valid, reason, _ = await validate_file_content_async(
-                contents, file.filename, file.content_type
-            )
-            if not is_valid:
-                log_warning(f"[SECURITY] Invalid PDF content: {reason} [operation_id={operation_id}]")
-                return JSONResponse(status_code=415, content={"detail": reason})
+            # Validate and read the file.
+            contents, error, _ = await read_and_validate_file(file, operation_id)
+            if error:
+                return error
 
             # Parse redaction mapping.
             mapping_data, total_redactions, mapping_error = self._parse_redaction_mapping(
@@ -150,34 +131,6 @@ class DocumentRedactionService:
                 e, "pdf_redaction", 500, file.filename
             )
             return JSONResponse(status_code=status_code, content=error_response)
-
-    @staticmethod
-    def _validate_mime(file: UploadFile, operation_id: str) -> Optional[JSONResponse]:
-        if not validate_mime_type(file.content_type, ["application/pdf"]):
-            log_warning(
-                f"[SECURITY] Unsupported file type attempted: {file.content_type} [operation_id={operation_id}]")
-            return JSONResponse(status_code=415, content={"detail": "Only PDF files are supported"})
-        return None
-
-    @staticmethod
-    async def _read_file_content(file: UploadFile, operation_id: str) -> Tuple[bytes, float]:
-        file_read_start = time.time()
-        content = await file.read()
-        elapsed = time.time() - file_read_start
-        log_info(
-            f"[SECURITY] File read completed in {elapsed:.3f}s. Size: {len(content) / 1024 :.1f}KB [operation_id={operation_id}]")
-        return content, elapsed
-
-    @staticmethod
-    def _validate_file_size(content: bytes, operation_id: str) -> Optional[JSONResponse]:
-        if len(content) > MAX_PDF_SIZE_BYTES:
-            log_warning(
-                f"[SECURITY] PDF size exceeds limit: {len(content) / (1024 * 1024):.2f}MB > {MAX_PDF_SIZE_BYTES / (1024 * 1024):.2f}MB [operation_id={operation_id}]")
-            return JSONResponse(
-                status_code=413,
-                content={"detail": f"PDF file size exceeds maximum allowed ({MAX_PDF_SIZE_BYTES // (1024 * 1024)}MB)"}
-            )
-        return None
 
     @staticmethod
     def _parse_redaction_mapping(redaction_mapping: Optional[str], filename: str, operation_id: str) -> Tuple[

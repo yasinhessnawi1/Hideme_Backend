@@ -10,6 +10,7 @@ from backend.app.configs.gemini_config import (
 )
 from backend.app.utils.helpers.gemini_helper import gemini_helper
 from backend.app.utils.logging.logger import log_debug
+from backend.app.utils.validation.sanitize_utils import deduplicate_bbox
 
 
 class PDFSearcher:
@@ -172,12 +173,15 @@ class PDFSearcher:
                 page_matches = [
                     {
                         "bbox": token_entity["bbox"],
+                        "original_text": token_entity.get("original_text", "")
                     }
                     for page_data in parsed_response["pages"]
                     for text_obj in page_data.get("text", [])
                     for entity in text_obj.get("entities", [])
                     for token_entity in self._split_and_remap_entity(entity, mapping, case_sensitive)
                 ]
+                # Deduplicate based on bbox.
+                page_matches = deduplicate_bbox(page_matches)
             return {"page": page_number, "matches": page_matches}, len(page_matches)
         except Exception as e:
             log_debug(f"Error processing AI page {page.get('page')}: {e}")
@@ -211,7 +215,7 @@ class PDFSearcher:
                         "x1": word.get("x1"),
                         "y1": word.get("y1")
                     }
-                    page_matches.append({"bbox": bbox})
+                    page_matches.append({"bbox": bbox, "original_text": word_text,})
             return {"page": page_number, "matches": page_matches}, len(page_matches)
         except Exception as e:
             log_debug(f"Error processing fallback page {page.get('page')}: {e}")
