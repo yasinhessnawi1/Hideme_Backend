@@ -1,9 +1,16 @@
 """
-Enhanced utility functions for validating file types and content with comprehensive security.
+Enhanced utility functions for validating file types, sizes, and content with comprehensive security.
 
-This module provides advanced functions to validate uploaded PDF files by checking their headers,
-content types, signatures, and sizes to prevent security issues related to malicious file uploads.
-It implements in-depth content inspection and improved security checks.
+This module provides advanced functions to:
+  - Validate uploaded PDF files by checking their headers (magic bytes), MIME types, sizes, and safety.
+  - Perform asynchronous content validation.
+  - Read and validate a single PDF file ensuring that its size does not exceed MAX_PDF_SIZE_BYTES (10 MB).
+  - Validate multiple uploaded PDF files by ensuring that:
+      * No more than MAX_FILES_COUNT files are uploaded.
+      * Each file meets the per-file requirements.
+      * The total size of all files does not exceed TOTAL_MAX_SIZE_BYTES (25 MB).
+
+Comprehensive logging and error handling (try/except) are implemented throughout.
 """
 
 import asyncio
@@ -11,55 +18,47 @@ import logging
 import mimetypes
 import os
 import re
-from typing import Optional, Union, Tuple, BinaryIO
+import time
+from typing import Optional, Union, Tuple, BinaryIO, List
 
-# Configure logging
-_logger = logging.getLogger("file_validation")
+from fastapi import UploadFile
+from fastapi.responses import JSONResponse
 
-# Maximum file size for PDFs (in bytes)
-MAX_PDF_SIZE_BYTES = int(os.environ.get("MAX_PDF_SIZE_BYTES", 25 * 1024 * 1024))  # 25MB
+from backend.app.utils.logging.logger import log_info, log_warning
+
+MAX_PDF_SIZE_BYTES =  10 * 1024 * 1024 # 10 MB per file
+# Constants for multi-file validation
+TOTAL_MAX_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB total
+MAX_FILES_COUNT = 20
 
 APPLICATION_WORD = "application/pdf"
-
-# Allowed MIME types (only PDFs are allowed)
 ALLOWED_MIME_TYPES = {
     "pdf": {APPLICATION_WORD, "application/x-pdf"}
 }
 
-# File signatures (magic bytes) for PDF files
+# File signatures (magic bytes) for PDF files.
 FILE_SIGNATURES = {
     "pdf": [(b"%PDF", 0)]
 }
 
-# Mapping from file extension to MIME type (only PDF is supported)
+# Mapping from file extension to MIME type.
 EXTENSION_TO_MIME = {
     ".pdf": APPLICATION_WORD
 }
 
-# Malicious content patterns to check for
-MALICIOUS_PATTERNS = {
-    "js_injection": rb"<script.*?>.*?</script>",
-    "php_injection": rb"<\?php.*?\?>",
-    "sql_injection": rb"(?i)(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION).*?(?:FROM|INTO|WHERE|TABLE)",
-    "command_injection": rb"(?i)(?:\||;|`|&|\$\(|\$\{)",
-    "xss": rb"(?i)(?:on\w+\s*=|javascript:)",
-    "html_injection": rb"(?i)(?:<\s*(?:iframe|frame|embed|object|applet))",
-    "path_traversal": rb"(?:\.\./|\.\.\\\|\.\.;)",
-    "null_byte": rb"\x00"
-}
+# Configure module-level logger
+_logger = logging.getLogger("file_validation_utils")
 
-
-# Utility Functions
 
 def get_file_signature(content: bytes) -> Optional[str]:
     """
     Determine the file type from the content's signature (magic bytes).
 
     Args:
-        content: First chunk of file content (at least first 16 bytes).
+        content (bytes): The first chunk of file content.
 
     Returns:
-        File type string or None if the signature is not recognized.
+        Optional[str]: The file type if recognized (e.g., 'pdf'), otherwise None.
     """
     if not content or len(content) < 4:
         return None
@@ -71,19 +70,16 @@ def get_file_signature(content: bytes) -> Optional[str]:
     return None
 
 
-def get_mime_type_from_buffer(
-        buffer: Union[bytes, BinaryIO],
-        filename: Optional[str] = None
-) -> str:
+def get_mime_type_from_buffer(buffer: Union[bytes, BinaryIO], filename: Optional[str] = None) -> str:
     """
-    Determine MIME type from file content and an optional filename.
+    Determine the MIME type from file content and optional filename.
 
     Args:
-        buffer: File content as bytes or a file-like object.
-        filename: Optional filename for extension-based guessing.
+        buffer (Union[bytes, BinaryIO]): File content as bytes or a file-like object.
+        filename (Optional[str]): Optional filename for extension-based guessing.
 
     Returns:
-        MIME type string.
+        str: The MIME type string.
     """
     if filename:
         ext = os.path.splitext(filename)[1].lower()
@@ -109,18 +105,18 @@ def sanitize_filename(filename: str) -> str:
     Sanitize a filename to prevent path traversal and other security issues.
 
     Args:
-        filename: The filename to sanitize.
+        filename (str): The original filename.
 
     Returns:
-        A sanitized filename.
+        str: A sanitized filename.
     """
     if not filename:
         return "unnamed_file"
-    # Remove any path components.
+    # Remove path components.
     filename = re.sub(r"[/\\]", "", filename)
-    # Replace null bytes using str.replace.
+    # Remove null bytes.
     filename = filename.replace("\x00", "")
-    # Remove any control characters.
+    # Remove control characters.
     filename = re.sub(r"[\x01-\x1F\x7F]", "", filename)
     # Remove potentially dangerous characters.
     filename = re.sub(r"[;&|`$><^]", "", filename)
@@ -130,7 +126,7 @@ def sanitize_filename(filename: str) -> str:
         filename = base[:250] + ext
     if not filename:
         filename = "unnamed_file"
-    # Optionally add a random suffix for extra safety.
+    # Optionally randomize filename.
     if os.environ.get("RANDOMIZE_FILENAMES", "false").lower() == "true":
         import random, string
         suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
@@ -139,34 +135,16 @@ def sanitize_filename(filename: str) -> str:
     return filename
 
 
-def is_valid_file_size(file_size: int, file_type: str) -> bool:
+def validate_mime_type(content_type: str, allowed_types: Optional[Union[List[str], set]] = None) -> bool:
     """
-    Check if the file size is within the allowed limit for PDF files.
+    Validate that the provided MIME type is allowed.
 
     Args:
-        file_size: Size of the file in bytes.
-        file_type: Type of the file (only 'pdf' is supported).
+        content_type (str): The MIME type to validate.
+        allowed_types (Optional[Union[List[str], set]]): Allowed MIME types; defaults to ALLOWED_MIME_TYPES["pdf"].
 
     Returns:
-        True if the file size is within limits, False otherwise.
-    """
-    max_size = MAX_PDF_SIZE_BYTES
-    valid = file_size <= max_size
-    if not valid:
-        _logger.warning("File size %d exceeds maximum %d for type %s", file_size, max_size, file_type)
-    return valid
-
-
-def validate_mime_type(content_type: str, allowed_types: Optional[Union[list, set]] = None) -> bool:
-    """
-    Validate that the provided content type is allowed.
-
-    Args:
-        content_type: The MIME type to check.
-        allowed_types: Optional list or set of allowed MIME types. Defaults to ALLOWED_MIME_TYPES["pdf"].
-
-    Returns:
-        True if the normalized content type is allowed, otherwise False.
+        bool: True if the MIME type is allowed, otherwise False.
     """
     if not content_type:
         return False
@@ -178,17 +156,15 @@ def validate_mime_type(content_type: str, allowed_types: Optional[Union[list, se
     return normalized in allowed_types
 
 
-# PDF Validation Functions (Only PDFs are Supported)
-
 def validate_pdf_file(content: bytes) -> bool:
     """
     Validate that a file is a genuine PDF by checking its header.
 
     Args:
-        content: File content as bytes (first chunk should include the header).
+        content (bytes): The file content.
 
     Returns:
-        True if the file appears to be a valid PDF, False otherwise.
+        bool: True if content appears to be a valid PDF, False otherwise.
     """
     try:
         if not content.startswith(b"%PDF"):
@@ -196,11 +172,11 @@ def validate_pdf_file(content: bytes) -> bool:
         match = re.search(rb"%PDF-(\d+)\.(\d+)", content[:20])
         if not match:
             return False
-        major, _ = int(match.group(1)), int(match.group(2))
+        major = int(match.group(1))
         if major < 1 or major > 9:
             return False
         return True
-    except (ValueError, re.error) as e:
+    except Exception as e:
         _logger.warning("PDF validation error: %s", e)
         return False
 
@@ -210,12 +186,12 @@ def _check_pdf_javascript(content: bytes, filename: Optional[str]) -> Tuple[bool
     Check PDF content for JavaScript markers.
 
     Args:
-        content: PDF content as bytes.
-        filename: Optional filename.
+        content (bytes): The PDF file content.
+        filename (Optional[str]): Filename for logging.
 
     Returns:
-        Tuple (is_safe, reason). If JavaScript is found and BLOCK_PDF_JAVASCRIPT is true,
-        returns False with an appropriate reason.
+        Tuple[bool, str]: (is_safe, reason). If JavaScript is detected and blocking is enabled,
+                          returns False with a reason.
     """
     if b"/JavaScript" in content or b"/JS" in content:
         if os.environ.get("BLOCK_PDF_JAVASCRIPT", "false").lower() == "true":
@@ -230,8 +206,8 @@ def _check_pdf_acroform(content: bytes, filename: Optional[str]) -> None:
     Check for the presence of AcroForm in the PDF and log a warning if found.
 
     Args:
-        content: PDF content as bytes.
-        filename: Optional filename.
+        content (bytes): The PDF file content.
+        filename (Optional[str]): Filename for logging.
     """
     if b"/AcroForm" in content:
         _logger.warning("PDF contains AcroForm: %s", filename or "")
@@ -241,14 +217,12 @@ def validate_file_safety(content: bytes, filename: Optional[str] = None) -> Tupl
     """
     Validate the safety of a PDF file by checking for potentially malicious elements.
 
-    This function only supports PDFs. It verifies the file signature and checks for JavaScript markers.
-
     Args:
-        content: File content as bytes.
-        filename: Optional filename for logging purposes.
+        content (bytes): The file content.
+        filename (Optional[str]): Filename for logging.
 
     Returns:
-        Tuple (is_safe, reason). If safety checks fail, is_safe is False and reason explains why.
+        Tuple[bool, str]: (is_safe, reason). If unsafe, reason explains why.
     """
     file_type = get_file_signature(content)
     if file_type != "pdf":
@@ -258,37 +232,28 @@ def validate_file_safety(content: bytes, filename: Optional[str] = None) -> Tupl
         return False, reason
     try:
         _check_pdf_acroform(content, filename)
-    except OSError as e:
+    except Exception as e:
         _logger.warning("Error checking PDF AcroForm: %s", e)
     return True, ""
 
 
-def validate_file_content(
-        content: bytes,
-        filename: Optional[str] = None,
-        content_type: Optional[str] = None
-) -> Tuple[bool, str, Optional[str]]:
+def validate_file_content(content: bytes, filename: Optional[str] = None, content_type: Optional[str] = None) -> Tuple[bool, str, Optional[str]]:
     """
     Perform comprehensive validation of a PDF file's content.
 
-    This function only supports PDF files. It verifies the MIME type (allowing only PDFs),
-    checks the PDF file structure, and then performs safety checks.
-
     Args:
-        content: File content as bytes.
-        filename: Optional filename for extension-based checks.
-        content_type: Optional content type to validate against.
+        content (bytes): The file content.
+        filename (Optional[str]): Filename for extension-based checks.
+        content_type (Optional[str]): Provided MIME type.
 
     Returns:
-        Tuple (is_valid, reason, detected_mime_type). If validation fails, is_valid is False and
-        reason provides the explanation.
+        Tuple[bool, str, Optional[str]]: (is_valid, reason, detected_mime_type).
     """
     if not content:
         return False, "Empty file content", None
 
     detected_mime = get_mime_type_from_buffer(content, filename)
 
-    # Use content_type if provided to validate the detected MIME type.
     if content_type:
         normalized_content_type = content_type.split(';')[0].strip().lower()
         if normalized_content_type != detected_mime:
@@ -307,23 +272,17 @@ def validate_file_content(
     return True, "", detected_mime
 
 
-async def validate_file_content_async(
-        content: bytes,
-        filename: Optional[str] = None,
-        content_type: Optional[str] = None
-) -> Tuple[bool, str, Optional[str]]:
+async def validate_file_content_async(content: bytes, filename: Optional[str] = None, content_type: Optional[str] = None) -> Tuple[bool, str, Optional[str]]:
     """
-    Asynchronously perform comprehensive validation of a PDF file's content.
-
-    Wraps the synchronous validate_file_content function in an asynchronous call.
+    Asynchronously validate a PDF file's content.
 
     Args:
-        content: File content as bytes.
-        filename: Optional filename.
-        content_type: Optional content type to validate against.
+        content (bytes): The file content.
+        filename (Optional[str]): Filename.
+        content_type (Optional[str]): Provided MIME type.
 
     Returns:
-        Tuple (is_valid, reason, detected_mime_type).
+        Tuple[bool, str, Optional[str]]: (is_valid, reason, detected_mime_type).
     """
     try:
         result = await asyncio.to_thread(validate_file_content, content, filename, content_type)
@@ -331,3 +290,53 @@ async def validate_file_content_async(
     except Exception as e:
         _logger.warning("Error in async file content validation: %s", e)
         return False, "Async validation error", None
+
+
+async def read_and_validate_file(file: UploadFile, operation_id: str) -> Tuple[Optional[bytes], Optional[JSONResponse], float]:
+    """
+    Reads and validates a single PDF file.
+
+    The function checks:
+      - The file's MIME type (only PDFs allowed).
+      - Reads the file content.
+      - Verifies that the file size does not exceed MAX_PDF_SIZE_BYTES (10 MB).
+      - Validates the file content asynchronously.
+
+    Args:
+        file (UploadFile): The uploaded file.
+        operation_id (str): Operation identifier for logging.
+
+    Returns:
+        Tuple[Optional[bytes], Optional[JSONResponse], float]:
+          - The file content as bytes if valid; otherwise, None.
+          - A JSONResponse error if validation fails; otherwise, None.
+          - The elapsed time for reading the file.
+    """
+
+    try:
+        if not validate_mime_type(file.content_type, list(ALLOWED_MIME_TYPES["pdf"])):
+            log_warning(f"[SECURITY] Unsupported file type: {file.content_type} [operation_id={operation_id}]")
+            return None, JSONResponse(status_code=415, content={"detail": "Only PDF files are supported", "operation_id": operation_id}), 0
+
+        file_read_start = time.time()
+        content = await file.read()
+        file_read_time = time.time() - file_read_start
+        log_info(f"[SECURITY] File read completed in {file_read_time:.3f}s. Size: {len(content) / 1024:.1f}KB [operation_id={operation_id}]")
+
+        if len(content) > MAX_PDF_SIZE_BYTES:
+            log_warning(f"[SECURITY] PDF size exceeds limit: {len(content)/(1024*1024):.2f}MB > {MAX_PDF_SIZE_BYTES/(1024*1024):.2f}MB [operation_id={operation_id}]")
+            return None, JSONResponse(
+                status_code=413,
+                content={"detail": f"PDF file size exceeds maximum allowed ({MAX_PDF_SIZE_BYTES // (1024*1024)}MB)", "operation_id": operation_id}
+            ), file_read_time
+
+        is_valid, reason, _ = await validate_file_content_async(content, file.filename, file.content_type)
+        if not is_valid:
+            log_warning(f"[SECURITY] Invalid PDF content: {reason} [operation_id={operation_id}]")
+            return None, JSONResponse(status_code=415, content={"detail": reason, "operation_id": operation_id}), file_read_time
+
+        return content, None, file_read_time
+
+    except Exception as e:
+        log_warning(f"[SECURITY] Exception in read_and_validate_file: {str(e)} [operation_id={operation_id}]")
+        return None, JSONResponse(status_code=500, content={"detail": "Internal Server Error", "operation_id": operation_id}), 0

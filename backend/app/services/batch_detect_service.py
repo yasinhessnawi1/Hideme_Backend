@@ -16,6 +16,7 @@ from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
+from backend.app.utils.validation.file_validation import read_and_validate_file, MAX_FILES_COUNT
 from backend.app.utils.validation.sanitize_utils import sanitize_detection_output, replace_original_text_in_redaction
 
 
@@ -60,6 +61,12 @@ class BatchDetectService(BaseDetectionService):
         batch_id = str(uuid.uuid4())
         log_info(f"Starting batch entity detection (Batch ID: {batch_id})")
 
+        # Check if the number of files exceeds the maximum allowed.
+        if len(files) > MAX_FILES_COUNT:
+            error_message = f"Too many files uploaded. Maximum allowed is {MAX_FILES_COUNT}."
+            log_error(f"[SECURITY] {error_message} [operation_id={batch_id}]")
+            return {"detail": error_message, "operation_id": batch_id}
+
         # Validate and prepare the entity list.
         try:
             entity_list = validate_all_engines_requested_entities(requested_entities)
@@ -79,7 +86,7 @@ class BatchDetectService(BaseDetectionService):
         log_info(f"Processing {len(files)} files with {optimal_workers} workers (Batch ID: {batch_id})")
 
         # Read file contents, filenames, and metadata.
-        pdf_files, file_names, file_metadata = await BatchDetectService._read_pdf_files(files)
+        pdf_files, file_names, file_metadata = await BatchDetectService._read_pdf_files(files, batch_id)
 
         # Filter valid PDFs.
         valid_pdf_files = [content for content in pdf_files if content is not None]
@@ -148,51 +155,57 @@ class BatchDetectService(BaseDetectionService):
         }
 
     @staticmethod
-    async def _read_pdf_files(files: List[UploadFile]) -> Tuple[List[Optional[bytes]], List[str], List[Dict[str, Any]]]:
+    async def _read_pdf_files(
+            files: List[UploadFile],
+            operation_id: str
+    ) -> Tuple[List[Optional[bytes]], List[str], List[Dict[str, Any]]]:
         """
-        Read and validate a list of PDF files.
+        Asynchronously read and validate a list of PDF files using the enhanced file validation utilities.
+
+        For each file, this method:
+          - Invokes `read_and_validate_file` to perform comprehensive validation (MIME type, file size, PDF header,
+            and safety checks).
+          - Builds a list of file contents (as bytes) or `None` for invalid files.
+          - Constructs a list of filenames and metadata (including content type, size, and read time).
 
         Args:
-            files: A list of UploadFile objects.
+            files (List[UploadFile]): A list of uploaded file objects.
+            operation_id (str): A unique identifier for the current operation (used for logging).
 
         Returns:
-            A tuple containing:
-              - A list of file contents (bytes) or None for invalid PDFs.
-              - A list of filenames.
-              - A list of metadata dictionaries for each file.
+            Tuple[List[Optional[bytes]], List[str], List[Dict[str, Any]]]:
+              - A list of file contents (or `None` if the file failed validation).
+              - A list of filenames corresponding to the files.
+              - A list of metadata dictionaries for each file (e.g., content type, size, read time).
         """
         pdf_files = []
         file_names = []
         file_metadata = []
         for file in files:
             try:
-                content_type = file.content_type or "application/octet-stream"
-                if "pdf" in content_type.lower():
-                    await file.seek(0)
-                    content = await file.read()
-                    pdf_files.append(content)
-                    file_names.append(file.filename)
-                    file_metadata.append({
-                        "filename": file.filename,
-                        "content_type": content_type,
-                        "size": len(content)
-                    })
-                else:
+                # Validate and read each file using the validate file utility.
+                content, error_response, read_time = await read_and_validate_file(file, operation_id)
+                if error_response:
+                    log_error(f"Validation failed for file {file.filename} [operation_id={operation_id}]")
                     pdf_files.append(None)
-                    file_names.append(file.filename)
-                    file_metadata.append({
-                        "filename": file.filename,
-                        "content_type": content_type,
-                        "size": 0
-                    })
+                else:
+                    pdf_files.append(content)
+                file_names.append(file.filename)
+                file_metadata.append({
+                    "filename": file.filename,
+                    "content_type": file.content_type or "application/octet-stream",
+                    "size": len(content) if content else 0,
+                    "read_time": read_time
+                })
             except Exception as e:
-                log_error(f"Error reading file {file.filename}: {str(e)}")
+                log_error(f"Exception reading file {file.filename}: {str(e)} [operation_id={operation_id}]")
                 pdf_files.append(None)
                 file_names.append(file.filename)
                 file_metadata.append({
                     "filename": file.filename,
                     "content_type": "unknown",
-                    "size": 0
+                    "size": 0,
+                    "read_time": 0
                 })
         return pdf_files, file_names, file_metadata
 

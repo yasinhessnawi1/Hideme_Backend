@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple, Optional
 
 from backend.app.domain.interfaces import EntityDetector
-from backend.app.utils.helpers.text_utils import TextUtils, EntityUtils
+from backend.app.utils.helpers.text_utils import TextUtils
 from backend.app.utils.logging.logger import default_logger as logger, log_warning
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
@@ -146,12 +146,9 @@ class BaseEntityDetector(EntityDetector, ABC):
         # 1. Standardize raw entities (convert them to a consistent dict format, etc.)
         standardized_entities = self._standardize_raw_entities(entities, full_text)
 
-        # 2. Sanitize entities (merge overlapping and remove duplicates).
-        sanitized_entities = self.sanitize_entities(standardized_entities)
-
         # 3. Process sanitized entities to find bounding boxes and positions.
         processed_entities, page_sensitive = self._process_sanitized_entities(
-            sanitized_entities,
+            standardized_entities,
             full_text,
             mapping
         )
@@ -456,33 +453,6 @@ class BaseEntityDetector(EntityDetector, ABC):
         finally:
             if acquired:
                 lock.release()
-
-    def sanitize_entities(self, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Sanitizes the detected entities by:
-        1. Merging overlapping entities
-        2. Removing duplicates with the same start and end indices
-
-        This method ensures that the entity detection results are clean and
-        without redundancy before further processing.
-
-        Args:
-            entities: List of entity dictionaries
-
-        Returns:
-            Sanitized list of entities
-        """
-        entity_dicts = []
-        for ent in entities:
-            if isinstance(ent, dict):
-                entity_dicts.append(ent)
-            else:
-                entity_dicts.append(self._convert_to_entity_dict(ent))
-
-        merged_entities = EntityUtils.merge_overlapping_entity_dicts(entity_dicts)
-        deduplicated_entities = EntityUtils.remove_duplicate_entities(merged_entities)
-
-        return deduplicated_entities
 
     @staticmethod
     def filter_entities_by_score(entities: List[Dict[str, Any]], threshold: float = 0.85) -> List[Dict[str, Any]]:

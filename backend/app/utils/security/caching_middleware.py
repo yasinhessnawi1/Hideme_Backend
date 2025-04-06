@@ -28,7 +28,7 @@ class ResponseCache:
     to ensure consistency. Each cache entry expires after a TTL and may include an ETag.
     """
 
-    def __init__(self, max_size: int = 1000, default_ttl: int = 300):
+    def __init__(self, max_size: int = 1000, default_ttl: int = 600):
         """
         Initialize the response cache.
 

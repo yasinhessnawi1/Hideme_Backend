@@ -227,9 +227,6 @@ class InitializationService:
         config = {"entities": entities or GLINER_AVAILABLE_ENTITIES}
         return self.get_detector(EntityDetectionEngine.GLINER, config)
 
-    def get_hybrid_detector(self, config: Optional[Dict[str, Any]] = None):
-        """Get a hybrid detector instance with basic thread safety."""
-        return self.get_detector(EntityDetectionEngine.HYBRID, config or {})
 
     # 4) Main "get_detector" logic  #
 

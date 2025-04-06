@@ -98,6 +98,7 @@ class MashinLearningService(BaseDetectionService):
         redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name= self.detector_type)
         # Prepare response.
         sanitized_response = sanitize_detection_output(entities, redaction_mapping, processing_times)
+
         sanitized_response["file_info"] = {
             "filename": file.filename,
             "content_type": file.content_type,

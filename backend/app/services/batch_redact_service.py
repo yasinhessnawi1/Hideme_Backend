@@ -31,7 +31,7 @@ from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.parallel.core import ParallelProcessingCore
 from backend.app.utils.system_utils.secure_file_utils import SecureTempFileManager
 from backend.app.utils.security.processing_records import record_keeper
-from backend.app.utils.validation.file_validation import sanitize_filename, validate_mime_type
+from backend.app.utils.validation.file_validation import read_and_validate_file, sanitize_filename, MAX_FILES_COUNT
 
 # Constants
 CHUNK_SIZE = 64 * 1024  # 64KB for streaming responses
@@ -58,14 +58,14 @@ class BatchRedactService:
         computes summary statistics, builds a ZIP archive of redacted files, and returns a streaming response.
 
         Args:
-            files: List of uploaded PDF files.
-            redaction_mappings: JSON string containing redaction mappings.
-            remove_images: If True, images will be detected and redacted on each file.
-            max_parallel_files: Maximum number of files to process concurrently.
-            background_tasks: BackgroundTasks instance for scheduling cleanup tasks.
+            files (List[UploadFile]): List of uploaded PDF files.
+            redaction_mappings (str): JSON string containing redaction mappings.
+            remove_images (bool): If True, images will be detected and redacted on each file.
+            max_parallel_files (Optional[int]): Maximum number of files to process concurrently.
+            background_tasks (Optional[BackgroundTasks]): BackgroundTasks instance for scheduling cleanup tasks.
 
         Returns:
-            A StreamingResponse streaming the ZIP archive of redacted files, or a JSONResponse with errors.
+            Union[JSONResponse, StreamingResponse]: A streaming response of the ZIP archive or a JSONResponse with errors.
         """
         start_time = time.time()
         batch_id = str(uuid.uuid4())
@@ -73,6 +73,13 @@ class BatchRedactService:
 
         if background_tasks is None:
             background_tasks = BackgroundTasks()
+
+        # Check if the number of files exceeds the maximum allowed.
+        if len(files) > MAX_FILES_COUNT:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": f"Too many files uploaded. Maximum allowed is {MAX_FILES_COUNT}."}
+            )
 
         # Parse the redaction mappings.
         file_mappings = BatchRedactService._parse_redaction_mappings(redaction_mappings)
@@ -86,8 +93,8 @@ class BatchRedactService:
         output_dir = await SecureTempFileManager.create_secure_temp_dir_async(f"batch_redact_{batch_id}_")
         background_tasks.add_task(SecureTempFileManager.secure_delete_directory, output_dir)
 
-        # Read and validate files.
-        file_metadata, valid_files = await BatchRedactService._prepare_files_for_redaction(files, file_mappings)
+        # Read and validate files (using the new validation mechanism).
+        file_metadata, valid_files = await BatchRedactService._prepare_files_for_redaction(files, file_mappings, batch_id)
         if not valid_files:
             return JSONResponse(
                 status_code=400,
@@ -144,6 +151,14 @@ class BatchRedactService:
     def build_streaming_response(zip_path: str, batch_summary: Dict[str, Any], batch_id: str) -> StreamingResponse:
         """
         Builds and returns a StreamingResponse for the ZIP archive.
+
+        Args:
+            zip_path (str): Path to the ZIP archive.
+            batch_summary (Dict[str, Any]): Summary information of the batch processing.
+            batch_id (str): Unique identifier for the batch.
+
+        Returns:
+            StreamingResponse: A response streaming the ZIP archive.
         """
         mem_stats = memory_monitor.get_memory_stats()
 
@@ -167,6 +182,12 @@ class BatchRedactService:
         """
         Parses the provided JSON string of redaction mappings.
         Returns a dictionary mapping filenames to their redaction mappings.
+
+        Args:
+            redaction_mappings (str): JSON string with redaction mappings.
+
+        Returns:
+            Dict[str, Any]: Mapping of filenames to redaction instructions.
         """
         try:
             mapping_data = json.loads(redaction_mappings)
@@ -195,54 +216,62 @@ class BatchRedactService:
     @staticmethod
     async def _prepare_files_for_redaction(
         files: List[UploadFile],
-        file_mappings: Dict[str, Any]
+        file_mappings: Dict[str, Any],
+        operation_id: str
     ) -> Tuple[List[Dict[str, Any]], List[Tuple[int, bytes]]]:
         """
-        Reads and validates each file.
+        Reads and validates each file using the read_and_validate_file utility.
         Returns a tuple containing:
           - A list of file metadata dictionaries.
           - A list of tuples (index, file content) for valid PDF files.
+
+        Args:
+            files (List[UploadFile]): List of uploaded file objects.
+            file_mappings (Dict[str, Any]): Mapping of filenames to redaction mappings.
+            operation_id (str): Unique identifier for the current operation (used for logging).
+
+        Returns:
+            Tuple[List[Dict[str, Any]], List[Tuple[int, bytes]]]: File metadata and valid file tuples.
         """
         file_metadata = []
         valid_files = []
         for i, file in enumerate(files):
+            if file.filename not in file_mappings:
+                log_warning(f"No redaction mapping for file: {file.filename}")
+                file_metadata.append({
+                    "original_name": file.filename,
+                    "content_type": file.content_type or DEFAULT_CONTENT_TYPE,
+                    "size": 0,
+                    "status": "error",
+                    "error": "No redaction mapping provided"
+                })
+                continue
+
             try:
-                if file.filename not in file_mappings:
-                    log_warning(f"No redaction mapping for file: {file.filename}")
+                # Validate the file using the shared utility.
+                content, error_response, read_time = await read_and_validate_file(file, operation_id)
+                if error_response:
+                    log_error(f"Validation failed for file {file.filename} [operation_id={operation_id}]")
                     file_metadata.append({
                         "original_name": file.filename,
                         "content_type": file.content_type or DEFAULT_CONTENT_TYPE,
                         "size": 0,
                         "status": "error",
-                        "error": "No redaction mapping provided"
+                        "error": error_response
                     })
                     continue
 
-                content_type = file.content_type or DEFAULT_CONTENT_TYPE
-                if not validate_mime_type(content_type, {"application/pdf"}):
-                    log_warning(f"Skipping non-PDF file: {file.filename} ({content_type})")
-                    file_metadata.append({
-                        "original_name": file.filename,
-                        "content_type": content_type,
-                        "size": 0,
-                        "status": "error",
-                        "error": "Only PDF files are supported for redaction"
-                    })
-                    continue
-
-                await file.seek(0)
-                content = await file.read()
                 file_idx = len(valid_files)
-
                 valid_files.append((file_idx, content))
                 file_metadata.append({
                     "original_name": file.filename,
-                    "content_type": content_type,
+                    "content_type": file.content_type or DEFAULT_CONTENT_TYPE,
                     "size": len(content),
+                    "read_time": read_time,
                     "safe_name": sanitize_filename(file.filename or f"file_{file_idx}.pdf"),
-                    "mapping": file_mappings[file.filename]
+                    "mapping": file_mappings[file.filename],
+                    "status": "success"
                 })
-
             except Exception as exc:
                 error_id = SecurityAwareErrorHandler.log_processing_error(
                     exc, "batch_redaction_preparation", file.filename or "unnamed_file"
@@ -268,6 +297,14 @@ class BatchRedactService:
         Creates a list of redaction items from the valid files.
         Each item is a tuple containing:
           (file index, file content, file metadata mapping, output path for redacted file).
+
+        Args:
+            valid_files (List[Tuple[int, bytes]]): List of valid file tuples.
+            file_metadata (List[Dict[str, Any]]): Metadata for each file.
+            output_dir (str): Directory path for storing redacted files.
+
+        Returns:
+            List[Tuple[int, bytes, Dict[str, Any], str]]: List of redaction items.
         """
         redaction_items = []
         for file_idx, content in valid_files:
@@ -289,9 +326,12 @@ class BatchRedactService:
         Returns a mapping from file index to the redaction result.
 
         Args:
-            redaction_items: List of redaction items.
-            max_workers: Maximum number of concurrent workers.
-            remove_images: If True, images will be redacted in each file.
+            redaction_items (List[Tuple[int, bytes, Dict[str, Any], str]]): List of redaction items.
+            max_workers (int): Maximum number of concurrent workers.
+            remove_images (bool): If True, images will be redacted in each file.
+
+        Returns:
+            Dict[int, Dict[str, Any]]: Mapping of file index to redaction result.
         """
 
         async def _process_redaction_item(item: Tuple[int, bytes, Dict[str, Any], str]) -> Tuple[int, Dict[str, Any]]:
@@ -310,7 +350,9 @@ class BatchRedactService:
                     "redactions_applied": redaction_count
                 }
             except Exception as redact_item_error:
-                err_id = SecurityAwareErrorHandler.log_processing_error(redact_item_error, "pdf_redaction", f"file_{file_idx}")
+                err_id = SecurityAwareErrorHandler.log_processing_error(
+                    redact_item_error, "pdf_redaction", f"file_{file_idx}"
+                )
                 log_error(f"Error applying redactions: {str(redact_item_error)} [error_id={err_id}]")
                 return file_idx, {
                     "status": "error",
@@ -349,6 +391,15 @@ class BatchRedactService:
         """
         Computes summary statistics for the batch redaction.
         Returns a tuple (successful, failed, total_redactions, total_time, batch_summary dict).
+
+        Args:
+            file_metadata (List[Dict[str, Any]]): Metadata for each file.
+            result_mapping (Dict[int, Dict[str, Any]]): Mapping of file index to redaction result.
+            start_time (float): Timestamp when processing started.
+            batch_id (str): Unique identifier for the batch.
+
+        Returns:
+            Tuple[int, int, int, float, Dict[str, Any]]: Summary statistics and batch summary dictionary.
         """
         successful = 0
         failed = 0
@@ -386,6 +437,13 @@ class BatchRedactService:
     ) -> List[Dict[str, Any]]:
         """
         Builds the file results list from file metadata and redaction result mapping.
+
+        Args:
+            file_metadata (List[Dict[str, Any]]): Metadata for each file.
+            result_mapping (Dict[int, Dict[str, Any]]): Mapping of file index to redaction result.
+
+        Returns:
+            List[Dict[str, Any]]: List of results for each file.
         """
         file_results = []
         for i, meta in enumerate(file_metadata):
@@ -427,6 +485,12 @@ class BatchRedactService:
         """
         Creates a ZIP archive from the redacted output files based on file metadata and redaction results.
         Updates the batch_summary's file_results with arcname references if needed.
+
+        Args:
+            batch_summary (Dict[str, Any]): Summary of the batch processing.
+            file_metadata (List[Dict[str, Any]]): Metadata for each file.
+            result_mapping (Dict[int, Dict[str, Any]]): Mapping of file index to redaction result.
+            zip_path (str): Path where the ZIP archive will be saved.
         """
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for res_entry in batch_summary["file_results"]:
@@ -443,6 +507,12 @@ class BatchRedactService:
     async def _stream_zip(zip_path: str):
         """
         Asynchronous generator to stream the ZIP file in chunks.
+
+        Args:
+            zip_path (str): Path to the ZIP archive.
+
+        Yields:
+            bytes: Chunks of the ZIP file.
         """
         try:
             with open(zip_path, "rb") as f:

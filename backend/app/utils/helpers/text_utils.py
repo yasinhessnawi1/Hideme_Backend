@@ -2,12 +2,11 @@
 Utility functions for text processing and entity handling.
 """
 from collections import defaultdict
-from typing import Dict, List, Tuple, Any, Union
+from typing import Dict, List, Tuple, Any
 
 from presidio_analyzer import RecognizerResult
 
 from backend.app.utils.logging.logger import log_warning
-
 
 
 class TextUtils:
@@ -186,88 +185,3 @@ class EntityUtils:
         merged_entities.append(prev_entity)
 
         return merged_entities
-
-    @staticmethod
-    def merge_overlapping_entity_dicts(entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Merges overlapping entities by keeping the longest span.
-        Works with generic entity dictionaries rather than specific object types.
-
-        Args:
-            entities: List of entity dictionaries (must have start, end, and score fields)
-
-        Returns:
-            List of merged entity dictionaries
-        """
-        if not entities:
-            return []
-
-        # Filter out entities with invalid start/end values
-        valid_entities = []
-        for entity in entities:
-            if isinstance(entity.get("start"), (int, float)) and isinstance(entity.get("end"), (int, float)):
-                valid_entities.append(entity)
-            else:
-                log_warning(f"[WARNING] Skipping entity with invalid position values: {entity}")
-
-        if not valid_entities:
-            return []
-
-        # Sort entities by start index
-        sorted_entities = sorted(valid_entities, key=lambda e: e.get("start", 0))
-
-        merged_entities = []
-        prev_entity = dict(sorted_entities[0])  # Create a copy to avoid modifying the original
-
-        for curr_entity in sorted_entities[1:]:
-            # Check if entities overlap
-            if curr_entity.get("start", 0) <= prev_entity.get("end", 0):
-                # Merge by keeping the longest span
-                prev_entity["start"] = min(prev_entity.get("start", 0), curr_entity.get("start", 0))
-                prev_entity["end"] = max(prev_entity.get("end", 0), curr_entity.get("end", 0))
-                prev_entity["score"] = max(prev_entity.get("score", 0.0), curr_entity.get("score", 0.0))
-
-                # For entity type, we generally keep the type of the entity with the higher score
-                if curr_entity.get("score", 0.0) > prev_entity.get("score", 0.0):
-                    prev_entity["entity_type"] = curr_entity.get("entity_type",
-                                                                 prev_entity.get("entity_type", "UNKNOWN"))
-            else:
-                merged_entities.append(prev_entity)
-                prev_entity = dict(curr_entity)  # Create a copy to avoid modifying the original
-
-        # Add the last entity
-        merged_entities.append(prev_entity)
-
-        return merged_entities
-
-    @staticmethod
-    def remove_duplicate_entities(entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Removes duplicate entities with the same start and end indices.
-        When duplicates are found, keeps the entity with the highest confidence score.
-
-        Args:
-            entities: List of entity dictionaries with start, end, and score fields
-
-        Returns:
-            List of deduplicated entities
-        """
-        if not entities:
-            return []
-
-        # Create a dictionary to track the highest score entity for each position
-        position_map = {}  # Format: (start, end) -> entity_dict
-
-        for entity in entities:
-            position_key = (entity.get("start"), entity.get("end"))
-
-            # Skip invalid positions
-            if None in position_key:
-                continue
-
-            # If we haven't seen this position before, or this entity has a higher score
-            if position_key not in position_map or entity.get("score", 0) > position_map[position_key].get("score", 0):
-                position_map[position_key] = entity
-
-        # Return the deduplicated entities
-        return list(position_map.values())

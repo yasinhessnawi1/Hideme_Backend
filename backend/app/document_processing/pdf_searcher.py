@@ -172,7 +172,8 @@ class PDFSearcher:
             if parsed_response and "pages" in parsed_response:
                 page_matches = [
                     {
-                        "bbox": token_entity["bbox"]
+                        "bbox": token_entity["bbox"],
+                        "original_text": token_entity.get("original_text", "")
                     }
                     for page_data in parsed_response["pages"]
                     for text_obj in page_data.get("text", [])
@@ -214,7 +215,7 @@ class PDFSearcher:
                         "x1": word.get("x1"),
                         "y1": word.get("y1")
                     }
-                    page_matches.append({"bbox": bbox})
+                    page_matches.append({"bbox": bbox, "original_text": word_text,})
             return {"page": page_number, "matches": page_matches}, len(page_matches)
         except Exception as e:
             log_debug(f"Error processing fallback page {page.get('page')}: {e}")
