@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/go-chi/chi/v5"
 	"github.com/yasinhessnawi1/Hideme_Backend/migrations"
 	"github.com/yasinhessnawi1/Hideme_Backend/scripts"
 	"net/http"
@@ -11,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
