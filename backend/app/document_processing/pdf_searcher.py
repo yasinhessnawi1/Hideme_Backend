@@ -172,7 +172,7 @@ class PDFSearcher:
             if parsed_response and "pages" in parsed_response:
                 page_matches = [
                     {
-                        "bbox": token_entity["bbox"],
+                        "bbox": token_entity["bbox"]
                     }
                     for page_data in parsed_response["pages"]
                     for text_obj in page_data.get("text", [])

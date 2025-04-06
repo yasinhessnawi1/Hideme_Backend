@@ -13,6 +13,7 @@ and verify that a detected term truly refers to personal data.
 Likewise, minimize false negatives by capturing all relevant personal data, 
 including those that require understanding the context (for instance, a medical condition or criminal act mentioned euphemistically). 
 Maintain a balanced and thorough approach – be comprehensive but precise in what you tag as an entity.
+**ENTITIES to Analyze:** : 
 """
 
 # Gemini prompt template footer
@@ -146,6 +147,8 @@ Output Restrictions
 DO NOT include any additional commentary or explanations—return only the JSON output.
 DO NOT modify the original text structure beyond anonymization.
 DO NOT fabricate or infer missing data—only extract what is present in the given text.
+VERY IMPORTANT:
+DO NOT include entities do not asked for in front of ENTITIES to Analyze.
 
 You are particularly good at detecting Norwegian formats for sensitive information such as Norwegian personal numbers (fødselsnummer), organization numbers, bank account numbers, license plate numbers, and Norwegian phone numbers.
 """

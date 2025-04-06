@@ -271,29 +271,3 @@ class EntityUtils:
 
         # Return the deduplicated entities
         return list(position_map.values())
-
-    @staticmethod
-    def convert_entity_to_dict(entity: Union[RecognizerResult, Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Converts an entity to a dictionary format.
-
-        Args:
-            entity: Entity object or dictionary
-
-        Returns:
-            Standardized entity dictionary
-        """
-        if isinstance(entity, dict):
-            return {
-                "entity_type": entity.get("entity_type", "UNKNOWN"),
-                "start": entity.get("start", 0),
-                "end": entity.get("end", 0),
-                "score": float(entity.get("score", 0.0))
-            }
-        else:
-            return {
-                "entity_type": entity.entity_type,
-                "start": entity.start,
-                "end": entity.end,
-                "score": float(entity.score)
-            }

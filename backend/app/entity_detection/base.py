@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple, Optional
 
 from backend.app.domain.interfaces import EntityDetector
-from backend.app.utils.helpers.text_utils import TextUtils
+from backend.app.utils.helpers.text_utils import TextUtils, EntityUtils
 from backend.app.utils.logging.logger import default_logger as logger, log_warning
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
@@ -240,10 +240,10 @@ class BaseEntityDetector(EntityDetector, ABC):
         return processed_entities, page_sensitive
 
     def _process_single_entity(
-        self,
-        sanitized_entity: Dict[str, Any],
-        full_text: str,
-        mapping: List[Tuple[Dict[str, Any], int, int]]
+            self,
+            sanitized_entity: Dict[str, Any],
+            full_text: str,
+            mapping: List[Tuple[Dict[str, Any], int, int]]
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         For a single sanitized entity, find all occurrences in the text,
@@ -272,24 +272,40 @@ class BaseEntityDetector(EntityDetector, ABC):
             log_warning("[WARNING] No matches found for entity '{0}', skipping".format(entity_text))
             return local_processed, local_sensitive
 
+        # Deduplicate matches based on (start, end) offsets.
+        unique_matches = {}
         for start_offset, end_offset in matches:
-            mapped_bboxes = TextUtils.map_offsets_to_bboxes(full_text, mapping, (start_offset, end_offset))
-            if not mapped_bboxes:
+            key = (start_offset, end_offset)
+            if key not in unique_matches:
+                unique_matches[key] = (start_offset, end_offset)
+
+        # Process each unique occurrence.
+        for start_offset, end_offset in unique_matches.values():
+            bboxes = TextUtils.map_offsets_to_bboxes(full_text, mapping, (start_offset, end_offset))
+            if not bboxes:
                 continue
 
-            # Build local_sensitive data
-            for bbox in mapped_bboxes:
-                sensitive_item = {
-                    "original_text": full_text[start_offset:end_offset],
-                    "entity_type": sanitized_entity["entity_type"],
-                    "start": start_offset,
-                    "end": end_offset,
-                    "score": sanitized_entity["score"],
-                    "bbox": bbox
+            # Merge multiple bounding boxes for a single occurrence.
+            if len(bboxes) > 1:
+                merged_bbox = {
+                    "x0": min(b["x0"] for b in bboxes),
+                    "y0": min(b["y0"] for b in bboxes),
+                    "x1": max(b["x1"] for b in bboxes),
+                    "y1": max(b["y1"] for b in bboxes)
                 }
-                local_sensitive.append(sensitive_item)
+            else:
+                merged_bbox = bboxes[0]
 
-            # Build local_processed data
+            sensitive_item = {
+                "original_text": full_text[start_offset:end_offset],
+                "entity_type": sanitized_entity["entity_type"],
+                "start": start_offset,
+                "end": end_offset,
+                "score": sanitized_entity["score"],
+                "bbox": merged_bbox
+            }
+            local_sensitive.append(sensitive_item)
+
             local_processed.append({
                 "entity_type": sanitized_entity["entity_type"],
                 "start": start_offset,
@@ -462,9 +478,6 @@ class BaseEntityDetector(EntityDetector, ABC):
                 entity_dicts.append(ent)
             else:
                 entity_dicts.append(self._convert_to_entity_dict(ent))
-
-        # Import here to avoid circular imports
-        from backend.app.utils.helpers.text_utils import EntityUtils
 
         merged_entities = EntityUtils.merge_overlapping_entity_dicts(entity_dicts)
         deduplicated_entities = EntityUtils.remove_duplicate_entities(merged_entities)
