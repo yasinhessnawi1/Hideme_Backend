@@ -1,4 +1,3 @@
-# backend/app/configs/gdpr_config.py
 """
 GDPR configuration settings for document processing.
 

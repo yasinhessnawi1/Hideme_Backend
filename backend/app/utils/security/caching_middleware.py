@@ -339,6 +339,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
             return response
 
         # Process the request normally.
+        # Process the request normally.
         response = await call_next(request)
         if 200 <= response.status_code < 400:
             response_body = b""
@@ -349,7 +350,14 @@ class CacheMiddleware(BaseHTTPMiddleware):
             if self.content_hashing:
                 content_hash = hashlib.sha256(response_body).hexdigest()
 
-            # Cache the response details.
+            # Determine TTL: check if the endpoint set a custom TTL header.
+            custom_ttl = response.headers.get("X-Cache-TTL")
+            try:
+                ttl_value = int(custom_ttl) if custom_ttl else self.ttl
+            except ValueError:
+                ttl_value = self.ttl
+
+            # Cache the response details using the determined TTL.
             response_cache.set(
                 cache_key,
                 {
@@ -358,7 +366,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
                     "headers": dict(response.headers),
                     "media_type": response.media_type
                 },
-                ttl=self.ttl,
+                ttl=ttl_value,
                 content_hash=content_hash
             )
 
@@ -371,7 +379,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
             if content_hash:
                 new_response.headers["ETag"] = content_hash
 
-            self._logger.debug(f"Cached new response for {cache_key}")
+            self._logger.info(f"✅ Cached new response with TTL: {ttl_value}")
             return new_response
 
         return response

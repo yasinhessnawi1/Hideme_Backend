@@ -1,9 +1,15 @@
+# This configuration file sets up global settings and recognizers for entity extraction
+# using custom regex-based patterns and built-in spaCy recognizers.
+
+# Global configuration settings:
 supported_languages:
-  - nb
-global_regex_flags: 26
+  - nb                        # Supported language: Norwegian Bokmål
+global_regex_flags: 26         # Global regex flags used in pattern matching
+
+# Recognizers for extracting various entities:
 recognizers:
   # Norwegian custom recognizers
-  - name: NO_FODSELSNUMMER_Recognizer
+  - name: NO_FODSELSNUMMER_Recognizer  # Recognizer for Norwegian social security numbers (fodselsnummer)
     supported_languages:
       - nb
     supported_entity: NO_FODSELSNUMMER
@@ -16,7 +22,7 @@ recognizers:
         regex: \b[0-3]\d[0-1]\d\d\d\s?\d{5}\b
         score: 0.95
 
-  - name: NO_PHONE_NUMBER_Recognizer
+  - name: NO_PHONE_NUMBER_Recognizer   # Recognizer for Norwegian phone numbers
     supported_languages:
       - nb
     supported_entity: NO_PHONE_NUMBER
@@ -29,7 +35,7 @@ recognizers:
         regex: \b(?:\+47\s?)?(\d{3}\s?\d{2}\s?\d{3})\b
         score: 0.95
 
-  - name: NO_ADDRESS_Recognizer
+  - name: NO_ADDRESS_Recognizer          # Recognizer for Norwegian addresses
     supported_languages:
       - nb
     supported_entity: NO_ADDRESS
@@ -39,7 +45,7 @@ recognizers:
         regex: (\b(?:[A-Za-zÆØÅæøå]+\s){1,4}\d{1,4}(?:,\s)?\d{4}\s[A-Za-zÆØÅæøå]+)|(\bPostboks\s?\d{1,5}(?:,\s)?\d{4}\s[A-Za-zÆØÅæøå]+)|(\b\d{4}\s[A-Za-zÆØÅæøå]+\b)|(\b[A-Za-zÆØÅæøå]+\s\d{1,4},?\s?\d{4}\s[A-Za-zÆØÅæøå]+\b)
         score: 0.98
 
-  - name: NO_BANK_ACCOUNT_Recognizer
+  - name: NO_BANK_ACCOUNT_Recognizer     # Recognizer for Norwegian bank account numbers
     supported_languages:
       - nb
     supported_entity: NO_BANK_ACCOUNT
@@ -52,7 +58,7 @@ recognizers:
         regex: \b(?:kontonr\.?|kontonummer:?|bankkontonummer:?|konto:?)\s*\d{4}[.\s]?\d{2}[.\s]?\d{5}\b
         score: 0.9
 
-  - name: NO_COMPANY_NUMBER_Recognizer
+  - name: NO_COMPANY_NUMBER_Recognizer    # Recognizer for Norwegian company numbers
     supported_languages:
       - nb
     supported_entity: NO_COMPANY_NUMBER
@@ -65,7 +71,7 @@ recognizers:
         regex: \b(?:organisasjonsnummer|organisasjonsnr|orgnr|org\.nr\.|org\s?nr)\.?:?\s*\d{3}[\s]?\d{3}[\s]?\d{3}\b
         score: 0.9
 
-  - name: NO_LICENSE_PLATE_Recognizer
+  - name: NO_LICENSE_PLATE_Recognizer     # Recognizer for Norwegian vehicle license plates
     supported_languages:
       - nb
     supported_entity: NO_LICENSE_PLATE
@@ -78,8 +84,8 @@ recognizers:
         regex: \b(?:reg\.?(?:istrerings)?nr\.?|bilnr\.?|bilskilt:?)\s*[A-Z]{2}[\s]?\d{4,5}\b
         score: 0.9
 
-  # Common global recognizers that work in any language
-  - name: EMAIL_ADDRESS_Recognizer
+  # Common global recognizers that work in any language:
+  - name: EMAIL_ADDRESS_Recognizer        # Recognizer for email addresses
     supported_languages:
       - nb
     supported_entity: EMAIL_ADDRESS
@@ -92,7 +98,7 @@ recognizers:
         regex: \b(?:e-post|epost|mail|e-mail):?\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b
         score: 0.9
 
-  - name: DATE_TIME_Recognizer
+  - name: DATE_TIME_Recognizer            # Recognizer for date and time expressions
     supported_languages:
       - nb
     supported_entity: DATE_TIME
@@ -108,7 +114,7 @@ recognizers:
         regex: \b\d{1,2}\.?\s+(?:januar|februar|mars|april|mai|juni|juli|august|september|oktober|november|desember)\s+\d{4}\b
         score: 0.8
 
-  - name: CRYPTO_Recognizer
+  - name: CRYPTO_Recognizer               # Recognizer for cryptocurrency addresses
     supported_languages:
       - nb
     supported_entity: CRYPTO
@@ -121,7 +127,7 @@ recognizers:
         regex: \b0x[a-fA-F0-9]{40}\b
         score: 0.85
 
-  - name: IBAN_CODE_Recognizer
+  - name: IBAN_CODE_Recognizer            # Recognizer for IBAN codes
     supported_languages:
       - nb
     supported_entity: IBAN_CODE
@@ -131,7 +137,7 @@ recognizers:
         regex: \bNO\d{2}\s?\d{4}\s?\d{4}\s?\d{3}\b
         score: 0.9
 
-  - name: IP_ADDRESS_Recognizer
+  - name: IP_ADDRESS_Recognizer           # Recognizer for IP addresses (IPv4 and IPv6)
     supported_languages:
       - nb
     supported_entity: IP_ADDRESS
@@ -144,7 +150,7 @@ recognizers:
         regex: \b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b
         score: 0.9
 
-  - name: URL_Recognizer
+  - name: URL_Recognizer                  # Recognizer for URLs and domains
     supported_languages:
       - nb
     supported_entity: URL
@@ -157,7 +163,7 @@ recognizers:
         regex: \b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]\b
         score: 0.7
 
-  - name: MEDICAL_LICENSE_Recognizer
+  - name: MEDICAL_LICENSE_Recognizer       # Recognizer for medical licenses (HPR numbers)
     supported_languages:
       - nb
     supported_entity: MEDICAL_LICENSE
@@ -167,7 +173,7 @@ recognizers:
         regex: \bHPR-(?:\d{7}|[A-Z0-9]{9})\b
         score: 0.9
 
-  # These are built-in recognizers that work in any language and use spaCy NLP
+  # Built-in recognizers that leverage spaCy NLP for entity recognition:
   - name: SpacyRecognizer
     supported_languages:
       - nb

@@ -30,6 +30,7 @@ from backend.app.utils.validation.file_validation import read_and_validate_file,
 
 
 class BaseDetectionService:
+    # Allowed MIME types for file validation.
     allowed_mime_types = ["application/pdf"]
 
     @staticmethod
@@ -44,17 +45,21 @@ class BaseDetectionService:
             list: A list of cleaned words/phrases.
         """
         try:
+            # Attempt to parse the removal words as JSON.
             parsed = json.loads(remove_words)
+            # If the parsed result is a list, clean each item.
             if isinstance(parsed, list):
                 return [str(item).strip() for item in parsed if str(item).strip()]
+            # Otherwise, treat it as a single string and return as a one-item list.
             return [str(parsed).strip()]
         except Exception as e:
+            # Log a warning if JSON parsing fails.
             log_warning(f"Error parsing removal words: {str(e)}")
+            # Fallback: split the string by commas and clean each word.
             return [word.strip() for word in remove_words.split(",") if word.strip()]
 
     @staticmethod
-    def extract_text(file_content: bytes, filename: str, operation_id: str) -> Tuple[
-        Optional[Any], Optional[JSONResponse]]:
+    def extract_text(file_content: bytes, filename: str, operation_id: str) -> Tuple[Optional[Any], Optional[JSONResponse]]:
         """
         Extracts text from the provided PDF file content.
 
@@ -69,20 +74,28 @@ class BaseDetectionService:
               - A JSONResponse error if extraction fails; otherwise, None.
         """
         try:
+            # Create a PDFTextExtractor instance with the file content.
             extractor = PDFTextExtractor(file_content)
+            # Extract text/data from the PDF.
             extracted_data = extractor.extract_text()
+            # Close the extractor to release any resources.
             extractor.close()
+            # Return the extracted data and no error.
             return extracted_data, None
         except Exception as e:
+            # Log the error that occurred during text extraction.
             log_error(f"Error during text extraction: {str(e)} [operation_id={operation_id}]")
+            # Create an API error response using the SecurityAwareErrorHandler.
             error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-                e, "text_extraction", 500, filename)
+                e, "text_extraction", 500, filename
+            )
+            # Include the operation ID in the error response.
             error_response["operation_id"] = operation_id
+            # Return no extracted data and the error response.
             return None, JSONResponse(status_code=status_code, content=error_response)
 
     @staticmethod
-    def process_requested_entities(requested_entities: Optional[str], operation_id: str) -> Tuple[
-        Optional[Any], Optional[JSONResponse]]:
+    def process_requested_entities(requested_entities: Optional[str], operation_id: str) -> Tuple[Optional[Any], Optional[JSONResponse]]:
         """
         Processes and validates the requested entities.
 
@@ -96,13 +109,20 @@ class BaseDetectionService:
               - A JSONResponse error if validation fails.
         """
         try:
+            # Validate the requested entities using the helper function.
             entity_list = validate_all_engines_requested_entities(requested_entities)
+            # Return the validated entity list and no error.
             return entity_list, None
         except Exception as e:
+            # Log a warning if entity validation fails.
             log_warning(f"Error processing requested entities: {str(e)} [operation_id={operation_id}]")
+            # Create an API error response for the entity validation error.
             error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-                e, "entity_validation", 400)
+                e, "entity_validation", 400
+            )
+            # Attach the operation ID to the error response.
             error_response["operation_id"] = operation_id
+            # Return no entity list and the error response.
             return None, JSONResponse(status_code=status_code, content=error_response)
 
     @classmethod
@@ -118,8 +138,9 @@ class BaseDetectionService:
             Optional[JSONResponse]: A JSONResponse error if the MIME type is invalid; otherwise, None.
         """
         try:
-            # Here you could use a shared MIME validation utility if available.
+            # Check if the file has a valid content type and if it is allowed.
             if not file.content_type or file.content_type.split(';')[0].strip().lower() not in cls.allowed_mime_types:
+                # Return an error response for unsupported file types.
                 return JSONResponse(
                     status_code=415,
                     content={
@@ -127,9 +148,12 @@ class BaseDetectionService:
                         "operation_id": operation_id
                     }
                 )
+            # Return None if the MIME type is valid.
             return None
         except Exception as e:
+            # Log a warning if an exception occurs during MIME validation.
             log_warning(f"Exception during MIME validation: {str(e)} [operation_id={operation_id}]")
+            # Return a generic internal server error response.
             return JSONResponse(
                 status_code=500,
                 content={"detail": "Internal Server Error during MIME validation", "operation_id": operation_id}
@@ -137,8 +161,7 @@ class BaseDetectionService:
 
     @staticmethod
     async def perform_detection(detector, minimized_data: Any, entity_list: Optional[Any],
-                                detection_timeout: int, operation_id: str) -> Tuple[
-        Optional[Any], Optional[JSONResponse]]:
+                                detection_timeout: int, operation_id: str) -> Tuple[Optional[Any], Optional[JSONResponse]]:
         """
         Performs detection using the provided detector.
 
@@ -153,14 +176,19 @@ class BaseDetectionService:
             Tuple[Optional[Any], Optional[JSONResponse]]: Detection result and any error response.
         """
         try:
-            if hasattr(detector, 'detect_sensitive_data_async') and callable(
-                    getattr(detector, 'detect_sensitive_data_async')):
+            # Check if the detector has an asynchronous detection method.
+            if hasattr(detector, 'detect_sensitive_data_async') and callable(getattr(detector, 'detect_sensitive_data_async')):
+                # Start the asynchronous detection task.
                 detection_task = detector.detect_sensitive_data_async(minimized_data, entity_list)
+                # Wait for the detection task to complete within the specified timeout.
                 detection_result = await asyncio.wait_for(detection_task, timeout=detection_timeout)
             else:
+                # If no asynchronous method is available, run the detection in a separate thread.
                 detection_result = await asyncio.to_thread(detector.detect_sensitive_data, minimized_data, entity_list)
+            # Return the detection result with no error.
             return detection_result, None
         except asyncio.TimeoutError:
+            # Return a timeout error response if detection exceeds the allowed time.
             return None, JSONResponse(
                 status_code=408,
                 content={
@@ -169,15 +197,17 @@ class BaseDetectionService:
                 }
             )
         except Exception as e:
+            # Log any error that occurs during detection.
             log_error(f"Error performing detection: {str(e)} [operation_id={operation_id}]")
+            # Create an API error response for the detection error.
             error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(e, "detection", 500)
             error_response["operation_id"] = operation_id
+            # Return no detection result and the error response.
             return None, JSONResponse(status_code=status_code, content=error_response)
 
     @staticmethod
     async def prepare_detection_context(file, requested_entities: Optional[str], operation_id: str,
-                                        start_time: float) -> Tuple[
-        Optional[Any], Optional[bytes], Optional[Any], Optional[dict], Optional[JSONResponse]]:
+                                        start_time: float) -> Tuple[Optional[Any], Optional[bytes], Optional[Any], Optional[dict], Optional[JSONResponse]]:
         """
         Prepares the detection context by:
           1. Validating the file's MIME type.
@@ -200,51 +230,59 @@ class BaseDetectionService:
               - processing_times (Optional[dict]): Performance metrics.
               - error_response (Optional[JSONResponse]): An error response if any step fails.
         """
+        # Initialize a dictionary to keep track of processing times.
         processing_times = {}
         try:
             # Step 1: Validate MIME type.
             mime_error = BaseDetectionService.validate_mime(file, operation_id)
             if mime_error:
+                # Return early if MIME validation fails.
                 return None, None, None, None, mime_error
 
             # Step 2: Process requested entities.
-            entity_list, entity_error = BaseDetectionService.process_requested_entities(requested_entities,
-                                                                                        operation_id)
+            entity_list, entity_error = BaseDetectionService.process_requested_entities(requested_entities, operation_id)
             if entity_error:
+                # Return early if processing requested entities fails.
                 return None, None, None, None, entity_error
 
             # Step 3: Read and validate file content using the shared utility.
             file_content, error, read_time = await read_and_validate_file(file, operation_id)
+            # Record the time taken to read the file.
             processing_times["file_read_time"] = read_time
             if error:
+                # Return early if file reading fails.
                 return None, None, None, None, error
 
             # Step 4: Validate file content asynchronously.
             is_valid, reason, _ = await validate_file_content_async(file_content, file.filename, file.content_type)
             if not is_valid:
+                # Return an error response if file content is invalid.
                 return None, None, None, None, JSONResponse(
                     status_code=415,
                     content={"detail": reason, "operation_id": operation_id}
                 )
 
             # Step 5: Extract text from the file.
-            extracted_data, extraction_error = BaseDetectionService.extract_text(file_content, file.filename,
-                                                                                 operation_id)
+            extracted_data, extraction_error = BaseDetectionService.extract_text(file_content, file.filename, operation_id)
             if extraction_error:
+                # Return early if text extraction fails.
                 return None, None, None, None, extraction_error
+            # Calculate the extraction time.
             processing_times["extraction_time"] = time.time() - start_time - processing_times.get("file_read_time", 0)
 
+            # Return the extracted data, file content, processed entities, timing metrics, and no error.
             return extracted_data, file_content, entity_list, processing_times, None
         except Exception as e:
+            # Log any exception that occurs during the detection context preparation.
             log_error(f"Exception in prepare_detection_context: {str(e)} [operation_id={operation_id}]")
+            # Return a generic internal server error response.
             return None, None, None, None, JSONResponse(
                 status_code=500,
                 content={"detail": "Internal Server Error", "operation_id": operation_id}
             )
 
     @staticmethod
-    def apply_removal_words(extracted_data: Any, detection_result: Tuple[Any, Any], remove_words: str) -> Tuple[
-        Any, Any]:
+    def apply_removal_words(extracted_data: Any, detection_result: Tuple[Any, Any], remove_words: str) -> Tuple[Any, Any]:
         """
         Applies removal words to update the detection result.
 
@@ -257,13 +295,20 @@ class BaseDetectionService:
             Tuple[Any, Any]: Updated (entities, redaction_mapping).
         """
         try:
+            # Parse the removal words into a list.
             words_to_remove = BaseDetectionService.parse_remove_words(remove_words)
+            # Create a DetectionResultUpdater instance with the extracted data and raw detection result.
             updater = DetectionResultUpdater(extracted_data, detection_result)
+            # Update the detection result using the removal words.
             updated_result = updater.update_result(words_to_remove)
+            # Get the updated redaction mapping; fallback to original if not provided.
             redaction_mapping = updated_result.get("redaction_mapping", detection_result[1])
+            # Return the original entities and the updated redaction mapping.
             return detection_result[0], redaction_mapping
         except Exception as e:
+            # Log a warning if an error occurs during removal words application.
             log_warning(f"Error applying removal words: {str(e)}")
+            # In case of error, return the original detection result.
             return detection_result[0], detection_result[1]
 
     @staticmethod
@@ -279,12 +324,19 @@ class BaseDetectionService:
             dict: A dictionary containing computed statistics.
         """
         try:
+            # Sum the total number of words in all pages.
             total_words = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
+            # Count the total number of pages.
             total_pages = len(extracted_data.get("pages", []))
+            # Initialize the stat's dictionary.
             stats = {"words_count": total_words, "pages_count": total_pages}
+            # If there are words and detected entities, compute the entity density.
             if total_words > 0 and entities:
                 stats["entity_density"] = (len(entities) / total_words) * 1000
+            # Return the computed statistics.
             return stats
         except Exception as e:
+            # Log a warning if an error occurs during statistics computation.
             log_warning(f"Error computing statistics: {str(e)}")
+            # Return an empty dictionary if an error occurs.
             return {}

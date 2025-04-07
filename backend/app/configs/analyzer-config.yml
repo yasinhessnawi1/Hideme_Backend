@@ -1,3 +1,11 @@
+# This configuration file defines the supported languages and the default score threshold
+# for score-based operations in the system.
+
+# List of supported language codes.
+# In this example, only Norwegian Bokmål ("nb") is supported.
 supported_languages:
   - nb
+
+# Default score threshold for score-based operations.
+# A threshold of 0 means that no minimum score is enforced by default.
 default_score_threshold: 0

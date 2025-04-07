@@ -1,9 +1,20 @@
+"""
+DocumentExtractService Module
+
+This module provides the DocumentExtractService class which encapsulates all steps
+for extracting text (with positions) from a PDF file. It validates the input file,
+extracts the text using PDFTextExtractor, applies data minimization techniques,
+records performance metrics and memory usage, and handles errors securely using
+SecurityAwareErrorHandler.
+"""
+
 import time
 from typing import Optional, Tuple, Any
 
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
 
+# Import custom modules for PDF extraction, logging, error handling, memory monitoring, and data minimization.
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
@@ -16,35 +27,73 @@ from backend.app.utils.validation.file_validation import read_and_validate_file
 
 class DocumentExtractService:
     """
-    Service that encapsulates all steps for extracting text with positions from a PDF file.
-    Includes performance metrics, memory optimization, and enhanced error handling.
+    DocumentExtractService Class
+
+    This class provides a service for extracting text along with positional information
+    from PDF documents. It reads and validates the uploaded file, extracts text using
+    PDFTextExtractor, minimizes the extracted data to remove unnecessary details, and records
+    performance and memory statistics. Errors during processing are handled securely using
+    SecurityAwareErrorHandler.
+
+    Methods:
+        extract(file) -> JSONResponse:
+            Extracts text from the provided PDF file and returns the extracted data along with performance metrics.
     """
 
     async def extract(self, file: UploadFile) -> JSONResponse:
+        """
+        Extract text with positional information from a PDF file.
+
+        This method performs the following steps:
+        1. Validates and reads the uploaded file.
+        2. Extracts text from the file using PDFTextExtractor.
+        3. Applies data minimization to the extracted data.
+        4. Removes the actual text content from the extracted words for privacy.
+        5. Records performance statistics and memory usage.
+        6. Logs sensitive operations and records processing for compliance.
+        7. Returns a JSONResponse containing the extracted data and performance metrics.
+
+        Args:
+            file: The PDF file to be processed for text extraction.
+
+        Returns:
+            JSONResponse: A response containing the extracted data along with performance and debug information,
+            or an error response if any error occurs during processing.
+        """
+        # Record the start time for overall processing
         start_time = time.time()
+        # Generate a unique operation ID using the current timestamp
         operation_id = f"pdf_extract_{time.time()}"
         log_info(f"[SECURITY] Starting PDF extraction [operation_id={operation_id}]")
 
+        # Validate and read the file; measure file reading time along with validation
         content, error, file_read_time = await read_and_validate_file(file, operation_id)
         if error:
+            # Return the error response immediately if file validation fails
             return error
 
-        # Step 5: Extract text.
+        # Extract text from the PDF using the helper method _extract_text
         extracted_data, extraction_error = self._extract_text(content, file.filename, operation_id)
         if extraction_error:
+            # Return the error response if text extraction fails
             return extraction_error
+
+        # Calculate extraction time excluding the file reading duration
         extract_time = time.time() - start_time - file_read_time
 
-        # Step 6: Apply data minimization.
+        # Apply data minimization to reduce the extracted data size
         extracted_data = minimize_extracted_data(extracted_data)
 
-        # Step 6.5: Remove the actual text from the extracted data.
+        # Remove the actual text from each word to further minimize sensitive data exposure
         extracted_data = self._remove_text_from_extracted_data(extracted_data)
 
-        # Step 7: Add performance statistics.
+        # Calculate total processing time
         total_time = time.time() - start_time
+        # Count the total number of pages and words in the extracted data
         pages_count = len(extracted_data.get("pages", []))
         words_count = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
+
+        # Append performance statistics to the extracted data
         extracted_data["performance"] = {
             "file_read_time": file_read_time,
             "extraction_time": extract_time,
@@ -53,13 +102,14 @@ class DocumentExtractService:
             "words_count": words_count,
             "operation_id": operation_id
         }
+        # Append file information details to the extracted data
         extracted_data["file_info"] = {
             "filename": file.filename,
             "content_type": file.content_type,
             "size": f"{round(len(content) / (1024 * 1024), 2)} MB"
         }
 
-        # Step 8: Record processing for compliance.
+        # Record processing details for compliance and auditing
         record_keeper.record_processing(
             operation_type="pdf_extraction",
             document_type="PDF",
@@ -69,7 +119,7 @@ class DocumentExtractService:
             success=True
         )
 
-        # Step 9: Log the sensitive operation.
+        # Log sensitive operation details with performance metrics
         log_sensitive_operation(
             "PDF Extraction",
             0,
@@ -79,8 +129,9 @@ class DocumentExtractService:
             extraction_time=extract_time
         )
 
-        # Step 10: Add memory statistics.
+        # Retrieve current memory usage statistics after processing
         mem_stats = memory_monitor.get_memory_stats()
+        # Include debug information for memory usage
         extracted_data["_debug"] = {
             "memory_usage": mem_stats["current_usage"],
             "peak_memory": mem_stats["peak_usage"]
@@ -91,25 +142,60 @@ class DocumentExtractService:
 
     @staticmethod
     def _extract_text(content: bytes, filename: str, operation_id: str) -> Tuple[Optional[Any], Optional[JSONResponse]]:
+        """
+        Extract text from the PDF file content using PDFTextExtractor.
+
+        This method attempts to extract text from the provided file content.
+        It initializes PDFTextExtractor, extracts text, and closes the extractor.
+        If any error occurs during extraction, it handles the error securely using
+        SecurityAwareErrorHandler.
+
+        Args:
+            content: The binary content of the PDF file.
+            filename: The name of the PDF file.
+            operation_id: Unique identifier for the current extraction operation.
+
+        Returns:
+            A tuple containing:
+                - extracted_data: The extracted text data (or None if extraction fails).
+                - error_response: A JSONResponse containing an error message if extraction fails, otherwise None.
+        """
         log_info(f"[SECURITY] Starting PDF text extraction [operation_id={operation_id}]")
         try:
+            # Initialize the PDFTextExtractor with the file content
             extractor = PDFTextExtractor(content)
+            # Extract text data from the PDF
             extracted_data = extractor.extract_text()
+            # Close the extractor to free up resources
             extractor.close()
             log_info(f"[SECURITY] PDF text extraction completed [operation_id={operation_id}]")
             return extracted_data, None
         except Exception as e:
+            # Log the error and create a secure error response if extraction fails
             log_error(f"[SECURITY] Error extracting text: {str(e)} [operation_id={operation_id}]")
-            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(e, "pdf_text_extraction",
-                                                                                              500, filename)
+            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+                e, "pdf_text_extraction", 500, filename
+            )
             return None, JSONResponse(status_code=status_code, content=error_response)
 
     @staticmethod
     def _remove_text_from_extracted_data(extracted_data: dict) -> dict:
         """
         Remove the actual text from each word in the extracted pages.
+
+        This method iterates over the pages and words in the extracted data,
+        and removes the "text" key from each word to minimize sensitive data exposure.
+
+        Args:
+            extracted_data: A dictionary containing extracted PDF data including pages and words.
+
+        Returns:
+            The modified extracted_data dictionary with the "text" key removed from each word.
         """
+        # Loop through each page in the extracted data
         for page in extracted_data.get("pages", []):
+            # Loop through each word in the current page
             for word in page.get("words", []):
+                # Remove the "text" field if it exists
                 word.pop("text", None)
         return extracted_data
