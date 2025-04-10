@@ -42,6 +42,12 @@ variable "backend_port" {
   default     = 8000
 }
 
+variable "go_backend_port" {
+  description = "Port on which the Go backend instances serve HTTP traffic"
+  type        = number
+  default     = 8080
+}
+
 variable "db_user" {
   description = "Database user name"
   type        = string

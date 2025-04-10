@@ -464,7 +464,7 @@ class BatchRedactService:
                     out_path = res.get("output_path")
                     if out_path and os.path.exists(out_path):
                         safe_name = sanitize_filename(meta.get("original_name", f"file_{i}.pdf"))
-                        res_entry["arcname"] = f"redacted_{safe_name}"
+                        res_entry["arcname"] = f"{safe_name}"
                 else:
                     res_entry = {
                         "file": meta.get("original_name", f"file_{i}"),

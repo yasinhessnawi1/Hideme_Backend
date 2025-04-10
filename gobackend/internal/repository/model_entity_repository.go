@@ -27,37 +27,38 @@ type ModelEntityRepository interface {
 	DeleteByMethodID(ctx context.Context, settingID, methodID int64) error
 }
 
-// MysqlModelEntityRepository is a MySQL implementation of ModelEntityRepository
-type MysqlModelEntityRepository struct {
+// PostgresModelEntityRepository is a PostgreSQL implementation of ModelEntityRepository
+type PostgresModelEntityRepository struct {
 	db *database.Pool
 }
 
 // NewModelEntityRepository creates a new ModelEntityRepository
 func NewModelEntityRepository(db *database.Pool) ModelEntityRepository {
-	return &MysqlModelEntityRepository{
+	return &PostgresModelEntityRepository{
 		db: db,
 	}
 }
 
 // Create adds a new model entity to the database
-func (r *MysqlModelEntityRepository) Create(ctx context.Context, entity *models.ModelEntity) error {
+func (r *PostgresModelEntityRepository) Create(ctx context.Context, entity *models.ModelEntity) error {
 	// Start query timer
 	startTime := time.Now()
 
-	// Define the query
+	// Define the query with RETURNING for PostgreSQL
 	query := `
         INSERT INTO model_entities (setting_id, method_id, entity_text)
-        VALUES (?, ?, ?)
+        VALUES ($1, $2, $3)
+        RETURNING model_entity_id
     `
 
 	// Execute the query
-	result, err := r.db.ExecContext(
+	err := r.db.QueryRowContext(
 		ctx,
 		query,
 		entity.SettingID,
 		entity.MethodID,
 		entity.EntityText,
-	)
+	).Scan(&entity.ID)
 
 	// Log the query execution
 	utils.LogDBQuery(
@@ -71,17 +72,8 @@ func (r *MysqlModelEntityRepository) Create(ctx context.Context, entity *models.
 		return fmt.Errorf("failed to create model entity: %w", err)
 	}
 
-	// Get the last insert ID
-	entityID, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("failed to get entity ID: %w", err)
-	}
-
-	// Set the entity ID
-	entity.ID = entityID
-
 	log.Info().
-		Int64("model_entity_id", entityID).
+		Int64("model_entity_id", entity.ID).
 		Int64("setting_id", entity.SettingID).
 		Int64("method_id", entity.MethodID).
 		Msg("Model entity created")
@@ -90,7 +82,7 @@ func (r *MysqlModelEntityRepository) Create(ctx context.Context, entity *models.
 }
 
 // CreateBatch adds multiple model entities to the database in a single transaction
-func (r *MysqlModelEntityRepository) CreateBatch(ctx context.Context, entities []*models.ModelEntity) error {
+func (r *PostgresModelEntityRepository) CreateBatch(ctx context.Context, entities []*models.ModelEntity) error {
 	if len(entities) == 0 {
 		return nil
 	}
@@ -100,23 +92,19 @@ func (r *MysqlModelEntityRepository) CreateBatch(ctx context.Context, entities [
 
 	// Execute within a transaction
 	return r.db.Transaction(ctx, func(tx *sql.Tx) error {
-		// Define the query
+		// Define the query with RETURNING for PostgreSQL
 		query := `
             INSERT INTO model_entities (setting_id, method_id, entity_text)
-            VALUES (?, ?, ?)
+            VALUES ($1, $2, $3)
+            RETURNING model_entity_id
         `
 
 		// Add each entity individually
 		for _, entity := range entities {
-			result, err := tx.ExecContext(ctx, query, entity.SettingID, entity.MethodID, entity.EntityText)
+			var entityID int64
+			err := tx.QueryRowContext(ctx, query, entity.SettingID, entity.MethodID, entity.EntityText).Scan(&entityID)
 			if err != nil {
 				return fmt.Errorf("failed to create model entity: %w", err)
-			}
-
-			// Get the last insert ID
-			entityID, err := result.LastInsertId()
-			if err != nil {
-				return fmt.Errorf("failed to get entity ID: %w", err)
 			}
 
 			// Set the entity ID
@@ -142,7 +130,7 @@ func (r *MysqlModelEntityRepository) CreateBatch(ctx context.Context, entities [
 }
 
 // GetByID retrieves a model entity by ID
-func (r *MysqlModelEntityRepository) GetByID(ctx context.Context, id int64) (*models.ModelEntity, error) {
+func (r *PostgresModelEntityRepository) GetByID(ctx context.Context, id int64) (*models.ModelEntity, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -150,7 +138,7 @@ func (r *MysqlModelEntityRepository) GetByID(ctx context.Context, id int64) (*mo
 	query := `
         SELECT model_entity_id, setting_id, method_id, entity_text
         FROM model_entities
-        WHERE model_entity_id = ?
+        WHERE model_entity_id = $1
     `
 
 	// Execute the query
@@ -181,7 +169,7 @@ func (r *MysqlModelEntityRepository) GetByID(ctx context.Context, id int64) (*mo
 }
 
 // GetBySettingID retrieves all model entities for a setting
-func (r *MysqlModelEntityRepository) GetBySettingID(ctx context.Context, settingID int64) ([]*models.ModelEntity, error) {
+func (r *PostgresModelEntityRepository) GetBySettingID(ctx context.Context, settingID int64) ([]*models.ModelEntity, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -189,7 +177,7 @@ func (r *MysqlModelEntityRepository) GetBySettingID(ctx context.Context, setting
 	query := `
         SELECT model_entity_id, setting_id, method_id, entity_text
         FROM model_entities
-        WHERE setting_id = ?
+        WHERE setting_id = $1
         ORDER BY method_id, entity_text
     `
 
@@ -236,7 +224,7 @@ func (r *MysqlModelEntityRepository) GetBySettingID(ctx context.Context, setting
 }
 
 // GetBySettingIDAndMethodID retrieves all model entities for a setting and method with method information
-func (r *MysqlModelEntityRepository) GetBySettingIDAndMethodID(ctx context.Context, settingID, methodID int64) ([]*models.ModelEntityWithMethod, error) {
+func (r *PostgresModelEntityRepository) GetBySettingIDAndMethodID(ctx context.Context, settingID, methodID int64) ([]*models.ModelEntityWithMethod, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -245,7 +233,7 @@ func (r *MysqlModelEntityRepository) GetBySettingIDAndMethodID(ctx context.Conte
         SELECT me.model_entity_id, me.setting_id, me.method_id, me.entity_text, dm.method_name
         FROM model_entities me
         JOIN detection_methods dm ON me.method_id = dm.method_id
-        WHERE me.setting_id = ? AND me.method_id = ?
+        WHERE me.setting_id = $1 AND me.method_id = $2
         ORDER BY me.entity_text
     `
 
@@ -295,15 +283,15 @@ func (r *MysqlModelEntityRepository) GetBySettingIDAndMethodID(ctx context.Conte
 }
 
 // Update updates a model entity in the database
-func (r *MysqlModelEntityRepository) Update(ctx context.Context, entity *models.ModelEntity) error {
+func (r *PostgresModelEntityRepository) Update(ctx context.Context, entity *models.ModelEntity) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
 	query := `
         UPDATE model_entities
-        SET entity_text = ?
-        WHERE model_entity_id = ?
+        SET entity_text = $1
+        WHERE model_entity_id = $2
     `
 
 	// Execute the query
@@ -344,12 +332,12 @@ func (r *MysqlModelEntityRepository) Update(ctx context.Context, entity *models.
 }
 
 // Delete removes a model entity from the database
-func (r *MysqlModelEntityRepository) Delete(ctx context.Context, id int64) error {
+func (r *PostgresModelEntityRepository) Delete(ctx context.Context, id int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM model_entities WHERE model_entity_id = ?`
+	query := `DELETE FROM model_entities WHERE model_entity_id = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, id)
@@ -384,12 +372,12 @@ func (r *MysqlModelEntityRepository) Delete(ctx context.Context, id int64) error
 }
 
 // DeleteBySettingID removes all model entities for a setting
-func (r *MysqlModelEntityRepository) DeleteBySettingID(ctx context.Context, settingID int64) error {
+func (r *PostgresModelEntityRepository) DeleteBySettingID(ctx context.Context, settingID int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM model_entities WHERE setting_id = ?`
+	query := `DELETE FROM model_entities WHERE setting_id = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, settingID)
@@ -417,12 +405,12 @@ func (r *MysqlModelEntityRepository) DeleteBySettingID(ctx context.Context, sett
 }
 
 // DeleteByMethodID removes all model entities for a setting and method
-func (r *MysqlModelEntityRepository) DeleteByMethodID(ctx context.Context, settingID, methodID int64) error {
+func (r *PostgresModelEntityRepository) DeleteByMethodID(ctx context.Context, settingID, methodID int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM model_entities WHERE setting_id = ? AND method_id = ?`
+	query := `DELETE FROM model_entities WHERE setting_id = $1 AND method_id = $2`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, settingID, methodID)

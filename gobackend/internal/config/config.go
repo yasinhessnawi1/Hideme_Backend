@@ -184,17 +184,11 @@ func setDefaults(config *AppConfig) {
 	if config.App.Environment == "" {
 		config.App.Environment = EnvDevelopment
 	}
-	if config.App.Name == "" {
-		config.App.Name = "HideMe"
-	}
+
 	if config.App.Version == "" {
 		config.App.Version = "1.0.0"
 	}
 
-	// Server defaults
-	if config.Server.Host == "" {
-		config.Server.Host = "127.0.0.1"
-	}
 	if config.Server.Port == 0 {
 		config.Server.Port = 8080 // Changed from 3306 to 8080 for web server
 	}
@@ -208,23 +202,6 @@ func setDefaults(config *AppConfig) {
 		config.Server.ShutdownTimeout = 30 * time.Second
 	}
 
-	// Database defaults
-	if config.Database.Host == "" {
-		config.Database.Host = "localhost"
-	}
-	if config.Database.Port == 0 {
-		config.Database.Port = 3306 // changed from 3306 to 3000
-	}
-	if config.Database.Name == "" {
-		config.Database.Name = "hideme"
-	}
-	// Add default database user and password
-	if config.Database.User == "" {
-		config.Database.User = "root" // Default MySQL user
-	}
-	if config.Database.Password == "" {
-		config.Database.Password = "" // Default password (change if needed)
-	}
 	if config.Database.MaxConns == 0 {
 		config.Database.MaxConns = 20
 	}

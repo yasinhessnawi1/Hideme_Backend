@@ -37,7 +37,8 @@ logger = logging.getLogger(__name__)
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
 # Define paths to data files
-data_path = r"C:\Users\yasin\Hideme_Backend\data_generation\Data-jsonl"
+#data_path = r"C:\Users\yasin\Hideme_Backend\data_generation\Data-jsonl"
+data_path = r"C:/workspace"
 
 # Path for combined JSONL file
 combined_data_path = os.path.join(os.path.dirname(data_path), "combined_data.jsonl")

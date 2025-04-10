@@ -17,7 +17,7 @@ import (
 )
 
 // setupSettingsRepositoryTest creates a new test database connection and mock
-func setupSettingsRepositoryTest(t *testing.T) (*repository.MysqlSettingsRepository, sqlmock.Sqlmock, func()) {
+func setupSettingsRepositoryTest(t *testing.T) (*repository.PostgresSettingsRepository, sqlmock.Sqlmock, func()) {
 	// Create a new SQL mock database
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -26,7 +26,7 @@ func setupSettingsRepositoryTest(t *testing.T) (*repository.MysqlSettingsReposit
 	dbPool := &database.Pool{DB: db}
 
 	// Create a new repository with the mocked database
-	repo := repository.NewSettingsRepository(dbPool).(*repository.MysqlSettingsRepository)
+	repo := repository.NewSettingsRepository(dbPool).(*repository.PostgresSettingsRepository)
 
 	// Return the repository, mock and a cleanup function
 	return repo, mock, func() {

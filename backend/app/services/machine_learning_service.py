@@ -13,7 +13,7 @@ to the threshold are retained. Both the flat list of entities and the nested red
 """
 
 import time
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
@@ -86,7 +86,6 @@ class MashinLearningService(BaseDetectionService):
         # Record the start time of the detection operation.
         start_time = time.time()
         log_info(f"[ML] Starting {self.detector_type} detection operation [operation_id={operation_id}]")
-
         try:
             # STEP 1: Prepare the detection context (e.g., file validation, text extraction).
             extracted_data, file_content, entity_list, processing_times, error = await self.prepare_detection_context(
