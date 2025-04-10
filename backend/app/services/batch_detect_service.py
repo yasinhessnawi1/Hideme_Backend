@@ -49,7 +49,8 @@ class BatchDetectService(BaseDetectionService):
             use_presidio: bool = True,
             use_gemini: bool = False,
             use_gliner: bool = False,
-            remove_words: Optional[str] = None
+            remove_words: Optional[str] = None,
+            threshold: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Process a batch of PDF files for entity detection.
@@ -63,6 +64,7 @@ class BatchDetectService(BaseDetectionService):
             use_gemini: Flag to enable the Gemini engine in hybrid mode.
             use_gliner: Flag to enable the Gliner engine in hybrid mode.
             remove_words: Optional words to remove from the detected output.
+            threshold (Optional[float]): A numeric threshold (0.00 to 1.00) for filtering the detection results.
 
         Returns:
             A dictionary containing the batch summary, individual file results, and debug information.
@@ -142,11 +144,12 @@ class BatchDetectService(BaseDetectionService):
                 })
                 continue
 
-            # Process entity detection for the current file.
+            # Process entity detection for the current file with the defined threshold.
             result = await BatchDetectService._process_detection_for_file(
                 extracted, filename, file_metadata[i], entity_list, detector,
                 detection_engine, use_presidio, use_gemini, use_gliner,
-                remove_words=remove_words
+                remove_words=remove_words,
+                threshold=threshold
             )
             detection_results.append(result)
 
@@ -280,13 +283,15 @@ class BatchDetectService(BaseDetectionService):
             use_presidio: bool,
             use_gemini: bool,
             use_gliner: bool,
-            remove_words: Optional[str] = None
+            remove_words: Optional[str] = None,
+            threshold: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Process entity detection for a single file.
 
         This method minimizes the extracted text data, selects the proper detection function (hybrid or single),
-        and then sanitizes the detection output. It computes processing metrics and constructs the result.
+        and then sanitizes and filters the detection output based on a given threshold.
+        It computes processing metrics and constructs the final result.
 
         Args:
             extracted: Raw text extraction result from a PDF file.
@@ -299,9 +304,10 @@ class BatchDetectService(BaseDetectionService):
             use_gemini: Flag for using Gemini in hybrid mode.
             use_gliner: Flag for using Gliner in hybrid mode.
             remove_words: Optional words to remove from the detection output.
+            threshold: Optional numeric threshold (0.00 to 1.00) used to filter detection results.
 
         Returns:
-            A dictionary with the file name, processing status, and detection results.
+            A dictionary with the file name, status, and detection results (after threshold filtering).
         """
         try:
             # Minimize the extracted data to remove redundant or sensitive information.
@@ -325,15 +331,23 @@ class BatchDetectService(BaseDetectionService):
                 "pages_count": pages_count,
                 "entity_density": (len(combined_entities) / total_words * 1000) if total_words > 0 else 0
             }
-            # Sanitize detection output to remove or mask sensitive information.
-            sanitized = sanitize_detection_output(combined_entities, combined_redaction_mapping, processing_times)
-            # Append file information to the sanitized output.
+
+            # Apply threshold filtering ---
+            # Use the centralized method from BaseDetectionService to filter the detection results.
+            filtered_entities, filtered_redaction_mapping = BaseDetectionService.apply_threshold_filter(
+                combined_entities, combined_redaction_mapping, threshold
+            )
+
+            # Sanitize the detection output using the filtered results.
+            sanitized = sanitize_detection_output(filtered_entities, filtered_redaction_mapping, processing_times)
+
+            # Append file metadata.
             sanitized["file_info"] = {
                 "filename": filename,
                 "content_type": file_meta.get("content_type", "unknown"),
                 "size": f"{round(file_meta.get('size', 0) / (1024 * 1024), 2)} MB"
             }
-            # Include model information based on the detection engine type.
+            # Append model information based on the detection engine type.
             if detection_engine == EntityDetectionEngine.HYBRID:
                 sanitized["model_info"] = {
                     "engine": "hybrid",
@@ -346,7 +360,7 @@ class BatchDetectService(BaseDetectionService):
             else:
                 sanitized["model_info"] = {"engine": detection_engine.name}
 
-            # Return a success result for the file.
+            # Return the successful result for this file.
             return {
                 "file": filename,
                 "status": "success",

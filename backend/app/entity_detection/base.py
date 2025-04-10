@@ -12,7 +12,7 @@ import asyncio
 import time
 from abc import ABC
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Tuple, Optional, Union
 
 from backend.app.domain.interfaces import EntityDetector
 from backend.app.utils.helpers.text_utils import TextUtils
@@ -528,39 +528,41 @@ class BaseEntityDetector(EntityDetector, ABC):
                 lock.release()
 
     @staticmethod
-    def filter_entities_by_score(entities: List[Dict[str, Any]], threshold: float = 0.85) -> List[Dict[str, Any]]:
+    def filter_by_score(
+            data: Union[List[Dict[str, Any]], Dict[str, Any]],
+            threshold: float = 0.85
+    ) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """
-        Filter a list of entity dictionaries based on a score threshold.
+        Filter a list of entity dictionaries or a redaction mapping based on a score threshold.
 
-        Only entities with a 'score' greater than or equal to the threshold are retained.
+        If data is a list, only entities with a 'score' greater than or equal to the threshold are retained.
+        If data is a dictionary (expected to be a redaction mapping with a 'pages' key), then for each page,
+        only the 'sensitive' entities with a score meeting the threshold are retained.
 
         Args:
-            entities: List of entity dictionaries.
-            threshold: The minimum score required (default: 0.85).
+            data: Either a list of entity dictionaries or a redaction mapping dictionary.
+            threshold: Minimum score required (default: 0.85).
 
         Returns:
-            A list of filtered entity dictionaries.
+            The filtered data in the same structure as the input.
+
+        Raises:
+            ValueError: If the input data is not of an expected type.
         """
-        return [entity for entity in entities if entity.get("score", 0) >= threshold]
-
-    @staticmethod
-    def filter_redaction_mapping_by_score(redaction_mapping: Dict[str, Any], threshold: float = 0.85) -> Dict[str, Any]:
-        """
-        Filter redaction mapping details for each page based on a score threshold.
-
-        For each page, only the entities with a 'score' greater than or equal to the threshold are retained.
-
-        Args:
-            redaction_mapping: Dictionary containing redaction details per page.
-            threshold: Minimum score required for an entity to be kept (default: 0.85).
-
-        Returns:
-            The updated redaction mapping with only high-score entities.
-        """
-        for page in redaction_mapping.get("pages", []):
-            if "sensitive" in page:
-                page["sensitive"] = [entity for entity in page["sensitive"] if entity.get("score", 0) >= threshold]
-        return redaction_mapping
+        if isinstance(data, list):
+            # Data is a flat list of entities.
+            return [entity for entity in data if entity.get("score", 0) >= threshold]
+        elif isinstance(data, dict):
+            # Data is assumed to be a redaction mapping with "pages".
+            for page in data.get("pages", []):
+                if "sensitive" in page:
+                    page["sensitive"] = [
+                        entity for entity in page["sensitive"]
+                        if entity.get("score", 0) >= threshold
+                    ]
+            return data
+        else:
+            raise ValueError("Input data must be a list or a dictionary with a 'pages' key.")
 
     @staticmethod
     def _convert_to_entity_dict(entity: Any) -> Dict[str, Any]:

@@ -581,12 +581,7 @@ class GlinerEntityDetector(BaseEntityDetector):
 
             log_sensitive_operation("GLiNER Detection", len(combined_results), total_time, pages=len(pages))
 
-            # Filter final results based on score threshold.
-            filter_final_entities = BaseEntityDetector.filter_entities_by_score(combined_results, threshold=0.50)
-            filter_final_redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping,
-                                                                                                  threshold=0.50)
-
-            return filter_final_entities, filter_final_redaction_mapping
+            return combined_results, redaction_mapping
 
         except Exception as exc:
             error_time = time.time() - start_time

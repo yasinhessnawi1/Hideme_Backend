@@ -12,6 +12,27 @@ from backend.app.configs.presidio_config import PRESIDIO_AVAILABLE_ENTITIES
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 
 
+def validate_threshold_score(threshold: Optional[float]) -> Optional[float]:
+    """
+    Validate the threshold value.
+
+    Args:
+        threshold: The threshold score (expected between 0.00 and 1.00)
+
+    Returns:
+        The threshold score if valid.
+
+    Raises:
+        HTTPException: If the threshold is not between 0.00 and 1.00.
+    """
+    if threshold is not None and (threshold < 0.00 or threshold > 1.00):
+        raise HTTPException(
+            status_code=400,
+            detail="Threshold must be between 0.00 and 1.00."
+        )
+    return threshold
+
+
 def check_all_option(entity_list):
     new_list = []
     for entity in entity_list:
@@ -62,7 +83,8 @@ def validate_all_engines_requested_entities(
                     )
         # Otherwise validate against standard entity lists
         else:
-            available_entities = list(GEMINI_AVAILABLE_ENTITIES.keys()) + PRESIDIO_AVAILABLE_ENTITIES + GLINER_AVAILABLE_ENTITIES
+            available_entities = list(
+                GEMINI_AVAILABLE_ENTITIES.keys()) + PRESIDIO_AVAILABLE_ENTITIES + GLINER_AVAILABLE_ENTITIES
             for entity in entity_list:
                 if entity not in available_entities:
                     raise HTTPException(
@@ -76,6 +98,7 @@ def validate_all_engines_requested_entities(
     except json.JSONDecodeError:
         log_error("[OK]Invalid JSON format in requested_entities")
         raise HTTPException(status_code=400, detail="Invalid JSON format in ALL_requested_entities")
+
 
 def validate_gemini_requested_entities(requested_entities: Optional[str]) -> List[str]:
     """
@@ -192,6 +215,7 @@ def validate_gliner_requested_entities(requested_entities: Optional[str]) -> Lis
     except json.JSONDecodeError:
         log_error("[Gliner] Invalid JSON format in requested_entities")
         raise HTTPException(status_code=400, detail="Invalid JSON format in gliner requested_entities")
+
 
 def convert_to_json(data: Any, indent: int = 2) -> str:
     """

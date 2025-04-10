@@ -10,6 +10,8 @@ This class includes methods for:
   - Preparing a complete detection context (combining all steps with performance metrics).
   - Applying removal words to update detection results.
   - Computing statistics from the extracted data.
+  - Filtering detection results based on a score threshold.
+  - Preparing the final JSON response by sanitizing the detection output and appending file and engine metadata.
 
 Comprehensive error handling via try/except is implemented in each method.
 """
@@ -17,16 +19,19 @@ Comprehensive error handling via try/except is implemented in each method.
 import asyncio
 import json
 import time
-from typing import Optional, Tuple, Any
+from typing import Optional, Tuple, Any, List, Dict
 
 from fastapi.responses import JSONResponse
 
 from backend.app.document_processing.detection_updater import DetectionResultUpdater
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
+from backend.app.entity_detection import BaseEntityDetector
 from backend.app.utils.helpers.json_helper import validate_all_engines_requested_entities
 from backend.app.utils.logging.logger import log_warning, log_error
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.validation.file_validation import read_and_validate_file, validate_file_content_async
+from backend.app.utils.validation.sanitize_utils import sanitize_detection_output
 
 
 class BaseDetectionService:
@@ -59,7 +64,8 @@ class BaseDetectionService:
             return [word.strip() for word in remove_words.split(",") if word.strip()]
 
     @staticmethod
-    def extract_text(file_content: bytes, filename: str, operation_id: str) -> Tuple[Optional[Any], Optional[JSONResponse]]:
+    def extract_text(file_content: bytes, filename: str, operation_id: str) -> Tuple[
+        Optional[Any], Optional[JSONResponse]]:
         """
         Extracts text from the provided PDF file content.
 
@@ -95,7 +101,8 @@ class BaseDetectionService:
             return None, JSONResponse(status_code=status_code, content=error_response)
 
     @staticmethod
-    def process_requested_entities(requested_entities: Optional[str], operation_id: str) -> Tuple[Optional[Any], Optional[JSONResponse]]:
+    def process_requested_entities(requested_entities: Optional[str], operation_id: str) -> Tuple[
+        Optional[Any], Optional[JSONResponse]]:
         """
         Processes and validates the requested entities.
 
@@ -161,7 +168,8 @@ class BaseDetectionService:
 
     @staticmethod
     async def perform_detection(detector, minimized_data: Any, entity_list: Optional[Any],
-                                detection_timeout: int, operation_id: str) -> Tuple[Optional[Any], Optional[JSONResponse]]:
+                                detection_timeout: int, operation_id: str) -> Tuple[
+        Optional[Any], Optional[JSONResponse]]:
         """
         Performs detection using the provided detector.
 
@@ -177,7 +185,8 @@ class BaseDetectionService:
         """
         try:
             # Check if the detector has an asynchronous detection method.
-            if hasattr(detector, 'detect_sensitive_data_async') and callable(getattr(detector, 'detect_sensitive_data_async')):
+            if hasattr(detector, 'detect_sensitive_data_async') and callable(
+                    getattr(detector, 'detect_sensitive_data_async')):
                 # Start the asynchronous detection task.
                 detection_task = detector.detect_sensitive_data_async(minimized_data, entity_list)
                 # Wait for the detection task to complete within the specified timeout.
@@ -207,7 +216,8 @@ class BaseDetectionService:
 
     @staticmethod
     async def prepare_detection_context(file, requested_entities: Optional[str], operation_id: str,
-                                        start_time: float) -> Tuple[Optional[Any], Optional[bytes], Optional[Any], Optional[dict], Optional[JSONResponse]]:
+                                        start_time: float) -> Tuple[
+        Optional[Any], Optional[bytes], Optional[Any], Optional[dict], Optional[JSONResponse]]:
         """
         Prepares the detection context by:
           1. Validating the file's MIME type.
@@ -240,7 +250,8 @@ class BaseDetectionService:
                 return None, None, None, None, mime_error
 
             # Step 2: Process requested entities.
-            entity_list, entity_error = BaseDetectionService.process_requested_entities(requested_entities, operation_id)
+            entity_list, entity_error = BaseDetectionService.process_requested_entities(requested_entities,
+                                                                                        operation_id)
             if entity_error:
                 # Return early if processing requested entities fails.
                 return None, None, None, None, entity_error
@@ -263,7 +274,8 @@ class BaseDetectionService:
                 )
 
             # Step 5: Extract text from the file.
-            extracted_data, extraction_error = BaseDetectionService.extract_text(file_content, file.filename, operation_id)
+            extracted_data, extraction_error = BaseDetectionService.extract_text(file_content, file.filename,
+                                                                                 operation_id)
             if extraction_error:
                 # Return early if text extraction fails.
                 return None, None, None, None, extraction_error
@@ -282,7 +294,8 @@ class BaseDetectionService:
             )
 
     @staticmethod
-    def apply_removal_words(extracted_data: Any, detection_result: Tuple[Any, Any], remove_words: str) -> Tuple[Any, Any]:
+    def apply_removal_words(extracted_data: Any, detection_result: Tuple[Any, Any], remove_words: str) -> Tuple[
+        Any, Any]:
         """
         Applies removal words to update the detection result.
 
@@ -340,3 +353,74 @@ class BaseDetectionService:
             log_warning(f"Error computing statistics: {str(e)}")
             # Return an empty dictionary if an error occurs.
             return {}
+
+    @staticmethod
+    def apply_threshold_filter(entities: List[Dict[str, Any]],
+                               redaction_mapping: Dict[str, Any],
+                               threshold: Optional[float] = None
+                               ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """
+        Apply threshold-based filtering on both a flat list of entity dictionaries and a redaction mapping.
+
+        Only entities with a 'score' greater than or equal to the threshold are retained.
+        If no threshold is provided, a default value of 0.85 is used.
+
+        Args:
+            entities: List of detected entity dictionaries.
+            redaction_mapping: Dictionary containing redaction mapping data, typically with a 'pages' key.
+            threshold: Optional numeric threshold (expected between 0.00 and 1.00).
+
+        Returns:
+            A tuple containing:
+              - The filtered list of entity dictionaries.
+              - The filtered redaction mapping dictionary.
+        """
+        effective_threshold = threshold if threshold is not None else 0.85
+        # Filter the flat entities list using the helper method from BaseEntityDetector.
+        filtered_entities = BaseEntityDetector.filter_by_score(entities, threshold=effective_threshold)
+        # Filter the redaction mapping similarly.
+        filtered_redaction_mapping = BaseEntityDetector.filter_by_score(redaction_mapping,
+                                                                        threshold=effective_threshold)
+        return filtered_entities, filtered_redaction_mapping
+
+    @staticmethod
+    def prepare_final_response(file, file_content: bytes, entities: List[Dict[str, Any]],
+                               redaction_mapping: Dict[str, Any], processing_times: dict,
+                               threshold: Optional[float], engine_name: str) -> JSONResponse:
+        """
+        Prepares the final JSON response for detection output by applying threshold filtering,
+        sanitizing the detection output, and appending file and engine metadata along with debug info.
+
+        Args:
+            file: The uploaded file object.
+            file_content: Raw contents of the file (bytes).
+            entities: List of detected entity dictionaries.
+            redaction_mapping: Dictionary with redaction mappings.
+            processing_times: Dictionary containing processing timing metrics.
+            threshold: Optional numeric threshold for filtering (default 0.85 if not provided).
+            engine_name: The name of the detection engine (e.g., "gemini", "presidio", "gliner").
+
+        Returns:
+            A JSONResponse containing the sanitized output with appended metadata.
+        """
+        # Apply the threshold filter.
+        filtered_entities, filtered_redaction_mapping = BaseDetectionService.apply_threshold_filter(
+            entities, redaction_mapping, threshold
+        )
+        # Sanitize the detection results.
+        sanitized_response = sanitize_detection_output(filtered_entities, filtered_redaction_mapping, processing_times)
+        # Append file metadata.
+        sanitized_response["file_info"] = {
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "size": f"{round(len(file_content) / (1024 * 1024), 2)} MB"
+        }
+        # Append engine/model metadata.
+        sanitized_response["model_info"] = {"engine": engine_name}
+        # Retrieve memory statistics for debugging and append.
+        mem_stats = memory_monitor.get_memory_stats()
+        sanitized_response["_debug"] = {
+            "memory_usage": mem_stats["current_usage"],
+            "peak_memory": mem_stats["peak_usage"]
+        }
+        return JSONResponse(content=sanitized_response)

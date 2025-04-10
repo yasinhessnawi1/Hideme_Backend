@@ -158,17 +158,7 @@ class GeminiEntityDetector(BaseEntityDetector):
                 start_time=start_time
             )
 
-            log_info(f"[DEBUG] Combined entities before filtering [Gemini]: {len(final_results)}")
-
-            # 4. Filter out entities below the desired score threshold.
-            filter_final_entities = BaseEntityDetector.filter_entities_by_score(final_results, threshold=0.85)
-            log_info(f"[DEBUG] Final entities after filtering (score >= 0.85) [Gemini]: {len(filter_final_entities)}")
-
-            # 5. Filter the redaction mapping similarly.
-            filter_final_redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(
-                final_redaction_mapping, threshold=0.85)
-
-            return filter_final_entities, filter_final_redaction_mapping
+            return final_results, final_redaction_mapping
 
         except Exception as exc:
             log_error("[ERROR] Error in Gemini detection: " + str(exc))

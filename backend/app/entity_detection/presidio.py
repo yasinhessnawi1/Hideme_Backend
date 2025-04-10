@@ -246,16 +246,10 @@ class PresidioEntityDetector(BaseEntityDetector):
                 success=True
             )
 
-            log_info(f"[DEBUG] Combined entities before filtering [Presidio]: {len(combined_entities)}")
-
-            # Filter detected entities based on a confidence score threshold.
-            final_entities = BaseEntityDetector.filter_entities_by_score(combined_entities, threshold=0.50)
-            redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping, threshold=0.50)
-
             # Log performance metrics for the detection process.
             self._log_detection_performance(combined_entities, redaction_mapping, pages, total_time)
 
-            return final_entities, redaction_mapping
+            return combined_entities, redaction_mapping
 
         except Exception as exc:
             log_error("[ERROR] Error in Presidio detection: " + str(exc))
