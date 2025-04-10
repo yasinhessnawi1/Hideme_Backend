@@ -1,8 +1,9 @@
 """
 GLiNER entity detection implementation with GDPR compliance and error handling.
 
-This module provides a robust implementation of GLiNER entity detection with
-improved initialization, GDPR compliance, and standardized error handling.
+This module provides a robust implementation of GLiNER entity detection with improved
+initialization, GDPR compliance, and standardized error handling. It uses a singleton
+pattern to ensure that the GLiNER model is loaded only once per process.
 """
 
 import asyncio
@@ -15,6 +16,7 @@ from typing import Dict, Any, List, Optional, Tuple
 
 import torch
 
+from backend.app.utils.constant.constant import GLINER_CONFIG_FILENAME, CONFIG_FILENAME
 from backend.app.utils.helpers.gliner_helper import GLiNERHelper
 from backend.app.utils.helpers.json_helper import validate_gliner_requested_entities
 
@@ -40,16 +42,14 @@ from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
 from backend.app.utils.parallel.core import ParallelProcessingCore
 
-# Constants to avoid duplicating these literal strings
-GLINER_CONFIG_FILENAME = "gliner_config.json"
-CONFIG_FILENAME = "config.json"
+
 
 
 class GlinerEntityDetector(BaseEntityDetector):
     """
     Enhanced service for detecting sensitive information using GLiNER with GDPR compliance
-    and standardized error handling. Uses a singleton pattern so that the GLiNER model
-    is loaded only once per process.
+    and standardized error handling. Uses a singleton pattern so that the GLiNER model is
+    loaded only once per process.
     """
 
     _shared_instance = None
@@ -89,7 +89,7 @@ class GlinerEntityDetector(BaseEntityDetector):
 
         Args:
             model_name: Name or path of the GLiNER model to use.
-            entities: Entity types to detect (if None, uses GLINER_ENTITIES).
+            entities: Entity types to detect (if None, uses GLINER_AVAILABLE_ENTITIES).
             local_model_path: Path to local model directory.
             local_files_only: If True, only use local model files.
         """
@@ -100,60 +100,67 @@ class GlinerEntityDetector(BaseEntityDetector):
         super().__init__()
         self.model_name = model_name
         self.model = None
+        # Use provided entities or fallback to default available entities
         self.default_entities = entities or GLINER_AVAILABLE_ENTITIES
         self.local_model_path = local_model_path or os.path.dirname(GLINER_MODEL_PATH)
         self.local_files_only = local_files_only
         self.model_dir_path = GLINER_MODEL_PATH
         self._is_initialized = False
 
-        # Lock for this instance (not the global model lock)
+        # Instance-specific lock (lazy creation)
         self._instance_lock: Optional[TimeoutLock] = None
 
-        # Keep track of calls and processing time
+        # Track number of calls and total processing time
         self._total_calls = 0
         self.total_processing_time = 0.0
 
-        # If GLiNER is not available, log an error
+        # Log error if GLiNER package is not available
         if not GLINER_AVAILABLE:
             log_error("[ERROR] GLiNER package not installed. Please install with 'pip install gliner'")
 
+        # Initialize any language-specific resources (e.g., Norwegian pronouns)
         self.norwegian_pronouns = self._init_norwegian_pronouns()
 
-        # Defer creation of the lock that was previously in the constructor
+        # Defer creation of the analyzer lock until needed
         self._model_analyzer_lock: Optional[TimeoutLock] = None
 
-        # Attempt model initialization
+        # Attempt to initialize the model with robust error handling
         self._initialize_model()
 
-        # Mark as initialized
+        # Mark initialization complete
         self._already_initialized = True
 
     def _get_model_analyzer_lock(self) -> TimeoutLock:
         """
         Lazily create and return the TimeoutLock for the GLiNER analyzer.
+        This lock is used to synchronize access during model inference.
         """
         if self._model_analyzer_lock is None:
-            self._model_analyzer_lock = TimeoutLock(
-                name="gliner_analyzer_lock",
-                priority=LockPriority.HIGH,
-                timeout=600.0
-            )
+            try:
+                self._model_analyzer_lock = TimeoutLock(
+                    name="gliner_analyzer_lock",
+                    priority=LockPriority.HIGH,
+                    timeout=600.0
+                )
+            except Exception as exc:
+                SecurityAwareErrorHandler.log_processing_error(exc, "model_analyzer_lock_init", self.model_dir_path)
         return self._model_analyzer_lock
 
-    # -------------------------------------------------------------------------
-    # Model Initialization
-    # -------------------------------------------------------------------------
+
     def _initialize_model(self) -> None:
         """
-        Refactored entry point for model initialization to reduce complexity.
+        Entry point for model initialization. Checks if GLiNER is available,
+        loads the model from cache if possible, and performs model loading otherwise.
         """
         if not GLINER_AVAILABLE:
             log_error("[ERROR] GLiNER package not installed.")
             return
 
+        # If already initialized, do nothing.
         if self._is_initialized and self.model is not None:
-            return  # Already initialized
+            return
 
+        # Create a unique cache key based on model configuration.
         cache_key = (self.model_name, self.local_files_only, tuple(sorted(self.default_entities)))
         if self._try_load_model_from_cache(cache_key):
             return
@@ -165,17 +172,19 @@ class GlinerEntityDetector(BaseEntityDetector):
             return
 
         try:
-            # Double-check after acquiring the lock
+            # Double-check cache after acquiring the lock.
             if self._try_load_model_from_cache(cache_key):
                 return
 
+            # Handle concurrent initialization if another thread is already working.
             if self._handle_concurrent_initialization(cache_key):
                 return
 
-            # Mark global as initializing
+            # Mark global initialization in progress.
             GlinerEntityDetector._global_initializing = True
 
             try:
+                # Perform the actual model loading.
                 self._perform_model_initialization(cache_key, start_time)
             finally:
                 GlinerEntityDetector._global_initializing = False
@@ -185,14 +194,13 @@ class GlinerEntityDetector(BaseEntityDetector):
 
     def _try_load_model_from_cache(self, cache_key) -> bool:
         """
-        Check if the model with this cache_key is already in the global cache.
-        If so, load it and update initialization fields.
+        Check if the model is already cached globally and load it if so.
 
         Args:
             cache_key: Unique key for this model configuration.
 
         Returns:
-            True if loaded from cache, otherwise False.
+            True if the model was loaded from cache, False otherwise.
         """
         short_acquired = GlinerEntityDetector._model_lock.acquire(timeout=5.0)
         if not short_acquired:
@@ -200,24 +208,21 @@ class GlinerEntityDetector(BaseEntityDetector):
             return False
         try:
             if cache_key in GlinerEntityDetector._model_cache:
-                return self._load_model_from_cache_and_log(
-                    cache_key,
-                    "in"
-                )
+                return self._load_model_from_cache_and_log(cache_key, "in")
             return False
         finally:
             GlinerEntityDetector._model_lock.release()
 
     def _handle_concurrent_initialization(self, cache_key) -> bool:
         """
-        If another thread is already initializing, wait up to 60s. If the model
-        appears in the cache afterward, load from there.
+        Wait if another thread is initializing the model. If the model is available in the cache
+        after waiting, load it.
 
         Args:
-            cache_key: Unique key for this model configuration
+            cache_key: Unique key for this model configuration.
 
         Returns:
-            True if the model was loaded from cache after waiting, otherwise False.
+            True if the model was loaded from cache after waiting, False otherwise.
         """
         if GlinerEntityDetector._global_initializing:
             log_info("[GLINER] Another thread is already initializing the model")
@@ -225,21 +230,19 @@ class GlinerEntityDetector(BaseEntityDetector):
             while GlinerEntityDetector._global_initializing and time.time() < wait_until:
                 time.sleep(1)
             if cache_key in GlinerEntityDetector._model_cache:
-                return self._load_model_from_cache_and_log(
-                    cache_key,
-                    "after waiting "
-                )
+                return self._load_model_from_cache_and_log(cache_key, "after waiting ")
         return False
 
     def _perform_model_initialization(self, cache_key, start_time: float, max_retries: int = 2) -> None:
         """
-        Perform the actual model loading logic, either from local or by downloading.
+        Load the model by either using local files or by downloading it, with retries.
 
         Args:
-            cache_key: Unique key for this model configuration
-            start_time: Time when initialization started
-            max_retries: Number of times to retry initialization
+            cache_key: Unique key for this model configuration.
+            start_time: Time when initialization started.
+            max_retries: Number of attempts to initialize the model.
         """
+        # Check if the local model directory exists.
         local_exists = self._check_local_model_exists()
         log_info(f"[GLINER] Local model exists: {local_exists}")
         for attempt_index in range(max_retries):
@@ -257,10 +260,10 @@ class GlinerEntityDetector(BaseEntityDetector):
                 GlinerEntityDetector._global_initialization_time = init_duration
                 return
             else:
-                local_exists = False
+                local_exists = False  # After a failed attempt, try downloading next
                 time.sleep(2)
 
-        # If we exit the loop, initialization failed
+        # Record failure if initialization did not succeed.
         record_keeper.record_processing(
             operation_type="gliner_model_initialization",
             document_type="model",
@@ -272,14 +275,14 @@ class GlinerEntityDetector(BaseEntityDetector):
 
     def _attempt_model_init(self, local_exists: bool, attempt_index: int) -> bool:
         """
-        Attempt to initialize the model once, either from local or by downloading.
+        Try to initialize the model either from a local directory or by downloading it.
 
         Args:
             local_exists: Whether a local model directory is present.
             attempt_index: Current attempt number.
 
         Returns:
-            True if the model is successfully loaded, False otherwise.
+            True if the model was successfully loaded, False otherwise.
         """
         try:
             if local_exists:
@@ -309,14 +312,14 @@ class GlinerEntityDetector(BaseEntityDetector):
 
     def _load_model_from_cache_and_log(self, cache_key: tuple, reason: str) -> bool:
         """
-        Helper to load a cached model and log the result to reduce duplicated code.
+        Load a cached model from the global cache and log the event.
 
         Args:
-            cache_key: Unique key for the model configuration
-            reason: A small phrase to describe how the model was loaded (e.g., "after waiting")
+            cache_key: Unique key for this model configuration.
+            reason: A phrase describing how the model was loaded (e.g., "after waiting").
 
         Returns:
-            True to indicate the model was successfully loaded from cache
+            True if the model was loaded successfully.
         """
         cached = GlinerEntityDetector._model_cache[cache_key]
         self.model = cached["model"]
@@ -326,16 +329,13 @@ class GlinerEntityDetector(BaseEntityDetector):
         log_info(f"[GLINER] Loaded model from cache {reason}in {self._initialization_time:.2f}s")
         return True
 
-    # -------------------------------------------------------------------------
-    # Utility Methods
-    # -------------------------------------------------------------------------
     @staticmethod
     def _init_norwegian_pronouns() -> set:
         """
-        Initialize the set of Norwegian pronouns for filtering.
+        Initialize a set of Norwegian pronouns used for filtering false positives.
 
         Returns:
-            Set of Norwegian pronouns in lowercase
+            A set of lowercase Norwegian pronouns.
         """
         pronouns = {
             "jeg", "du", "han", "hun", "vi", "dere", "de",
@@ -353,24 +353,25 @@ class GlinerEntityDetector(BaseEntityDetector):
 
     def _fix_config_file_discrepancy(self) -> None:
         """
-        Fix configuration file discrepancy by creating a copy of gliner_config.json as config.json.
+        Resolve configuration file discrepancies by copying gliner_config.json
+        to config.json if the latter does not exist.
         """
         try:
             gliner_config_path = os.path.join(self.model_dir_path, GLINER_CONFIG_FILENAME)
             config_path = os.path.join(self.model_dir_path, CONFIG_FILENAME)
             if os.path.exists(gliner_config_path) and not os.path.exists(config_path):
                 log_info("[GLINER] Creating config.json from gliner_config.json")
-                shutil.copy2(gliner_config_path, config_path)
+                shutil.copy2(GLINER_CONFIG_FILENAME, CONFIG_FILENAME)
                 log_info("[GLINER] Successfully created config.json")
         except Exception as exc:
             SecurityAwareErrorHandler.log_processing_error(exc, "gliner_config_fix", self.model_dir_path)
 
     def _check_local_model_exists(self) -> bool:
         """
-        Check if a valid local model directory exists.
+        Verify whether a valid local model directory exists by checking for required files.
 
         Returns:
-            True if a valid local model directory exists, False otherwise
+            True if a valid model directory exists; False otherwise.
         """
         if not os.path.exists(self.model_dir_path):
             log_warning(f"[GLINER] Model directory does not exist: {self.model_dir_path}")
@@ -399,13 +400,13 @@ class GlinerEntityDetector(BaseEntityDetector):
 
     def _save_model_to_directory(self, model_dir: str) -> bool:
         """
-        Save model to directory using GLiNER's native method.
+        Save the loaded model to a directory using GLiNER's native saving method or torch.save.
 
         Args:
-            model_dir: Directory path where to save the model
+            model_dir: The directory to save the model in.
 
         Returns:
-            True if saving succeeded, False otherwise
+            True if the model was saved successfully, False otherwise.
         """
         try:
             if not self.model:
@@ -428,13 +429,13 @@ class GlinerEntityDetector(BaseEntityDetector):
 
     def _load_local_model(self, model_dir: str) -> bool:
         """
-        Load model from directory using GLiNER's native method with error handling.
+        Load the model from a local directory using GLiNER's native method with error handling.
 
         Args:
-            model_dir: Path to the model directory
+            model_dir: The path to the model directory.
 
         Returns:
-            True if loading succeeded, False otherwise
+            True if the model was loaded successfully, False otherwise.
         """
         try:
             log_info(f"[OK] Loading GLiNER model from directory: {model_dir}")
@@ -442,7 +443,6 @@ class GlinerEntityDetector(BaseEntityDetector):
                 log_error(f"[ERROR] Expected a directory for model path: {model_dir}")
                 return False
             self._fix_config_file_discrepancy()
-
             from gliner import GLiNER  # re-import to avoid top-level error
             try:
                 config_path = os.path.join(model_dir, CONFIG_FILENAME)
@@ -462,13 +462,13 @@ class GlinerEntityDetector(BaseEntityDetector):
 
     def _attempt_explicit_config_load(self, model_dir: str) -> bool:
         """
-        Attempt to load model with an explicit config file if the native method fails.
+        Attempt to load the model with an explicit configuration file if the native load fails.
 
         Args:
-            model_dir: Path to the model directory
+            model_dir: The model directory path.
 
         Returns:
-            True if loading succeeded, False otherwise
+            True if loading succeeded, False otherwise.
         """
         try:
             from gliner import GLiNER
@@ -491,10 +491,6 @@ class GlinerEntityDetector(BaseEntityDetector):
             SecurityAwareErrorHandler.log_processing_error(config_error, "gliner_model_load_explicit_config", model_dir)
             return False
 
-    # -------------------------------------------------------------------------
-    # detect_sensitive_data_async
-    # -------------------------------------------------------------------------
-
     async def detect_sensitive_data_async(
             self,
             extracted_data: Dict[str, Any],
@@ -503,27 +499,30 @@ class GlinerEntityDetector(BaseEntityDetector):
         """
         Asynchronously detect sensitive entities in extracted data with GDPR compliance.
 
+        This method minimizes input data, validates requested entities, prepares page data,
+        and processes pages in parallel to extract and process entities.
+
         Args:
-            extracted_data: Dictionary containing text and bounding box information
-            requested_entities: List of entity types to detect
+            extracted_data: Dictionary containing text and bounding box information.
+            requested_entities: List of entity types to detect.
 
         Returns:
-            Tuple of (results_json, redaction_mapping)
+            Tuple of (detected entities, redaction mapping).
         """
         start_time = time.time()
         minimized_data = minimize_extracted_data(extracted_data)
         self._total_calls += 1
         self._last_used = time.time()
 
-        # Validate requested entities if provided; otherwise, use the default for GLiNER.
+        # Validate requested entities if provided, else use default.
         try:
             if requested_entities is not None:
                 requested_entities_json = json.dumps(requested_entities)
                 validated_entities = validate_gliner_requested_entities(requested_entities_json)
             else:
-                validated_entities = self.default_entities  # Assume self.default_entities is defined.
+                validated_entities = self.default_entities
         except Exception as e:
-            log_error("[GLiNER] Entity validation failed: " + str(e))
+            log_error("[GLINER] Entity validation failed: " + str(e))
             record_keeper.record_processing(
                 operation_type="gliner_detection",
                 document_type="document",
@@ -534,9 +533,9 @@ class GlinerEntityDetector(BaseEntityDetector):
             )
             return [], {"pages": []}
 
-        # If no valid GLiNER entities remain, short-circuit processing.
+        # Short-circuit if no valid entities remain.
         if not validated_entities:
-            log_warning("[GLiNER] No valid entities remain after filtering, returning empty results")
+            log_warning("[GLINER] No valid entities remain after filtering, returning empty results")
             record_keeper.record_processing(
                 operation_type="gliner_detection",
                 document_type="document",
@@ -552,11 +551,12 @@ class GlinerEntityDetector(BaseEntityDetector):
             if not pages:
                 return [], {"pages": []}
 
+            # Prepare page texts and mappings.
             page_texts_and_mappings, redaction_mapping = self._prepare_page_data(pages)
             if not page_texts_and_mappings:
                 return [], {"pages": []}
 
-            # Process pages in parallel with GLiNER's asynchronous method.
+            # Process pages concurrently using GLiNER's asynchronous method.
             page_results = await self._process_pages_gliner_async(pages, page_texts_and_mappings, validated_entities)
 
             combined_results = []
@@ -566,6 +566,7 @@ class GlinerEntityDetector(BaseEntityDetector):
                 if local_processed_entities:
                     combined_results.extend(local_processed_entities)
 
+            # Sort redaction mapping by page number.
             redaction_mapping["pages"].sort(key=lambda x: x.get("page", 0))
 
             total_time = time.time() - start_time
@@ -578,18 +579,9 @@ class GlinerEntityDetector(BaseEntityDetector):
                 success=True
             )
 
-            log_info(f"[PERF] GLiNER detection completed in {total_time:.2f}s")
-            log_info(f"[PERF] Found {len(combined_results)} entities across {len(pages)} pages")
             log_sensitive_operation("GLiNER Detection", len(combined_results), total_time, pages=len(pages))
-            log_info(f"[DEBUG] Combined entities before filtering [GLiNER]: {len(combined_results)}")
 
-            # Filter final results.
-            filter_final_entities = BaseEntityDetector.filter_entities_by_score(combined_results, threshold=0.50)
-            log_info(f"[DEBUG] Final entities after filtering (score >= 0.50) [GLiNER]: {len(filter_final_entities)}")
-            filter_final_redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping,
-                                                                                                  threshold=0.50)
-
-            return filter_final_entities, filter_final_redaction_mapping
+            return combined_results, redaction_mapping
 
         except Exception as exc:
             error_time = time.time() - start_time
@@ -614,12 +606,12 @@ class GlinerEntityDetector(BaseEntityDetector):
         Process pages in parallel using the GLiNER model.
 
         Args:
-            pages: List of page dictionaries
-            page_texts_and_mappings: Mapping of page_number -> (full_text, mapping)
-            requested_entities: List of entity types to detect
+            pages: List of page dictionaries.
+            page_texts_and_mappings: Mapping from page number to (full_text, mapping).
+            requested_entities: List of entity types to detect.
 
         Returns:
-            A list of (page_number, (page_redaction_info, processed_entities))
+            List of tuples containing page number and a tuple of (redaction info, processed entities).
         """
 
         async def process_page_async(local_page_data: Dict[str, Any]) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
@@ -647,22 +639,18 @@ class GlinerEntityDetector(BaseEntityDetector):
             requested_entities: List[str]
     ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         """
-        Process a single page asynchronously to detect entities with enhanced
-        error handling and GDPR compliance.
+        Process a single page asynchronously to detect entities with enhanced error handling and GDPR compliance.
 
-        This version uses ParallelProcessingCore.process_entities_in_parallel
-        to process the detected entities concurrently in batches.
+        This method uses the GLiNER model to process the page text, extracts entities,
+        and then processes these entities into redaction information.
 
         Args:
-            local_page_data: Dictionary with page information.
-            page_texts_and_mappings: Dictionary mapping page numbers to (text, mapping) tuples.
+            local_page_data: Dictionary with page details.
+            page_texts_and_mappings: Mapping of page numbers to (full_text, mapping).
             requested_entities: List of entity types to detect.
 
         Returns:
-            Tuple of (page_redaction_info, processed_entities) where:
-              - page_redaction_info: A dict containing redaction details for the page.
-              - processed_entities: A list of dictionaries for each detected entity,
-                including keys: "entity_type", "start", "end", "score", "original_text".
+            Tuple of (page_redaction_info, processed_entities).
         """
         page_start_time = time.time()
         local_page_number = local_page_data.get("page")
@@ -679,7 +667,7 @@ class GlinerEntityDetector(BaseEntityDetector):
             log_warning(f"[WARNING] GLiNER model not available, skipping page {local_page_number}")
             return {"page": local_page_number, "sensitive": []}, []
 
-        # Process text with GLiNER to get initial detected entities.
+        # Use a thread to process text with GLiNER as it may be CPU-bound.
         page_entities = await asyncio.to_thread(self._process_text_with_gliner, full_text, requested_entities)
         if not page_entities:
             log_info(f"[OK] No entities detected by GLiNER on page {local_page_number}")
@@ -688,8 +676,7 @@ class GlinerEntityDetector(BaseEntityDetector):
         entity_count = len(page_entities)
         log_info(f"[OK] Found {entity_count} entities on page {local_page_number}")
 
-        # Process entities in parallel using the ParallelProcessingCore helper.
-        # This method batches the processing of entities for the page.
+        # Process the detected entities into redaction information.
         processed_entities, local_page_redaction_info = await ParallelProcessingCore.process_entities_in_parallel(
             self, full_text, mapping, page_entities, local_page_number
         )
@@ -712,13 +699,15 @@ class GlinerEntityDetector(BaseEntityDetector):
             pages: List[Dict[str, Any]]
     ) -> Tuple[Dict[int, Tuple[str, List]], Dict[str, Any]]:
         """
-        Prepare page data for processing by extracting text and creating mappings.
+        Prepare page data by extracting full text and mapping for each page.
 
         Args:
-            pages: List of page dictionaries with word data
+            pages: List of page dictionaries with word data.
 
         Returns:
-            Tuple of (page_texts_and_mappings, redaction_mapping)
+            A tuple containing:
+              - page_texts_and_mappings: Mapping of page number to (full_text, mapping).
+              - redaction_mapping: A dictionary initialized with an empty pages list.
         """
         page_texts_and_mappings = {}
         redaction_mapping = {"pages": []}
@@ -736,9 +725,11 @@ class GlinerEntityDetector(BaseEntityDetector):
                 redaction_mapping["pages"].append({"page": local_page_number, "sensitive": []})
                 continue
 
-            full_text, mapping = TextUtils.reconstruct_text_and_mapping(words)
-            page_texts_and_mappings[local_page_number] = (full_text, mapping)
-
+            try:
+                full_text, mapping = TextUtils.reconstruct_text_and_mapping(words)
+                page_texts_and_mappings[local_page_number] = (full_text, mapping)
+            except Exception as exc:
+                SecurityAwareErrorHandler.log_processing_error(exc, "prepare_page_data", f"page_{local_page_number}")
         return page_texts_and_mappings, redaction_mapping
 
     def _process_text_with_gliner(
@@ -747,16 +738,20 @@ class GlinerEntityDetector(BaseEntityDetector):
             requested_entities: List[str]
     ) -> List[Dict[str, Any]]:
         """
-        Process text with GLiNER to extract entities with robust error handling.
+        Process text with GLiNER to extract entities, with robust error handling.
+
+        This method first checks for a cached result and returns it if available.
+        If not, it processes the text by splitting it into paragraphs and batches,
+        extracts entities for each group, deduplicates and filters results, and caches the result.
 
         Args:
-            text: Text to process
-            requested_entities: List of entity types to detect
+            text: The text to process.
+            requested_entities: List of entity types to detect.
 
         Returns:
-            List of detected entities
+            List of detected entity dictionaries.
         """
-        # Generate cache key using the helper's method
+        # Generate a unique cache key for the text and requested entities.
         key = GLiNERHelper.get_cache_key(text, requested_entities)
         cached = GLiNERHelper.get_cached_result(key)
         if cached is not None:
@@ -784,6 +779,7 @@ class GlinerEntityDetector(BaseEntityDetector):
             )
             return []
 
+        # Split the text into paragraphs and process each batch.
         paragraphs = [p for p in text.split('\n') if p.strip()]
         all_entities: List[Dict[str, Any]] = []
         batch_size = 5
@@ -793,12 +789,13 @@ class GlinerEntityDetector(BaseEntityDetector):
             batch_results = self._process_paragraph_batch(batch_paragraphs, text, requested_entities)
             all_entities.extend(batch_results)
 
+        # Deduplicate and filter out false positives based on Norwegian pronouns.
         deduplicated_entities = deduplicate_entities(all_entities)
         filtered_entities = self._filter_norwegian_pronouns(deduplicated_entities)
         processing_time = time.time() - start_time
         self.total_processing_time += processing_time
 
-        # Store the processed result using the public setter
+        # Cache the result for future reuse.
         GLiNERHelper.set_cached_result(key, filtered_entities)
         return filtered_entities
 
@@ -809,24 +806,22 @@ class GlinerEntityDetector(BaseEntityDetector):
             requested_entities: List[str]
     ) -> List[Dict[str, Any]]:
         """
-        Process a batch of paragraphs by splitting each paragraph into smaller text groups,
-        each containing at most max_chars (800) characters, and then extracting entities from each group
-        using the full list of requested entity types.
+        Process a batch of paragraphs by splitting each paragraph into smaller groups
+        and extracting entities for each group.
 
         For each paragraph:
-          1. Determine the paragraph's base offset in the full text.
-          2. Split the paragraph into groups (chunks) using _split_into_sentence_groups.
-          3. For each group, compute the absolute offset and process the group with all requested entity types.
-          4. Aggregate and return all detected entities.
+          1. Determine the base offset.
+          2. Split the paragraph into groups (max 800 characters).
+          3. Process each group and adjust the offsets.
+          4. Aggregate detected entities.
 
         Args:
-            paragraphs: A list of paragraph strings extracted from the page.
-            full_text: The complete text content of the page.
-            requested_entities: The full list of entity types to detect.
+            paragraphs: List of paragraph strings.
+            full_text: The full page text.
+            requested_entities: List of entity types to detect.
 
         Returns:
-            A list of dictionaries representing the detected entities.
-            Each dictionary contains keys: "entity_type", "start", "end", "score", "original_text".
+            A list of detected entity dictionaries.
         """
         all_entities = []
         for paragraph in paragraphs:
@@ -836,14 +831,13 @@ class GlinerEntityDetector(BaseEntityDetector):
             if base_offset == -1:
                 continue
 
-            # Split the paragraph into groups with at most 800 characters.
+            # Split the paragraph into sentence groups with a max character limit.
             sentence_groups = GLiNERHelper.split_into_sentence_groups(paragraph, 800)
             for group_text in sentence_groups:
                 group_offset = paragraph.find(group_text)
                 if group_offset == -1:
                     continue
                 absolute_offset = base_offset + group_offset
-                # Process the group_text with the full list of requested entity types.
                 group_entities = self._extract_entities_for_group(group_text, requested_entities, absolute_offset)
                 all_entities.extend(group_entities)
         return all_entities
@@ -855,23 +849,18 @@ class GlinerEntityDetector(BaseEntityDetector):
             absolute_offset: int
     ) -> List[Dict[str, Any]]:
         """
-        Extract entities from a given text group using the full list of requested entity types.
+        Extract entities from a text group using the model's prediction method.
 
-        This method:
-          1. Acquires a lock to ensure thread-safe access to the model.
-          2. Logs debug information about the text group.
-          3. Calls the model's predict_entities method once with all requested entity types.
-          4. Adjusts the start and end offsets of each detected entity by adding the absolute offset.
-          5. Returns a list of detected entity dictionaries.
+        This method acquires a lock for thread-safe access, logs debug information,
+        calls the model's predict_entities method, adjusts offsets, and returns the results.
 
         Args:
-            group_text: The text group (chunk) to process.
-            requested_entities: The full list of entity types to detect.
-            absolute_offset: The starting offset of group_text within the full page text.
+            group_text: The text chunk to process.
+            requested_entities: List of entity types to detect.
+            absolute_offset: Base offset of the group within the full text.
 
         Returns:
-            A list of dictionaries representing detected entities.
-            Each dictionary includes: "entity_type", "start", "end", "score", "original_text".
+            List of detected entity dictionaries.
         """
         local_entities = []
         lock = self._get_model_analyzer_lock()
@@ -881,8 +870,8 @@ class GlinerEntityDetector(BaseEntityDetector):
 
         try:
             log_info(
-                f"[DEBUG] Processing group_text (length {len(group_text)}): '{group_text[:100]}...' for entity_types: {requested_entities}")
-            # Process the group_text with all requested entity types in one call.
+                f"[DEBUG] Processing group_text (length {len(group_text)}): for entity_types: {requested_entities}")
+            # Predict entities using the GLiNER model.
             group_entities = self.model.predict_entities(group_text, requested_entities, threshold=0.5)
             for entity in group_entities:
                 entity_dict = {
@@ -895,10 +884,9 @@ class GlinerEntityDetector(BaseEntityDetector):
                 local_entities.append(entity_dict)
         except Exception as predict_error:
             log_error(
-                f"[DEBUG] Error in predict_entities for group_text (length {len(group_text)}): '{group_text[:100]}...'. Error: {predict_error}")
-            SecurityAwareErrorHandler.log_processing_error(
-                predict_error, "gliner_predict_entities", f"group_{hash(group_text) % 10000}"
-            )
+                f"[DEBUG] Error in predict_entities for group_text (length {len(group_text)}): Error: {predict_error}")
+            SecurityAwareErrorHandler.log_processing_error(predict_error, "gliner_predict_entities",
+                                                           f"group_{hash(group_text) % 10000}")
         finally:
             lock.release()
 
@@ -909,10 +897,10 @@ class GlinerEntityDetector(BaseEntityDetector):
         Filter out Norwegian pronouns that are incorrectly identified as person names.
 
         Args:
-            entities: List of detected entities
+            entities: List of detected entity dictionaries.
 
         Returns:
-            Filtered list of entities without Norwegian pronouns
+            A filtered list of entities without false positives due to pronoun detection.
         """
         filtered_entities = []
         for ent in entities:
@@ -920,9 +908,11 @@ class GlinerEntityDetector(BaseEntityDetector):
             if etype in {"person", "per"}:
                 text_val = ent.get("original_text", "").strip()
                 text_words = text_val.split()
+                # Remove if it's a single word that is a known pronoun.
                 if len(text_words) == 1 and text_words[0].lower() in self.norwegian_pronouns:
                     log_info("[FILTER] Removed Norwegian pronoun incorrectly detected as person")
                     continue
+                # Remove if all words are Norwegian pronouns.
                 if len(text_words) > 1 and all(w.lower() in self.norwegian_pronouns for w in text_words):
                     log_info("[FILTER] Removed compound Norwegian pronoun incorrectly detected as person")
                     continue
@@ -931,10 +921,10 @@ class GlinerEntityDetector(BaseEntityDetector):
 
     def get_status(self) -> Dict[str, Any]:
         """
-        Get the current status of the GLiNER detector.
+        Retrieve the current status and performance metrics of the GLiNER detector.
 
         Returns:
-            Dictionary with status information
+            A dictionary containing initialization status, timings, model info, and file details.
         """
         return {
             "initialized": self._is_initialized,

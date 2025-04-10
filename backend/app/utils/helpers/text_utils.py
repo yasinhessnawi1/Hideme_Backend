@@ -139,9 +139,31 @@ class TextUtils:
                 matches.append((start, end))
 
         if not matches:
-            log_warning(f"[OK] No match found for entity: '{entity_text}' in full text")
+            log_warning("[OK] No match found for entity in full text")
 
         return matches
+
+    @staticmethod
+    def merge_bounding_boxes(bboxes: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Merge multiple bounding boxes into a single bounding box that encompasses all of them.
+
+        Args:
+            bboxes (List[Dict[str, Any]]): A list of bounding boxes with keys "x0", "y0", "x1", "y1".
+
+        Returns:
+            Dict[str, Any]: A merged bounding box.
+        """
+        if not bboxes:
+            raise ValueError("No bounding boxes to merge.")
+        if len(bboxes) == 1:
+            return bboxes[0]
+        return {
+            "x0": min(b["x0"] for b in bboxes),
+            "y0": min(b["y0"] for b in bboxes),
+            "x1": max(b["x1"] for b in bboxes),
+            "y1": max(b["y1"] for b in bboxes)
+        }
 
 
 class EntityUtils:

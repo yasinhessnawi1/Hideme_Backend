@@ -1,7 +1,7 @@
 """
-Domain package for core domain entities and interfaces.
+Domain package for core domain  interfaces.
 
-This package defines the core domain model and interfaces for the
+This package defines the core domain interfaces for the
 document processing system.
 """
 from backend.app.domain.interfaces import (
@@ -10,17 +10,6 @@ from backend.app.domain.interfaces import (
     DocumentRedactor,
     PDFEntityMapping
 )
-from backend.app.domain.models import (
-    EntityInfo,
-    BoundingBox,
-    SensitiveEntity,
-    PageInfo,
-    RedactionMapping,
-    Word,
-    Page,
-    ExtractedData,
-    EntityDetectionResult
-)
 
 # Export classes
 __all__ = [
@@ -28,13 +17,4 @@ __all__ = [
     "EntityDetector",
     "DocumentRedactor",
     "PDFEntityMapping",
-    "EntityInfo",
-    "BoundingBox",
-    "SensitiveEntity",
-    "PageInfo",
-    "RedactionMapping",
-    "Word",
-    "Page",
-    "ExtractedData",
-    "EntityDetectionResult"
 ]

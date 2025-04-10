@@ -1,8 +1,16 @@
+# This configuration file sets up the NLP engine and model details for entity recognition.
+
+# Specify the name of the NLP engine to use.
 nlp_engine_name: spacy
+
+# Define the models used for language processing.
 models:
-  - lang_code: nb
-    model_name: nb_core_news_lg
+  - lang_code: nb               # Language code for Norwegian Bokmål.
+    model_name: nb_core_news_lg # Name of the model to use for this language.
+
+# Configuration for the Named Entity Recognition (NER) model.
 ner_model_configuration:
+  # Mapping of model-specific entity labels to standardized entity names.
   model_to_presidio_entity_mapping:
     PER: PERSON
     PERSON: PERSON
@@ -18,9 +26,17 @@ ner_model_configuration:
     NORP: NRP
     DRV: PERSON
     MISC: MEDICAL_LICENSE
+
+  # Multiplier to adjust scores for entities with low confidence.
   low_confidence_score_multiplier: 0.4
+
+  # List of entity names that should be considered as low-scoring.
   low_score_entity_names:
     - ORGANIZATION
     - ORG
+
+  # Default score to assign when no score is provided.
   default_score: 0.85
+
+  # List of labels that should be ignored during entity recognition.
   labels_to_ignore: ["PROD", "EVT"]

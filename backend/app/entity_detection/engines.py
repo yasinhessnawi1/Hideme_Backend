@@ -1,3 +1,7 @@
+"""
+Enum representing the supported entity detection engines.
+"""
+
 from enum import Enum, auto
 
 

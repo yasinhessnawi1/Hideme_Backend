@@ -1,5 +1,5 @@
 """
-Core domain interfaces for document processing system.
+Core domain interfaces for pdf processing system.
 """
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any, Tuple

@@ -1,8 +1,9 @@
 """
-Presidio entity detection implementation with enhanced GDPR compliance and error handling.
-
-This module provides a robust implementation of entity detection using Microsoft Presidio
-with improved security features, GDPR compliance, and standardized error handling.
+PresidioEntityDetector class implementation.
+This module provides a robust implementation of entity detection using Microsoft Presidio.
+It ensures enhanced GDPR compliance by minimizing data, supports asynchronous processing,
+and applies standardized error handling to avoid leaking sensitive information. Configuration
+files (YAML) are loaded for advanced analyzer and anonymizer setup, with fallbacks to defaults.
 """
 
 import asyncio
@@ -12,6 +13,7 @@ import os
 import time
 from typing import Dict, Any, List, Optional, Tuple
 
+# Import Presidio libraries for analysis and anonymization.
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer import AnalyzerEngineProvider
 from presidio_anonymizer import AnonymizerEngine
@@ -31,58 +33,89 @@ from backend.app.utils.validation.data_minimization import minimize_extracted_da
 
 class PresidioEntityDetector(BaseEntityDetector):
     """
-    Service for detecting sensitive information using Microsoft Presidio
-    with robust async processing support and GDPR compliance features.
+    Service for detecting sensitive information using Microsoft Presidio.
+
+    This detector leverages Microsoft Presidio's AnalyzerEngine and AnonymizerEngine
+    to detect and anonymize sensitive entities from input text. It loads configuration
+    from YAML files for custom setups, falls back to default settings if needed, and
+    employs robust error handling and caching to ensure GDPR compliance and operational resilience.
     """
 
     def __init__(self) -> None:
         """
         Initialize the Presidio entity detector using YAML configuration.
 
-        The lock for the Presidio analyzer is now lazily created instead of
-        being directly instantiated here.
+        This constructor sets up paths to configuration files, creates a lazy lock for
+        analyzer operations, and initializes the Presidio analyzer and anonymizer.
         """
+        # Call the parent class initializer.
         super().__init__()
+        # Lock to synchronize analyzer operations; created lazily.
         self._analyzer_lock: Optional[TimeoutLock] = None
+        # AnalyzerEngine instance; will be set during initialization.
         self.analyzer: Optional[AnalyzerEngine] = None
+        # AnonymizerEngine instance; will be set during initialization.
         self.anonymizer: Optional[AnonymizerEngine] = None
-        self.cache = {}  # Add an internal cache for analysis results
+        # Cache to store analysis results for reuse.
+        self.cache = {}
 
+        # Determine the base directory (two levels up from current file).
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # Configuration directory path.
         config_dir = os.path.join(base_dir, "configs")
 
+        # Define full paths to required configuration files.
         self._analyzer_conf_file = os.path.join(config_dir, "analyzer-config.yml")
         self._nlp_engine_conf_file = os.path.join(config_dir, "nlp-config.yml")
         self._recognizer_registry_conf_file = os.path.join(config_dir, "recognizers-config.yml")
 
-        # Perform initial loading of configuration
+        # Load Presidio analyzer and anonymizer with proper configuration.
         self._initialize_presidio()
 
     def _get_analyzer_lock(self) -> TimeoutLock:
         """
         Lazily create and return the TimeoutLock for analyzer operations.
+
+        This lock ensures that configuration and analysis operations are thread-safe.
+
+        Returns:
+            TimeoutLock: The analyzer lock.
         """
         if self._analyzer_lock is None:
-            self._analyzer_lock = TimeoutLock(
-                name="presidio_analyzer_lock",
-                priority=LockPriority.HIGH,
-                timeout=30.0
-            )
+            try:
+                self._analyzer_lock = TimeoutLock(
+                    name="presidio_analyzer_lock",
+                    priority=LockPriority.HIGH,
+                    timeout=30.0
+                )
+            except Exception as exc:
+                # Log the error using our error handling utility.
+                SecurityAwareErrorHandler.log_processing_error(exc, "analyzer_lock_init", self._analyzer_conf_file)
         return self._analyzer_lock
 
     @staticmethod
     def _cache_key(text: str, entities: List[str]) -> str:
+        """
+        Create a unique cache key based on the input text and list of entities.
+
+        Args:
+            text: The text to analyze.
+            entities: List of entity types.
+
+        Returns:
+            A string representing the MD5 hash of the combined input.
+        """
         key_data = text + '|' + ','.join(sorted(entities))
         return hashlib.md5(key_data.encode('utf-8')).hexdigest()
-
 
     def _initialize_presidio(self) -> None:
         """
         Initialize the Presidio analyzer and anonymizer using YAML configuration.
-        If configuration files are missing or a lock cannot be acquired,
-        falls back to default initialization.
+
+        Checks for existence of configuration files; if any are missing or if the
+        lock cannot be acquired, falls back to default initialization.
         """
-        # Check if configuration files exist
+        # List to store missing configuration file paths.
         missing_files = []
         for file_path in [
             self._analyzer_conf_file,
@@ -92,35 +125,39 @@ class PresidioEntityDetector(BaseEntityDetector):
             if not os.path.exists(file_path):
                 missing_files.append(file_path)
 
-        # Acquire lock for initialization
+        # Acquire the analyzer lock to ensure only one initialization occurs.
         analyzer_lock = self._get_analyzer_lock()
         acquired = analyzer_lock.acquire(timeout=60.0)  # 1-minute timeout
         if not acquired:
             log_error("[ERROR] Failed to acquire lock for Presidio analyzer initialization")
-            # Fallback to default
+            # Fallback to default initialization if lock acquisition fails.
             self.analyzer = AnalyzerEngine(supported_languages=[DEFAULT_LANGUAGE])
             self.anonymizer = AnonymizerEngine()
             return
 
         try:
+            # If configuration files are missing, log a warning and use default settings.
             if missing_files:
                 log_warning("[WARNING] Missing configuration files: " + ", ".join(missing_files))
                 log_warning("[WARNING] Using default configuration")
                 self.analyzer = AnalyzerEngine(supported_languages=[DEFAULT_LANGUAGE])
             else:
                 log_info("[OK] Loading Presidio configuration from YAML files")
+                # Create an AnalyzerEngineProvider with configuration file paths.
                 provider = AnalyzerEngineProvider(
                     analyzer_engine_conf_file=self._analyzer_conf_file,
                     nlp_engine_conf_file=self._nlp_engine_conf_file,
                     recognizer_registry_conf_file=self._recognizer_registry_conf_file
                 )
+                # Create the analyzer engine from configuration.
                 self.analyzer = provider.create_engine()
                 log_info("[OK] Successfully created analyzer engine from configuration")
 
-            # Initialize anonymizer
+            # Always initialize the anonymizer engine.
             self.anonymizer = AnonymizerEngine()
 
         finally:
+            # Release the lock regardless of success.
             analyzer_lock.release()
 
     async def detect_sensitive_data_async(
@@ -128,12 +165,28 @@ class PresidioEntityDetector(BaseEntityDetector):
             extracted_data: Dict[str, Any],
             requested_entities: Optional[List[str]] = None
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        start_time = time.time()
+        """
+        Asynchronously detect sensitive entities using Microsoft Presidio.
+
+        This method:
+          - Validates and minimizes input data.
+          - Processes each page of the document asynchronously.
+          - Aggregates and filters results based on confidence scores.
+          - Records processing details for GDPR compliance.
+
+        Args:
+            extracted_data: Dictionary containing text and bounding box information.
+            requested_entities: List of entity types to detect.
+
+        Returns:
+            A tuple containing a list of detected entities and a redaction mapping.
+        """
+        start_time = time.time()  # Record start time for performance metrics
         operation_type = "presidio_detection"
         document_type = "document"
 
-        # Validate requested entities if provided; otherwise, use the default for Presidio.
         try:
+            # Validate requested entities; if not provided, use default available entities.
             if requested_entities is not None:
                 requested_entities_json = json.dumps(requested_entities)
                 validated_entities = validate_presidio_requested_entities(requested_entities_json)
@@ -141,6 +194,7 @@ class PresidioEntityDetector(BaseEntityDetector):
                 validated_entities = PRESIDIO_AVAILABLE_ENTITIES
         except Exception as e:
             log_error("[Presidio] Entity validation failed: " + str(e))
+            # Record failure in processing.
             record_keeper.record_processing(
                 operation_type=operation_type,
                 document_type=document_type,
@@ -151,7 +205,7 @@ class PresidioEntityDetector(BaseEntityDetector):
             )
             return [], {"pages": []}
 
-        # If no valid Presidio entities remain, short-circuit processing.
+        # If no valid entities remain after validation, return empty results.
         if not validated_entities:
             log_warning("[Presidio] No valid entities remain after filtering, returning empty results")
             record_keeper.record_processing(
@@ -164,21 +218,25 @@ class PresidioEntityDetector(BaseEntityDetector):
             )
             return [], {"pages": []}
 
+        # Minimize data for GDPR compliance.
         minimized_data = minimize_extracted_data(extracted_data)
 
         try:
+            # Get the list of pages from the minimized data.
             pages = minimized_data.get("pages", [])
             if not pages:
                 return [], {"pages": []}
 
-            # Process all pages asynchronously (engine-specific parallel processing)
+            # Process all pages asynchronously using engine-specific parallel processing.
             local_page_results = await self._process_all_pages_async(pages, validated_entities)
 
-            # Aggregate results from all pages
+            # Aggregate the detection results from all pages.
             combined_entities, redaction_mapping = self._aggregate_page_results(local_page_results)
 
             total_time = time.time() - start_time
+            # Update usage metrics from the base class.
             self.update_usage_metrics(len(combined_entities), total_time)
+            # Record processing for auditing and GDPR compliance.
             record_keeper.record_processing(
                 operation_type=operation_type,
                 document_type=document_type,
@@ -188,15 +246,10 @@ class PresidioEntityDetector(BaseEntityDetector):
                 success=True
             )
 
-            log_info(f"[DEBUG] Combined entities before filtering [Presidio]: {len(combined_entities)}")
-
-            # Filter final results based on a confidence score threshold.
-            final_entities = BaseEntityDetector.filter_entities_by_score(combined_entities, threshold=0.50)
-            redaction_mapping = BaseEntityDetector.filter_redaction_mapping_by_score(redaction_mapping, threshold=0.50)
-
+            # Log performance metrics for the detection process.
             self._log_detection_performance(combined_entities, redaction_mapping, pages, total_time)
 
-            return final_entities, redaction_mapping
+            return combined_entities, redaction_mapping
 
         except Exception as exc:
             log_error("[ERROR] Error in Presidio detection: " + str(exc))
@@ -216,11 +269,13 @@ class PresidioEntityDetector(BaseEntityDetector):
         local_requested_entities: List[str]
     ) -> List[Tuple[int, Tuple[Dict[str, Any], List[Dict[str, Any]]]]]:
         """
-        Step 1: Process all pages in parallel with a global timeout.
+        Process all pages in parallel using a global timeout.
+
+        For each page, the text is reconstructed and analyzed in a separate thread.
 
         Args:
             pages: List of page dictionaries.
-            local_requested_entities: The list of requested entity types.
+            local_requested_entities: List of requested entity types.
 
         Returns:
             A list of tuples: (page_number, (page_redaction_info, processed_entities))
@@ -230,21 +285,24 @@ class PresidioEntityDetector(BaseEntityDetector):
             Processes a single page for entity detection.
 
             Args:
-                local_page: Dictionary representing a page of text.
+                local_page: Dictionary representing a page.
 
             Returns:
-                (page_redaction_info, processed_entities) for the page.
+                A tuple with page redaction information and a list of processed entities.
             """
             try:
+                # Get page number and word data.
                 local_page_number = local_page.get("page")
                 local_words = local_page.get("words", [])
                 if not local_words:
+                    # Return empty result if no words are present.
                     return {"page": local_page_number, "sensitive": []}, []
 
+                # Reconstruct the full text and mapping from the word data.
                 full_text, mapping = TextUtils.reconstruct_text_and_mapping(local_words)
                 log_info(f"[OK] Processing page {local_page_number} with {len(local_words)} words")
 
-                # Analyze text in a thread with a 30s timeout
+                # Analyze the text in a separate thread with a 30-second timeout.
                 try:
                     page_results = await asyncio.wait_for(
                         asyncio.to_thread(
@@ -259,26 +317,30 @@ class PresidioEntityDetector(BaseEntityDetector):
                     log_warning(f"[WARNING] Timeout analyzing text on page {local_page_number}")
                     return {"page": local_page_number, "sensitive": []}, []
 
+                # Merge overlapping entities using text utilities.
                 filtered_results = EntityUtils.merge_overlapping_entities(page_results)
                 if not filtered_results:
                     return {"page": local_page_number, "sensitive": []}, []
 
+                # Convert raw entities into standardized dictionaries.
                 entity_dicts = [self._convert_to_entity_dict(ent) for ent in filtered_results]
                 log_info(f"[OK] Found {len(entity_dicts)} entities on page {local_page_number}")
 
+                # Process entities to compute redaction information.
                 processed_entities, local_page_redaction_info = await ParallelProcessingCore.process_entities_in_parallel(
                     self, full_text, mapping, entity_dicts, local_page_number
                 )
                 return local_page_redaction_info, processed_entities
 
             except Exception as page_exc:
+                # Log error for the page and return empty results.
                 SecurityAwareErrorHandler.log_processing_error(
                     page_exc, "presidio_page_processing",
                     f"page_{local_page.get('page', 'unknown')}"
                 )
                 return {"page": local_page.get('page', 0), "sensitive": []}, []
 
-        # Execute all pages in parallel with a 2-minute global timeout
+        # Execute processing for all pages in parallel with a 2-minute timeout.
         try:
             return await asyncio.wait_for(
                 ParallelProcessingCore.process_pages_in_parallel(pages, _process_single_page_async),
@@ -293,48 +355,48 @@ class PresidioEntityDetector(BaseEntityDetector):
             local_page_results: List[Tuple[int, Tuple[Dict[str, Any], List[Dict[str, Any]]]]]
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
-        Step 2: Aggregate results from all pages.
+        Aggregate detection results from all pages.
 
         Args:
-            local_page_results: A list of (page_number, (page_redaction_info, processed_entities)) tuples.
+            local_page_results: List of tuples (page_number, (page_redaction_info, processed_entities))
 
         Returns:
-            (combined_entities, redaction_mapping)
+            A tuple (combined_entities, redaction_mapping)
         """
         combined_entities: List[Dict[str, Any]] = []
         redaction_mapping = {"pages": []}
-
+        # Iterate over the results from each page.
         for result_page_number, (local_page_redaction_info, local_processed_entities) in local_page_results:
             if local_page_redaction_info:
                 redaction_mapping["pages"].append(local_page_redaction_info)
             if local_processed_entities:
                 combined_entities.extend(local_processed_entities)
-
-        # Sort pages by page number
+        # Sort redaction mapping by page number.
         redaction_mapping["pages"].sort(key=lambda x: x.get("page", 0))
-
         return combined_entities, redaction_mapping
 
     @staticmethod
     def _log_detection_performance(
             combined_entities: List[Dict[str, Any]],
-        redaction_mapping: Dict[str, Any],
-        pages: List[Dict[str, Any]],
-        total_time: float
+            redaction_mapping: Dict[str, Any],
+            pages: List[Dict[str, Any]],
+            total_time: float
     ) -> None:
         """
-        Step 3: Log final performance metrics without sensitive details.
+        Log the overall performance of the detection process.
 
         Args:
-            combined_entities: List of all detected entities across pages
-            redaction_mapping: Redaction mapping dictionary with 'pages'
-            pages: Original pages list
-            total_time: Total detection time
+            combined_entities: Aggregated list of detected entities.
+            redaction_mapping: Combined redaction mapping.
+            pages: List of original pages.
+            total_time: Total time taken for detection.
         """
+        # Create a summary of entities per page.
         page_summaries = [
             f"page_{info['page']}:{len(info['sensitive'])}"
             for info in redaction_mapping["pages"]
         ]
+        # Log sensitive operation metrics.
         log_sensitive_operation(
             "Presidio Detection",
             len(combined_entities),
@@ -350,22 +412,23 @@ class PresidioEntityDetector(BaseEntityDetector):
         entities: List[str]
     ) -> List[Any]:
         """
-        Thread-safe wrapper for the Presidio analyzer's analyze method with improved timeout handling.
+        Thread-safe wrapper for the Presidio analyzer's analyze method with timeout handling.
 
         Args:
-            text: Text to analyze
-            language: Language of the text
-            entities: Entity types to detect
+            text: Text to analyze.
+            language: Language of the text.
+            entities: List of entity types to detect.
 
         Returns:
-            List of recognized entities
+            List of recognized entities.
         """
-        # Compute a unique cache key based on text and entities.
+        # Compute a unique cache key using the helper function.
         key = self._cache_key(text, entities)
         if key in self.cache:
             log_info("[Presidio] ✅ Using cached analysis result")
             return self.cache[key]
 
+        # Acquire the analyzer lock to ensure safe concurrent access.
         lock = self._get_analyzer_lock()
         acquired = lock.acquire(timeout=30.0)
         if not acquired:
@@ -373,16 +436,19 @@ class PresidioEntityDetector(BaseEntityDetector):
             return []
 
         try:
+            # Check if the analyzer is properly initialized.
             if self.analyzer is None:
                 log_warning("[WARNING] Presidio analyzer not initialized, returning empty result")
                 return []
-                # Run the analysis.
+            # Run the analysis using Presidio's analyzer.
             result = self.analyzer.analyze(text=text, language=language, entities=entities)
-            # Store the result in the cache.
+            # Cache the result for future reuse.
             self.cache[key] = result
             return result
         except Exception as analyze_exc:
+            # Log any analysis error using our error handling.
             SecurityAwareErrorHandler.log_processing_error(analyze_exc, "presidio_analysis")
             return []
         finally:
+            # Always release the lock.
             lock.release()

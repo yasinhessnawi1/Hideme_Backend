@@ -29,7 +29,7 @@ from backend.app.utils.logging.logger import log_info, log_warning
 MAX_PDF_SIZE_BYTES =  10 * 1024 * 1024 # 10 MB per file
 # Constants for multi-file validation
 TOTAL_MAX_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB total
-MAX_FILES_COUNT = 20
+MAX_FILES_COUNT = 10
 
 APPLICATION_WORD = "application/pdf"
 ALLOWED_MIME_TYPES = {
