@@ -33,10 +33,6 @@ class BatchSearchService:
     it searches for the specified search terms in each file using PDFSearcher. The service aggregates
     results and performance metrics, logs the batch operation, and handles errors securely using
     SecurityAwareErrorHandler.
-
-    Methods:
-        batch_search_text(files, search_terms, max_parallel_files, case_sensitive, ai_search) -> Dict[str, Any]:
-            Processes multiple PDF files to search for given terms and returns a summary of results.
     """
 
     @staticmethod
@@ -340,3 +336,138 @@ class BatchSearchService:
                         "status": "error",
                         "error": f"Error during search: {str(e)}"
                     }, 0, 1, 0)
+
+    @staticmethod
+    async def find_words_by_bbox(
+            files: List[UploadFile],
+            bounding_box: Dict[str, float],
+            operation_id: str
+    ) -> Dict[str, Any]:
+        """
+        Process a batch of PDF files to find all occurrences of the word(s) that appear
+        within a specified bounding box.
+
+        For each file, the method:
+          1. Reads and validates the PDF file.
+          2. Extracts the text content.
+          3. Instantiates PDFSearcher with the extracted data.
+          4. Calls the PDFSearcher method (e.g. `find_target_phrase_occurrences_by_page`)
+             to obtain a result dict that includes:
+                 - "pages": a list of dictionaries containing page number and its matches.
+                 - "word_count": the number of words in the candidate phrase.
+             and the overall match count.
+          5. Aggregates the result for each file.
+
+        Returns a dictionary containing:
+          - "batch_summary": Summary information for the batch operation.
+          - "file_results": List of dictionaries for each file.
+          - "_debug": Debug information including memory statistics and the operation ID.
+        """
+        # Record the start time of the batch process for performance measurement.
+        start_time = time.time()
+
+        # Initialize an empty list to collect results for each file.
+        file_results: List[Dict[str, Any]] = []
+
+        # Counters for tracking successful and failed file operations, as well as total matches.
+        successful = 0
+        failed = 0
+        total_matches = 0
+
+        # Try to read and validate the PDF files using the helper method for extraction.
+        try:
+            pdf_files, file_metadata = await BatchSearchService._read_files_for_extraction(files, operation_id)
+        except Exception as e:
+            # Log the error if file reading fails and return an early error response.
+            log_error(f"[SECURITY] Error reading files in find_words_by_bbox: {str(e)} [operation_id={operation_id}]")
+            return {"detail": "Error reading files", "operation_id": operation_id}
+
+        # Process each file along with its corresponding metadata.
+        for idx, meta in enumerate(file_metadata):
+            try:
+                # Retrieve the original filename from metadata.
+                filename = meta.get("original_name")
+
+                # Check if the file failed validation (i.e., if pdf_files[idx] is None).
+                if pdf_files[idx] is None:
+                    file_results.append({
+                        "file": filename,
+                        "status": "error",
+                        "error": "File validation failed."
+                    })
+                    failed += 1
+                    continue  # Skip further processing for this file.
+
+                # Create an instance of PDFTextExtractor to extract text from the PDF.
+                extractor = PDFTextExtractor(pdf_files[idx])
+                extracted_data = extractor.extract_text()  # Extract the textual content.
+                extractor.close()  # Close the extractor to free up resources.
+
+                # Initialize PDFSearcher with the extracted text data.
+                searcher = PDFSearcher(extracted_data)
+                # Execute the search method to find target phrase occurrences within the bounding box.
+                # This method returns a tuple: (result_data_dict, match_count)
+                result_data, match_count = searcher.find_target_phrase_occurrences(bounding_box)
+
+                # Append a successful result entry for the current file.
+                file_results.append({
+                    "file": filename,
+                    "status": "success",
+                    "results": {
+                        "pages": result_data.get("pages", []),  # List of matches per page.
+                        "match_count": match_count,  # Total matches found in the file.
+                    }
+                })
+                successful += 1
+                total_matches += match_count  # Accumulate the number of matches.
+            except Exception as e:
+                # Log any exceptions that occur during processing for this file.
+                log_error(
+                    f"[SECURITY] Error processing file {meta.get('original_name')}: {str(e)} [operation_id={operation_id}]"
+                )
+                # Append an error result for the file that failed processing.
+                file_results.append({
+                    "file": meta.get("original_name", "unknown"),
+                    "status": "error",
+                    "error": str(e)
+                })
+                failed += 1
+
+        # Calculate the total elapsed time for the batch operation.
+        total_time = time.time() - start_time
+
+        # Compile a summary of the batch operation including counts and performance.
+        batch_summary = {
+            "batch_id": operation_id,
+            "total_files": len(files),
+            "successful": successful,
+            "failed": failed,
+            "total_matches": total_matches,
+            "search_term": f"Bounding Box: {bounding_box}",
+            "query_time": round(total_time, 2)
+        }
+
+        # Gather debug information including current and peak memory usage.
+        debug_info = {
+            "memory_usage": memory_monitor.get_memory_stats().get("current_usage"),
+            "peak_memory": memory_monitor.get_memory_stats().get("peak_usage"),
+            "operation_id": operation_id
+        }
+
+        # Record processing details for compliance and audit.
+        record_keeper.record_processing(
+            operation_type="batch_find_words",
+            document_type="PDF_files",
+            entity_types_processed=[f"Bounding Box: {bounding_box}"],
+            processing_time=total_time,
+            file_count=len(files),
+            entity_count=total_matches,
+            success=(successful > 0)
+        )
+
+        # Return the complete batch results including a summary, detailed file results, and debug information.
+        return {
+            "batch_summary": batch_summary,
+            "file_results": file_results,
+            "_debug": debug_info,
+        }

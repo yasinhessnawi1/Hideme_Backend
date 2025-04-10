@@ -337,17 +337,8 @@ class BaseEntityDetector(EntityDetector, ABC):
 
             if not bboxes:
                 continue
-
             # If multiple bounding boxes are found, merge them into one.
-            if len(bboxes) > 1:
-                merged_bbox = {
-                    "x0": min(b["x0"] for b in bboxes),
-                    "y0": min(b["y0"] for b in bboxes),
-                    "x1": max(b["x1"] for b in bboxes),
-                    "y1": max(b["y1"] for b in bboxes)
-                }
-            else:
-                merged_bbox = bboxes[0]
+            merged_bbox = TextUtils.merge_bounding_boxes(bboxes)
 
             # Build the sensitive item with redaction details.
             sensitive_item = {

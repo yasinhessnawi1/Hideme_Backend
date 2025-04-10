@@ -9,14 +9,19 @@ This parameter is used to filter detection results so that only entities with a 
 score greater than or equal to the threshold are retained.
 
 The module includes endpoints for:
-  - batch_detect_sensitive: Batch processing of files for sensitive data detection(This method work with one engine).
-  - batch_hybrid_detect_sensitive: Batch processing using a hybrid detection approach(This method work with multiple engine).
-  - batch_search_text: Searching text in multiple files.
+  - batch_detect_sensitive: Batch processing of files for sensitive data detection
+    (this method works with one engine).
+  - batch_hybrid_detect_sensitive: Batch processing using a hybrid detection approach
+    (this method works with multiple engines).
+  - batch_search_text: Searching for specific text strings in multiple files.
   - batch_redact_documents: Redacting sensitive information in multiple documents.
+  - batch_find_words: Finding words in PDF files based on a specified bounding box.
+    This endpoint accepts a JSON representation of a bounding box (with keys "x0", "y0", "x1", "y1")
+    and processes the files to extract and locate words within the defined region.
 """
 import json
 import time
-from http.client import HTTPException
+from fastapi import HTTPException
 from typing import List, Optional
 
 from fastapi import APIRouter, File, UploadFile, Form, BackgroundTasks, Request, Response
@@ -241,6 +246,63 @@ async def batch_search_text(
         # Create a secure error response including the request URL.
         error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
             e, "batch_search", 500, resource_id=str(request.url)
+        )
+        return JSONResponse(status_code=status_code, content=error_response)
+
+
+@router.post("/find_words")
+@limiter.limit("10/minute")
+@memory_optimized(threshold_mb=50)
+async def batch_find_words_by_bbox(
+        request: Request,
+        files: List[UploadFile] = File(...),
+        bounding_box: str = Form(...)
+) -> JSONResponse:
+    """
+    Find words in multiple PDF files based on the provided bounding box.
+
+    This endpoint accepts:
+      - files: A list of PDF files to process.
+      - bounding_box: A JSON string representing a bounding box. It should be a JSON object with keys:
+                      "x0", "y0", "x1", and "y1" (all float values) that define the coordinate region.
+
+    The endpoint delegates all processing logic—such as file reading, text extraction,
+    and word location based on the bounding box—to BatchWordSearchService.
+
+    Returns:
+        JSONResponse: A JSON response containing the batch search results.
+                    If an error occurs, a secure error response is returned.
+    """
+    try:
+        # Validate and parse the bounding_box parameter.
+        bbox = json.loads(bounding_box)
+        # Ensure bbox is a dict and has all required keys.
+        required_keys = {"x0", "y0", "x1", "y1"}
+        if not isinstance(bbox, dict) or not required_keys.issubset(bbox.keys()):
+            raise HTTPException(
+                status_code=400,
+                detail="Bounding box must be a JSON object with keys: x0, y0, x1, and y1"
+            )
+    except Exception as e:
+        log_error(f"Error parsing bounding box: {str(e)}")
+        return JSONResponse(status_code=400, content={"detail": "Invalid bounding box format."})
+
+    # Generate a unique operation identifier.
+    operation_id = f"batch_find_words_{int(time.time())}"
+    log_info(f"[BATCH] Starting batch find words operation [operation_id={operation_id}]")
+
+    try:
+        # Delegate the processing to the BatchWordSearchService.
+        result = await BatchSearchService.find_words_by_bbox(
+            files=files,
+            bounding_box=bbox,
+            operation_id=operation_id
+        )
+        return JSONResponse(content=result)
+    except Exception as e:
+        log_error(f"[BATCH] Unhandled exception in batch find words: {str(e)} [operation_id={operation_id}]")
+        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
+            e, "batch_find_words", 500, resource_id=str(request.url)
         )
         return JSONResponse(status_code=status_code, content=error_response)
 
