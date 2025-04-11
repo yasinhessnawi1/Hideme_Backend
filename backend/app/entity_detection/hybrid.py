@@ -11,10 +11,10 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from backend.app.domain.interfaces import EntityDetector
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.security.processing_records import record_keeper
+from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.system_utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
 
@@ -36,42 +36,53 @@ class HybridEntityDetector(EntityDetector):
         """
         # Initialize the list to store the individual detection engine instances.
         self.detectors: List[EntityDetector] = []
-        # Save the configuration.
+        # Save the provided configuration.
         self.config = config
-        # Record the initialization time.
+        # Record the current time as the initialization time.
         self._initialization_time = time.time()
-        # Set last used time to the initialization time.
+        # Set the last used time equal to the initialization time.
         self._last_used = self._initialization_time
-        # Initialize counter for total calls.
+        # Initialize a counter for the total detection calls.
         self._total_calls = 0
-        # Initialize counter for total entities detected.
+        # Initialize a counter for the total number of entities detected.
         self._total_entities_detected = 0
-
-        # Lazy creation of a detector lock to synchronize metric updates.
+        # Set the detector lock to None for lazy creation.
         self._detector_lock: Optional[AsyncTimeoutLock] = None
 
-        # If configuration requests, initialize Presidio detector.
+        # If configuration requests, initialize the Presidio detector.
         if config.get("use_presidio", True):
+            # Get the Presidio detector instance from the initialization service.
             presidio = initialization_service.get_presidio_detector()
+            # If the Presidio detector is available...
             if presidio:
+                # Append the Presidio detector to the list of detectors.
                 self.detectors.append(presidio)
                 log_info("[INIT] Presidio Detector Initialized Successfully")
-        # If configuration requests, initialize Gemini detector.
+        # If configuration requests, initialize the Gemini detector.
         if config.get("use_gemini", True):
+            # Get the Gemini detector instance.
             gemini = initialization_service.get_gemini_detector()
+            # If the Gemini detector is available...
             if gemini:
+                # Append it to the list of detectors.
                 self.detectors.append(gemini)
                 log_info("[INIT] Gemini Detector Initialized Successfully")
             else:
+                # Log a warning if Gemini detection could not be initialized.
                 log_warning("[INIT] Gemini Detector Initialization Failed")
-        # If configuration requests, initialize GLiNER detector.
+        # If configuration requests, initialize the GLiNER detector.
         if config.get("use_gliner", True):
+            # Retrieve the list of entities to detect from configuration.
             entity_list = config.get("entities", [])
+            # Get the GLiNER detector instance with the provided entity list.
             gliner = initialization_service.get_gliner_detector(entity_list)
+            # If the GLiNER detector is available...
             if gliner:
+                # Append it to the detectors list.
                 self.detectors.append(gliner)
                 log_info("[INIT] GLiNER Detector Initialized Successfully")
             else:
+                # Log a warning if GLiNER detector initialization failed.
                 log_warning("[INIT] GLiNER Detector Initialization Failed")
 
     async def _get_detector_lock(self) -> AsyncTimeoutLock:
@@ -82,15 +93,19 @@ class HybridEntityDetector(EntityDetector):
         Returns:
             AsyncTimeoutLock: The detector lock.
         """
+        # If the detector lock has not been created yet...
         if self._detector_lock is None:
             try:
+                # Create a new AsyncTimeoutLock with medium priority and a 30-second timeout.
                 self._detector_lock = AsyncTimeoutLock(
                     name="hybrid_detector_lock",
                     priority=LockPriority.MEDIUM,
                     timeout=30.0
                 )
             except Exception as exc:
+                # Log any error during the detector lock initialization.
                 SecurityAwareErrorHandler.log_processing_error(exc, "detector_lock_init", "")
+        # Return the detector lock.
         return self._detector_lock
 
     async def detect_sensitive_data_async(
@@ -115,14 +130,17 @@ class HybridEntityDetector(EntityDetector):
         Returns:
             Tuple containing a list of detected entities and a redaction mapping.
         """
-        start_time = time.time()  # Mark the start time for performance metrics
+        # Mark the start time for performance tracking.
+        start_time = time.time()
         try:
-            # Step 1: Minimize input data for GDPR and check that at least one detector is configured.
+            # Step 1: Minimize input data for GDPR compliance.
             minimized_data = minimize_extracted_data(extracted_data)
+            # Check that at least one detection engine is configured.
             if not self._prepare_data_and_check_detectors():
+                # If no detectors are available, return empty results.
                 return [], {"pages": []}
 
-            # Step 2: Update usage metrics (increment call counter and update last used timestamp).
+            # Step 2: Increment usage metrics.
             await self._increment_usage_metrics(start_time)
 
             # Step 3: Run each configured detector in parallel.
@@ -132,12 +150,12 @@ class HybridEntityDetector(EntityDetector):
             combined_entities, all_redaction_mappings, success_count, failure_count = \
                 self._process_detection_results(parallel_results)
 
-            # If no detector succeeded, log error and return empty results.
+            # If no detector succeeded, log an error and return empty results.
             if success_count == 0:
                 log_error("[ERROR] All detection engines failed")
                 return [], {"pages": []}
 
-            # Step 5: Finalize detection results (merge mappings, deduplicate, log metrics, etc.).
+            # Step 5: Finalize detection results by merging mappings and updating records.
             final_entities, final_mapping = await self._finalize_detection(
                 combined_entities, all_redaction_mappings, extracted_data,
                 requested_entities, start_time, success_count, failure_count
@@ -147,6 +165,7 @@ class HybridEntityDetector(EntityDetector):
             return final_entities, final_mapping
 
         except Exception as exc:
+            # Log any unexpected errors and return empty results.
             log_error(f"[ERROR] Unexpected error in hybrid detection: {str(exc)}")
             return [], {"pages": []}
 
@@ -157,9 +176,12 @@ class HybridEntityDetector(EntityDetector):
         Returns:
             True if detectors are available, False otherwise.
         """
+        # If the detectors list is empty...
         if not self.detectors:
+            # Log a warning.
             log_warning("[WARNING] No detection engines available in hybrid detector")
             return False
+        # Otherwise, return True.
         return True
 
     async def _increment_usage_metrics(self, start_time: float) -> None:
@@ -170,11 +192,15 @@ class HybridEntityDetector(EntityDetector):
         Args:
             start_time: The start time of the detection operation.
         """
+        # Retrieve the detector lock asynchronously.
         detector_lock = await self._get_detector_lock()
-        # Use the lock to ensure that updates are thread-safe.
+        # Acquire the lock with a timeout.
         async with detector_lock.acquire_timeout(timeout=5.0) as acquired:
+            # If the lock was acquired...
             if acquired:
+                # Increment the call counter.
                 self._total_calls += 1
+                # Update the last used time to the start time.
                 self._last_used = start_time
 
     async def _run_all_detectors_in_parallel(
@@ -192,14 +218,14 @@ class HybridEntityDetector(EntityDetector):
         Returns:
             List of dictionaries, each containing detection results from one engine.
         """
-        # Create a list of asyncio tasks, one per detector.
+        # Create a list of asyncio tasks, one for each detection engine.
         tasks = [
             asyncio.create_task(
                 self._process_single_detector(det, minimized_data, requested_entities)
             )
             for det in self.detectors
         ]
-        # Execute the tasks and wait for their results.
+        # Execute all tasks concurrently and return the list of results.
         return await self._execute_detector_tasks(tasks)
 
     @staticmethod
@@ -214,13 +240,15 @@ class HybridEntityDetector(EntityDetector):
             List of results from each task, or an empty list if a timeout occurs.
         """
         try:
+            # Wait for all tasks to complete with a timeout.
             return await asyncio.wait_for(asyncio.gather(*tasks), timeout=600.0)
         except asyncio.TimeoutError:
+            # Log an error if a global timeout occurs.
             log_error("[ERROR] Global timeout for all detection engines")
             return []
 
+    @staticmethod
     async def _process_single_detector(
-            self,
             engine_detector: EntityDetector,
             minimized_data: Dict[str, Any],
             requested_entities: Optional[List[str]]
@@ -236,36 +264,39 @@ class HybridEntityDetector(EntityDetector):
         Returns:
             A dictionary containing the detection result, success flag, engine name, and timing.
         """
+        # Get the engine detector's class name.
         engine_name = type(engine_detector).__name__
-        engine_start_time = time.time()  # Mark engine start time
+        # Record the engine start time.
+        engine_start_time = time.time()
         try:
-            # Check if the detector provides an async method.
+            # Check if the engine has an asynchronous detection method.
             if hasattr(engine_detector, "detect_sensitive_data_async"):
-                result_tuple = await self._run_async_detector(engine_detector, minimized_data, requested_entities)
+                # Run the engine asynchronously.
+                result_tuple = await HybridEntityDetector._run_async_detector(engine_detector, minimized_data,
+                                                                              requested_entities)
             else:
-                # Run synchronous detectors in a separate thread.
-                result_tuple = await self._run_sync_detector(engine_detector, minimized_data, requested_entities)
-
-            # Validate the result format; it must be a tuple with two elements.
+                # Run the engine synchronously in a separate thread.
+                result_tuple = await HybridEntityDetector._run_sync_detector(engine_detector, minimized_data,
+                                                                             requested_entities)
+            # Check if the result is a tuple with two elements.
             if not isinstance(result_tuple, tuple) or len(result_tuple) != 2:
-                return self._engine_failure_dict(
-                    engine_name,
-                    f"Invalid result format: {type(result_tuple)}",
-                    engine_start_time
-                )
-
-            # Unpack the detection results.
+                return HybridEntityDetector._engine_failure_dict(engine_name,
+                                                                 f"Invalid result format: {type(result_tuple)}",
+                                                                 engine_start_time)
+            # Unpack the results.
             found_entities, found_mapping = result_tuple
+            # If the entities result is not a list, log a warning.
             if not isinstance(found_entities, list):
                 log_warning(f"[WARNING] Entities result from {engine_name} is not a list")
                 found_entities = []
+            # If the mapping is not a dict, log a warning.
             if not isinstance(found_mapping, dict):
                 log_warning(f"[WARNING] Redaction mapping from {engine_name} is not a dict")
                 found_mapping = {"pages": []}
-
+            # Compute the time taken by the engine.
             engine_time = time.time() - engine_start_time
             log_info(f"[OK] {engine_name} found {len(found_entities)} entities in {engine_time:.2f}s")
-            # Record the processing details for the engine.
+            # Record processing metrics for the engine.
             record_keeper.record_processing(
                 operation_type=f"hybrid_detection_{engine_name.lower()}",
                 document_type="document",
@@ -274,6 +305,7 @@ class HybridEntityDetector(EntityDetector):
                 entity_count=len(found_entities),
                 success=True
             )
+            # Return a dictionary with successful detection details.
             return {
                 "success": True,
                 "engine": engine_name,
@@ -282,11 +314,10 @@ class HybridEntityDetector(EntityDetector):
                 "time": engine_time
             }
         except Exception as detect_exc:
-            # Log any errors that occur during detection.
-            SecurityAwareErrorHandler.log_processing_error(
-                detect_exc, f"hybrid_{engine_name.lower()}_detection", "document"
-            )
-            return self._engine_failure_dict(engine_name, str(detect_exc), engine_start_time)
+            # Log any error that occurred during detection.
+            SecurityAwareErrorHandler.log_processing_error(detect_exc, f"hybrid_{engine_name.lower()}_detection",
+                                                           "document")
+            return HybridEntityDetector._engine_failure_dict(engine_name, str(detect_exc), engine_start_time)
 
     @staticmethod
     async def _run_async_detector(
@@ -307,7 +338,7 @@ class HybridEntityDetector(EntityDetector):
         """
         engine_name = type(detector).__name__
         try:
-            # Use cast to bypass type checking for the async method call.
+            # Use cast to call the asynchronous detection method with a timeout.
             return await asyncio.wait_for(
                 cast(Any, detector).detect_sensitive_data_async(minimized_data, requested_entities),
                 timeout=600.0
@@ -386,13 +417,12 @@ class HybridEntityDetector(EntityDetector):
         all_redaction_mappings: List[Dict[str, Any]] = []
         success_count = 0
         failure_count = 0
-
         # Iterate over each engine's result.
         for engine_result in parallel_results:
+            # If the engine returned a success flag...
             if engine_result.get("success"):
                 found_entities = engine_result.get("entities", [])
                 found_mapping = engine_result.get("mapping", {})
-                # Log detailed sensitive operation for each engine.
                 log_sensitive_operation(
                     f"{engine_result['engine']} Detection",
                     len(found_entities),
@@ -404,7 +434,7 @@ class HybridEntityDetector(EntityDetector):
                 success_count += 1
             else:
                 failure_count += 1
-
+        # Return aggregated results and counts.
         return all_entities, all_redaction_mappings, success_count, failure_count
 
     async def _finalize_detection(
@@ -433,23 +463,20 @@ class HybridEntityDetector(EntityDetector):
         Returns:
             A tuple containing final entities and the final merged redaction mapping.
         """
-        # Merge all redaction mappings into a single mapping.
+        # Merge all redaction mappings into one unified mapping.
         merged_mapping = self._merge_redaction_mappings(all_redaction_mappings)
         if not merged_mapping.get("pages"):
             merged_mapping["pages"] = []
-
-        # Deduplicate entities to remove any overlapping or duplicate detections.
+        # Deduplicate entities using a helper function.
         from backend.app.utils.validation.sanitize_utils import deduplicate_entities
         final_entities = deduplicate_entities(combined_entities)
         total_time = time.time() - start_time
-
-        # Update usage metrics with the total number of entities detected.
+        # Update overall usage metrics using the detector lock.
         detector_lock = await self._get_detector_lock()
         async with detector_lock.acquire_timeout(timeout=5.0) as acquired:
             if acquired:
                 self._total_entities_detected += len(final_entities)
-
-        # Record the overall processing details for audit and GDPR compliance.
+        # Record overall processing details for audit and GDPR compliance.
         record_keeper.record_processing(
             operation_type="hybrid_detection",
             document_type="document",
@@ -471,7 +498,6 @@ class HybridEntityDetector(EntityDetector):
             engines_used=success_count,
             engines_failed=failure_count
         )
-
         return final_entities, merged_mapping
 
     @staticmethod
@@ -487,29 +513,25 @@ class HybridEntityDetector(EntityDetector):
         """
         if not mappings:
             return {"pages": []}
-
         merged_result = {"pages": []}
         pages_dict = {}
-
-        # Iterate over each mapping and group redaction info by page.
+        # Iterate over each mapping.
         for single_mapping in mappings:
             if not isinstance(single_mapping, dict) or "pages" not in single_mapping:
                 continue
-
+            # Iterate over each page's redaction info.
             for page_info in single_mapping.get("pages", []):
                 page_num = page_info.get("page")
                 if page_num is None:
                     continue
-
+                # If this page number is not yet in the dictionary, initialize it.
                 if page_num not in pages_dict:
                     pages_dict[page_num] = {"page": page_num, "sensitive": []}
-
+                # Extend the sensitive list with current page's sensitive items.
                 pages_dict[page_num]["sensitive"].extend(page_info.get("sensitive", []))
-
-        # Convert grouped redaction info into a sorted list.
+        # Convert the pages dictionary to a sorted list.
         for pg_num in sorted(pages_dict.keys()):
             merged_result["pages"].append(pages_dict[pg_num])
-
         return merged_result
 
     def detect_sensitive_data(
@@ -531,12 +553,13 @@ class HybridEntityDetector(EntityDetector):
             Tuple of (detected entities, redaction mapping).
         """
         try:
-            # Minimize data for GDPR compliance.
+            # Minimize input data for GDPR compliance.
             minimized_data = minimize_extracted_data(extracted_data)
             # Create a new event loop for synchronous execution.
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
+                # Define an async function that runs the detection with a timeout.
                 async def run_with_timeout():
                     return await asyncio.wait_for(
                         self.detect_sensitive_data_async(minimized_data, requested_entities),
@@ -546,21 +569,25 @@ class HybridEntityDetector(EntityDetector):
                 # Run the async detection and return its result.
                 return loop.run_until_complete(run_with_timeout())
             finally:
+                # Ensure the event loop is closed after execution.
                 loop.close()
         except asyncio.TimeoutError:
+            # Log and return empty results on timeout.
             log_error("[ERROR] Global timeout in hybrid entity detection (sync wrapper)")
             return [], {"pages": []}
         except RuntimeError as exc:
+            # Handle runtime errors due to interpreter shutdown gracefully.
             if "cannot schedule new futures after interpreter shutdown" in str(exc):
                 log_warning(f"[WARNING] Shutdown in progress, returning empty results: {exc}")
                 return [], {"pages": []}
             SecurityAwareErrorHandler.log_processing_error(exc, "hybrid_detection_runtime", "document")
             return [], {"pages": []}
         except Exception as exc:
+            # Log any other unexpected errors and return empty results.
             SecurityAwareErrorHandler.log_processing_error(exc, "hybrid_detection", "document")
             return [], {"pages": []}
 
-    def get_status(self) -> Dict[str, Any]:
+    async def get_status(self) -> Dict[str, Any]:
         """
         Get the current status of the hybrid entity detector.
 
@@ -570,6 +597,7 @@ class HybridEntityDetector(EntityDetector):
         """
 
         async def get_status_async() -> Dict[str, Any]:
+            # Acquire the detector lock to safely read status.
             detector_lock = await self._get_detector_lock()
             async with detector_lock.acquire_timeout(timeout=1.0):
                 # Return key status details.
@@ -586,7 +614,7 @@ class HybridEntityDetector(EntityDetector):
                 }
 
         try:
-            # Create and run a new event loop to get status asynchronously.
+            # Create a new event loop and run the async status function.
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:

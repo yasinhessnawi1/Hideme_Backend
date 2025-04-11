@@ -50,6 +50,18 @@ from backend.app.utils.validation.sanitize_utils import deduplicate_bbox
 
 
 class PDFSearcher:
+    """
+    PDFSearcher is responsible for finding specific search terms within text extracted from PDFs.
+
+    It supports two search modes:
+      1. AI Search Mode: Uses the Gemini API with a custom prompt to identify entities.
+      2. Fallback Word-Based Matching: Performs direct matching against extracted text.
+
+    The class includes helper methods for building search sets, reconstructing page text and its mapping, constructing
+    AI prompts, processing pages with AI or fallback mode, splitting and remapping entity tokens back to locations,
+    grouping consecutive indices, and processing single- or multi-word occurrences.
+    """
+
     def __init__(self, extracted_data: Dict[str, Any]):
         """
         Initialize the PDFSearcher with extracted PDF data.
@@ -74,9 +86,11 @@ class PDFSearcher:
         Returns:
             set: Processed set of search terms.
         """
-        # Remove extra spaces from each term and conditionally adjust for case sensitivity.
+        # Check if matching is case-sensitive.
         if case_sensitive:
+            # Return a set with each term stripped of extra spaces.
             return {term.strip() for term in search_terms if term.strip()}
+        # Otherwise, return a set with all terms converted to lowercase.
         return {term.strip().lower() for term in search_terms if term.strip()}
 
     @staticmethod
@@ -93,14 +107,15 @@ class PDFSearcher:
         Returns:
             bool: True if the word is a match, False otherwise.
         """
-        # Remove any punctuation from the word to ensure clean matching.
+        # Strip punctuation from the word.
         cleaned = word_text.strip(string.punctuation)
+        # If AI search mode is enabled, bypass direct matching.
         if ai_search:
-            # In AI search mode, matching is handled by the Gemini API so bypass direct matching.
             return False
-        # Compare words based on the case sensitivity flag.
+        # If case-sensitive, check for an exact match.
         if case_sensitive:
             return cleaned in search_set
+        # Otherwise, check match after converting to lowercase.
         return cleaned.lower() in search_set
 
     @staticmethod
@@ -118,34 +133,41 @@ class PDFSearcher:
         Returns:
             Tuple[List[Dict[str, Any]], str]: A tuple with a mapping list and the full page text.
         """
-        mapping = []  # List to store mapping info for each word.
-        page_text_parts = []  # List to accumulate text parts of the page.
-        current_index = 0  # Start index for the first word.
-        # Iterate over all words on the page.
+        # Initialize an empty list to hold mapping information.
+        mapping = []
+        # Initialize an empty list to accumulate parts of the page text.
+        page_text_parts = []
+        # Set current index to start at zero.
+        current_index = 0
+        # Iterate over each word in the provided list.
         for word in words:
+            # Get the text value of the word; default to an empty string.
             text = word.get("text", "")
+            # Set the start index of the current word.
             start_idx = current_index
+            # Calculate the end index as start index plus the length of the text.
             end_idx = start_idx + len(text)
-            # Retrieve bounding box from the word; if not found, use individual coordinate keys.
+            # Retrieve bounding box from the word if available; otherwise build one from coordinates.
             bbox = word.get("bbox") or {
                 "x0": word.get("x0"),
                 "y0": word.get("y0"),
                 "x1": word.get("x1"),
                 "y1": word.get("y1")
             }
-            # Append mapping information for this word.
+            # Append the mapping information as a dictionary.
             mapping.append({
                 "start": start_idx,
                 "end": end_idx,
                 "bbox": bbox,
                 "text": text
             })
-            # Add the word's text to the page text parts.
+            # Append the text to the list of page text parts.
             page_text_parts.append(text)
-            # Update current index (adding one extra character for the space that will be inserted).
+            # Update the current index, adding one for the space that will be inserted.
             current_index = end_idx + 1
         # Join all text parts with a space to form the full page text.
         page_text = " ".join(page_text_parts)
+        # Return the mapping and the full page text.
         return mapping, page_text
 
     @staticmethod
@@ -163,6 +185,7 @@ class PDFSearcher:
         Returns:
             str: The constructed prompt.
         """
+        # Build and return the full prompt string by concatenating header, entity definitions, query, page text, and footer.
         return (
             f"{AI_SEARCH_PROMPT_HEADER}\n"
             f"{AI_SEARCH_GEMINI_AVAILABLE_ENTITIES}\n"
@@ -192,29 +215,33 @@ class PDFSearcher:
 
         Returns:
             Tuple[Dict[str, Any], int]: A tuple where the first element is a dictionary with the page number and matches,
-                                        and the second element is the count of matches on that page.
+                                         and the second element is the count of matches on that page.
         """
         try:
+            # Retrieve the page number from the page data.
             page_number = page.get("page")
+            # Retrieve the list of words from the page data.
             words = page.get("words", [])
-            # Build mapping from words to their positions and create the full text.
+            # Reconstruct the full page text and build a mapping of words to their indices and bounding boxes.
             mapping, page_text = self.build_page_text_and_mapping(words)
-            # Combine individual search terms into one query string.
+            # Combine search terms into a single query string.
             combined_query = " ".join(search_terms)
-            # Build the AI prompt for Gemini API using the combined query and page text.
+            # Build the custom AI prompt using the combined query and page text.
             prompt = self._build_ai_prompt([combined_query], page_text)
-            # Send the prompt to the Gemini API and await its response.
+            # Send the prompt to the Gemini API asynchronously and wait for the response.
             response = await self.gemini_helper.send_request(
                 prompt,
                 requested_entities=[combined_query],
                 raw_prompt=True,
                 system_instruction_override=AI_SEARCH_SYSTEM_INSTRUCTION
             )
-            # Parse the API response to retrieve the matched entities.
+            # Parse the API response to retrieve matched entities.
             parsed_response = self.gemini_helper.parse_response(response)
+            # Initialize an empty list to hold matches.
             page_matches = []
+            # If the parsed response contains page data, iterate through it.
             if parsed_response and "pages" in parsed_response:
-                # For each page in the response, iterate over text objects and their entities.
+                # Build the list of matches by iterating over pages and their text objects and entities.
                 page_matches = [
                     {
                         "bbox": token_entity["bbox"],
@@ -224,15 +251,17 @@ class PDFSearcher:
                     for entity in text_obj.get("entities", [])
                     for token_entity in self._split_and_remap_entity(entity, mapping, case_sensitive)
                 ]
-                # Remove duplicate matches based on bounding box information.
+                # Remove duplicate bounding boxes from the list of matches.
                 page_matches = deduplicate_bbox(page_matches)
+            # Return a dictionary of the page number and its matches along with the match count.
             return {"page": page_number, "matches": page_matches}, len(page_matches)
         except Exception as e:
-            # Log the error securely using SecurityAwareErrorHandler.
+            # Log any error that occurs during processing using the secure error handler.
             SecurityAwareErrorHandler.log_processing_error(e, "PDFSearcher._process_ai_page",
                                                            f"page_{page.get('page')}")
+            # Log a debug message with error details.
             log_debug(f"Error processing AI page {page.get('page')}: {e}")
-            # In case of an error, return an empty match set for the page.
+            # Return an empty match set for the page in case of error.
             return {"page": page.get("page"), "matches": []}, 0
 
     def _process_fallback_page(self, page: Dict[str, Any], search_set: set, case_sensitive: bool) -> Tuple[
@@ -250,33 +279,39 @@ class PDFSearcher:
 
         Returns:
             Tuple[Dict[str, Any], int]: A tuple where the first element is a dictionary with the page number and matches,
-                                        and the second element is the count of matches on that page.
+                                         and the second element is the count of matches on that page.
         """
         try:
+            # Retrieve the page number.
             page_number = page.get("page")
+            # Initialize an empty list for matches.
             page_matches = []
-            # Iterate through each word in the page.
+            # Iterate through each word in the page data.
             for word in page.get("words", []):
+                # Retrieve the text of the word and strip extra spaces.
                 word_text = (word.get("text") or "").strip()
-                # Check if the word matches any of the search terms.
+                # Check whether the cleaned word matches any term in the search set.
                 if self._word_matches(word_text, search_set, case_sensitive, ai_search=False):
-                    # Retrieve the bounding box for the word.
+                    # Retrieve the bounding box from the word, or construct it from coordinates.
                     bbox = word.get("bbox") or {
                         "x0": word.get("x0"),
                         "y0": word.get("y0"),
                         "x1": word.get("x1"),
                         "y1": word.get("y1")
                     }
+                    # Append a dictionary of the matching word's bounding box.
                     page_matches.append({
                         "bbox": bbox
                     })
+            # Return a dictionary with the page number and match results, along with the match count.
             return {"page": page_number, "matches": page_matches}, len(page_matches)
         except Exception as e:
-            # Log the error securely using SecurityAwareErrorHandler.
+            # Log errors during fallback processing securely.
             SecurityAwareErrorHandler.log_processing_error(e, "PDFSearcher._process_fallback_page",
                                                            f"page_{page.get('page')}")
+            # Log a debug message with error details.
             log_debug(f"Error processing fallback page {page.get('page')}: {e}")
-            # If an error occurs, return no matches for the page.
+            # Return no matches if an error occurs.
             return {"page": page.get("page"), "matches": []}, 0
 
     async def search_terms(self, search_terms: List[str], case_sensitive: bool = False, ai_search: bool = False) -> \
@@ -285,12 +320,8 @@ class PDFSearcher:
         Search for the specified search terms in the extracted PDF data.
 
         Depending on the mode selected:
-          - In AI search mode:
-              * Each page is processed concurrently using the Gemini API.
-              * A custom prompt is built and sent to the API.
-              * The response is parsed and remapped to yield bounding boxes.
-          - In fallback mode:
-              * Each word is directly compared against the search terms using simple text matching.
+          - In AI search mode, each page is processed concurrently using the Gemini API.
+          - In fallback mode, each word is directly compared using simple text matching.
 
         Args:
             search_terms (List[str]): List of search terms to locate.
@@ -302,39 +333,54 @@ class PDFSearcher:
                 - "pages": A list of pages with their matched entities (bounding boxes).
                 - "match_count": Total number of matches found.
         """
+        # Initialize an empty list to collect per-page results.
         pages_results = []
+        # Set the total match count to zero.
         total_matches = 0
         try:
+            # Check if AI search mode is enabled.
             if ai_search:
+                # Log a debug message indicating that AI search mode is being used.
                 log_debug("Using AI search with custom prompt for entity extraction.")
-                # Process each page concurrently using asynchronous tasks.
+                # Create asynchronous tasks for processing each page with AI search.
                 tasks = [
                     self._process_ai_page(page, search_terms, case_sensitive)
                     for page in self.extracted_data.get("pages", [])
                 ]
+                # Run all tasks concurrently and gather the results.
                 results = await asyncio.gather(*tasks, return_exceptions=True)
-                # Iterate over the results and accumulate matches.
+                # Iterate over the gathered results.
                 for result in results:
+                    # If the result is an exception, log it and continue.
                     if isinstance(result, Exception):
-                        # Log exception using SecurityAwareErrorHandler if an error occurred in a task.
                         SecurityAwareErrorHandler.log_processing_error(result, "PDFSearcher.search_terms", "ai_search")
                         continue
+                    # Otherwise, unpack the page result and match count.
                     page_result, count = result
+                    # Append the page result to the list.
                     pages_results.append(page_result)
+                    # Add the count to the total number of matches.
                     total_matches += count
             else:
-                # For fallback mode, first build a set of search terms.
+                # For fallback search mode, build a set of search terms.
                 search_set = self._build_search_set(search_terms, case_sensitive)
+                # Iterate through each page in the extracted data.
                 for page in self.extracted_data.get("pages", []):
+                    # Process the page using fallback matching.
                     page_result, count = self._process_fallback_page(page, search_set, case_sensitive)
+                    # Append the result.
                     pages_results.append(page_result)
+                    # Accumulate the match count.
                     total_matches += count
+            # Log the total number of matches found.
             log_debug(f"✅ Total matches found: {total_matches}")
+            # Return the dictionary containing pages and the total match count.
             return {"pages": pages_results, "match_count": total_matches}
         except Exception as e:
-            # Log any errors that occur during the overall search process.
+            # Log any errors during the overall search process.
             SecurityAwareErrorHandler.log_processing_error(e, "PDFSearcher.search_terms", "global")
             log_debug(f"Error during search_terms: {e}")
+            # Return empty results if an error occurs.
             return {"pages": [], "match_count": 0}
 
     @staticmethod
@@ -361,19 +407,24 @@ class PDFSearcher:
                 - "score": The confidence score from Gemini.
                 - "case_sensitive": The case sensitivity flag.
         """
+        # Initialize an empty list to collect remapped token entities.
         token_entities = []
+        # Retrieve the original text from the entity.
         entity_query = entity.get("original_text", "")
+        # If the original text is empty, return the empty list.
         if not entity_query:
             return token_entities
-
         # Define a comparison function based on the case sensitivity flag.
         compare = (lambda a, b: a == b) if case_sensitive else (lambda a, b: a.lower() == b.lower())
-        # Split the entity text into individual tokens.
+        # Split the entity's text into individual tokens.
         for token in entity_query.split():
-            # Iterate over the mapping to find tokens that match.
+            # Iterate over each mapping entry.
             for m in mapping:
+                # Retrieve the text from the mapping.
                 mapping_text = m.get("text", "")
+                # Compare the mapping text with the token.
                 if compare(mapping_text, token):
+                    # If they match, append a dictionary of token information.
                     token_entities.append({
                         "entity_type": entity.get("entity_type"),
                         "original_text": mapping_text,
@@ -383,17 +434,17 @@ class PDFSearcher:
                         "score": entity.get("score"),
                         "case_sensitive": case_sensitive
                     })
+        # Return the list of remapped token entities.
         return token_entities
 
     @staticmethod
     def _word_center_in_bbox(word_bbox: Dict[str, Any], target_bbox: Dict[str, Any]) -> bool:
         """
-        Check if the center of a word's bounding box lies within the given target bounding box,
-        using Python's chained comparison syntax for clarity.
+        Check if the center of a word's bounding box lies within the given target bounding box.
 
         Args:
-            word_bbox (Dict[str, Any]): Bounding box for a word with keys "x0", "y0", "x1", "y1".
-            target_bbox (Dict[str, Any]): Target bounding box with similar keys.
+            word_bbox (Dict[str, Any]): Bounding box for a word.
+            target_bbox (Dict[str, Any]): Target bounding box.
 
         Returns:
             bool: True if the center of word_bbox lies within target_bbox, else False.
@@ -402,37 +453,39 @@ class PDFSearcher:
         cx = (word_bbox["x0"] + word_bbox["x1"]) / 2.0
         # Calculate the vertical center (cy) of the word's bounding box.
         cy = (word_bbox["y0"] + word_bbox["y1"]) / 2.0
-        # Return True if the center (cx, cy) lies within the target bounding box.
+        # Return True if the center point lies within the target bounding box.
         return target_bbox["x0"] <= cx <= target_bbox["x1"] and target_bbox["y0"] <= cy <= target_bbox["y1"]
 
     @staticmethod
     def _group_consecutive_indices(indices: List[int]) -> List[List[int]]:
         """
         Group a list of indices into sublist of consecutive numbers.
-        For example, [1, 2, 5, 6, 7] becomes [[1, 2], [5, 6, 7]].
 
         Args:
             indices (List[int]): A list of integer indices.
 
         Returns:
-            List[List[int]]: A list of lists, where each inner list contains consecutive indices.
+            List[List[int]]: A list of lists of consecutive indices.
         """
-        # If there are no indices, return an empty list.
+        # If the list of indices is empty, return an empty list.
         if not indices:
             return []
-        groups = []  # Initialize an empty list to hold groups.
-        current_group = [indices[0]]  # Start the first group with the first index.
-        # Loop over the remaining indices.
+        # Initialize the list to hold groups.
+        groups = []
+        # Start with the first index in a new group.
+        current_group = [indices[0]]
+        # Iterate over the remaining indices.
         for index in indices[1:]:
-            # If the index is consecutive with the last one in current_group, add it.
+            # If the current index is consecutive, add it to the current group.
             if index == current_group[-1] + 1:
                 current_group.append(index)
             else:
-                # Otherwise, save the current group and start a new one.
+                # Otherwise, append the current group and start a new one.
                 groups.append(current_group)
                 current_group = [index]
-        # Add the final group to the list of groups.
+        # Append the final group to the groups list.
         groups.append(current_group)
+        # Return the list of grouped consecutive indices.
         return groups
 
     def _process_single_word_occurrences(self, page: Dict[str, Any], candidate_phrase: str) -> Tuple[
@@ -446,25 +499,25 @@ class PDFSearcher:
             candidate_phrase (str): The candidate phrase (a single word).
 
         Returns:
-            Tuple[Dict[str, Any], int]: A tuple with:
-                - A dictionary with the page number and a list of matching results.
-                - The count of matches found.
+            Tuple[Dict[str, Any], int]: A tuple with the page result and match count.
         """
-        # Retrieve the page number from the page data; default to "unknown" if not available.
+        # Retrieve the page number; default to "unknown" if not provided.
         page_number = page.get("page", "unknown")
-        page_matches = []  # Initialize an empty list for collecting matches.
-        # Build the mapping of words along with their positions and bounding boxes.
+        # Initialize an empty list to store matches.
+        page_matches = []
+        # Build a mapping of words to their positions and bounding boxes.
         mapping, _ = self.build_page_text_and_mapping(page.get("words", []))
-        # Iterate over each mapped word.
+        # Iterate over each mapping entry.
         for m in mapping:
-            # If the word matches the candidate phrase exactly...
+            # Check if the mapping text exactly matches the candidate phrase.
             if m["text"] == candidate_phrase:
-                # ...append its bounding box and text to the match list.
+                # Append the match information with its bounding box.
                 page_matches.append({
                     "bbox": m["bbox"],
                 })
+                # Log a debug message showing the occurrence.
                 log_debug(f"Page {page_number}: Found occurrence with bbox: {m['bbox']}")
-        # Return a dictionary that includes the page number and its matches, along with the match count.
+        # Return a dictionary with page results and the count of matches.
         return {"page": page_number, "matches": page_matches}, len(page_matches)
 
     @staticmethod
@@ -479,35 +532,38 @@ class PDFSearcher:
             candidate_phrase (str): The candidate phrase (multiple words).
 
         Returns:
-            Tuple[Dict[str, Any], int]: A tuple with:
-                - A dictionary with the page number and list of matches (each includes a merged bounding box and the matched substring).
-                - The count of matches found.
+            Tuple[Dict[str, Any], int]: A tuple with the page result and match count.
         """
-        # Retrieve the page number.
+        # Retrieve the page number; default to "unknown" if not provided.
         page_number = page.get("page", "unknown")
-        page_matches = []  # Initialize the list for storing match results.
-        # Reconstruct the full text and obtain a mapping of character offsets to word bounding boxes.
+        # Initialize an empty list to store match results.
+        page_matches = []
+        # Reconstruct the full text and mapping using TextUtils helper.
         full_text, text_mapping = TextUtils.reconstruct_text_and_mapping(page.get("words", []))
+        # Log the full text for debugging.
         log_debug(f"Page {page_number}: full_text: '{full_text}'")
-        # Calculate the character offset positions where the candidate phrase occurs.
+        # Compute the offsets where the candidate phrase occurs.
         matches = TextUtils.recompute_offsets(full_text, candidate_phrase)
+        # Log the offsets found.
         log_debug(f"Page {page_number}: Found candidate phrase offsets: {matches}")
-        # Process each occurrence of the candidate phrase.
+        # Process each occurrence identified by its start and end offsets.
         for s, e in matches:
             try:
-                # Map the start and end offsets back to bounding boxes.
+                # Map the character offsets back to bounding boxes.
                 bboxes = TextUtils.map_offsets_to_bboxes(full_text, text_mapping, (s, e))
             except Exception as exc:
+                # Log any error that occurs during mapping.
                 log_debug(f"Page {page_number}: Error in map_offsets_to_bboxes: {exc}")
                 continue
-            # If no bounding boxes were returned, skip this occurrence.
+            # If no bounding boxes are found, skip this occurrence.
             if not bboxes:
                 log_debug(f"Page {page_number}: No bounding boxes found for offsets {s}-{e}")
                 continue
-            # Merge multiple bounding boxes into one using the provided utility.
+            # Merge the bounding boxes into one.
             merged_bbox = TextUtils.merge_bounding_boxes(bboxes)
-            # Append the occurrence as a dictionary.
+            # Append the merged bounding box to the match results.
             page_matches.append({"bbox": merged_bbox})
+            # Log the merged bounding box result.
             log_debug(f"Page {page_number}: Merged bounding box for offsets {s}-{e}: {merged_bbox}")
         # Return the page result along with the count of matches.
         return {"page": page_number, "matches": page_matches}, len(page_matches)
@@ -525,63 +581,68 @@ class PDFSearcher:
              Even pages with no matches are included in the results.
 
         Returns:
-            Tuple[Dict[str, Any], int]: A tuple where the first element is a dictionary containing:
-                - "pages": A list of dictionaries (one per page) with keys:
-                    "page": page number,
-                    "matches": list of match dictionaries (each containing "bbox" and "original_text").
-            The second element is the total count of occurrences found across pages.
+            Tuple[Dict[str, Any], int]: A tuple with a dictionary of per-page results and the total occurrence count.
         """
-        candidate_phrases = []  # List to accumulate candidate phrases from all pages.
+        # Initialize an empty list to collect candidate phrases from all pages.
+        candidate_phrases = []
+        # Log the beginning of the process with the target bounding box.
         log_debug(f"Starting find_target_phrase_occurrences with target_bbox: {target_bbox}")
-
-        # Step 1: Loop over each page to identify candidate phrases.
+        # Step 1: Iterate over each page to identify candidate phrases.
         for page in self.extracted_data.get("pages", []):
-            # Build a mapping of word positions and text for the current page.
+            # Build the mapping of words for the current page.
             mapping, _ = self.build_page_text_and_mapping(page.get("words", []))
-            # Identify indices where the word center falls within the target bounding box.
+            # Identify the indices of words whose centers lie within the target bounding box.
             candidate_indices = [
                 idx for idx, m in enumerate(mapping)
                 if self._word_center_in_bbox(m["bbox"], target_bbox)
             ]
+            # Log the indices found for the page.
             log_debug(f"Page {page.get('page', 'unknown')}: candidate_indices: {candidate_indices}")
+            # If no candidate indices are found, log and skip this page.
             if not candidate_indices:
                 log_debug(f"Page {page.get('page', 'unknown')}: No words found in target_bbox.")
-                continue  # Skip this page if no candidate indices are found.
-            # Group consecutive indices to form candidate phrases.
+                continue
+            # Group the consecutive candidate indices.
             groups = self._group_consecutive_indices(candidate_indices)
+            # Log the grouped indices.
             log_debug(f"Page {page.get('page', 'unknown')}: grouped candidate indices: {groups}")
-            # For each group, join the words to form a candidate phrase.
+            # For each group, join the corresponding words to form a candidate phrase.
             for group in groups:
                 phrase = " ".join(mapping[i]["text"] for i in group)
+                # Append the candidate phrase to the collection.
                 candidate_phrases.append(phrase)
+                # Log the candidate phrase found.
                 log_debug(f"Page {page.get('page', 'unknown')}: found candidate phrase: '{phrase}'")
-
-        # If no candidate phrases were found across any page, return empty results.
+        # Check if any candidate phrases were found.
         if not candidate_phrases:
+            # Log that no candidate phrases were found.
             log_debug("No candidate phrases found in any page.")
+            # Return empty results.
             return {"pages": [], "target_phrase": None, "word_count": 0}, 0
-
-        # Step 2: Select the candidate phrase to use (here we choose the longest candidate phrase).
+        # Step 2: Select the candidate phrase with the greatest length.
         candidate_phrase = max(candidate_phrases, key=len)
+        # Count the number of words in the selected candidate phrase.
         word_count = len(candidate_phrase.split())
+        # Log the chosen candidate phrase and its word count.
         log_debug(
-            f"Chosen candidate phrase: '{candidate_phrase}' with {word_count} words from candidate phrases: {candidate_phrases}"
-        )
-
-        total_occurrences = 0  # Counter for the total number of occurrences found.
-        pages_results = []  # List to store results per page.
-        # Step 3: Process each page to find occurrences of the candidate phrase.
+            f"Chosen candidate phrase: '{candidate_phrase}' with {word_count} words from candidate phrases: {candidate_phrases}")
+        # Initialize a counter for total occurrences.
+        total_occurrences = 0
+        # Initialize a list to hold per-page results.
+        pages_results = []
+        # Step 3: Process each page for occurrences of the candidate phrase.
         for page in self.extracted_data.get("pages", []):
-            # For single-word candidate phrases.
+            # If the candidate phrase is a single word, process it accordingly.
             if word_count == 1:
                 result, count = self._process_single_word_occurrences(page, candidate_phrase)
             else:
-                # For multi-word candidate phrases.
+                # For multiple words, use the multi-word processing function.
                 result, count = self._process_multiword_occurrences(page, candidate_phrase)
+            # Append the result for the page.
             pages_results.append(result)
-            total_occurrences += count  # Sum the number of matches.
-
+            # Increment the total occurrences by the count for this page.
+            total_occurrences += count
+        # Log the final count of occurrences.
         log_debug(f"find_target_phrase_occurrences: Final occurrences: {total_occurrences}")
-        # Return a dictionary containing the per-page results, the candidate phrase, its word count,
-        # and the total number of occurrences across all pages.
-        return {"pages": pages_results, }, total_occurrences
+        # Return the final results along with the total occurrence count.
+        return {"pages": pages_results, "target_phrase": candidate_phrase, "word_count": word_count}, total_occurrences

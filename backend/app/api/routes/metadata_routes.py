@@ -1,36 +1,32 @@
 """
-Metadata and configuration endpoints with response caching for improved performance.
-
-This module provides endpoints that return configuration data such as available engines,
-entity lists, entity examples, and the status of detection engines. Static responses are
-cached to improve performance, while dynamic endpoints are secured with robust error handling.
-Each endpoint includes detailed documentation to aid developers in understanding the interface.
+This module provides endpoints that return metadata and configuration data with response caching for improved performance.
+It exposes endpoints to retrieve available detection engines, entity lists, sample entity examples, detector statuses,
+and the API routes. Static responses are cached to improve response times, and all endpoints are secured with robust
+error handling through SecurityAwareErrorHandler. This module is designed to aid developers by providing clear and
+detailed information about the current state and configuration of the detection system.
 """
-from datetime import datetime
 
+from datetime import datetime
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-
 from backend.app.configs.gemini_config import GEMINI_AVAILABLE_ENTITIES
 from backend.app.configs.gliner_config import GLINER_AVAILABLE_ENTITIES
 from backend.app.configs.presidio_config import PRESIDIO_AVAILABLE_ENTITIES
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.initialization_service import initialization_service
-from backend.app.utils.constant.constant import CACHE_TTL  # Cache TTL values defined in a constant file.
+from backend.app.utils.constant.constant import CACHE_TTL
 from backend.app.utils.logging.logger import log_error
 from backend.app.utils.security.caching_middleware import get_cached_response, response_cache
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.system_utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
-# Configure rate limiter using the client's remote address.
+# Create a rate limiter using the client's remote address.
 limiter = Limiter(key_func=get_remote_address)
-
-# Create the API router.
+# Instantiate the API router.
 router = APIRouter()
-
-# Create an asynchronous lock for accessing active detector instances safely.
+# Create an asynchronous lock for safe access of detector status.
 _status_lock = AsyncTimeoutLock("detector_status_lock", priority=LockPriority.MEDIUM)
 
 
@@ -52,36 +48,38 @@ async def get_available_engines(request: Request, response: Response) -> JSONRes
                       or a secure error response if an exception occurs.
     """
     try:
-        # Set cache control header and custom TTL header for client-side caching.
+        # Set the Cache-Control header with a public caching policy and max-age based on CACHE_TTL.
         response.headers["Cache-Control"] = f"public, max-age={CACHE_TTL['engines']}"
+        # Set a custom header 'X-Cache-TTL' with the TTL value.
         response.headers["X-Cache-TTL"] = str(CACHE_TTL["engines"])
-
-        # Define a cache key for engines list.
+        # Define a cache key for storing the engines list.
         cache_key = "engines_list"
-        # Attempt to retrieve cached engines data.
+        # Attempt to retrieve the engines list from the cache.
         cached = get_cached_response(cache_key)
+        # If the cache contains data, return it immediately.
         if cached:
-            # Return cached data if available.
             return JSONResponse(content=cached)
-
-        # Generate engines data by iterating over the EntityDetectionEngine enum.
+        # Generate engines data by enumerating all available engines from the EntityDetectionEngine enum.
         engines_data = {"engines": [e.name for e in EntityDetectionEngine]}
-        # Cache the engines data with the specified TTL.
+        # Cache the generated engines data using the defined TTL.
         response_cache.set(cache_key, engines_data, CACHE_TTL["engines"])
+        # Create a JSONResponse with the engine's data.
         resp = JSONResponse(content=engines_data)
+        # Set the Cache-Control header in the response.
         resp.headers["Cache-Control"] = f"public, max-age={CACHE_TTL['engines']}"
+        # Set the X-Cache-TTL header in the response.
         resp.headers["X-Cache-TTL"] = str(CACHE_TTL["engines"])
-        # Return the generated engines data as a JSON response.
+        # Return the JSON response.
         return resp
-
     except Exception as e:
-        # Log the error.
+        # Log the error if an exception is raised.
         log_error(f"[ERROR] Error retrieving available engines: {str(e)}")
-        # Create a secure error response using the error handling utility.
-        error_response = SecurityAwareErrorHandler.handle_safe_error(
-            e, "api_engines_router", resource_id=str(request.url)
-        )
+        # Securely handle the error using SecurityAwareErrorHandler.
+        error_response = SecurityAwareErrorHandler.handle_safe_error(e, "api_engines_router",
+                                                                     resource_id=str(request.url))
+        # Get the error status code, defaulting to 500 if not specified.
         status = error_response.get("status_code", 500)
+        # Return a JSONResponse containing the secure error information.
         return JSONResponse(content=error_response, status_code=status)
 
 
@@ -103,39 +101,44 @@ async def get_available_entities(request: Request, response: Response) -> JSONRe
         JSONResponse: A JSON response with available entity types or a secure error response.
     """
     try:
-        # Set caching headers for a 1-hour cache.
+        # Set Cache-Control header with a 1-hour max-age based on CACHE_TTL.
         response.headers["Cache-Control"] = f"public, max-age={CACHE_TTL['entities']}"
+        # Set a custom header 'X-Cache-TTL' with the TTL for entities.
         response.headers["X-Cache-TTL"] = str(CACHE_TTL["entities"])
-
-        # Define a cache key for entities list.
+        # Define a cache key for the entities list.
         cache_key = "entities_list"
-        # Retrieve cached entities data if available.
+        # Retrieve cached entities if available.
         cached = get_cached_response(cache_key)
+        # If cached data exists, return it immediately.
         if cached:
             return JSONResponse(content=cached)
-
         # Retrieve GLiNER entities from configuration.
         gliner_entities = GLINER_AVAILABLE_ENTITIES
-        # Build a dictionary with entities for each detection engine.
+        # Build a dictionary containing entity lists for Presidio, Gemini, and GLiNER.
         entities_data = {
             "presidio_entities": PRESIDIO_AVAILABLE_ENTITIES,
             "gemini_entities": GEMINI_AVAILABLE_ENTITIES,
             "gliner_entities": gliner_entities
         }
-        # Cache the entities' data.
+        # Cache the entities data with the defined TTL.
         response_cache.set(cache_key, entities_data, CACHE_TTL["entities"])
+        # Create a JSONResponse with the entity's data.
         resp = JSONResponse(content=entities_data)
+        # Set the Cache-Control header in the response.
         resp.headers["Cache-Control"] = f"public, max-age={CACHE_TTL['entities']}"
+        # Set the X-Cache-TTL header in the response.
         resp.headers["X-Cache-TTL"] = str(CACHE_TTL["entities"])
-        # Return the generated engines data as a JSON response.
+        # Return the JSON response.
         return resp
-
     except Exception as e:
+        # Log the error if an exception is raised.
         log_error(f"[ERROR] Error retrieving available entities: {str(e)}")
-        error_response = SecurityAwareErrorHandler.handle_safe_error(
-            e, "api_entities_router", resource_id=str(request.url)
-        )
+        # Securely handle the exception.
+        error_response = SecurityAwareErrorHandler.handle_safe_error(e, "api_entities_router",
+                                                                     resource_id=str(request.url))
+        # Get the status code, defaulting to 500.
         status = error_response.get("status_code", 500)
+        # Return a JSONResponse with the error information.
         return JSONResponse(content=error_response, status_code=status)
 
 
@@ -158,17 +161,17 @@ async def get_entity_examples(request: Request, response: Response) -> JSONRespo
                       or a secure error response if an exception occurs.
     """
     try:
-        # Set caching headers for a 24-hour cache.
+        # Set Cache-Control header for a 24-hour cache using CACHE_TTL.
         response.headers["Cache-Control"] = f"public, max-age={CACHE_TTL['entity_examples']}"
+        # Set the custom header X-Cache-TTL with the TTL for entity examples.
         response.headers["X-Cache-TTL"] = str(CACHE_TTL["entity_examples"])
-
-        # Define a cache key for entity examples.
+        # Define a cache key for the entity examples.
         cache_key = "entity_examples"
-        # Check if examples data is cached.
+        # Attempt to retrieve cached examples.
         cached = get_cached_response(cache_key)
+        # If cached examples exist, return them.
         if cached:
             return JSONResponse(content=cached)
-
         # Define static example data for various entity types.
         examples_data = {
             "examples": {
@@ -183,20 +186,25 @@ async def get_entity_examples(request: Request, response: Response) -> JSONRespo
                 "ORGANIZATION": ["Acme Corporation", "United Nations", "Stanford University"]
             }
         }
-        # Cache the example data.
+        # Cache the example's data.
         response_cache.set(cache_key, examples_data, CACHE_TTL["entity_examples"])
+        # Create a JSONResponse with the example's data.
         resp = JSONResponse(content=examples_data)
+        # Set the Cache-Control header for the response.
         resp.headers["Cache-Control"] = f"public, max-age={CACHE_TTL['entity_examples']}"
+        # Set the X-Cache-TTL header for the response.
         resp.headers["X-Cache-TTL"] = str(CACHE_TTL["engines"])
-        # Return the generated engines data as a JSON response.
+        # Return the JSONResponse containing the entity examples.
         return resp
-
     except Exception as e:
+        # Log any errors encountered.
         log_error(f"[ERROR] Error retrieving entity examples: {str(e)}")
-        error_response = SecurityAwareErrorHandler.handle_safe_error(
-            e, "api_entity_example_router", resource_id=str(request.url)
-        )
+        # Securely handle the exception.
+        error_response = SecurityAwareErrorHandler.handle_safe_error(e, "api_entity_example_router",
+                                                                     resource_id=str(request.url))
+        # Get the status code, defaulting to 500 if necessary.
         status = error_response.get("status_code", 500)
+        # Return a JSONResponse with the error details.
         return JSONResponse(content=error_response, status_code=status)
 
 
@@ -215,17 +223,19 @@ async def get_detectors_status(request: Request, response: Response) -> JSONResp
         response (Response): The outgoing HTTP response, used to set custom TTL headers.
 
     Returns:
-        JSONResponse: A JSON response containing status and metrics for each detector, or a secure error response.
+        JSONResponse: A JSON response containing status and metrics for each detector,
+                      or a secure error response if an exception occurs.
     """
     try:
-        # Set a custom TTL header for detector status.
+        # Set the custom header X-Cache-TTL with the detector status TTL.
         response.headers["X-Cache-TTL"] = str(CACHE_TTL["detector_status"])
-        # Get the current time as an ISO formatted string.
+        # Get the current time in ISO format.
         last_updated = datetime.isoformat(datetime.now())
-        # Retrieve detector health and usage metrics.
+        # Retrieve overall detector health status.
         detector_health = initialization_service.check_health()
+        # Retrieve usage metrics for detectors.
         detector_metrics = initialization_service.get_usage_metrics()
-        # Initialize a dictionary to store detectors' status.
+        # Initialize a dictionary to store status for each detector and metadata.
         detectors_status = {
             "presidio": {},
             "gemini": {},
@@ -235,47 +245,43 @@ async def get_detectors_status(request: Request, response: Response) -> JSONResp
                 "cache_ttl": CACHE_TTL["detector_status"]
             }
         }
-        # Acquire an async lock to safely read detector instances.
+        # Acquire the asynchronous lock to ensure safe access to detector instances.
         async with _status_lock.acquire_timeout(timeout=2.0):
-            # Retrieve and set status for the Presidio detector.
+            # Retrieve the Presidio detector.
             presidio_detector = initialization_service.get_detector(EntityDetectionEngine.PRESIDIO)
-            detectors_status["presidio"] = (
-                presidio_detector.get_status() if hasattr(presidio_detector, 'get_status')
-                else {
-                    "initialized": detector_health["detectors"]["presidio"],
-                    "uses": detector_metrics.get("presidio", {}).get("uses", 0)
-                }
-            )
-            # Retrieve and set status for the Gemini detector.
+            # Set the Presidio detector status.
+            detectors_status["presidio"] = (presidio_detector.get_status() if hasattr(presidio_detector, 'get_status')
+                                            else {"initialized": detector_health["detectors"]["presidio"],
+                                                  "uses": detector_metrics.get("presidio", {}).get("uses", 0)})
+            # Retrieve the Gemini detector.
             gemini_detector = initialization_service.get_gemini_detector()
-            detectors_status["gemini"] = (
-                gemini_detector.get_status() if hasattr(gemini_detector, 'get_status')
-                else {
-                    "initialized": detector_health["detectors"]["gemini"],
-                    "uses": detector_metrics.get("gemini", {}).get("uses", 0)
-                }
-            )
-            # Retrieve and set status for the GLiNER detector.
+            # Set the Gemini detector status.
+            detectors_status["gemini"] = (gemini_detector.get_status() if hasattr(gemini_detector, 'get_status')
+                                          else {"initialized": detector_health["detectors"]["gemini"],
+                                                "uses": detector_metrics.get("gemini", {}).get("uses", 0)})
+            # Retrieve the GLiNER detector.
             gliner_detector = initialization_service.get_gliner_detector()
-            detectors_status["gliner"] = (
-                gliner_detector.get_status() if hasattr(gliner_detector, 'get_status')
-                else {
-                    "initialized": detector_health["detectors"]["gliner"],
-                    "uses": detector_metrics.get("gliner", {}).get("uses", 0)
-                }
-            )
-        # Do not cache detector status if data is very dynamic.
+            # Set the GLiNER detector status.
+            detectors_status["gliner"] = (gliner_detector.get_status() if hasattr(gliner_detector, 'get_status')
+                                          else {"initialized": detector_health["detectors"]["gliner"],
+                                                "uses": detector_metrics.get("gliner", {}).get("uses", 0)})
+        # Cache the detectors status data with the defined TTL.
         response_cache.set("detectors_status", detectors_status, CACHE_TTL["detector_status"])
+        # Create a JSONResponse with the detectors status data.
         resp = JSONResponse(content=detectors_status)
+        # Set the X-Cache-TTL header for the response.
         resp.headers["X-Cache-TTL"] = str(CACHE_TTL["detector_status"])
+        # Return the detectors status JSON response.
         return resp
-
     except Exception as e:
+        # Log any exception encountered.
         log_error(f"[ERROR] Error retrieving detector status: {str(e)}")
-        error_response = SecurityAwareErrorHandler.handle_safe_error(
-            e, "api_status_metadata_router", resource_id=str(request.url)
-        )
+        # Securely handle the error.
+        error_response = SecurityAwareErrorHandler.handle_safe_error(e, "api_status_metadata_router",
+                                                                     resource_id=str(request.url))
+        # Get the status code.
         status = error_response.get("status_code", 500)
+        # Return a JSONResponse with the error details.
         return JSONResponse(content=error_response, status_code=status)
 
 
@@ -292,132 +298,68 @@ async def get_api_routes(request: Request, response: Response) -> JSONResponse:
         response (Response): The outgoing HTTP response, used to set caching headers.
 
     Returns:
-        JSONResponse: A JSON response containing detailed API route information, or a secure error response if an exception occurs.
+        JSONResponse: A JSON response containing detailed API route information,
+                      or a secure error response if an exception occurs.
     """
     try:
-        # Set caching headers for a 24-hour cache for routes.
+        # Set Cache-Control header to use public caching with a TTL based on CACHE_TTL for engines.
         response.headers["Cache-Control"] = f"public, max-age={CACHE_TTL['engines']}"
+        # Set a custom header with the cache TTL.
         response.headers["X-Cache-TTL"] = str(CACHE_TTL["engines"])
-
-        # Define the routes' information.
+        # Define a dictionary with detailed information for each API route category.
         routes_info = {
             "entity_detection": [
-                {
-                    "path": "/ml/detect",
-                    "method": "POST",
-                    "description": "Presidio entity detection",
-                    "engine": "Presidio"
-                },
-                {
-                    "path": "/ml/gl_detect",
-                    "method": "POST",
-                    "description": "GLiNER entity detection",
-                    "engine": "GLiNER"
-                },
-                {
-                    "path": "/ai/detect",
-                    "method": "POST",
-                    "description": "Gemini AI entity detection",
-                    "engine": "Gemini"
-                }
+                {"path": "/ml/detect", "method": "POST", "description": "Presidio entity detection",
+                 "engine": "Presidio"},
+                {"path": "/ml/gl_detect", "method": "POST", "description": "GLiNER entity detection",
+                 "engine": "GLiNER"},
+                {"path": "/ai/detect", "method": "POST", "description": "Gemini AI entity detection",
+                 "engine": "Gemini"}
             ],
             "batch_processing": [
-                {
-                    "path": "/batch/detect",
-                    "method": "POST",
-                    "description": "Batch entity detection"
-                },
-                {
-                    "path": "/batch/redact",
-                    "method": "POST",
-                    "description": "Batch document redaction"
-                },
-                {
-                    "path": "/batch/hybrid_detect",
-                    "method": "POST",
-                    "description": "Hybrid batch detection across multiple engines"
-                },
-                {
-                    "path": "/batch/extract",
-                    "method": "POST",
-                    "description": "Batch text extraction"
-                }
+                {"path": "/batch/detect", "method": "POST", "description": "Batch entity detection"},
+                {"path": "/batch/redact", "method": "POST", "description": "Batch document redaction"},
+                {"path": "/batch/hybrid_detect", "method": "POST",
+                 "description": "Hybrid batch detection across multiple engines"},
+                {"path": "/batch/extract", "method": "POST", "description": "Batch text extraction"}
             ],
             "pdf_processing": [
-                {
-                    "path": "/pdf/redact",
-                    "method": "POST",
-                    "description": "PDF document redaction"
-                },
-                {
-                    "path": "/pdf/extract",
-                    "method": "POST",
-                    "description": "PDF text extraction"
-                }
+                {"path": "/pdf/redact", "method": "POST", "description": "PDF document redaction"},
+                {"path": "/pdf/extract", "method": "POST", "description": "PDF text extraction"}
             ],
             "metadata": [
-                {
-                    "path": "/help/engines",
-                    "method": "GET",
-                    "description": "List available detection engines"
-                },
-                {
-                    "path": "/help/entities",
-                    "method": "GET",
-                    "description": "List available entity types"
-                },
-                {
-                    "path": "/help/entity-examples",
-                    "method": "GET",
-                    "description": "Get examples of different entity types"
-                },
-                {
-                    "path": "/help/detectors-status",
-                    "method": "GET",
-                    "description": "Get status of detection engines"
-                },
-                {
-                    "path": "/help/routes",
-                    "method": "GET",
-                    "description": "Comprehensive overview of API routes"
-                }
+                {"path": "/help/engines", "method": "GET", "description": "List available detection engines"},
+                {"path": "/help/entities", "method": "GET", "description": "List available entity types"},
+                {"path": "/help/entity-examples", "method": "GET",
+                 "description": "Get examples of different entity types"},
+                {"path": "/help/detectors-status", "method": "GET", "description": "Get status of detection engines"},
+                {"path": "/help/routes", "method": "GET", "description": "Comprehensive overview of API routes"}
             ],
             "system": [
-                {
-                    "path": "/status",
-                    "method": "GET",
-                    "description": "Basic API status"
-                },
-                {
-                    "path": "/health",
-                    "method": "GET",
-                    "description": "Detailed health check"
-                },
-                {
-                    "path": "/metrics",
-                    "method": "GET",
-                    "description": "Performance metrics"
-                },
-                {
-                    "path": "/readiness",
-                    "method": "GET",
-                    "description": "Service readiness check"
-                }
+                {"path": "/status", "method": "GET", "description": "Basic API status"},
+                {"path": "/health", "method": "GET", "description": "Detailed health check"},
+                {"path": "/metrics", "method": "GET", "description": "Performance metrics"},
+                {"path": "/readiness", "method": "GET", "description": "Service readiness check"}
             ]
         }
-        # Cache the routes' information.
+        # Define a cache key for the API routes.
         cache_key = "api_routes"
+        # Cache the routes information using the defined TTL.
         response_cache.set(cache_key, routes_info, CACHE_TTL["engines"])
-        # Return the routes' information.
+        # Create a JSONResponse with the route's information.
         resp = JSONResponse(content=routes_info)
+        # Set the Cache-Control header on the response.
         resp.headers["Cache-Control"] = f"public, max-age={CACHE_TTL['engines']}"
+        # Set a custom X-Cache-TTL header on the response.
         resp.headers["X-Cache-TTL"] = str(CACHE_TTL["engines"])
+        # Return the JSONResponse with the detailed API routes.
         return resp
-
     except Exception as e:
+        # Log an error if an exception occurs while retrieving API routes.
         log_error(f"[ERROR] Error retrieving API routes: {str(e)}")
-        error_response = SecurityAwareErrorHandler.handle_safe_error(
-            e, "api_routes", resource_id=str(request.url)
-        )
+        # Securely handle the exception.
+        error_response = SecurityAwareErrorHandler.handle_safe_error(e, "api_routes", resource_id=str(request.url))
+        # Retrieve the status code from the error response.
         status = error_response.get("status_code", 500)
+        # Return a JSONResponse with the secure error information.
         return JSONResponse(content=error_response, status_code=status)

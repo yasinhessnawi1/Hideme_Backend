@@ -92,7 +92,7 @@ class BaseDetectionService:
             # Log the error that occurred during text extraction.
             log_error(f"Error during text extraction: {str(e)} [operation_id={operation_id}]")
             # Create an API error response using the SecurityAwareErrorHandler.
-            error_response= SecurityAwareErrorHandler.handle_safe_error(
+            error_response = SecurityAwareErrorHandler.handle_safe_error(
                 e, "file_text_extraction", filename
             )
             # Include the operation ID in the error response.

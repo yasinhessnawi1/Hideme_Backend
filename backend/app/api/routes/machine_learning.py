@@ -1,10 +1,14 @@
 """
-This router defines machine learning based sensitive information detection endpoints.
+This module defines machine learning based sensitive information detection endpoints.
 It supports two detection modes:
   - Presidio detection using Microsoft Presidio NER.
   - GLiNER detection using specialized entity recognition with memory monitoring.
-Each endpoint logs its operation and handles errors securely via SecurityAwareErrorHandler.
+Each endpoint logs its operations and handles errors securely via SecurityAwareErrorHandler.
+The endpoints are rate-limited and optimized for memory usage, and they delegate detection tasks
+to MashinLearningService. This design ensures secure and efficient processing of uploaded files
+for sensitive data detection.
 """
+
 import time
 from typing import Optional
 
@@ -17,11 +21,9 @@ from backend.app.services.machine_learning_service import MashinLearningService
 from backend.app.utils.logging.logger import log_info, log_warning
 from backend.app.utils.system_utils.memory_management import memory_optimized, memory_monitor
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.helpers.json_helper import validate_threshold_score  # Import helper if desired
+from backend.app.utils.helpers.json_helper import validate_threshold_score
 
-# Configure rate limiter using the client's remote address.
 limiter = Limiter(key_func=get_remote_address)
-# Create the API router.
 router = APIRouter()
 
 
@@ -54,37 +56,45 @@ async def presidio_detect_sensitive(
     Returns:
         JSONResponse: A JSON response containing the detection results, or a secure error response if an exception occurs.
     """
-    # Validate the threshold using your JSON helper.
+    # Begin threshold validation in a try block.
     try:
+        # Validate the threshold value using the JSON helper.
         validate_threshold_score(threshold)
     except Exception as e:
-        error_info = SecurityAwareErrorHandler.handle_safe_error(
-            e, "api_presidio_sensitive", endpoint=str(request.url)
-        )
+        # Handle any exceptions during threshold validation securely.
+        error_info = SecurityAwareErrorHandler.handle_safe_error(e, "api_presidio_sensitive", endpoint=str(request.url))
+        # Retrieve the HTTP status code from the error information, default to 500 if not found.
         status = error_info.get("status_code", 500)
+        # Return a JSONResponse with the sanitized error information.
         return JSONResponse(status_code=status, content=error_info)
 
-    # Generate a unique operation ID using the current timestamp.
+    # Generate a unique operation ID based on the current timestamp.
     operation_id = f"presidio_detect_{int(time.time())}"
+    # Log the start of Presidio detection processing along with the operation ID.
     log_info(f"[ML] Starting Presidio detection processing [operation_id={operation_id}]")
     # Initialize the machine learning service with 'presidio' as the detector type.
     service = MashinLearningService(detector_type="presidio")
+    # Begin the detection process in a try block.
     try:
-        # Pass along the threshold parameter to the service.
+        # Call the detection service's asynchronous detect method with provided parameters.
         result = await service.detect(file, requested_entities, operation_id, remove_words, threshold)
+        # Return the detection result.
         return result
     except Exception as e:
+        # Log a warning if an exception occurs during detection.
         log_warning(f"[ML] Exception in Presidio detection: {str(e)} [operation_id={operation_id}]")
-        error_response = SecurityAwareErrorHandler.handle_safe_error(
-            e, "api_presidio_router", resource_id=str(request.url)
-        )
+        # Securely handle the exception using SecurityAwareErrorHandler.
+        error_response = SecurityAwareErrorHandler.handle_safe_error(e, "api_presidio_router",
+                                                                     resource_id=str(request.url))
+        # Retrieve the error status code, defaulting to 500 if not available.
         status = error_response.get("status_code", 500)
+        # Return a JSONResponse with the secure error response.
         return JSONResponse(content=error_response, status_code=status)
 
 
 @router.post("/gl_detect")
 @limiter.limit("10/minute")
-@memory_optimized(threshold_mb=200)  # GLiNER requires more memory.
+@memory_optimized(threshold_mb=200)
 async def gliner_detect_sensitive_entities(
         request: Request,
         file: UploadFile = File(...),
@@ -113,34 +123,44 @@ async def gliner_detect_sensitive_entities(
     Returns:
         JSONResponse: A JSON response containing the detection results, or a secure error response if an exception occurs.
     """
-    # Validate the threshold using your JSON helper.
+    # Begin threshold validation in a try block.
     try:
+        # Validate the threshold using the helper function.
         validate_threshold_score(threshold)
     except Exception as e:
-        error_info = SecurityAwareErrorHandler.handle_safe_error(
-            e, "api_gliner_sensitive_entities", endpoint=str(request.url)
-        )
+        # Handle any exceptions during threshold validation securely.
+        error_info = SecurityAwareErrorHandler.handle_safe_error(e, "api_gliner_sensitive_entities",
+                                                                 endpoint=str(request.url))
+        # Retrieve the HTTP status code from the error information, default to 500.
         status = error_info.get("status_code", 500)
+        # Return a JSONResponse with the sanitized error information.
         return JSONResponse(status_code=status, content=error_info)
 
-    # Generate a unique operation ID using the current timestamp.
+    # Generate a unique operation ID based on the current time.
     operation_id = f"gliner_detect_{int(time.time())}"
+    # Log the start of GLiNER detection processing along with the generated operation ID.
     log_info(f"[ML] Starting GLiNER detection processing [operation_id={operation_id}]")
+    # Begin the detection process in a try block.
     try:
+        # Retrieve the current memory usage percentage.
         current_memory_usage = memory_monitor.get_memory_usage()
+        # Check if memory usage is above 85% and log a warning if so.
         if current_memory_usage > 85:
             log_warning(
-                f"[ML] High memory pressure ({current_memory_usage:.1f}%), may impact GLiNER performance [operation_id={operation_id}]"
-            )
+                f"[ML] High memory pressure ({current_memory_usage:.1f}%), may impact GLiNER performance [operation_id={operation_id}]")
         # Initialize the machine learning service with 'gliner' as the detector type.
         service = MashinLearningService(detector_type="gliner")
-        # Pass the threshold parameter along to the detection service.
+        # Call the detection service's asynchronous detect method with provided parameters.
         result = await service.detect(file, requested_entities, operation_id, remove_words, threshold)
+        # Return the detection result.
         return result
     except Exception as e:
+        # Log a warning if an exception occurs during GLiNER detection.
         log_warning(f"[ML] Exception in GLiNER detection: {str(e)} [operation_id={operation_id}]")
-        error_response = SecurityAwareErrorHandler.handle_safe_error(
-            e, "api_gliner_router", resource_id=str(request.url)
-        )
+        # Securely handle the exception using SecurityAwareErrorHandler.
+        error_response = SecurityAwareErrorHandler.handle_safe_error(e, "api_gliner_router",
+                                                                     resource_id=str(request.url))
+        # Retrieve the error status code, defaulting to 500 if not found.
         status = error_response.get("status_code", 500)
+        # Return a JSONResponse with the sanitized error response.
         return JSONResponse(content=error_response, status_code=status)

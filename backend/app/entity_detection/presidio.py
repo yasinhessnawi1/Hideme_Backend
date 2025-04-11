@@ -264,9 +264,9 @@ class PresidioEntityDetector(BaseEntityDetector):
             return [], {"pages": []}
 
     async def _process_all_pages_async(
-        self,
-        pages: List[Dict[str, Any]],
-        local_requested_entities: List[str]
+            self,
+            pages: List[Dict[str, Any]],
+            local_requested_entities: List[str]
     ) -> List[Tuple[int, Tuple[Dict[str, Any], List[Dict[str, Any]]]]]:
         """
         Process all pages in parallel using a global timeout.
@@ -280,6 +280,7 @@ class PresidioEntityDetector(BaseEntityDetector):
         Returns:
             A list of tuples: (page_number, (page_redaction_info, processed_entities))
         """
+
         async def _process_single_page_async(local_page: Dict[str, Any]) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
             """
             Processes a single page for entity detection.
@@ -406,10 +407,10 @@ class PresidioEntityDetector(BaseEntityDetector):
         )
 
     def _analyze_text(
-        self,
-        text: str,
-        language: str,
-        entities: List[str]
+            self,
+            text: str,
+            language: str,
+            entities: List[str]
     ) -> List[Any]:
         """
         Thread-safe wrapper for the Presidio analyzer's analyze method with timeout handling.

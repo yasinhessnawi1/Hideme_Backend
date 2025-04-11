@@ -4,6 +4,7 @@ It integrates rate limiting via SlowAPI and memory optimization via a decorator,
 while delegating the file processing to AIDetectService. All errors are handled securely
 using SecurityAwareErrorHandler to prevent leaking sensitive information.
 """
+
 from http.client import HTTPException
 from typing import Optional
 
@@ -17,8 +18,9 @@ from backend.app.utils.helpers.json_helper import validate_threshold_score
 from backend.app.utils.system_utils.memory_management import memory_optimized
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 
-# Configure the rate limiter (using the client's remote address) and the API router.
+# Configure the rate limiter using the client's remote address.
 limiter = Limiter(key_func=get_remote_address)
+# Create an instance of APIRouter for the AI detection endpoints.
 router = APIRouter()
 
 
@@ -37,9 +39,9 @@ async def ai_detect_sensitive(
 
     This endpoint receives an uploaded file along with optional parameters specifying
     the entities to detect, words to remove, and a threshold to filter the detection results.
-    The processing is delegated to AIDetectService which performs AI-based sensitive data detection.
-    If any error occurs during processing, the error is securely handled using
-    SecurityAwareErrorHandler to provide a sanitized error response.
+    Processing is delegated to AIDetectService which performs AI-based sensitive data detection.
+    If any error occurs during processing, the error is securely handled using SecurityAwareErrorHandler
+    to provide a sanitized error response.
 
     Parameters:
         request (Request): The incoming HTTP request.
@@ -52,29 +54,36 @@ async def ai_detect_sensitive(
         Response: The detection results as returned by AIDetectService, or a sanitized error response if an exception occurs.
     """
     try:
-        # Validate the threshold using the JSON helper method.
+        # Validate the threshold score; will raise HTTPException if threshold is invalid.
         validate_threshold_score(threshold)
     except HTTPException as e:
+        # Handle threshold validation error securely.
         error_info = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_ai_detect_sensitive", endpoint=str(request.url)
         )
+        # Retrieve the status code from the error info, defaulting to 500 if not present.
         status = error_info.get("status_code", 500)
+        # Return a Response with the safe error information.
         return Response(
             content=error_info,
             status_code=status,
             media_type=JSON_MEDIA_TYPE
         )
+    # Instantiate the AI detection service.
     service = AIDetectService()
     try:
-        # Delegate file processing to the AI detection service, and pass the threshold if provided.
+        # Delegate file processing to the AI detection service, passing all relevant parameters.
         result = await service.detect(file, requested_entities, remove_words, threshold)
+        # Return the processing result.
         return result
     except Exception as e:
-        # If an error occurs, log it and return a secure error response as JSON.
+        # Securely handle any exceptions during AI detection.
         error_info = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_ai_detect_sensitive", endpoint=str(request.url)
         )
+        # Determine the status code from the error information.
         status = error_info.get("status_code", 500)
+        # Return a Response containing the sanitized error message.
         return Response(
             content=error_info,
             status_code=status,

@@ -24,10 +24,10 @@ GLINER_AVAILABLE_ENTITIES = [
     , "date of birth", "bank account number",
     "medication", "tax identification number", "medical condition",
     "identity card number", "national id number", "ip address", "iban",
-    "credit card expiration date", "username" , "registration number",
+    "credit card expiration date", "username", "registration number",
     "student id number", "insurance number"
     , "social media handle", "license plate number"
-    , "postal code","vehicle registration number", "passport_number",
+    , "postal code", "vehicle registration number", "passport_number",
     "fax number", "visa number"
 
 ]
