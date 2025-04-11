@@ -6,11 +6,8 @@ and error handling. It supports both asynchronous and synchronous detection meth
 """
 
 import asyncio
-import json
 import time
 from typing import Any, Dict, List, Optional, Tuple, cast
-
-from fastapi import HTTPException
 
 from backend.app.domain.interfaces import EntityDetector
 from backend.app.services.initialization_service import initialization_service
@@ -20,22 +17,6 @@ from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.system_utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
-
-# Constants for available entities by detector type
-PRESIDIO_AVAILABLE_ENTITIES = ["CREDIT_CARD", "EMAIL_ADDRESS", "PHONE_NUMBER", "US_SSN", "US_BANK_ACCOUNT",
-                               "US_DRIVER_LICENSE", "US_PASSPORT", "IP_ADDRESS", "DATE_TIME"]
-GLINER_AVAILABLE_ENTITIES = ["PERSON", "ORGANIZATION", "LOCATION", "DATE", "MONEY", "PERCENT", "TIME", "URL"]
-GEMINI_AVAILABLE_ENTITIES = {
-    "PERSON_NAME": "Person names",
-    "EMAIL_ADDRESS": "Email addresses",
-    "PHONE_NUMBER": "Phone numbers",
-    "ADDRESS": "Physical addresses",
-    "CREDIT_CARD": "Credit card numbers",
-    "US_SSN": "US Social Security Numbers",
-    "US_TAX_ID": "US Tax IDs",
-    "US_PASSPORT": "US Passport numbers",
-    "BANK_ACCOUNT": "Bank account numbers"
-}
 
 
 class HybridEntityDetector(EntityDetector):
@@ -77,7 +58,6 @@ class HybridEntityDetector(EntityDetector):
             if presidio:
                 # Append the Presidio detector to the list of detectors.
                 self.detectors.append(presidio)
-                self.detector_types[type(presidio).__name__] = "presidio"
                 log_info("[INIT] Presidio Detector Initialized Successfully")
         # If configuration requests, initialize the Gemini detector.
         if config.get("use_gemini", True):
@@ -87,7 +67,6 @@ class HybridEntityDetector(EntityDetector):
             if gemini:
                 # Append it to the list of detectors.
                 self.detectors.append(gemini)
-                self.detector_types[type(gemini).__name__] = "gemini"
                 log_info("[INIT] Gemini Detector Initialized Successfully")
             else:
                 # Log a warning if Gemini detection could not be initialized.
@@ -102,7 +81,6 @@ class HybridEntityDetector(EntityDetector):
             if gliner:
                 # Append it to the detectors list.
                 self.detectors.append(gliner)
-                self.detector_types[type(gliner).__name__] = "gliner"
                 log_info("[INIT] GLiNER Detector Initialized Successfully")
             else:
                 # Log a warning if GLiNER detector initialization failed.
@@ -148,7 +126,7 @@ class HybridEntityDetector(EntityDetector):
 
         Args:
             extracted_data: Dictionary containing text and bounding box information.
-            requested_entities: List of three lists of entity types to detect for each detector.
+            requested_entities: List of entity types to detect.
 
         Returns:
             Tuple containing a list of detected entities and a redaction mapping.
@@ -237,11 +215,6 @@ class HybridEntityDetector(EntityDetector):
         Args:
             minimized_data: The pre-processed, minimized input data.
             requested_entities: List of entity types to detect.
-
-        Match each detector with its corresponding entity list:
-        - Index 0: Presidio entities
-        - Index 1: GLiNER entities
-        - Index 2: Gemini entities
 
         Returns:
             List of dictionaries, each containing detection results from one engine.
@@ -508,7 +481,7 @@ class HybridEntityDetector(EntityDetector):
         record_keeper.record_processing(
             operation_type="hybrid_detection",
             document_type="document",
-            entity_types_processed=flat_entities or [],
+            entity_types_processed=requested_entities or [],
             processing_time=total_time,
             file_count=1,
             entity_count=len(final_entities),
@@ -575,8 +548,7 @@ class HybridEntityDetector(EntityDetector):
 
         Args:
             extracted_data: Dictionary containing text and bounding box information.
-            requested_entities: List of three lists for entity types to detect
-                              [presidio_entities, gliner_entities, gemini_entities].
+            requested_entities: List of entity types to detect.
 
         Returns:
             Tuple of (detected entities, redaction mapping).
