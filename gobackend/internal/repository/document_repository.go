@@ -28,38 +28,39 @@ type DocumentRepository interface {
 	GetDocumentSummary(ctx context.Context, documentID int64) (*models.DocumentSummary, error)
 }
 
-// MysqlDocumentRepository is a MySQL implementation of DocumentRepository
-type MysqlDocumentRepository struct {
+// PostgresDocumentRepository is a PostgreSQL implementation of DocumentRepository
+type PostgresDocumentRepository struct {
 	db *database.Pool
 }
 
 // NewDocumentRepository creates a new DocumentRepository
 func NewDocumentRepository(db *database.Pool) DocumentRepository {
-	return &MysqlDocumentRepository{
+	return &PostgresDocumentRepository{
 		db: db,
 	}
 }
 
 // Create adds a new document to the database
-func (r *MysqlDocumentRepository) Create(ctx context.Context, document *models.Document) error {
+func (r *PostgresDocumentRepository) Create(ctx context.Context, document *models.Document) error {
 	// Start query timer
 	startTime := time.Now()
 
-	// Define the query
+	// Define the query with RETURNING for PostgreSQL
 	query := `
         INSERT INTO documents (user_id, hashed_document_name, upload_timestamp, last_modified)
-        VALUES (?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4)
+        RETURNING document_id
     `
 
 	// Execute the query
-	result, err := r.db.ExecContext(
+	err := r.db.QueryRowContext(
 		ctx,
 		query,
 		document.UserID,
 		document.HashedDocumentName,
 		document.UploadTimestamp,
 		document.LastModified,
-	)
+	).Scan(&document.ID)
 
 	// Log the query execution
 	utils.LogDBQuery(
@@ -73,17 +74,8 @@ func (r *MysqlDocumentRepository) Create(ctx context.Context, document *models.D
 		return fmt.Errorf("failed to create document: %w", err)
 	}
 
-	// Get the document ID
-	documentID, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("failed to get document ID: %w", err)
-	}
-
-	// Set the document ID
-	document.ID = documentID
-
 	log.Info().
-		Int64("document_id", documentID).
+		Int64("document_id", document.ID).
 		Int64("user_id", document.UserID).
 		Msg("Document created")
 
@@ -91,7 +83,7 @@ func (r *MysqlDocumentRepository) Create(ctx context.Context, document *models.D
 }
 
 // GetByID retrieves a document by ID
-func (r *MysqlDocumentRepository) GetByID(ctx context.Context, id int64) (*models.Document, error) {
+func (r *PostgresDocumentRepository) GetByID(ctx context.Context, id int64) (*models.Document, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -99,7 +91,7 @@ func (r *MysqlDocumentRepository) GetByID(ctx context.Context, id int64) (*model
 	query := `
         SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified
         FROM documents
-        WHERE document_id = ?
+        WHERE document_id = $1
     `
 
 	// Execute the query
@@ -131,7 +123,7 @@ func (r *MysqlDocumentRepository) GetByID(ctx context.Context, id int64) (*model
 }
 
 // GetByUserID retrieves all documents for a user with pagination
-func (r *MysqlDocumentRepository) GetByUserID(ctx context.Context, userID int64, page, pageSize int) ([]*models.Document, int, error) {
+func (r *PostgresDocumentRepository) GetByUserID(ctx context.Context, userID int64, page, pageSize int) ([]*models.Document, int, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -139,7 +131,7 @@ func (r *MysqlDocumentRepository) GetByUserID(ctx context.Context, userID int64,
 	offset := (page - 1) * pageSize
 
 	// Get total count
-	countQuery := `SELECT COUNT(*) FROM documents WHERE user_id = ?`
+	countQuery := `SELECT COUNT(*) FROM documents WHERE user_id = $1`
 	var totalCount int
 	if err := r.db.QueryRowContext(ctx, countQuery, userID).Scan(&totalCount); err != nil {
 		return nil, 0, fmt.Errorf("failed to count documents: %w", err)
@@ -149,9 +141,9 @@ func (r *MysqlDocumentRepository) GetByUserID(ctx context.Context, userID int64,
 	query := `
         SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified
         FROM documents
-        WHERE user_id = ?
+        WHERE user_id = $1
         ORDER BY upload_timestamp DESC
-        LIMIT ? OFFSET ?
+        LIMIT $2 OFFSET $3
     `
 
 	// Execute the query
@@ -198,7 +190,7 @@ func (r *MysqlDocumentRepository) GetByUserID(ctx context.Context, userID int64,
 }
 
 // Update updates a document in the database
-func (r *MysqlDocumentRepository) Update(ctx context.Context, document *models.Document) error {
+func (r *PostgresDocumentRepository) Update(ctx context.Context, document *models.Document) error {
 	// Start query timer
 	startTime := time.Now()
 
@@ -208,8 +200,8 @@ func (r *MysqlDocumentRepository) Update(ctx context.Context, document *models.D
 	// Define the query
 	query := `
         UPDATE documents
-        SET last_modified = ?
-        WHERE document_id = ?
+        SET last_modified = $1
+        WHERE document_id = $2
     `
 
 	// Execute the query
@@ -250,21 +242,21 @@ func (r *MysqlDocumentRepository) Update(ctx context.Context, document *models.D
 }
 
 // Delete removes a document and all its detected entities
-func (r *MysqlDocumentRepository) Delete(ctx context.Context, id int64) error {
+func (r *PostgresDocumentRepository) Delete(ctx context.Context, id int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Execute the delete within a transaction to cascade properly
 	return r.db.Transaction(ctx, func(tx *sql.Tx) error {
 		// First delete all detected entities
-		entitiesQuery := "DELETE FROM detected_entities WHERE document_id = ?"
+		entitiesQuery := "DELETE FROM detected_entities WHERE document_id = $1"
 		_, err := tx.ExecContext(ctx, entitiesQuery, id)
 		if err != nil {
 			return fmt.Errorf("failed to delete detected entities: %w", err)
 		}
 
 		// Then delete the document
-		documentQuery := "DELETE FROM documents WHERE document_id = ?"
+		documentQuery := "DELETE FROM documents WHERE document_id = $1"
 		result, err := tx.ExecContext(ctx, documentQuery, id)
 
 		// Log the query execution
@@ -298,14 +290,14 @@ func (r *MysqlDocumentRepository) Delete(ctx context.Context, id int64) error {
 }
 
 // DeleteByUserID removes all documents for a user
-func (r *MysqlDocumentRepository) DeleteByUserID(ctx context.Context, userID int64) error {
+func (r *PostgresDocumentRepository) DeleteByUserID(ctx context.Context, userID int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Execute the delete within a transaction to cascade properly
 	return r.db.Transaction(ctx, func(tx *sql.Tx) error {
 		// First get all document IDs
-		documentIDsQuery := "SELECT document_id FROM documents WHERE user_id = ?"
+		documentIDsQuery := "SELECT document_id FROM documents WHERE user_id = $1"
 		rows, err := tx.QueryContext(ctx, documentIDsQuery, userID)
 		if err != nil {
 			return fmt.Errorf("failed to get document IDs: %w", err)
@@ -328,7 +320,7 @@ func (r *MysqlDocumentRepository) DeleteByUserID(ctx context.Context, userID int
 		// Delete all detected entities for these documents
 		if len(documentIDs) > 0 {
 			for _, documentID := range documentIDs {
-				entitiesQuery := "DELETE FROM detected_entities WHERE document_id = ?"
+				entitiesQuery := "DELETE FROM detected_entities WHERE document_id = $1"
 				_, err := tx.ExecContext(ctx, entitiesQuery, documentID)
 				if err != nil {
 					return fmt.Errorf("failed to delete detected entities: %w", err)
@@ -337,7 +329,7 @@ func (r *MysqlDocumentRepository) DeleteByUserID(ctx context.Context, userID int
 		}
 
 		// Then delete all documents
-		documentsQuery := "DELETE FROM documents WHERE user_id = ?"
+		documentsQuery := "DELETE FROM documents WHERE user_id = $1"
 		result, err := tx.ExecContext(ctx, documentsQuery, userID)
 
 		// Log the query execution
@@ -364,7 +356,7 @@ func (r *MysqlDocumentRepository) DeleteByUserID(ctx context.Context, userID int
 }
 
 // GetDetectedEntities retrieves all detected entities for a document with method information
-func (r *MysqlDocumentRepository) GetDetectedEntities(ctx context.Context, documentID int64) ([]*models.DetectedEntityWithMethod, error) {
+func (r *PostgresDocumentRepository) GetDetectedEntities(ctx context.Context, documentID int64) ([]*models.DetectedEntityWithMethod, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -374,7 +366,7 @@ func (r *MysqlDocumentRepository) GetDetectedEntities(ctx context.Context, docum
                dm.method_name, dm.highlight_color
         FROM detected_entities de
         JOIN detection_methods dm ON de.method_id = dm.method_id
-        WHERE de.document_id = ?
+        WHERE de.document_id = $1
         ORDER BY de.detected_timestamp DESC
     `
 
@@ -427,18 +419,19 @@ func (r *MysqlDocumentRepository) GetDetectedEntities(ctx context.Context, docum
 }
 
 // AddDetectedEntity adds a new detected entity to the database
-func (r *MysqlDocumentRepository) AddDetectedEntity(ctx context.Context, entity *models.DetectedEntity) error {
+func (r *PostgresDocumentRepository) AddDetectedEntity(ctx context.Context, entity *models.DetectedEntity) error {
 	// Start query timer
 	startTime := time.Now()
 
-	// Define the query
+	// Define the query with RETURNING for PostgreSQL
 	query := `
         INSERT INTO detected_entities (document_id, method_id, entity_name, redaction_schema, detected_timestamp)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING entity_id
     `
 
 	// Execute the query
-	result, err := r.db.ExecContext(
+	err := r.db.QueryRowContext(
 		ctx,
 		query,
 		entity.DocumentID,
@@ -446,7 +439,7 @@ func (r *MysqlDocumentRepository) AddDetectedEntity(ctx context.Context, entity 
 		entity.EntityName,
 		entity.RedactionSchema,
 		entity.DetectedTimestamp,
-	)
+	).Scan(&entity.ID)
 
 	// Log the query execution (without sensitive data)
 	utils.LogDBQuery(
@@ -460,17 +453,8 @@ func (r *MysqlDocumentRepository) AddDetectedEntity(ctx context.Context, entity 
 		return fmt.Errorf("failed to create detected entity: %w", err)
 	}
 
-	// Get the entity ID
-	entityID, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("failed to get entity ID: %w", err)
-	}
-
-	// Set the entity ID
-	entity.ID = entityID
-
 	log.Info().
-		Int64("entity_id", entityID).
+		Int64("entity_id", entity.ID).
 		Int64("document_id", entity.DocumentID).
 		Int64("method_id", entity.MethodID).
 		Str("entity_name", entity.EntityName).
@@ -480,12 +464,12 @@ func (r *MysqlDocumentRepository) AddDetectedEntity(ctx context.Context, entity 
 }
 
 // DeleteDetectedEntity removes a detected entity from the database
-func (r *MysqlDocumentRepository) DeleteDetectedEntity(ctx context.Context, entityID int64) error {
+func (r *PostgresDocumentRepository) DeleteDetectedEntity(ctx context.Context, entityID int64) error {
 	// Start query timer
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM detected_entities WHERE entity_id = ?`
+	query := `DELETE FROM detected_entities WHERE entity_id = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, entityID)
@@ -520,7 +504,7 @@ func (r *MysqlDocumentRepository) DeleteDetectedEntity(ctx context.Context, enti
 }
 
 // GetDocumentSummary retrieves a summary of a document including the entity count
-func (r *MysqlDocumentRepository) GetDocumentSummary(ctx context.Context, documentID int64) (*models.DocumentSummary, error) {
+func (r *PostgresDocumentRepository) GetDocumentSummary(ctx context.Context, documentID int64) (*models.DocumentSummary, error) {
 	// Start query timer
 	startTime := time.Now()
 
@@ -530,7 +514,7 @@ func (r *MysqlDocumentRepository) GetDocumentSummary(ctx context.Context, docume
                COUNT(de.entity_id) AS entity_count
         FROM documents d
         LEFT JOIN detected_entities de ON d.document_id = de.document_id
-        WHERE d.document_id = ?
+        WHERE d.document_id = $1
         GROUP BY d.document_id
     `
 

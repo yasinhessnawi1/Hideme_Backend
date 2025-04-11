@@ -4,6 +4,8 @@ services:
     build:
       context: .         # Use current directory (i.e. backend folder)
       dockerfile: Dockerfile
+    container_name: hideme-backend
+    restart: always
     ports:
       - "8000:8000"
     environment:
@@ -13,3 +15,9 @@ services:
     # For development, you might mount the code. For production, you might remove or adjust this.
     volumes:
       - .:/Hideme_Backend/backend
+      # Configure healthcheck with longer intervals to account for long processing
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/status" ]
+      interval: 60s
+      timeout: 20s
+      retries: 3

@@ -49,6 +49,11 @@ variable "disk_size" {
   type        = number
 }
 
+variable "db_port" {
+  description = "Database port"
+  type        = number
+  default     = 5432
+}
 variable "db_disk_size" {
   description = "Boot disk size in GB"
   type        = number
@@ -77,6 +82,12 @@ variable "backend_port" {
   description = "Port on which the backend serves HTTP traffic"
   type        = number
   default     = 8000
+}
+
+variable "go_backend_port" {
+  description = "Port on which the Go backend serves HTTP traffic"
+  type        = number
+  default     = 8080
 }
 
 variable "health_check_port" {
@@ -126,7 +137,7 @@ variable "db_password" {
 variable "db_deletion_protection" {
   description = "Whether to enable deletion protection for the database"
   type        = bool
-  default     = false #todo: change it to true for production
+  default     = false
 }
 
 variable "alert_email" {
@@ -151,6 +162,12 @@ variable "gemini_api_key" {
 
 variable "github_repo" {
   description = "GitHub repository URL for the backend code"
+  type        = string
+  default     = "git@github.com:yasinhessnawi1/Hideme_Backend.git"
+}
+
+variable "go_github_repo" {
+  description = "GitHub repository URL for the Go backend code"
   type        = string
   default     = "git@github.com:yasinhessnawi1/Hideme_Backend.git"
 }
@@ -185,6 +202,17 @@ variable "domain" {
   type        = string
 }
 
+variable "db_host" {
+  description = "Database IP address to associate with the database"
+  type        = string
+  default     = "10.25.0.2"
+}
+variable "go_domain" {
+  description = "Domain name for the Go application"
+  type        = string
+  default     = "goapi.hidemeai.com"
+}
+
 variable "ssl_email" {
   description = "Email address for SSL certificate notifications"
   type        = string
@@ -198,5 +226,5 @@ variable "static_ip_name" {
 variable "domain_name" {
   description = "Domain name for the Google-managed SSL certificate"
   type        = string
-  default     = "api.hidemeai.com"
+  default     = "hidemeai.com"
 }

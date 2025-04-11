@@ -1,16 +1,18 @@
 module github.com/yasinhessnawi1/Hideme_Backend
 
-go 1.24.0
+go 1.23.0
+
+toolchain go1.24.0
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/go-chi/chi/v5 v5.2.1
-	github.com/go-chi/cors v1.2.1
 	github.com/go-playground/validator/v10 v10.25.0
 	github.com/go-sql-driver/mysql v1.9.1
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
+	github.com/lib/pq v1.10.9
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/crypto v0.32.0

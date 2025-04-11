@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/lib/pq"
 )
 
 // Custom error types for the application
@@ -117,11 +119,15 @@ func NewForbiddenError(message string) *AppError {
 
 // NewInternalServerError creates a new internal server error
 func NewInternalServerError(err error) *AppError {
+	devInfo := ""
+	if err != nil {
+		devInfo = err.Error()
+	}
 	return &AppError{
 		Err:        ErrInternalServer,
 		StatusCode: http.StatusInternalServerError,
 		Message:    "An internal server error occurred",
-		DevInfo:    err.Error(),
+		DevInfo:    devInfo,
 	}
 }
 
@@ -192,7 +198,47 @@ func ParseError(err error) *AppError {
 		return NewInvalidTokenError()
 	}
 
-	// Check for database-specific errors
+	// Check for PostgreSQL-specific errors
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		switch pqErr.Code {
+		case "23505": // unique_violation
+			// Try to extract the constraint name for more specific error messages
+			constraint := pqErr.Constraint
+			field := ""
+			if strings.Contains(constraint, "idx_") {
+				parts := strings.Split(constraint, "idx_")
+				if len(parts) > 1 {
+					field = parts[1]
+				}
+			}
+			return &AppError{
+				Err:        ErrDuplicate,
+				StatusCode: http.StatusConflict,
+				Message:    "A resource with the same unique identifier already exists",
+				DevInfo:    pqErr.Error(),
+				Field:      field,
+			}
+		case "23503": // foreign_key_violation
+			return &AppError{
+				Err:        ErrBadRequest,
+				StatusCode: http.StatusBadRequest,
+				Message:    "This operation violates a foreign key constraint",
+				DevInfo:    pqErr.Error(),
+			}
+		case "23502": // not_null_violation
+			field := pqErr.Column
+			return &AppError{
+				Err:        ErrValidation,
+				StatusCode: http.StatusBadRequest,
+				Message:    fmt.Sprintf("The %s field cannot be empty", field),
+				DevInfo:    pqErr.Error(),
+				Field:      field,
+			}
+		}
+	}
+
+	// Check for general database-specific error patterns
 	errMsg := strings.ToLower(err.Error())
 	switch {
 	case strings.Contains(errMsg, "duplicate key") || strings.Contains(errMsg, "unique constraint"):
@@ -250,3 +296,46 @@ func StatusCode(err error) int {
 	}
 	return http.StatusInternalServerError
 }
+
+/*
+// IsDuplicateKeyError checks if an error is a duplicate key error (PostgreSQL specific)
+func IsDuplicateKeyError(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		// 23505 is the PostgreSQL error code for unique_violation
+		return pqErr.Code == "23505"
+	}
+	return false
+}
+/*
+// IsUniqueViolation checks if an error is a unique violation for a specific constraint
+func IsUniqueViolation(err error, constraintName string) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		// Check for unique violation and specific constraint
+		return pqErr.Code == "23505" && strings.Contains(pqErr.Constraint, constraintName)
+	}
+	return false
+}
+
+// IsNotNullViolation checks if an error is a not-null violation
+func IsNotNullViolation(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		// PostgreSQL error code 23502 is "not_null_violation"
+		return pqErr.Code == "23502"
+	}
+	return false
+}
+
+// IsForeignKeyViolation checks if an error is a foreign key violation
+func IsForeignKeyViolation(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		// PostgreSQL error code 23503 is "foreign_key_violation"
+		return pqErr.Code == "23503"
+	}
+	return false
+}
+
+*/
