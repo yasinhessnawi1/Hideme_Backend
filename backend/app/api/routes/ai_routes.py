@@ -7,7 +7,6 @@ using SecurityAwareErrorHandler to prevent leaking sensitive information.
 from http.client import HTTPException
 from typing import Optional
 
-import json
 from fastapi import APIRouter, File, UploadFile, Form, Request, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -56,12 +55,13 @@ async def ai_detect_sensitive(
         # Validate the threshold using the JSON helper method.
         validate_threshold_score(threshold)
     except HTTPException as e:
-        error_info = SecurityAwareErrorHandler.handle_api_gateway_error(
-            e, "ai_detect_sensitive", endpoint=str(request.url)
+        error_info = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_ai_detect_sensitive", endpoint=str(request.url)
         )
+        status = error_info.get("status_code", 500)
         return Response(
-            content=json.dumps(error_info),
-            status_code=400,
+            content=error_info,
+            status_code=status,
             media_type=JSON_MEDIA_TYPE
         )
     service = AIDetectService()
@@ -71,11 +71,12 @@ async def ai_detect_sensitive(
         return result
     except Exception as e:
         # If an error occurs, log it and return a secure error response as JSON.
-        error_info = SecurityAwareErrorHandler.handle_api_gateway_error(
-            e, "ai_detect_sensitive", endpoint=str(request.url)
+        error_info = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_ai_detect_sensitive", endpoint=str(request.url)
         )
+        status = error_info.get("status_code", 500)
         return Response(
-            content=json.dumps(error_info),
-            status_code=500,
+            content=error_info,
+            status_code=status,
             media_type=JSON_MEDIA_TYPE
         )

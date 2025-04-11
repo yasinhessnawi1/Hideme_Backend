@@ -75,12 +75,13 @@ async def batch_detect_sensitive(
         # Validate the threshold using the JSON helper method.
         validate_threshold_score(threshold)
     except HTTPException as e:
-        error_info = SecurityAwareErrorHandler.handle_api_gateway_error(
-            e, "batch_detect_sensitive", endpoint=str(request.url)
+        error_info = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_sensitive", endpoint=str(request.url)
         )
+        status = error_info.get("status_code", 500)
         return JSONResponse(
-            content=json.dumps(error_info),
-            status_code=400,
+            content=error_info,
+            status_code=status,
             media_type="application/json"
         )
 
@@ -117,10 +118,11 @@ async def batch_detect_sensitive(
         return JSONResponse(content=result)
     except Exception as e:
         log_error(f"[BATCH] Unhandled exception in batch detection: {str(e)} [operation_id={operation_id}]")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "batch_detection", 500, resource_id=str(request.url)
+        error_response= SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_hybrid",resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)
 
 
 @router.post("/hybrid_detect")
@@ -161,12 +163,13 @@ async def batch_hybrid_detect_sensitive(
         # Validate the threshold using the JSON helper method.
         validate_threshold_score(threshold)
     except HTTPException as e:
-        error_info = SecurityAwareErrorHandler.handle_api_gateway_error(
-            e, "batch_hybrid_detect_sensitive", endpoint=str(request.url)
+        error_info = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_hybrid_sensitive", endpoint=str(request.url)
         )
+        status = error_info.get("status_code", 500)
         return JSONResponse(
-            content=json.dumps(error_info),
-            status_code=400,
+            content=error_info,
+            status_code=status,
             media_type="application/json"
         )
 
@@ -195,10 +198,11 @@ async def batch_hybrid_detect_sensitive(
         return JSONResponse(content=result)
     except Exception as e:
         log_error(f"[BATCH] Unhandled exception in hybrid detection: {str(e)} [operation_id={operation_id}]")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "batch_hybrid_detection", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_hybrid", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)
 
 
 @router.post("/search")
@@ -244,10 +248,11 @@ async def batch_search_text(
         # Log the error.
         log_error(f"[BATCH] Unhandled exception in batch search: {str(e)} [operation_id={operation_id}]")
         # Create a secure error response including the request URL.
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "batch_search", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_search", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)
 
 
 @router.post("/find_words")
@@ -301,10 +306,11 @@ async def batch_find_words_by_bbox(
         return JSONResponse(content=result)
     except Exception as e:
         log_error(f"[BATCH] Unhandled exception in batch find words: {str(e)} [operation_id={operation_id}]")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "batch_find_words", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_find_words", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)
 
 
 @router.post("/redact")
@@ -353,7 +359,8 @@ async def batch_redact_documents(
         # Log the exception.
         log_error(f"[BATCH] Unhandled exception in batch redaction: {str(e)} [operation_id={operation_id}]")
         # Create a secure error response, including the request URL.
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "batch_redaction", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_redact", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)

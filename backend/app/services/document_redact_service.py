@@ -105,10 +105,10 @@ class DocumentRedactionService:
             except Exception as e:
                 # If an error occurs during the redaction process, log the error and return a secure error response.
                 log_error(f"[SECURITY] Error applying redactions: {str(e)} [operation_id={operation_id}]")
-                error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-                    e, "pdf_redaction_service", 500, file.filename
+                error_response = SecurityAwareErrorHandler.handle_safe_error(
+                    e, "file_redaction_service", file.filename
                 )
-                return JSONResponse(status_code=status_code, content=error_response)
+                return JSONResponse(content=error_response)
 
             # Calculate the elapsed time for redaction and the total processing time.
             redact_time = time.time() - redact_start
@@ -160,10 +160,10 @@ class DocumentRedactionService:
         except Exception as e:
             # Catch any unexpected errors, log the error, and return a secure API error response.
             log_error(f"[SECURITY] Unhandled exception in PDF redaction: {str(e)} [operation_id={operation_id}]")
-            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-                e, "pdf_redaction", 500, file.filename
+            error_response = SecurityAwareErrorHandler.handle_safe_error(
+                e, "file_redaction_service", file.filename
             )
-            return JSONResponse(status_code=status_code, content=error_response)
+            return JSONResponse(content=error_response)
 
     @staticmethod
     def _parse_redaction_mapping(redaction_mapping: Optional[str], filename: str, operation_id: str) -> Tuple[
@@ -198,10 +198,10 @@ class DocumentRedactionService:
             except Exception as e:
                 # If parsing fails, log the error and generate a secure error response.
                 log_error(f"[SECURITY] Error parsing redaction mapping: {str(e)} [operation_id={operation_id}]")
-                error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-                    e, "redaction_mapping_parse", 400, filename
+                error_response= SecurityAwareErrorHandler.handle_safe_error(
+                    e, "file_mapping_parse", filename
                 )
-                return {}, 0, JSONResponse(status_code=status_code, content=error_response)
+                return {}, 0, JSONResponse(content=error_response)
         else:
             # If no redaction mapping is provided, log that an empty mapping will be used.
             log_info(f"[SECURITY] No redaction mapping provided; using empty mapping [operation_id={operation_id}]")

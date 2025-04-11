@@ -268,6 +268,37 @@ class InitializationService:
             log_error(f"Error initializing Hybrid detector: {str(exc)}")
             raise
 
+    async def shutdown_async(self) -> None:
+        """
+        Perform asynchronous shutdown tasks for the initialization service.
+
+        This method checks if any detector instances expose an asynchronous shutdown routine
+        (e.g., a `shutdown_async` coroutine method) and awaits them. This is useful for releasing
+        resources associated with detectors that manage asynchronous connections or tasks.
+        If no asynchronous cleanup is required, this method simply completes.
+
+        Any exceptions during shutdown are caught and logged using SecurityAwareErrorHandler.
+        """
+        try:
+            # If the Presidio detector requires async shutdown, invoke it.
+            if self._presidio_detector and hasattr(self._presidio_detector, "shutdown_async"):
+                await self._presidio_detector.shutdown_async()
+            # Do the same for the Gemini detector.
+            if self._gemini_detector and hasattr(self._gemini_detector, "shutdown_async"):
+                await self._gemini_detector.shutdown_async()
+            # For any GLiNER detectors in the cache, perform asynchronous shutdown if available.
+            for detector in self._gliner_detectors.values():
+                if hasattr(detector, "shutdown_async"):
+                    await detector.shutdown_async()
+            # For any hybrid detectors, do the same.
+            for detector in self._hybrid_detectors.values():
+                if hasattr(detector, "shutdown_async"):
+                    await detector.shutdown_async()
+        except Exception as exc:
+            # Log any errors during shutdown and allow the shutdown process to continue.
+            SecurityAwareErrorHandler().log_processing_error(exc, "shutdown_async")
+            log_error(f"Error during asynchronous shutdown: {exc}")
+
     # 3) Public "get" methods (sync/async) #
 
     def get_presidio_detector(self):

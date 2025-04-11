@@ -5,7 +5,6 @@ This module provides endpoints to monitor system health, report API status, gath
 and check service readiness. It employs caching for frequently requested endpoints and uses robust error
 handling to ensure that sensitive information is not leaked in error messages.
 """
-
 import os
 import threading
 import time
@@ -73,10 +72,11 @@ async def status(request: Request, response: Response) -> JSONResponse:
     except Exception as e:
         # Log the error and create a secure error response.
         log_info(f"[STATUS] Error retrieving status: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "status_endpoint", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_status_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status_code = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status_code)
 
 
 @router.get("/health")
@@ -148,10 +148,11 @@ async def health_check(request: Request, response: Response) -> JSONResponse:
     except Exception as e:
         # Log error and return secure error response.
         log_info(f"[HEALTH] Error during health check: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "health_check", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_health_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status_code = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status_code)
 
 
 @router.get("/metrics")
@@ -224,10 +225,11 @@ async def metrics(request: Request, response: Response) -> JSONResponse:
         return resp
     except Exception as e:
         log_info(f"[METRICS] Error retrieving metrics: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "metrics", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_metrics_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status_code = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status_code)
 
 
 @router.get("/readiness")
@@ -272,7 +274,8 @@ async def readiness_check(request: Request) -> JSONResponse:
         return JSONResponse(status_code=status_code, content=readiness_data)
     except Exception as e:
         log_info(f"[READINESS] Error during readiness check: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "readiness_check", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_readiness_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status_code = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status_code)

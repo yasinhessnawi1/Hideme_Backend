@@ -220,8 +220,8 @@ class BatchSearchService:
                     log_error(f"[SECURITY] Validation failed for file {file.filename} [operation_id={operation_id}]")
                     pdf_files.append(None)
                     # Use SecurityAwareErrorHandler to create a secure error message
-                    error_info, _ = SecurityAwareErrorHandler.create_api_error_response(
-                        Exception("File validation error"), "file_validation", 400, file.filename
+                    error_info= SecurityAwareErrorHandler.handle_safe_error(
+                        Exception("File validation error"), "file_validation", file.filename
                     )
                     file_metadata.append({
                         "original_name": file.filename or f"file_{i}",
@@ -243,7 +243,7 @@ class BatchSearchService:
             except Exception as e:
                 # Handle unexpected exceptions using SecurityAwareErrorHandler for secure logging.
                 log_error(f"[SECURITY] Exception reading file {file.filename}: {str(e)} [operation_id={operation_id}]")
-                error_info, _ = SecurityAwareErrorHandler.create_api_error_response(e, "file_read", 400, file.filename)
+                error_info = SecurityAwareErrorHandler.handle_safe_error(e, "file_read",file.filename)
                 pdf_files.append(None)
                 file_metadata.append({
                     "original_name": file.filename or f"file_{i}",

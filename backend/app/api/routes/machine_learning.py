@@ -5,7 +5,6 @@ It supports two detection modes:
   - GLiNER detection using specialized entity recognition with memory monitoring.
 Each endpoint logs its operation and handles errors securely via SecurityAwareErrorHandler.
 """
-
 import time
 from typing import Optional
 
@@ -59,10 +58,11 @@ async def presidio_detect_sensitive(
     try:
         validate_threshold_score(threshold)
     except Exception as e:
-        error_info = SecurityAwareErrorHandler.handle_api_gateway_error(
-            e, "presidio_detect_sensitive", endpoint=str(request.url)
+        error_info = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_presidio_sensitive", endpoint=str(request.url)
         )
-        return JSONResponse(status_code=400, content=error_info)
+        status = error_info.get("status_code", 500)
+        return JSONResponse(status_code=status, content=error_info)
 
     # Generate a unique operation ID using the current timestamp.
     operation_id = f"presidio_detect_{int(time.time())}"
@@ -75,10 +75,11 @@ async def presidio_detect_sensitive(
         return result
     except Exception as e:
         log_warning(f"[ML] Exception in Presidio detection: {str(e)} [operation_id={operation_id}]")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "presidio_detection", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_presidio_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)
 
 
 @router.post("/gl_detect")
@@ -116,10 +117,11 @@ async def gliner_detect_sensitive_entities(
     try:
         validate_threshold_score(threshold)
     except Exception as e:
-        error_info = SecurityAwareErrorHandler.handle_api_gateway_error(
-            e, "gliner_detect_sensitive_entities", endpoint=str(request.url)
+        error_info = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_gliner_sensitive_entities", endpoint=str(request.url)
         )
-        return JSONResponse(status_code=400, content=error_info)
+        status = error_info.get("status_code", 500)
+        return JSONResponse(status_code=status, content=error_info)
 
     # Generate a unique operation ID using the current timestamp.
     operation_id = f"gliner_detect_{int(time.time())}"
@@ -137,7 +139,8 @@ async def gliner_detect_sensitive_entities(
         return result
     except Exception as e:
         log_warning(f"[ML] Exception in GLiNER detection: {str(e)} [operation_id={operation_id}]")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "gliner_detection", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_gliner_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)

@@ -89,7 +89,7 @@ class BatchDetectService(BaseDetectionService):
             entity_list = validate_all_engines_requested_entities(requested_entities)
         except Exception as e:
             # Use SecurityAwareErrorHandler to log and create an error response for entity validation.
-            return SecurityAwareErrorHandler.handle_batch_processing_error(e, "entity_validation", len(files))
+            return SecurityAwareErrorHandler.handle_safe_error(e, "batch_entity_validation")
 
         # Initialize the detection engine (detector) based on the provided engine type and flags.
         try:
@@ -98,7 +98,7 @@ class BatchDetectService(BaseDetectionService):
             )
         except Exception as e:
             # Use SecurityAwareErrorHandler to log and create an error response for detector initialization.
-            return SecurityAwareErrorHandler.handle_batch_processing_error(e, "detector_initialization", len(files))
+            return SecurityAwareErrorHandler.handle_safe_error(e, "batch_initialization")
 
         # Determine the optimal number of workers for parallel processing.
         optimal_workers = max_parallel_files if max_parallel_files is not None else 4
@@ -115,7 +115,7 @@ class BatchDetectService(BaseDetectionService):
             extraction_map = await BatchDetectService._batch_extract_text(valid_pdf_files, optimal_workers)
         except Exception as e:
             # Use SecurityAwareErrorHandler to log and create an error response for extraction errors.
-            return SecurityAwareErrorHandler.handle_batch_processing_error(e, "extraction", len(files))
+            return SecurityAwareErrorHandler.handle_safe_error(e, "batch_extraction")
 
         # Initialize an empty list to hold detection results for each file.
         detection_results = []

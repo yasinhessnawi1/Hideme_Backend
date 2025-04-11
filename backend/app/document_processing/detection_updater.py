@@ -111,8 +111,8 @@ class DetectionResultUpdater:
 
         except Exception as e:
             # Handle any error during the update process using the security-aware error handler
-            return SecurityAwareErrorHandler.handle_detection_error(
-                e, "DetectionResultUpdater.update_result"
+            return SecurityAwareErrorHandler.handle_safe_error(
+                e, "detection_update_result"
             )
 
     @staticmethod
@@ -266,7 +266,7 @@ class DetectionResultUpdater:
 
         except Exception as e:
             # Safely handle errors in processing sensitive entities
-            SecurityAwareErrorHandler.handle_detection_error(e, "DetectionResultUpdater._process_sensitive_entities")
+            SecurityAwareErrorHandler.handle_safe_error(e, "detection._process_sensitive_entities")
             return []
 
     def _append_updated_entities(
@@ -311,7 +311,7 @@ class DetectionResultUpdater:
                 entities_by_page[key] = entities_by_page.get(key, 0) + 1
 
         except Exception as e:
-            SecurityAwareErrorHandler.handle_detection_error(e, "DetectionResultUpdater._append_updated_entities")
+            SecurityAwareErrorHandler.handle_safe_error(e, "detection._append_updated_entities")
 
     @staticmethod
     def _build_updated_entity(

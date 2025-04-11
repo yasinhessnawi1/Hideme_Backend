@@ -52,10 +52,11 @@ async def pdf_redact(
         return result
     except Exception as e:
         # Log the error and create a secure error response using SecurityAwareErrorHandler.
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "pdf_redact", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_pdf_redact_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)
 
 
 @router.post("/extract")
@@ -87,7 +88,8 @@ async def pdf_extract(request: Request, file: UploadFile = File(...)) -> JSONRes
             return JSONResponse(content=result)
     except Exception as e:
         # Generate a secure error response using SecurityAwareErrorHandler.
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "pdf_extract", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_pdf_extract_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)

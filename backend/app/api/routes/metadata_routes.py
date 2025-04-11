@@ -6,7 +6,6 @@ entity lists, entity examples, and the status of detection engines. Static respo
 cached to improve performance, while dynamic endpoints are secured with robust error handling.
 Each endpoint includes detailed documentation to aid developers in understanding the interface.
 """
-
 from datetime import datetime
 
 from fastapi import APIRouter, Request, Response
@@ -79,10 +78,11 @@ async def get_available_engines(request: Request, response: Response) -> JSONRes
         # Log the error.
         log_error(f"[ERROR] Error retrieving available engines: {str(e)}")
         # Create a secure error response using the error handling utility.
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "engines_retrieval", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_engines_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)
 
 
 @router.get("/entities")
@@ -132,10 +132,11 @@ async def get_available_entities(request: Request, response: Response) -> JSONRe
 
     except Exception as e:
         log_error(f"[ERROR] Error retrieving available entities: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "metadata_retrieval", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_entities_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)
 
 
 @router.get("/entity-examples")
@@ -192,10 +193,11 @@ async def get_entity_examples(request: Request, response: Response) -> JSONRespo
 
     except Exception as e:
         log_error(f"[ERROR] Error retrieving entity examples: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "entity_examples", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_entity_example_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)
 
 
 @router.get("/detectors-status")
@@ -270,10 +272,11 @@ async def get_detectors_status(request: Request, response: Response) -> JSONResp
 
     except Exception as e:
         log_error(f"[ERROR] Error retrieving detector status: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "detectors_status", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_status_metadata_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)
 
 
 @router.get("/routes")
@@ -413,7 +416,8 @@ async def get_api_routes(request: Request, response: Response) -> JSONResponse:
 
     except Exception as e:
         log_error(f"[ERROR] Error retrieving API routes: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "api_routes", 500, resource_id=str(request.url)
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_routes", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        status = error_response.get("status_code", 500)
+        return JSONResponse(content=error_response, status_code=status)

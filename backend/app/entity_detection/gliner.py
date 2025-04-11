@@ -764,7 +764,7 @@ class GlinerEntityDetector(BaseEntityDetector):
         if not self.model:
             SecurityAwareErrorHandler.handle_safe_error(
                 ValueError("GLiNER model not available"),
-                "gliner_model_unavailable",
+                "detection_gliner_model_unavailable",
                 "",
                 default_return=[]
             )
@@ -773,7 +773,7 @@ class GlinerEntityDetector(BaseEntityDetector):
         if not self._is_initialized:
             SecurityAwareErrorHandler.handle_safe_error(
                 ValueError("GLiNER model not properly initialized"),
-                "gliner_model_not_initialized",
+                "detection_gliner_model_not_initialized",
                 "",
                 default_return=[]
             )

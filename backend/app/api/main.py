@@ -151,12 +151,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             return response
         except Exception as e:
             # On error, create a secure error response using SecurityAwareErrorHandler.
-            error_info = SecurityAwareErrorHandler.handle_api_gateway_error(
-                e, "SecurityHeadersMiddleware", endpoint=str(request.url)
+            error_info = SecurityAwareErrorHandler.handle_safe_error(
+                e, "api_dispatch_main", endpoint=str(request.url)
             )
+            status = error_info.get("status_code", 500)
             return Response(
-                content=json.dumps(error_info),
-                status_code=500,
+                content=error_info,
+                status_code=status,
                 media_type=JSON_MEDIA_TYPE
             )
 
@@ -205,12 +206,13 @@ class RequestSizeMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         except Exception as e:
             # Handle any unexpected errors during size check.
-            error_info = SecurityAwareErrorHandler.handle_api_gateway_error(
-                e, "RequestSizeMiddleware", endpoint=str(request.url)
+            error_info = SecurityAwareErrorHandler.handle_safe_error(
+                e, "api_dispatch_request", endpoint=str(request.url)
             )
+            status = error_info.get("status_code", 500)
             return Response(
-                content=json.dumps(error_info),
-                status_code=500,
+                content=error_info,
+                status_code=status,
                 media_type=JSON_MEDIA_TYPE
             )
 
@@ -251,12 +253,13 @@ class ValidationMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         except Exception as e:
             # Handle exceptions in path validation.
-            error_info = SecurityAwareErrorHandler.handle_api_gateway_error(
-                e, "ValidationMiddleware", endpoint=str(request.url)
+            error_info = SecurityAwareErrorHandler.handle_safe_error(
+                e, "api_validationMiddleware", endpoint=str(request.url)
             )
+            status = error_info.get("status_code", 500)
             return Response(
-                content=json.dumps(error_info),
-                status_code=500,
+                content=error_info,
+                status_code=status,
                 media_type=JSON_MEDIA_TYPE
             )
 
@@ -364,12 +367,13 @@ def create_app() -> FastAPI:
                 response = await call_next(request)
             except Exception as exp:
                 # On error, handle it securely using SecurityAwareErrorHandler.
-                error_info = SecurityAwareErrorHandler.handle_api_gateway_error(
-                    exp, "ProcessTimeMiddleware", endpoint=str(request.url)
+                error_info = SecurityAwareErrorHandler.handle_safe_error(
+                    exp, "api_process_time_header", endpoint=str(request.url)
                 )
+                status = error_info.get("status_code", 500)
                 return Response(
-                    content=json.dumps(error_info),
-                    status_code=500,
+                    content=error_info,
+                    status_code=status,
                     media_type=JSON_MEDIA_TYPE
                 )
             # Calculate processing time.
