@@ -96,8 +96,9 @@ class AIDetectService(BaseDetectionService):
             entities, redaction_mapping = detection_result
 
         except Exception as e:
-            error_response = SecurityAwareErrorHandler.handle_detection_error(e, "detection_pipeline")
-            return JSONResponse(status_code=500, content=error_response)
+            error_response = SecurityAwareErrorHandler.handle_safe_error(e, "detection_ai_detect")
+            status = error_response.get("status_code", 500)
+            return JSONResponse(status_code=status, content=error_response)
 
         try:
             # STEP 6: Calculate the total processing time.
@@ -147,5 +148,6 @@ class AIDetectService(BaseDetectionService):
             return final_response
 
         except Exception as e:
-            error_response = SecurityAwareErrorHandler.handle_safe_error(e, "post_processing")
-            return JSONResponse(status_code=500, content=error_response)
+            error_response = SecurityAwareErrorHandler.handle_safe_error(e, "detection_post_processing")
+            status = error_response.get("status_code", 500)
+            return JSONResponse(status_code=status, content=error_response)

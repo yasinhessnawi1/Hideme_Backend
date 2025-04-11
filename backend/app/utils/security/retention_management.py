@@ -130,7 +130,10 @@ class DocumentRetentionManager:
                 continue
             try:
                 self._secure_delete(file_path)
-                log_info(f"[GDPR] Removed file after retention period: {os.path.basename(file_path)}")
+                if not os.path.exists(file_path):
+                    log_info(f"[GDPR] Successfully deleted file: {os.path.basename(file_path)}")
+                else:
+                    log_warning(f"[GDPR] File still exists after deletion attempt: {os.path.basename(file_path)}")
             except (OSError, IOError) as e:
                 log_warning(f"[GDPR] Failed to remove expired file: {os.path.basename(file_path)}. Error: {e}")
 

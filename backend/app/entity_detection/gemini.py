@@ -37,11 +37,14 @@ class GeminiEntityDetector(BaseEntityDetector):
     """
 
     def __init__(self):
-        """Initialize the Gemini entity detector and prepare the helper and API lock."""
+        """
+        Initialize the Gemini entity detector and prepare the helper and API lock.
+        """
+        # Call the parent class initializer.
         super().__init__()
-        # Reference to the gemini helper which encapsulates API calls.
+        # Set the gemini helper reference for API calls.
         self.gemini_helper = gemini_helper
-        # The API lock is created lazily to ensure proper binding with the current event loop.
+        # Initialize the API lock as None (will be created lazily later).
         self._api_lock: Optional[AsyncTimeoutLock] = None
 
     async def _get_api_lock(self) -> AsyncTimeoutLock:
@@ -53,17 +56,21 @@ class GeminiEntityDetector(BaseEntityDetector):
         Returns:
             AsyncTimeoutLock: The API lock used to synchronize Gemini API calls.
         """
+        # Get the currently running event loop.
         current_loop = asyncio.get_running_loop()
-        # If the lock does not exist or is bound to a different loop, create a new one.
+        # If no API lock exists, or it is bound to a different event loop...
         if self._api_lock is None or getattr(self._api_lock, "_loop", None) != current_loop:
             try:
+                # Create a new asynchronous timeout lock with high priority and a 30-second timeout.
                 self._api_lock = AsyncTimeoutLock(
                     "gemini_api_lock",
                     priority=LockPriority.HIGH,
                     timeout=30.0
                 )
             except Exception as exc:
+                # Log any error encountered during API lock initialization.
                 SecurityAwareErrorHandler.log_processing_error(exc, "api_lock_initialization")
+        # Return the API lock.
         return self._api_lock
 
     async def detect_sensitive_data_async(
@@ -84,13 +91,17 @@ class GeminiEntityDetector(BaseEntityDetector):
         Returns:
             Tuple containing the list of processed entities and the redaction mapping.
         """
+        # Record the starting timestamp for processing.
         start_time = time.time()
+        # Define the operation type for processing records.
         operation_type = "gemini_detection"
+        # Define the document type for processing records.
         document_type = "document"
 
-        # If no specific entities are requested, log a warning, record the process, and return empty results.
+        # If no requested entities are provided, log a warning.
         if requested_entities is None:
             log_warning("[Gemini] No specific entities requested, returning empty results")
+            # Record the processing event as unsuccessful.
             record_keeper.record_processing(
                 operation_type=operation_type,
                 document_type=document_type,
@@ -99,14 +110,18 @@ class GeminiEntityDetector(BaseEntityDetector):
                 entity_count=0,
                 success=False
             )
+            # Return empty results.
             return [], {"pages": []}
 
-        # Validate the requested entities using the Gemini-specific validator.
         try:
+            # Convert the list of requested entities to a JSON string.
             requested_entities_json = json.dumps(requested_entities)
+            # Validate the entities using a Gemini-specific validator.
             validated_entities = validate_gemini_requested_entities(requested_entities_json)
         except Exception as e:
+            # Log an error if entity validation fails.
             log_error("[Gemini] Entity validation failed: " + str(e))
+            # Record the failure in processing records.
             record_keeper.record_processing(
                 operation_type=operation_type,
                 document_type=document_type,
@@ -115,9 +130,10 @@ class GeminiEntityDetector(BaseEntityDetector):
                 entity_count=0,
                 success=False
             )
+            # Return empty results upon validation failure.
             return [], {"pages": []}
 
-        # If no valid entities remain after validation, return empty results.
+        # If no valid entities remain after validation, log a warning.
         if not validated_entities:
             log_warning("[Gemini] No valid entities remain after filtering, returning empty results")
             record_keeper.record_processing(
@@ -128,14 +144,16 @@ class GeminiEntityDetector(BaseEntityDetector):
                 entity_count=0,
                 success=False
             )
+            # Return empty results.
             return [], {"pages": []}
 
-        # Minimize data to comply with GDPR before further processing.
+        # Minimize the extracted data to comply with GDPR requirements.
         minimized_data = minimize_extracted_data(extracted_data)
 
         try:
-            # 1. Prepare pages and mappings.
+            # 1. Prepare pages and mappings from the minimized data.
             pages, page_texts_and_mappings, redaction_mapping = self._prepare_pages_and_mappings(minimized_data)
+            # If no pages exist, return empty results.
             if not pages:
                 return [], {"pages": []}
 
@@ -147,7 +165,7 @@ class GeminiEntityDetector(BaseEntityDetector):
                 redaction_mapping
             )
 
-            # 3. Finalize the detection results (sorting, metrics update, GDPR recording, etc.).
+            # 3. Finalize detection results by updating metrics and recording processing details.
             final_results, final_redaction_mapping = self._finalize_detection_results(
                 pages=pages,
                 combined_entities=combined_entities,
@@ -158,10 +176,13 @@ class GeminiEntityDetector(BaseEntityDetector):
                 start_time=start_time
             )
 
+            # Return the final detection results and redaction mapping.
             return final_results, final_redaction_mapping
 
         except Exception as exc:
+            # Log any error that occurs during the Gemini detection process.
             log_error("[ERROR] Error in Gemini detection: " + str(exc))
+            # Record the failed processing in audit records.
             record_keeper.record_processing(
                 operation_type=operation_type,
                 document_type=document_type,
@@ -170,12 +191,14 @@ class GeminiEntityDetector(BaseEntityDetector):
                 entity_count=0,
                 success=False
             )
+            # Return empty results on failure.
             return [], {"pages": []}
 
     @staticmethod
     def _prepare_pages_and_mappings(
-        minimized_data: Dict[str, Any]
-    ) -> Tuple[List[Dict[str, Any]], Dict[int, Tuple[str, List[Tuple[Dict[str, Any], int, int]]]], Dict[str, List[Dict[str, Any]]]]:
+            minimized_data: Dict[str, Any]
+    ) -> Tuple[List[Dict[str, Any]], Dict[int, Tuple[str, List[Tuple[Dict[str, Any], int, int]]]], Dict[
+        str, List[Dict[str, Any]]]]:
         """
         Prepare pages, reconstructed text, and mapping data from the minimized input.
 
@@ -192,33 +215,42 @@ class GeminiEntityDetector(BaseEntityDetector):
               2. page_texts_and_mappings: Dictionary mapping page number to (full_text, mapping).
               3. redaction_mapping: Dictionary with a "pages" key to track redaction details.
         """
+        # Retrieve the list of pages from the minimized data.
         pages = minimized_data.get("pages", [])
+        # Initialize an empty dictionary to hold reconstructed text and mappings by page number.
         page_texts_and_mappings: Dict[int, Tuple[str, List[Tuple[Dict[str, Any], int, int]]]] = {}
+        # Initialize the redaction mapping with an empty list for pages.
         redaction_mapping = {"pages": []}
 
-        # Process each page to reconstruct text and mapping.
+        # Iterate over each page in the pages list.
         for pg in pages:
+            # Extract words from the page data.
             pg_words = pg.get("words", [])
+            # Get the page number from the current page.
             pg_number = pg.get("page")
+            # If no words exist for the page...
             if not pg_words:
-                # If no words exist for the page, initialize empty sensitive info.
+                # ...append an empty sensitive items list for that page in the redaction mapping.
                 redaction_mapping["pages"].append({"page": pg_number, "sensitive": []})
+                # Continue to the next page.
                 continue
             try:
-                # Reconstruct the full text and mapping from the list of words.
+                # Reconstruct the full text and text mapping from the list of words.
                 reconstructed_text, text_mapping = TextUtils.reconstruct_text_and_mapping(pg_words)
+                # Save the reconstructed text and mapping associated with the current page number.
                 page_texts_and_mappings[pg_number] = (reconstructed_text, text_mapping)
             except Exception as exc:
-                # Log errors during text reconstruction.
+                # Log any error encountered during text reconstruction.
                 SecurityAwareErrorHandler.log_processing_error(exc, "prepare_pages")
+        # Return the pages list, page_texts_and_mappings, and redaction_mapping.
         return pages, page_texts_and_mappings, redaction_mapping
 
     async def _process_all_pages_in_parallel(
-        self,
-        pages: List[Dict[str, Any]],
-        page_texts_and_mappings: Dict[int, Tuple[str, List[Tuple[Dict[str, Any], int, int]]]],
-        requested_entities: Optional[List[str]],
-        redaction_mapping: Dict[str, List[Dict[str, Any]]]
+            self,
+            pages: List[Dict[str, Any]],
+            page_texts_and_mappings: Dict[int, Tuple[str, List[Tuple[Dict[str, Any], int, int]]]],
+            requested_entities: Optional[List[str]],
+            redaction_mapping: Dict[str, List[Dict[str, Any]]]
     ) -> List[Dict[str, Any]]:
         """
         Process all pages concurrently using ParallelProcessingCore.
@@ -235,10 +267,11 @@ class GeminiEntityDetector(BaseEntityDetector):
         Returns:
             Combined list of processed entities from all pages.
         """
+        # Log information about the number of pages being processed in parallel.
         log_info("[OK] Processing {0} pages with Gemini API in parallel".format(len(pages)))
-        # Determine the maximum number of API workers based on the number of pages.
+        # Determine the maximum number of parallel API workers (up to 4).
         max_api_workers = min(4, len(pages))
-        # Process pages concurrently.
+        # Process pages concurrently using the ParallelProcessingCore helper.
         page_results = await ParallelProcessingCore.process_pages_in_parallel(
             pages,
             lambda pg: self._process_single_page(
@@ -249,21 +282,24 @@ class GeminiEntityDetector(BaseEntityDetector):
             max_workers=max_api_workers
         )
 
+        # Initialize an empty list to accumulate results from all pages.
         combined_results = []
-        # Update the redaction mapping and combine processed entities.
+        # Iterate over each result from page processing.
         for _, (local_page_redaction_info, local_processed_entities) in page_results:
+            # If redaction information exists for the page, add it to the redaction mapping.
             if local_page_redaction_info:
                 redaction_mapping["pages"].append(local_page_redaction_info)
+            # If processed entities exist for the page, extend the combined results list.
             if local_processed_entities:
                 combined_results.extend(local_processed_entities)
-
+        # Return the aggregated list of processed entities.
         return combined_results
 
     async def _process_single_page(
-        self,
-        single_page_data: Dict[str, Any],
-        page_texts_and_mappings: Dict[int, Tuple[str, List[Tuple[Dict[str, Any], int, int]]]],
-        requested_entities: Optional[List[str]]
+            self,
+            single_page_data: Dict[str, Any],
+            page_texts_and_mappings: Dict[int, Tuple[str, List[Tuple[Dict[str, Any], int, int]]]],
+            requested_entities: Optional[List[str]]
     ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         """
         Process a single page using the Gemini API and return its redaction info and detected entities.
@@ -282,78 +318,83 @@ class GeminiEntityDetector(BaseEntityDetector):
               1. page_redaction_info: Dictionary with redaction details for the page.
               2. processed_entities: List of detected entity dictionaries.
         """
+        # Record the starting time for processing this page.
         page_start_time = time.time()
+        # Retrieve the page number from the page data.
         local_page_number = single_page_data.get("page")
+        # Retrieve the list of words for the page.
         local_words = single_page_data.get("words", [])
-        # If there are no words on the page, return empty results.
+        # If no words exist for the page...
         if not local_words:
+            # ...return empty redaction info and empty processed entities.
             return {"page": local_page_number, "sensitive": []}, []
-
+        # Retrieve the reconstructed full text and mapping for the current page.
         local_full_text, local_mapping = page_texts_and_mappings[local_page_number]
-
-        # Manage API usage for this page.
+        # Manage API usage to process the page text; may block or filter processing.
         processed_text = await gemini_usage_manager.manage_page_processing(
             local_full_text,
             requested_entities,
             local_page_number
         )
+        # If usage management blocks processing, log a warning and return empty results.
         if processed_text is None:
             log_warning("[WARNING] Page {0} processing blocked by usage manager".format(local_page_number))
             return {"page": local_page_number, "sensitive": []}, []
-
+        # Log that the page is now being processed with the Gemini API.
         log_info("[OK] Processing text with Gemini API on page {0}".format(local_page_number))
         try:
-            # Acquire the API lock for exclusive access to the Gemini API.
+            # Acquire the API lock to ensure exclusive access to the Gemini API.
             api_lock = await self._get_api_lock()
             async with api_lock.acquire_timeout(timeout=45.0):
-                # Call the Gemini API to process the text.
+                # Call the Gemini API to process the page text with the requested entities.
                 response = await self.gemini_helper.process_text(processed_text, requested_entities)
         finally:
-            # Always release the usage slot even if errors occur.
+            # Always attempt to release the usage slot after processing.
             try:
                 await gemini_usage_manager.release_request_slot()
             except Exception as release_error:
+                # Log any error that occurs while releasing the usage slot.
                 SecurityAwareErrorHandler.log_processing_error(
                     release_error, "gemini_release_slot", f"page_{local_page_number}"
                 )
-
-        # If the API did not return a response, log and return empty results.
+        # If no response was returned from the API, log a warning and return empty results.
         if response is None:
             log_warning("[WARNING] Gemini API processing failed on page {0}".format(local_page_number))
             return {"page": local_page_number, "sensitive": []}, []
-
         # Extract entities from the Gemini API response.
         page_entities = self._extract_entities_from_response(response, local_full_text)
+        # If no entities were extracted, log the outcome and return empty results.
         if not page_entities:
             log_info("[OK] No entities detected on page {0}".format(local_page_number))
             return {"page": local_page_number, "sensitive": []}, []
-
+        # Log the number of entities detected on the current page.
         detected_entity_count = len(page_entities)
         log_info("[OK] Found {0} entities on page {1}".format(detected_entity_count, local_page_number))
-
-        # Process the entities to generate redaction info.
+        # Process the extracted entities to generate redaction mapping and processed entity metadata.
         processed_entities, page_redaction_info = await self.process_entities_for_page(
             local_page_number, local_full_text, local_mapping, page_entities
         )
+        # Calculate the total processing time for the page.
         page_time = time.time() - page_start_time
-        # Log sensitive operation metrics.
+        # Log sensitive operational metrics for the page.
         log_sensitive_operation(
             "Gemini Page Detection",
             len(processed_entities),
             page_time,
             page_number=local_page_number
         )
+        # Return the redaction info and the list of processed entities.
         return page_redaction_info, processed_entities
 
     def _finalize_detection_results(
-        self,
-        pages: List[Dict[str, Any]],
-        combined_entities: List[Dict[str, Any]],
-        redaction_mapping: Dict[str, List[Dict[str, Any]]],
-        requested_entities: Optional[List[str]],
-        operation_type: str,
-        document_type: str,
-        start_time: float
+            self,
+            pages: List[Dict[str, Any]],
+            combined_entities: List[Dict[str, Any]],
+            redaction_mapping: Dict[str, List[Dict[str, Any]]],
+            requested_entities: Optional[List[str]],
+            operation_type: str,
+            document_type: str,
+            start_time: float
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Finalize detection results by sorting pages, updating usage metrics, and recording processing.
@@ -373,12 +414,13 @@ class GeminiEntityDetector(BaseEntityDetector):
         Returns:
             A tuple containing the final list of entities and the updated redaction mapping.
         """
-        # Sort the redaction mapping pages by page number.
+        # Sort the pages in the redaction mapping based on page number.
         redaction_mapping["pages"].sort(key=lambda x: x.get("page", 0))
+        # Compute the total processing time from the start timestamp.
         total_time = time.time() - start_time
-        # Update overall usage metrics.
+        # Update overall usage metrics with the combined entity count and total processing time.
         self.update_usage_metrics(len(combined_entities), total_time)
-        # Record the processing details for audit and GDPR compliance.
+        # Record the processing details for GDPR compliance and auditing.
         record_keeper.record_processing(
             operation_type=operation_type,
             document_type=document_type,
@@ -387,25 +429,29 @@ class GeminiEntityDetector(BaseEntityDetector):
             entity_count=len(combined_entities),
             success=True
         )
+        # Log a performance summary with counts and rates.
         entity_count_local = len(combined_entities)
         pages_count_local = len(pages)
         if total_time > 0:
-            log_info("[PERF] Gemini processing summary: {0} entities across {1} pages in {2:.2f}s ({3:.2f} entities/s)".format(
-                entity_count_local,
-                pages_count_local,
-                total_time,
-                entity_count_local / total_time
-            ))
+            log_info(
+                "[PERF] Gemini processing summary: {0} entities across {1} pages in {2:.2f}s ({3:.2f} entities/s)".format(
+                    entity_count_local,
+                    pages_count_local,
+                    total_time,
+                    entity_count_local / total_time
+                ))
         else:
             log_info("[PERF] Gemini processing summary: 0s total time recorded.")
+        # Retrieve and log the API usage summary.
         usage_summary = gemini_usage_manager.get_usage_summary()
         log_info("[USAGE] Gemini API Usage: {0}".format(usage_summary))
+        # Return the final entities and updated redaction mapping.
         return combined_entities, redaction_mapping
 
     def _extract_entities_from_response(
-        self,
-        api_response: Dict[str, Any],
-        page_full_text: str
+            self,
+            api_response: Dict[str, Any],
+            page_full_text: str
     ) -> List[Dict[str, Any]]:
         """
         Extract entities from the Gemini API response.
@@ -421,16 +467,19 @@ class GeminiEntityDetector(BaseEntityDetector):
             A list of extracted and enriched entity dictionaries.
         """
         try:
-            # Gather raw entities from the response.
+            # Gather raw entities from the API response.
             raw_entities = self._gather_raw_entities(api_response)
-            # Enrich each entity with the original text if not present.
+            # Enrich each raw entity with original text if missing.
             enriched_entities = [
                 self._maybe_add_original_text(ent, page_full_text)
                 for ent in raw_entities
             ]
+            # Return the list of enriched entities.
             return enriched_entities
         except Exception as exc:
+            # Log any error during entity extraction.
             SecurityAwareErrorHandler.log_processing_error(exc, "gemini_response_extraction")
+            # Return an empty list on failure.
             return []
 
     @staticmethod
@@ -447,22 +496,27 @@ class GeminiEntityDetector(BaseEntityDetector):
         Returns:
             A list of raw entity dictionaries.
         """
+        # Initialize an empty list to hold all raw entities.
         all_entities = []
-        # Iterate over each page in the response.
+        # Retrieve the list of pages from the response.
         pages_in_response = api_response.get("pages", [])
+        # Iterate over each page.
         for p_data in pages_in_response:
-            # Retrieve text entries for the page.
+            # Retrieve the text entries on the page.
             text_entries = p_data.get("text", [])
+            # Iterate over each text entry.
             for t_entry in text_entries:
-                # Retrieve entities from each text entry.
+                # Retrieve the list of entities in the text entry.
                 entity_list = t_entry.get("entities", [])
+                # Extend the overall list with the entities.
                 all_entities.extend(entity_list)
+        # Return the aggregated list of entities.
         return all_entities
 
     @staticmethod
     def _maybe_add_original_text(
-        entity: Dict[str, Any],
-        page_full_text: str
+            entity: Dict[str, Any],
+            page_full_text: str
     ) -> Dict[str, Any]:
         """
         Ensure that the entity dictionary contains the 'original_text' field.
@@ -477,12 +531,17 @@ class GeminiEntityDetector(BaseEntityDetector):
         Returns:
             The updated entity dictionary, including 'original_text' if it was missing.
         """
+        # Check if 'original_text' is not already present in the entity.
         if "original_text" not in entity and "start" in entity and "end" in entity:
             try:
+                # Convert start and end indices to integers.
                 start_idx = int(entity["start"])
                 end_idx = int(entity["end"])
+                # If the indices are within the valid range, extract the original text.
                 if 0 <= start_idx < end_idx <= len(page_full_text):
                     entity["original_text"] = page_full_text[start_idx:end_idx]
             except (ValueError, IndexError, TypeError):
+                # Log a warning if extraction fails.
                 log_warning("[WARNING] Could not extract original_text from entity indices")
+        # Return the (possibly updated) entity dictionary.
         return entity

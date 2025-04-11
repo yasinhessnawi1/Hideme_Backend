@@ -39,4 +39,4 @@ ner_model_configuration:
   default_score: 0.85
 
   # List of labels that should be ignored during entity recognition.
-  labels_to_ignore: ["PROD", "EVT"]
+  labels_to_ignore: [ "PROD", "EVT" ]

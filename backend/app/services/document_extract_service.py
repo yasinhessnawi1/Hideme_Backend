@@ -173,10 +173,10 @@ class DocumentExtractService:
         except Exception as e:
             # Log the error and create a secure error response if extraction fails
             log_error(f"[SECURITY] Error extracting text: {str(e)} [operation_id={operation_id}]")
-            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-                e, "pdf_text_extraction", 500, filename
+            error_response= SecurityAwareErrorHandler.handle_safe_error(
+                e, "file_text_extraction", filename
             )
-            return None, JSONResponse(status_code=status_code, content=error_response)
+            return None, JSONResponse(content=error_response)
 
     @staticmethod
     def _remove_text_from_extracted_data(extracted_data: dict) -> dict:

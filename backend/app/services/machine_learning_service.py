@@ -128,8 +128,9 @@ class MashinLearningService(BaseDetectionService):
 
         except Exception as e:
             # Handle exceptions in the detection pipeline.
-            error_response = SecurityAwareErrorHandler.handle_detection_error(e, "detection_pipeline")
-            return JSONResponse(status_code=500, content=error_response)
+            error_response = SecurityAwareErrorHandler.handle_safe_error(e, "detection_ml_detect")
+            status = error_response.get("status_code", 500)
+            return JSONResponse(status_code=status, content=error_response)
 
         try:
             # STEP 6: Compute total processing time.
@@ -179,5 +180,6 @@ class MashinLearningService(BaseDetectionService):
             return final_response
         except Exception as e:
             # Handle errors during post-detection processing.
-            error_response = SecurityAwareErrorHandler.handle_safe_error(e, "post_processing")
-            return JSONResponse(status_code=500, content=error_response)
+            error_response = SecurityAwareErrorHandler.handle_safe_error(e, "detection_post_processing")
+            status = error_response.get("status_code", 500)
+            return JSONResponse(status_code=status, content=error_response)

@@ -17,6 +17,7 @@ import re
 import time
 import traceback
 import uuid
+from fastapi import HTTPException
 from typing import Dict, Any, Optional, TypeVar, Union, Tuple, Callable
 
 from backend.app.utils.logging.logger import log_warning, log_error
@@ -77,17 +78,18 @@ class SecurityAwareErrorHandler:
 
     _ERROR_LOG_PATH = os.environ.get("ERROR_LOG_PATH", "app/logs/error_logs/detailed_errors.log")
     _USE_JSON_LOGGING = os.environ.get("ERROR_JSON_LOGGING", "true").lower() == "true"
+    SAFE_MESSAGE = "Error details have been redacted for security."
 
     _URL_PATTERNS = [
         r'https?://[^\s/$.?#].[^\s]*',  # Standard URLs
-        r'redis://[^\s]*',              # Redis URLs
-        r'mongodb://[^\s]*',            # MongoDB URLs
-        r'postgresql://[^\s]*',         # PostgreSQL URLs
-        r'mysql://[^\s]*',              # MySQL URLs
-        r'jdbc:[^\s]*',                # JDBC URLs
-        r'file://[^\s]*',              # File URLs
-        r'ftp://[^\s]*',               # FTP URLs
-        r's3://[^\s]*'                 # S3 URLs
+        r'redis://[^\s]*',  # Redis URLs
+        r'mongodb://[^\s]*',  # MongoDB URLs
+        r'postgresql://[^\s]*',  # PostgreSQL URLs
+        r'mysql://[^\s]*',  # MySQL URLs
+        r'jdbc:[^\s]*',  # JDBC URLs
+        r'file://[^\s]*',  # File URLs
+        r'ftp://[^\s]*',  # FTP URLs
+        r's3://[^\s]*'  # S3 URLs
     ]
 
     _ENABLE_DISTRIBUTED_TRACING = os.environ.get("ENABLE_DISTRIBUTED_TRACING", "false").lower() == "true"
@@ -109,7 +111,6 @@ class SecurityAwareErrorHandler:
         if not trace_id:
             trace_id = f"trace_{int(time.time())}_{uuid.uuid4().hex[:8]}"
 
-        # Merge provided additional info with default context.
         info = {"trace_id": trace_id}
         if additional_info:
             info.update(additional_info)
@@ -123,6 +124,9 @@ class SecurityAwareErrorHandler:
             type(e).__name__,
             SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES['Exception']
         )
+        # Override safe_message if the error is sensitive.
+        if SecurityAwareErrorHandler.is_error_sensitive(e):
+            safe_message = SecurityAwareErrorHandler.SAFE_MESSAGE
         response = {
             "redaction_mapping": {"pages": []},
             "entities_detected": {"total": 0, "by_type": {}, "by_page": {}},
@@ -158,7 +162,8 @@ class SecurityAwareErrorHandler:
         if additional_info:
             info.update(additional_info)
 
-        log_error(f"[ERROR] {operation_type} error on {filename or 'unknown file'} (ID: {error_id}, Trace: {trace_id}): {str(e)}")
+        log_error(
+            f"[ERROR] {operation_type} error on {filename or 'unknown file'} (ID: {error_id}, Trace: {trace_id}): {str(e)}")
         SecurityAwareErrorHandler._log_detailed_error(
             error_id, type(e).__name__, str(e), operation_type, traceback.format_exc(), info
         )
@@ -166,6 +171,8 @@ class SecurityAwareErrorHandler:
             type(e).__name__,
             SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES['Exception']
         )
+        if SecurityAwareErrorHandler.is_error_sensitive(e):
+            safe_message = SecurityAwareErrorHandler.SAFE_MESSAGE
         response = {
             "file": safe_filename,
             "status": "error",
@@ -199,7 +206,8 @@ class SecurityAwareErrorHandler:
         if additional_info:
             info.update(additional_info)
 
-        log_error(f"[ERROR] {operation_type} batch error on {files_count} files (ID: {error_id}, Trace: {trace_id}): {str(e)}")
+        log_error(
+            f"[ERROR] {operation_type} batch error on {files_count} files (ID: {error_id}, Trace: {trace_id}): {str(e)}")
         SecurityAwareErrorHandler._log_detailed_error(
             error_id, type(e).__name__, str(e), operation_type, traceback.format_exc(), info
         )
@@ -207,6 +215,8 @@ class SecurityAwareErrorHandler:
             type(e).__name__,
             SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES['Exception']
         )
+        if SecurityAwareErrorHandler.is_error_sensitive(e):
+            safe_message = SecurityAwareErrorHandler.SAFE_MESSAGE
         response = {
             "batch_summary": {
                 "total_files": files_count,
@@ -246,7 +256,8 @@ class SecurityAwareErrorHandler:
         if additional_info:
             info.update(additional_info)
 
-        log_error(f"[ERROR] {operation_type} error on endpoint {safe_endpoint} (ID: {error_id}, Trace: {trace_id}): {str(e)}")
+        log_error(
+            f"[ERROR] {operation_type} error on endpoint {safe_endpoint} (ID: {error_id}, Trace: {trace_id}): {str(e)}")
         SecurityAwareErrorHandler._log_detailed_error(
             error_id, type(e).__name__, str(e), operation_type, traceback.format_exc(), info
         )
@@ -254,6 +265,8 @@ class SecurityAwareErrorHandler:
         status_code = 500
         if isinstance(e, (TimeoutError, asyncio.TimeoutError)):
             status_code = 504
+        elif isinstance(e, HTTPException):
+            status_code = e.status_code
         elif isinstance(e, ConnectionError):
             status_code = 502
         elif isinstance(e, (ValueError, TypeError)):
@@ -263,10 +276,15 @@ class SecurityAwareErrorHandler:
         elif isinstance(e, FileNotFoundError) or "404" in str(e):
             status_code = 404
 
-        safe_message = SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES.get(
-            type(e).__name__,
-            SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES['Exception']
-        )
+        if isinstance(e, HTTPException) and hasattr(e, "detail") and e.detail:
+            safe_message = str(e.detail)
+        else:
+            safe_message = SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES.get(
+                type(e).__name__,
+                SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES['Exception']
+            )
+        if SecurityAwareErrorHandler.is_error_sensitive(e):
+            safe_message = SecurityAwareErrorHandler.SAFE_MESSAGE
         response = {
             "status": "error",
             "error": f"{safe_message}. Reference ID: {error_id}",
@@ -284,6 +302,8 @@ class SecurityAwareErrorHandler:
     def handle_safe_error(
             e: Exception,
             operation_type: str,
+            endpoint: Optional[str] = None,
+            filename: Optional[str] = None,
             resource_id: str = "",
             default_return: Optional[T] = None,
             additional_info: Optional[Dict[str, Any]] = None,
@@ -305,14 +325,15 @@ class SecurityAwareErrorHandler:
             "batch": SecurityAwareErrorHandler.handle_batch_processing_error,
             "api": SecurityAwareErrorHandler.handle_api_gateway_error,
         }
-        # Use the first handler whose key is found in the operation type.
         handler = next((h for k, h in handlers.items() if k in operation_type), None)
         if handler:
-            if "batch" in operation_type:
+            if "api" in operation_type:
+                return handler(e, operation_type, endpoint, additional_info, trace_id)
+            elif "batch" in operation_type:
                 files_count = additional_info.get("files_count", 0) if additional_info else 0
                 return handler(e, operation_type, files_count, additional_info, trace_id)
             elif "file" in operation_type:
-                return handler(e, operation_type, resource_id, additional_info, trace_id)
+                return handler(e, operation_type, filename, additional_info, trace_id)
             else:
                 return handler(e, operation_type, additional_info, trace_id)
 
@@ -325,6 +346,8 @@ class SecurityAwareErrorHandler:
             error_type,
             SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES['Exception']
         )
+        if SecurityAwareErrorHandler.is_error_sensitive(e):
+            safe_message = SecurityAwareErrorHandler.SAFE_MESSAGE
         response = {
             "status": "error",
             "error": f"{safe_message}. Reference ID: {error_id}",
@@ -444,36 +467,6 @@ class SecurityAwareErrorHandler:
         """
         # Integration with distributed tracing systems goes here.
         pass
-
-    @staticmethod
-    def create_api_error_response(
-            e: Exception,
-            operation_type: str,
-            status_code: int = 500,
-            resource_id: str = ""
-    ) -> Tuple[Dict[str, Any], int]:
-        """
-        Create a standardized API error response with safe error messages.
-        """
-        error_id = str(uuid.uuid4())
-        trace_id = f"trace_{int(time.time())}_{uuid.uuid4().hex[:8]}"
-        log_error(f"[ERROR] {operation_type} error (ID: {error_id}, Trace: {trace_id}): {str(e)}")
-        SecurityAwareErrorHandler._log_detailed_error(
-            error_id, type(e).__name__, str(e), operation_type, traceback.format_exc(),
-            {"resource_id": resource_id, "trace_id": trace_id}
-        )
-        safe_message = SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES.get(
-            type(e).__name__,
-            SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES['Exception']
-        )
-        return ({
-            "status": "error",
-            "error": f"{safe_message}. Reference ID: {error_id}",
-            "error_type": type(e).__name__,
-            "error_id": error_id,
-            "trace_id": trace_id,
-            "timestamp": time.time()
-        }, status_code)
 
     @staticmethod
     def _sanitize_error_message(message: str) -> str:
@@ -630,33 +623,36 @@ class SecurityAwareErrorHandler:
         """
         Execute a function with safe error handling and tracing support.
 
+        This method executes the provided callable with the given keyword arguments.
+        In the event of an exception, it logs the error details, checks if the error
+        might contain sensitive information using is_error_sensitive, and returns a
+        tuple indicating whether the execution succeeded, the result (or a default),
+        and a safe error message.
+
         Args:
-            func: Function to execute
-            error_type: Type of operation for error reporting
-            default: Default return value in case of error
-            log_errors: Whether to log errors
-            trace_id: Optional trace ID for distributed tracing
-            **kwargs: Arguments to pass to the function
+            func: Function to execute.
+            error_type: Type of operation for error reporting.
+            default: Default return value in case of error.
+            log_errors: Whether to log errors.
+            trace_id: Optional trace ID for distributed tracing.
+            **kwargs: Arguments to pass to the function.
 
         Returns:
-            Tuple of (success, result, error_message)
+            Tuple of (success, result, error_message).
         """
         try:
             result = func(**kwargs)
             return True, result, None
         except Exception as e:
             if log_errors:
-                trace_id = SecurityAwareErrorHandler.log_processing_error(
-                    e, error_type, trace_id=trace_id
-                )
-
-            # Generate a safe error message
+                trace_id = SecurityAwareErrorHandler.log_processing_error(e, error_type, trace_id=trace_id)
             error_id = str(uuid.uuid4())
             error_type_name = type(e).__name__
             safe_message = SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES.get(
                 error_type_name,
                 SecurityAwareErrorHandler._ERROR_TYPE_MESSAGES['Exception']
             )
+            if SecurityAwareErrorHandler.is_error_sensitive(e):
+                safe_message = SecurityAwareErrorHandler.SAFE_MESSAGE
             error_message = f"{safe_message}. Reference ID: {error_id}, Trace ID: {trace_id}"
-
             return False, default, error_message

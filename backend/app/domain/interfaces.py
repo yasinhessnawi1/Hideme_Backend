@@ -41,9 +41,9 @@ class EntityDetector(ABC):
 
     @abstractmethod
     def detect_sensitive_data(
-        self,
-        extracted_data: Dict[str, Any],
-        requested_entities: Optional[List[str]] = None
+            self,
+            extracted_data: Dict[str, Any],
+            requested_entities: Optional[List[str]] = None
     ) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any]]:
         """
         Detect sensitive entities in extracted text.
@@ -63,9 +63,9 @@ class DocumentRedactor(ABC):
 
     @abstractmethod
     def apply_redactions(
-        self,
-        redaction_mapping: Dict[str, Any],
-        output_path: str
+            self,
+            redaction_mapping: Dict[str, Any],
+            output_path: str
     ) -> str:
         """
         Apply redactions to the document based on provided mapping.
@@ -84,16 +84,15 @@ class DocumentRedactor(ABC):
         pass
 
 
-
 class PDFEntityMapping(ABC):
     """Interface for mapping entity offsets to document positions."""
 
     @abstractmethod
     def map_entities_to_positions(
-        self,
-        full_text: str,
-        text_to_position_mapping: List[Tuple[Any, int, int]],
-        entity_offsets: Tuple[int, int]
+            self,
+            full_text: str,
+            text_to_position_mapping: List[Tuple[Any, int, int]],
+            entity_offsets: Tuple[int, int]
     ) -> List[Dict[str, float]]:
         """
         Map entity character offsets to document positions.

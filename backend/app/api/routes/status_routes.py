@@ -9,27 +9,25 @@ handling to ensure that sensitive information is not leaked in error messages.
 import os
 import threading
 import time
-
 import psutil
 from fastapi import APIRouter, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-
 from backend.app.utils.constant.constant import STATUS_CACHE_TTL, HEALTH_CACHE_TTL, METRICS_CACHE_TTL
 from backend.app.utils.logging.logger import log_info
 from backend.app.utils.security.caching_middleware import response_cache
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.system_utils.memory_management import memory_monitor
 
-# Configure rate limiter using the client's remote address.
+# Create a rate limiter using the client's remote address.
 limiter = Limiter(key_func=get_remote_address)
 
-# Create the API router.
+# Instantiate the API router.
 router = APIRouter()
 
-# Atomic initialization status flag (if needed).
+# Initialize an atomic status flag (if needed) for storing initialization status.
 _initialization_status = {"status": {}}
 
 
@@ -44,39 +42,50 @@ async def status(request: Request, response: Response) -> JSONResponse:
 
     Parameters:
         request (Request): The incoming HTTP request.
-        response (Response): The outgoing HTTP response (for setting caching headers).
+        response (Response): The outgoing HTTP response, used to set caching headers.
 
     Returns:
         JSONResponse: A JSON response containing status information, or a secure error response if an exception occurs.
     """
     try:
-        # Set caching headers for the status endpoint.
+        # Set Cache-Control header for public caching with max-age from STATUS_CACHE_TTL.
         response.headers["Cache-Control"] = f"public, max-age={STATUS_CACHE_TTL}"
+        # Set custom X-Cache-TTL header with STATUS_CACHE_TTL value.
         response.headers["X-Cache-TTL"] = str(STATUS_CACHE_TTL)
-        # Define a cache key and check if a cached response exists.
+        # Define a cache key for the API status.
         cache_key = "api_status"
+        # Attempt to retrieve a cached response using the cache key.
         cached_response = response_cache.get(cache_key)
+        # If a cached response exists, return it immediately.
         if cached_response:
             return JSONResponse(content=cached_response)
-        # Generate the status data.
+        # Generate status data with current timestamp and API version.
         status_data = {
             "status": "success",
             "timestamp": time.time(),
             "api_version": os.environ.get("API_VERSION", "1.0.0")
         }
-        # Cache the status data.
+        # Cache the generated status data using the defined TTL.
         response_cache.set(cache_key, status_data, ttl=STATUS_CACHE_TTL)
+        # Create a JSONResponse with the status data.
         resp = JSONResponse(content=status_data)
+        # Set Cache-Control header on the response.
         resp.headers["Cache-Control"] = f"public, max-age={STATUS_CACHE_TTL}"
+        # Set X-Cache-TTL header on the response.
         resp.headers["X-Cache-TTL"] = str(STATUS_CACHE_TTL)
+        # Return the final JSONResponse.
         return resp
     except Exception as e:
-        # Log the error and create a secure error response.
+        # Log the error encountered during status retrieval.
         log_info(f"[STATUS] Error retrieving status: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "status_endpoint", 500, resource_id=str(request.url)
+        # Handle the exception securely using SecurityAwareErrorHandler.
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_status_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        # Retrieve the error status code, defaulting to 500 if not specified.
+        status_code = error_response.get("status_code", 500)
+        # Return a secure JSONResponse containing the error details.
+        return JSONResponse(content=error_response, status_code=status_code)
 
 
 @router.get("/health")
@@ -90,36 +99,40 @@ async def health_check(request: Request, response: Response) -> JSONResponse:
 
     Parameters:
         request (Request): The incoming HTTP request.
-        response (Response): The outgoing HTTP response (for setting caching headers).
+        response (Response): The outgoing HTTP response for setting caching headers.
 
     Returns:
-        JSONResponse: A JSON response with detailed health check information, or a secure error response if an exception occurs.
+        JSONResponse: A JSON response with detailed health check information,
+                      or a secure error response if an exception occurs.
     """
     try:
-        # Set caching headers for health check.
+        # Set Cache-Control header for public caching with max-age from HEALTH_CACHE_TTL.
         response.headers["Cache-Control"] = f"public, max-age={HEALTH_CACHE_TTL}"
+        # Set custom header X-Cache-TTL using HEALTH_CACHE_TTL.
         response.headers["X-Cache-TTL"] = str(HEALTH_CACHE_TTL)
-        # Define a cache key and check if a cached health response exists.
+        # Define a cache key for health check data.
         cache_key = "health_check"
+        # Attempt to retrieve cached health check data.
         cached_response = response_cache.get(cache_key)
+        # If cached health data exists, return it immediately.
         if cached_response:
             return JSONResponse(content=cached_response)
-        # Gather process metrics.
+        # Gather process metrics using psutil.
         process = psutil.Process(os.getpid())
         process_info = {
-            "cpu_percent": process.cpu_percent(),
-            "memory_percent": process.memory_percent(),
-            "threads_count": threading.active_count(),
-            "uptime": time.time() - process.create_time()
+            "cpu_percent": process.cpu_percent(),  # Get CPU usage percentage.
+            "memory_percent": process.memory_percent(),  # Get memory usage percentage.
+            "threads_count": threading.active_count(),  # Get count of active threads.
+            "uptime": time.time() - process.create_time()  # Calculate process uptime.
         }
-        # Retrieve memory statistics.
+        # Retrieve memory statistics from the memory monitor.
         memory_stats = memory_monitor.get_memory_stats()
-        # Get cache statistics.
+        # Retrieve cache statistics from response_cache.
         cache_stats = {
             "cache_size": len(response_cache.cache),
-            "cached_endpoints": list(response_cache.cache.keys())[:5]  # Limit to first 5 keys.
+            "cached_endpoints": list(response_cache.cache.keys())[:5]  # Show up to first 5 keys.
         }
-        # Build the health data dictionary.
+        # Build the health check data dictionary.
         health_data = {
             "status": "healthy",
             "timestamp": time.time(),
@@ -131,7 +144,7 @@ async def health_check(request: Request, response: Response) -> JSONResponse:
             "memory": memory_stats,
             "cache": cache_stats
         }
-        # Optionally include debug info in non-production environments.
+        # Optionally include debug information in non-production environments.
         environment = os.environ.get("ENVIRONMENT", "development")
         if environment != "production":
             health_data["debug"] = {
@@ -139,19 +152,27 @@ async def health_check(request: Request, response: Response) -> JSONResponse:
                 "python_version": os.environ.get("PYTHON_VERSION", "unknown"),
                 "host": os.environ.get("HOSTNAME", "unknown")
             }
-        # Cache the health data.
+        # Cache the health check data using the defined TTL.
         response_cache.set(cache_key, health_data, ttl=HEALTH_CACHE_TTL)
+        # Create a JSONResponse with the health data.
         resp = JSONResponse(content=jsonable_encoder(health_data))
+        # Set Cache-Control header on the response.
         resp.headers["Cache-Control"] = f"public, max-age={HEALTH_CACHE_TTL}"
+        # Set custom X-Cache-TTL header on the response.
         resp.headers["X-Cache-TTL"] = str(HEALTH_CACHE_TTL)
+        # Return the final JSONResponse containing health check data.
         return resp
     except Exception as e:
-        # Log error and return secure error response.
+        # Log any error encountered during the health check.
         log_info(f"[HEALTH] Error during health check: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "health_check", 500, resource_id=str(request.url)
+        # Securely handle the error using SecurityAwareErrorHandler.
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_health_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        # Retrieve the error status code, defaulting to 500.
+        status_code = error_response.get("status_code", 500)
+        # Return a JSONResponse containing the secure error response.
+        return JSONResponse(content=error_response, status_code=status_code)
 
 
 @router.get("/metrics")
@@ -165,45 +186,50 @@ async def metrics(request: Request, response: Response) -> JSONResponse:
 
     Parameters:
         request (Request): The incoming HTTP request.
-        response (Response): The outgoing HTTP response (for setting caching headers).
+        response (Response): The outgoing HTTP response for setting caching headers.
 
     Returns:
         JSONResponse: A JSON response with performance metrics, or a secure error response if an exception occurs.
     """
     try:
-        # Set caching headers for metrics.
+        # Define a cache key for metrics data.
         cache_key = "api_metrics"
+        # Set Cache-Control header for public caching with max-age from METRICS_CACHE_TTL.
         response.headers["Cache-Control"] = f"public, max-age={METRICS_CACHE_TTL}"
+        # Set custom header X-Cache-TTL with METRICS_CACHE_TTL.
         response.headers["X-Cache-TTL"] = str(METRICS_CACHE_TTL)
         # Check for API key in request headers.
         api_key = request.headers.get("X-API-Key")
+        # Retrieve the expected API key from environment variables.
         expected_key = os.environ.get("METRICS_API_KEY", "")
+        # If an expected key is set and does not match the provided API key, return an error response.
         if expected_key and api_key != expected_key:
             return JSONResponse(
                 status_code=403,
                 content={"detail": "Unauthorized access to metrics endpoint"}
             )
-        # Get system metrics.
+        # Retrieve system memory statistics using psutil.
         system_memory = psutil.virtual_memory()
+        # Retrieve system CPU usage percentage.
         system_cpu = psutil.cpu_percent(interval=0.1)
-        # Get process metrics.
+        # Retrieve process information using psutil.
         process = psutil.Process(os.getpid())
         process_info = {
-            "cpu_percent": process.cpu_percent(),
-            "memory_rss": process.memory_info().rss,
-            "memory_percent": process.memory_percent(),
-            "threads_count": threading.active_count(),
-            "open_files": len(process.open_files()),
-            "connections": len(process.connections())
+            "cpu_percent": process.cpu_percent(),  # Get CPU usage of the process.
+            "memory_rss": process.memory_info().rss,  # Get resident memory usage.
+            "memory_percent": process.memory_percent(),  # Get memory percentage used by process.
+            "threads_count": threading.active_count(),  # Count of active threads.
+            "open_files": len(process.open_files()),  # Number of open files.
+            "connections": len(process.connections())  # Number of open connections.
         }
-        # Get memory monitoring statistics.
+        # Get additional memory monitoring statistics.
         memory_stats = memory_monitor.get_memory_stats()
-        # Get cache statistics.
+        # Get cache statistics from the caching middleware.
         cache_stats = {
             "cache_size": len(response_cache.cache),
             "cache_keys": len(response_cache.access_times) if hasattr(response_cache, 'access_times') else 0
         }
-        # Build the metrics data dictionary.
+        # Build the metrics data dictionary with timestamp, system metrics, process info, memory stats, and cache stats.
         metrics_data = {
             "timestamp": time.time(),
             "system": {
@@ -216,18 +242,29 @@ async def metrics(request: Request, response: Response) -> JSONResponse:
             "memory_monitor": memory_stats,
             "cache": cache_stats
         }
+        # Cache the metrics data using the defined TTL.
         response_cache.set(cache_key, metrics_data, ttl=METRICS_CACHE_TTL)
+        # Create a JSONResponse with the metrics data encoded as JSON.
         resp = JSONResponse(content=jsonable_encoder(metrics_data))
+        # Set Cache-Control header on the response.
         resp.headers["Cache-Control"] = f"public, max-age={METRICS_CACHE_TTL}"
+        # Set custom header X-Cache-TTL with the TTL value.
         resp.headers["X-Cache-TTL"] = str(METRICS_CACHE_TTL)
+        # Log the metrics request along with the requesting client's IP address.
         log_info(f"[METRICS] Metrics requested by {request.client.host}")
+        # Return the JSONResponse with performance metrics.
         return resp
     except Exception as e:
+        # Log any error encountered during metrics retrieval.
         log_info(f"[METRICS] Error retrieving metrics: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "metrics", 500, resource_id=str(request.url)
+        # Securely handle the error using SecurityAwareErrorHandler.
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_metrics_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        # Retrieve the error status code from the error response.
+        status_code = error_response.get("status_code", 500)
+        # Return a JSONResponse with the secure error information.
+        return JSONResponse(content=error_response, status_code=status_code)
 
 
 @router.get("/readiness")
@@ -246,17 +283,19 @@ async def readiness_check(request: Request) -> JSONResponse:
         JSONResponse: A JSON response indicating the readiness of the service, or a secure error response if an exception occurs.
     """
     try:
-        # Get initialization status from the initialization service.
+        # Import the initialization service to check the current initialization status.
         from backend.app.services.initialization_service import initialization_service
+        # Retrieve initialization status.
         init_status = initialization_service.get_initialization_status()
-        # Determine if essential services are initialized.
+        # Determine if the Presidio service is initialized.
         is_ready = init_status.get("presidio", False)
-        # Check current memory usage.
+        # Retrieve current memory usage percentage.
         memory_usage = memory_monitor.get_memory_usage()
+        # Check whether memory usage is below the critical threshold.
         memory_ok = memory_usage < memory_monitor.critical_threshold
-        # Set HTTP status code based on readiness.
+        # Set HTTP status code based on service readiness.
         status_code = 200 if is_ready and memory_ok else 503
-        # Build the readiness response.
+        # Build the readiness check response data.
         readiness_data = {
             "ready": is_ready and memory_ok,
             "services": {
@@ -269,10 +308,16 @@ async def readiness_check(request: Request) -> JSONResponse:
                 "status": "ok" if memory_ok else "critical"
             }
         }
+        # Return a JSONResponse with the readiness data and corresponding status code.
         return JSONResponse(status_code=status_code, content=readiness_data)
     except Exception as e:
+        # Log any error encountered during readiness check.
         log_info(f"[READINESS] Error during readiness check: {str(e)}")
-        error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-            e, "readiness_check", 500, resource_id=str(request.url)
+        # Securely handle the error using SecurityAwareErrorHandler.
+        error_response = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_readiness_router", resource_id=str(request.url)
         )
-        return JSONResponse(status_code=status_code, content=error_response)
+        # Retrieve the error status code, defaulting to 500 if not specified.
+        status_code = error_response.get("status_code", 500)
+        # Return a JSONResponse with the secure error response.
+        return JSONResponse(content=error_response, status_code=status_code)

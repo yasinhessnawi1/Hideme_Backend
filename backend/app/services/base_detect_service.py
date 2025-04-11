@@ -92,13 +92,13 @@ class BaseDetectionService:
             # Log the error that occurred during text extraction.
             log_error(f"Error during text extraction: {str(e)} [operation_id={operation_id}]")
             # Create an API error response using the SecurityAwareErrorHandler.
-            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-                e, "text_extraction", 500, filename
+            error_response = SecurityAwareErrorHandler.handle_safe_error(
+                e, "file_text_extraction", filename
             )
             # Include the operation ID in the error response.
             error_response["operation_id"] = operation_id
             # Return no extracted data and the error response.
-            return None, JSONResponse(status_code=status_code, content=error_response)
+            return None, JSONResponse(content=error_response)
 
     @staticmethod
     def process_requested_entities(requested_entities: Optional[str], operation_id: str) -> Tuple[
@@ -124,13 +124,13 @@ class BaseDetectionService:
             # Log a warning if entity validation fails.
             log_warning(f"Error processing requested entities: {str(e)} [operation_id={operation_id}]")
             # Create an API error response for the entity validation error.
-            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(
-                e, "entity_validation", 400
+            error_response = SecurityAwareErrorHandler.handle_safe_error(
+                e, "file_text_process_requested_entities"
             )
-            # Attach the operation ID to the error response.
+            # Include the operation ID in the error response.
             error_response["operation_id"] = operation_id
-            # Return no entity list and the error response.
-            return None, JSONResponse(status_code=status_code, content=error_response)
+            # Return no extracted data and the error response.
+            return None, JSONResponse(content=error_response)
 
     @classmethod
     def validate_mime(cls, file, operation_id: str) -> Optional[JSONResponse]:
@@ -209,10 +209,13 @@ class BaseDetectionService:
             # Log any error that occurs during detection.
             log_error(f"Error performing detection: {str(e)} [operation_id={operation_id}]")
             # Create an API error response for the detection error.
-            error_response, status_code = SecurityAwareErrorHandler.create_api_error_response(e, "detection", 500)
+            error_response = SecurityAwareErrorHandler.handle_safe_error(
+                e, "detection_base_perform"
+            )
+            # Include the operation ID in the error response.
             error_response["operation_id"] = operation_id
-            # Return no detection result and the error response.
-            return None, JSONResponse(status_code=status_code, content=error_response)
+            # Return no extracted data and the error response.
+            return None, JSONResponse(content=error_response)
 
     @staticmethod
     async def prepare_detection_context(file, requested_entities: Optional[str], operation_id: str,
