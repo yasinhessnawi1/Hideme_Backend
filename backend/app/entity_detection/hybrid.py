@@ -48,6 +48,7 @@ class HybridEntityDetector(EntityDetector):
         self._total_entities_detected = 0
         # Set the detector lock to None for lazy creation.
         self._detector_lock: Optional[AsyncTimeoutLock] = None
+        self.detector_types = {}
 
         # If configuration requests, initialize the Presidio detector.
         if config.get("use_presidio", True):
