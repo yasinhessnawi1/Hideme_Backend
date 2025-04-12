@@ -31,19 +31,19 @@ DEFAULT_ASYNC_LOCK_TIMEOUT = 30.0  # 30 seconds
 
 class LockPriority(Enum):
     """Priority levels for locks to establish hierarchy and prevent deadlocks."""
-    CRITICAL = auto()    # Highest priority (e.g., initialization, shutdown)
-    HIGH = auto()        # High priority (e.g., detector access)
-    MEDIUM = auto()      # Medium priority (e.g., document processing)
-    LOW = auto()         # Low priority (e.g., cache operations)
+    CRITICAL = auto()  # Highest priority (e.g., initialization, shutdown)
+    HIGH = auto()  # High priority (e.g., detector access)
+    MEDIUM = auto()  # Medium priority (e.g., document processing)
+    LOW = auto()  # Low priority (e.g., cache operations)
     BACKGROUND = auto()  # Lowest priority (e.g., cleanup tasks)
 
 
 class LockType(Enum):
     """Types of locks for monitoring and logging purposes."""
-    THREAD = auto()    # Threading lock
-    ASYNCIO = auto()   # Asyncio lock
-    SEMAPHORE = auto() # Threading or asyncio semaphore
-    RW_LOCK = auto()   # Read-write lock
+    THREAD = auto()  # Threading lock
+    ASYNCIO = auto()  # Asyncio lock
+    SEMAPHORE = auto()  # Threading or asyncio semaphore
+    RW_LOCK = auto()  # Read-write lock
 
 
 class LockStatistics:
@@ -308,7 +308,8 @@ def _prepare_lock_acquisition(timeout: Optional[float],
     return effective_timeout, wait_start
 
 
-async def _async_acquire_with_timeout(acquire_coro, effective_timeout: float, type_str: str, name: str) -> Tuple[bool, float]:
+async def _async_acquire_with_timeout(acquire_coro, effective_timeout: float, type_str: str, name: str) -> Tuple[
+    bool, float]:
     """
     Helper function to acquire an async lock or semaphore with a timeout.
     Returns a tuple of (acquired, wait_time).
@@ -621,8 +622,9 @@ class AsyncTimeoutSemaphore:
                          f"(remaining permits: {self.current_value})")
         else:
             lock_statistics.record_timeout(self.id)
-            logger.warning(f"Task {task_name} failed to acquire async semaphore '{self.name}' after {wait_time:.6f}s wait "
-                           f"(timeout={effective_timeout}s)")
+            logger.warning(
+                f"Task {task_name} failed to acquire async semaphore '{self.name}' after {wait_time:.6f}s wait "
+                f"(timeout={effective_timeout}s)")
 
         return acquired
 

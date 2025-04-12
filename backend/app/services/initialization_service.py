@@ -29,6 +29,7 @@ from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, Lo
 
 logger = logging.getLogger(__name__)
 
+
 class InitializationService:
     """
     Service for initializing and caching ML models and detectors with improved thread safety.
@@ -818,10 +819,10 @@ class InitializationService:
                 try:
                     # Compute the total cache size.
                     cache_size = (
-                        (1 if self._presidio_detector else 0) +
-                        (1 if self._gemini_detector else 0) +
-                        len(self._gliner_detectors) +
-                        len(self._hybrid_detectors)
+                            (1 if self._presidio_detector else 0) +
+                            (1 if self._gemini_detector else 0) +
+                            len(self._gliner_detectors) +
+                            len(self._hybrid_detectors)
                     )
                     # Build the health status dictionary.
                     return {
@@ -853,6 +854,7 @@ class InitializationService:
                 "timestamp": datetime.now().isoformat(),
                 "error": str(exc)
             }
+
 
 # Create a singleton instance of InitializationService.
 initialization_service = InitializationService()

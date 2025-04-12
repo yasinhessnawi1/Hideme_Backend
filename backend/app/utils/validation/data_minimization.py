@@ -21,6 +21,7 @@ _logger = logging.getLogger("data_minimization")
 SENSITIVE_FIELDS = ["content", "meta", "original", "raw", "owner", "source"]
 DEFAULT_METADATA_FIELDS: Set[str] = {"total_document_pages", "empty_pages", "content_pages"}
 
+
 # Helper functions for minimize_extracted_data
 
 def _get_trace_id(provided: Optional[str]) -> str:
@@ -212,7 +213,8 @@ def _remove_unwanted_fields(metadata: Dict[str, Any], fields_to_remove: List[str
                 _logger.warning("Error removing field '%s': %s", field, e)
 
 
-def _sanitize_specific_fields(metadata: Dict[str, Any], fields_to_sanitize: Dict[str, str], preserve_fields: List[str]) -> None:
+def _sanitize_specific_fields(metadata: Dict[str, Any], fields_to_sanitize: Dict[str, str],
+                              preserve_fields: List[str]) -> None:
     """
     Replace values of specific fields with predefined replacement values.
     """

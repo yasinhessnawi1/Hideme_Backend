@@ -28,6 +28,7 @@ from backend.app.utils.validation.file_validation import read_and_validate_file,
 CHUNK_SIZE = 64 * 1024  # 64KB for streaming responses
 DEFAULT_CONTENT_TYPE = "application/octet-stream"
 
+
 class BatchRedactService:
     """
     Service for batch redaction.
@@ -38,11 +39,11 @@ class BatchRedactService:
 
     @staticmethod
     async def batch_redact_documents(
-        files: List[UploadFile],
-        redaction_mappings: str,
-        remove_images: bool = False,
-        max_parallel_files: Optional[int] = None,
-        background_tasks: Optional[BackgroundTasks] = None
+            files: List[UploadFile],
+            redaction_mappings: str,
+            remove_images: bool = False,
+            max_parallel_files: Optional[int] = None,
+            background_tasks: Optional[BackgroundTasks] = None
     ) -> Union[JSONResponse, StreamingResponse]:
         """
         Main method for batch redaction.
@@ -93,7 +94,8 @@ class BatchRedactService:
         background_tasks.add_task(SecureTempFileManager.secure_delete_directory, output_dir)
 
         # Read and validate files based on the redaction mappings.
-        file_metadata, valid_files = await BatchRedactService._prepare_files_for_redaction(files, file_mappings, batch_id)
+        file_metadata, valid_files = await BatchRedactService._prepare_files_for_redaction(files, file_mappings,
+                                                                                           batch_id)
         # If no valid files were found, return a detailed error response.
         if not valid_files:
             return JSONResponse(
@@ -232,9 +234,9 @@ class BatchRedactService:
 
     @staticmethod
     async def _prepare_files_for_redaction(
-        files: List[UploadFile],
-        file_mappings: Dict[str, Any],
-        operation_id: str
+            files: List[UploadFile],
+            file_mappings: Dict[str, Any],
+            operation_id: str
     ) -> Tuple[List[Dict[str, Any]], List[Tuple[int, bytes]]]:
         """
         Reads and validates each file using the shared read_and_validate_file utility.
@@ -322,9 +324,9 @@ class BatchRedactService:
 
     @staticmethod
     def _prepare_redaction_items(
-        valid_files: List[Tuple[int, bytes]],
-        file_metadata: List[Dict[str, Any]],
-        output_dir: str
+            valid_files: List[Tuple[int, bytes]],
+            file_metadata: List[Dict[str, Any]],
+            output_dir: str
     ) -> List[Tuple[int, bytes, Dict[str, Any], str]]:
         """
         Creates a list of redaction items from the valid files.
@@ -357,9 +359,9 @@ class BatchRedactService:
 
     @staticmethod
     async def _process_redaction_items(
-        redaction_items: List[Tuple[int, bytes, Dict[str, Any], str]],
-        max_workers: int,
-        remove_images: bool
+            redaction_items: List[Tuple[int, bytes, Dict[str, Any], str]],
+            max_workers: int,
+            remove_images: bool
     ) -> Dict[int, Dict[str, Any]]:
         """
         Processes the redaction items concurrently using ParallelProcessingCore.
@@ -373,6 +375,7 @@ class BatchRedactService:
         Returns:
             Dict[int, Dict[str, Any]]: Mapping from file index to redaction result.
         """
+
         # Define an asynchronous helper function to process a single redaction item.
         async def _process_redaction_item(item: Tuple[int, bytes, Dict[str, Any], str]) -> Tuple[int, Dict[str, Any]]:
             # Unpack the redaction item tuple.
@@ -442,10 +445,10 @@ class BatchRedactService:
 
     @staticmethod
     def _compute_redaction_summary(
-        file_metadata: List[Dict[str, Any]],
-        result_mapping: Dict[int, Dict[str, Any]],
-        start_time: float,
-        batch_id: str
+            file_metadata: List[Dict[str, Any]],
+            result_mapping: Dict[int, Dict[str, Any]],
+            start_time: float,
+            batch_id: str
     ) -> Tuple[int, int, int, float, Dict[str, Any]]:
         """
         Computes summary statistics for the batch redaction.
@@ -508,8 +511,8 @@ class BatchRedactService:
 
     @staticmethod
     def _build_file_results(
-        file_metadata: List[Dict[str, Any]],
-        result_mapping: Dict[int, Dict[str, Any]]
+            file_metadata: List[Dict[str, Any]],
+            result_mapping: Dict[int, Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
         Builds the file results list using file metadata and redaction results.
@@ -563,10 +566,10 @@ class BatchRedactService:
 
     @staticmethod
     def _create_zip_archive(
-        batch_summary: Dict[str, Any],
-        file_metadata: List[Dict[str, Any]],
-        result_mapping: Dict[int, Dict[str, Any]],
-        zip_path: str
+            batch_summary: Dict[str, Any],
+            file_metadata: List[Dict[str, Any]],
+            result_mapping: Dict[int, Dict[str, Any]],
+            zip_path: str
     ) -> None:
         """
         Creates a ZIP archive including redacted output files and a summary JSON.

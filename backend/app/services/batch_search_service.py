@@ -302,6 +302,7 @@ class BatchSearchService:
         Returns:
             A list of cleaned search words.
         """
+
         # Define an inner function to trim whitespace from a word.
         def clean(word: str) -> str:
             # Return the word stripped of leading and trailing whitespace.
@@ -354,13 +355,15 @@ class BatchSearchService:
             return ({
                         "file": metadata["original_name"],
                         "status": "error",
-                        "error": extraction_result.get("error", "Extraction failed") if extraction_result else "Extraction missing"
+                        "error": extraction_result.get("error",
+                                                       "Extraction failed") if extraction_result else "Extraction missing"
                     }, 0, 1, 0)
         try:
             # Instantiate PDFSearcher with the extracted result.
             searcher = PDFSearcher(extraction_result)
             # Perform the search asynchronously with the provided search words and options.
-            search_result = await searcher.search_terms(search_words, case_sensitive=case_sensitive, ai_search=ai_search)
+            search_result = await searcher.search_terms(search_words, case_sensitive=case_sensitive,
+                                                        ai_search=ai_search)
             # Return a success result tuple with the search result and match count.
             return ({
                         "file": metadata["original_name"],
@@ -390,7 +393,7 @@ class BatchSearchService:
           1. Reads and validates the PDF file.
           2. Extracts the text content.
           3. Instantiates PDFSearcher with the extracted data.
-          4. Calls PDFSearcher (e.g. `find_target_phrase_occurrences_by_page`) to get a result dictionary containing
+          4. Calls PDFSearcher (e.g. `find_target_phrase_occurrences`) to get a result dictionary containing
              the pages with matches and the overall match count.
           5. Aggregates the results for each file.
 
@@ -463,7 +466,8 @@ class BatchSearchService:
                 total_matches += match_count
             except Exception as e:
                 # Log any exception that occurs during processing with security context.
-                log_error(f"[SECURITY] Error processing file {meta.get('original_name')}: {str(e)} [operation_id={operation_id}]")
+                log_error(
+                    f"[SECURITY] Error processing file {meta.get('original_name')}: {str(e)} [operation_id={operation_id}]")
                 # Append an error result entry for this file.
                 file_results.append({
                     "file": meta.get("original_name", "unknown"),

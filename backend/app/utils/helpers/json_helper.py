@@ -323,6 +323,7 @@ def convert_to_json(data: Any, indent: int = 2) -> str:
                 return obj.to_dict()
             # Otherwise, raise a TypeError indicating the object is not serializable.
             raise TypeError(f"Type not serializable: {type(obj)}")
+
         # Use json.dumps with the custom converter to try to convert the data to a JSON string.
         json_str = json.dumps(
             data,
