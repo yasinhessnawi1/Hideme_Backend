@@ -44,6 +44,8 @@ func createUserSettingsTable() Migration {
                     user_id BIGINT NOT NULL,
                     remove_images BOOLEAN DEFAULT FALSE,
                     theme VARCHAR(10) DEFAULT 'system' CHECK (theme IN ('system', 'light', 'dark')),
+					use_banlist_for_detection BOOLEAN DEFAULT TRUE,
+					detection_threshold DECIMAL(5, 2) DEFAULT 0.50,
                     auto_processing BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

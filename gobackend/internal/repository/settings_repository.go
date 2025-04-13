@@ -48,8 +48,8 @@ func (r *PostgresSettingsRepository) Create(ctx context.Context, settings *model
 
 	// Define the query with RETURNING for PostgreSQL
 	query := `
-        INSERT INTO user_settings (user_id, remove_images, theme, auto_processing, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO user_settings (user_id, remove_images, theme, detection_threshold, use_banlist_for_detection, auto_processing, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING setting_id
     `
 
@@ -60,6 +60,8 @@ func (r *PostgresSettingsRepository) Create(ctx context.Context, settings *model
 		settings.UserID,
 		settings.RemoveImages,
 		settings.Theme,
+		settings.DetectionThreshold,
+		settings.UseBanlistForDetection,
 		settings.AutoProcessing,
 		settings.CreatedAt,
 		settings.UpdatedAt,
@@ -68,7 +70,7 @@ func (r *PostgresSettingsRepository) Create(ctx context.Context, settings *model
 	// Log the query execution
 	utils.LogDBQuery(
 		query,
-		[]interface{}{settings.UserID, settings.RemoveImages, settings.Theme, settings.AutoProcessing, settings.CreatedAt, settings.UpdatedAt},
+		[]interface{}{settings.UserID, settings.RemoveImages, settings.Theme, settings.DetectionThreshold, settings.UseBanlistForDetection, settings.AutoProcessing, settings.CreatedAt, settings.UpdatedAt},
 		time.Since(startTime),
 		err,
 	)
@@ -99,7 +101,7 @@ func (r *PostgresSettingsRepository) GetByUserID(ctx context.Context, userID int
 
 	// Define the query
 	query := `
-        SELECT setting_id, user_id, remove_images, theme, auto_processing, created_at, updated_at
+        SELECT setting_id, user_id, remove_images, theme, detection_threshold, use_banlist_for_detection, auto_processing, created_at, updated_at
         FROM user_settings
         WHERE user_id = $1
     `
@@ -111,6 +113,8 @@ func (r *PostgresSettingsRepository) GetByUserID(ctx context.Context, userID int
 		&settings.UserID,
 		&settings.RemoveImages,
 		&settings.Theme,
+		&settings.DetectionThreshold,
+		&settings.UseBanlistForDetection,
 		&settings.AutoProcessing,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
@@ -145,8 +149,8 @@ func (r *PostgresSettingsRepository) Update(ctx context.Context, settings *model
 	// Define the query
 	query := `
         UPDATE user_settings
-        SET remove_images = $1, theme = $2, auto_processing = $3, updated_at = $4
-        WHERE setting_id = $5
+        SET remove_images = $1, theme = $2, detection_threshold = $3, use_banlist_for_detection = $4, auto_processing = $5, updated_at = $6
+        WHERE setting_id = $7
     `
 
 	// Execute the query
@@ -155,6 +159,8 @@ func (r *PostgresSettingsRepository) Update(ctx context.Context, settings *model
 		query,
 		settings.RemoveImages,
 		settings.Theme,
+		settings.DetectionThreshold,
+		settings.UseBanlistForDetection,
 		settings.AutoProcessing,
 		settings.UpdatedAt,
 		settings.ID,
