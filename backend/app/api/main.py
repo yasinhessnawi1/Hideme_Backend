@@ -7,9 +7,9 @@ It ensures compliance with GDPR and provides modular routing for various service
 """
 
 import time
-import atexit  # Ensure resources are cleaned up when the program exits.
+import atexit
 import os
-import json  # Used for serializing error responses.
+import json
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -423,6 +423,7 @@ def create_app() -> FastAPI:
                 log_info(f"[STARTUP] Presidio initialized: {status.get('presidio', False)}")
                 log_info(f"[STARTUP] Gemini initialized: {status.get('gemini', False)}")
                 log_info(f"[STARTUP] GLiNER initialized: {status.get('gliner', False)}")
+                log_info(f"[STARTUP] HIDEME initialized: {status.get('hideme', False)}")
                 # Perform a health check of the service.
                 health = initialization_service.check_health()
                 log_info(f"[STARTUP] Health check: {health.get('status', 'unknown')}")

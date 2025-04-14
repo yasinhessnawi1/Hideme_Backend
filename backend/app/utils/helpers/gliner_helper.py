@@ -22,7 +22,8 @@ class GLiNERHelper:
     - Split an entire text into groups of sentences suitable for API processing.
     """
     # Protected cache to store processed text results.
-    _cache: Dict[str, Any] = {}  # Global cache for processed text results
+    _gliner_cache: Dict[str, Any] = {}
+    _hideme_cache: Dict[str, Any] = {}
 
     @staticmethod
     def get_cache_key(text: str, requested_entities: Optional[List[str]] = None) -> str:
@@ -45,30 +46,28 @@ class GLiNERHelper:
         return hashlib.md5(key_data.encode('utf-8')).hexdigest()
 
     @staticmethod
-    def get_cached_result(key: str) -> Optional[Any]:
+    def get_cached_result(key: str, cache_namespace: str = "gliner") -> Optional[Any]:
         """
-        Retrieve a cached result by key.
-
-        Args:
-            key (str): The cache key.
-
-        Returns:
-            Optional[Any]: The cached result if found, otherwise None.
+        Retrieve a cached result from the specified namespace.
         """
-        # Return the cached result corresponding to the given key.
-        return GLiNERHelper._cache.get(key)
+        # retrieve cached results using the generated key with his own namespace.
+        if cache_namespace == "gliner":
+            return GLiNERHelper._gliner_cache.get(key)
+        elif cache_namespace == "hideme":
+            return GLiNERHelper._hideme_cache.get(key)
+        else:
+            return None
 
     @staticmethod
-    def set_cached_result(key: str, value: Any) -> None:
+    def set_cached_result(key: str, value: Any, cache_namespace: str = "gliner") -> None:
         """
-        Store a result in the cache with the given key.
-
-        Args:
-            key (str): The key under which the result will be stored.
-            value (Any): The result to store.
+        Store a result in the cache under the specified namespace.
         """
-        # Store the value in the global cache using the key.
-        GLiNERHelper._cache[key] = value
+        # Set cached results using the generated key with his own namespace.
+        if cache_namespace == "gliner":
+            GLiNERHelper._gliner_cache[key] = value
+        elif cache_namespace == "hideme":
+            GLiNERHelper._hideme_cache[key] = value
 
     @staticmethod
     def estimate_char_count(text: str) -> int:

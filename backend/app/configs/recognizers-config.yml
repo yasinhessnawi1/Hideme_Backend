@@ -9,10 +9,10 @@ global_regex_flags: 26         # Global regex flags used in pattern matching
 # Recognizers for extracting various entities:
 recognizers:
   # Norwegian custom recognizers
-  - name: NO_FODSELSNUMMER_Recognizer  # Recognizer for Norwegian social security numbers (fodselsnummer)
+  - name: NO_FODSELSNUMMER_P_Recognizer  # Recognizer for Norwegian social security numbers (fodselsnummer)
     supported_languages:
       - nb
-    supported_entity: NO_FODSELSNUMMER
+    supported_entity: NO_FODSELSNUMMER_P
     type: custom
     patterns:
       - name: fodselsnummer_pattern
@@ -22,10 +22,10 @@ recognizers:
         regex: \b[0-3]\d[0-1]\d\d\d\s?\d{5}\b
         score: 0.95
 
-  - name: NO_PHONE_NUMBER_Recognizer   # Recognizer for Norwegian phone numbers
+  - name: NO_PHONE_NUMBER_P_Recognizer   # Recognizer for Norwegian phone numbers
     supported_languages:
       - nb
-    supported_entity: NO_PHONE_NUMBER
+    supported_entity: NO_PHONE_NUMBER_P
     type: custom
     patterns:
       - name: norwegian_phone_pattern
@@ -35,20 +35,20 @@ recognizers:
         regex: \b(?:\+47\s?)?(\d{3}\s?\d{2}\s?\d{3})\b
         score: 0.95
 
-  - name: NO_ADDRESS_Recognizer          # Recognizer for Norwegian addresses
+  - name: NO_ADDRESS_P_Recognizer          # Recognizer for Norwegian addresses
     supported_languages:
       - nb
-    supported_entity: NO_ADDRESS
+    supported_entity: NO_ADDRESS_P
     type: custom
     patterns:
       - name: norwegian_address_pattern
         regex: (\b(?:[A-Za-zÆØÅæøå]+\s){1,4}\d{1,4}(?:,\s)?\d{4}\s[A-Za-zÆØÅæøå]+)|(\bPostboks\s?\d{1,5}(?:,\s)?\d{4}\s[A-Za-zÆØÅæøå]+)|(\b\d{4}\s[A-Za-zÆØÅæøå]+\b)|(\b[A-Za-zÆØÅæøå]+\s\d{1,4},?\s?\d{4}\s[A-Za-zÆØÅæøå]+\b)
         score: 0.98
 
-  - name: NO_BANK_ACCOUNT_Recognizer     # Recognizer for Norwegian bank account numbers
+  - name: NO_BANK_ACCOUNT_P_Recognizer     # Recognizer for Norwegian bank account numbers
     supported_languages:
       - nb
-    supported_entity: NO_BANK_ACCOUNT
+    supported_entity: NO_BANK_ACCOUNT_P
     type: custom
     patterns:
       - name: bank_account_pattern
@@ -58,10 +58,10 @@ recognizers:
         regex: \b(?:kontonr\.?|kontonummer:?|bankkontonummer:?|konto:?)\s*\d{4}[.\s]?\d{2}[.\s]?\d{5}\b
         score: 0.9
 
-  - name: NO_COMPANY_NUMBER_Recognizer    # Recognizer for Norwegian company numbers
+  - name: NO_COMPANY_NUMBER_P_Recognizer    # Recognizer for Norwegian company numbers
     supported_languages:
       - nb
-    supported_entity: NO_COMPANY_NUMBER
+    supported_entity: NO_COMPANY_NUMBER_P
     type: custom
     patterns:
       - name: company_number_pattern
@@ -71,10 +71,10 @@ recognizers:
         regex: \b(?:organisasjonsnummer|organisasjonsnr|orgnr|org\.nr\.|org\s?nr)\.?:?\s*\d{3}[\s]?\d{3}[\s]?\d{3}\b
         score: 0.9
 
-  - name: NO_LICENSE_PLATE_Recognizer     # Recognizer for Norwegian vehicle license plates
+  - name: NO_LICENSE_PLATE_P_Recognizer     # Recognizer for Norwegian vehicle license plates
     supported_languages:
       - nb
-    supported_entity: NO_LICENSE_PLATE
+    supported_entity: NO_LICENSE_PLATE_P
     type: custom
     patterns:
       - name: license_plate_pattern
@@ -85,10 +85,10 @@ recognizers:
         score: 0.9
 
   # Common global recognizers that work in any language:
-  - name: EMAIL_ADDRESS_Recognizer        # Recognizer for email addresses
+  - name: EMAIL_ADDRESS_P_Recognizer        # Recognizer for email addresses
     supported_languages:
       - nb
-    supported_entity: EMAIL_ADDRESS
+    supported_entity: EMAIL_ADDRESS_P
     type: custom
     patterns:
       - name: email_pattern
@@ -98,10 +98,10 @@ recognizers:
         regex: \b(?:e-post|epost|mail|e-mail):?\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b
         score: 0.9
 
-  - name: DATE_TIME_Recognizer            # Recognizer for date and time expressions
+  - name: DATE_TIME_P_Recognizer            # Recognizer for date and time expressions
     supported_languages:
       - nb
-    supported_entity: DATE_TIME
+    supported_entity: DATE_TIME_P
     type: custom
     patterns:
       - name: norwegian_date_pattern
@@ -114,10 +114,10 @@ recognizers:
         regex: \b\d{1,2}\.?\s+(?:januar|februar|mars|april|mai|juni|juli|august|september|oktober|november|desember)\s+\d{4}\b
         score: 0.8
 
-  - name: CRYPTO_Recognizer               # Recognizer for cryptocurrency addresses
+  - name: CRYPTO_P_Recognizer               # Recognizer for cryptocurrency addresses
     supported_languages:
       - nb
-    supported_entity: CRYPTO
+    supported_entity: CRYPTO_P
     type: custom
     patterns:
       - name: bitcoin_address
@@ -127,20 +127,20 @@ recognizers:
         regex: \b0x[a-fA-F0-9]{40}\b
         score: 0.85
 
-  - name: IBAN_CODE_Recognizer            # Recognizer for IBAN codes
+  - name: IBAN_CODE_P_Recognizer            # Recognizer for IBAN codes
     supported_languages:
       - nb
-    supported_entity: IBAN_CODE
+    supported_entity: IBAN_CODE_P
     type: custom
     patterns:
       - name: iban_pattern
         regex: \bNO\d{2}\s?\d{4}\s?\d{4}\s?\d{3}\b
         score: 0.9
 
-  - name: IP_ADDRESS_Recognizer           # Recognizer for IP addresses (IPv4 and IPv6)
+  - name: IP_ADDRESS_P_Recognizer           # Recognizer for IP addresses (IPv4 and IPv6)
     supported_languages:
       - nb
-    supported_entity: IP_ADDRESS
+    supported_entity: IP_ADDRESS_P
     type: custom
     patterns:
       - name: ipv4_pattern
@@ -150,23 +150,23 @@ recognizers:
         regex: \b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b
         score: 0.9
 
-  - name: URL_Recognizer                  # Recognizer for URLs and domains
+  - name: URL_P_Recognizer                  # Recognizer for URLs and domains
     supported_languages:
       - nb
-    supported_entity: URL
+    supported_entity: URL_P
     type: custom
     patterns:
       - name: url_pattern
         regex: https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+[^\s,]
-        score: 0.9
+        score: 0.7
       - name: domain_pattern
         regex: \b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]\b
         score: 0.7
 
-  - name: MEDICAL_LICENSE_Recognizer       # Recognizer for medical licenses (HPR numbers)
+  - name: MEDICAL_LICENSE_P_Recognizer       # Recognizer for medical licenses (HPR numbers)
     supported_languages:
       - nb
-    supported_entity: MEDICAL_LICENSE
+    supported_entity: MEDICAL_LICENSE_P
     type: custom
     patterns:
       - name: norwegian_hpr_number

@@ -508,11 +508,11 @@ class BaseEntityDetector(EntityDetector, ABC):
                     "initialized": True,
                     "initialization_time": self._initialization_time,
                     "initialization_time_readable": datetime.fromtimestamp(
-                        self._initialization_time, timezone.utc
+                        self._initialization_time
                     ).strftime('%Y-%m-%d %H:%M:%S'),
                     "last_used": self._last_used,
                     "last_used_readable": (
-                        datetime.fromtimestamp(self._last_used, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+                        datetime.fromtimestamp(self._last_used).strftime('%Y-%m-%d %H:%M:%S')
                         if self._last_used else "Never Used"
                     ),
                     "idle_time": (time.time() - self._last_used) if self._last_used else None,

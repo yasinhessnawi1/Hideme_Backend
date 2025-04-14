@@ -301,7 +301,8 @@ async def readiness_check(request: Request) -> JSONResponse:
             "services": {
                 "presidio_ready": init_status.get("presidio", False),
                 "gemini_ready": init_status.get("gemini", False),
-                "gliner_ready": init_status.get("gliner", False)
+                "gliner_ready": init_status.get("gliner", False),
+                "hideme_ready": init_status.get("hideme", False)
             },
             "memory": {
                 "usage_percent": memory_usage,

@@ -49,6 +49,7 @@ class BatchDetectService(BaseDetectionService):
             use_presidio: bool = True,
             use_gemini: bool = False,
             use_gliner: bool = False,
+            use_hideme: bool = False,
             remove_words: Optional[str] = None,
             threshold: Optional[float] = None
     ) -> Dict[str, Any]:
@@ -63,6 +64,7 @@ class BatchDetectService(BaseDetectionService):
             use_presidio: Flag to enable the Presidio engine in hybrid mode.
             use_gemini: Flag to enable the Gemini engine in hybrid mode.
             use_gliner: Flag to enable the Gliner engine in hybrid mode.
+            use_hideme: Flag to enable the HIDEME engine in hybrid mode.
             remove_words: Optional words to remove from the detected output.
             threshold (Optional[float]): A numeric threshold (0.00 to 1.00) for filtering the detection results.
 
@@ -94,7 +96,7 @@ class BatchDetectService(BaseDetectionService):
         # Initialize the detection engine (detector) based on the provided engine type and flags.
         try:
             detector = await BatchDetectService._get_initialized_detector(
-                detection_engine, use_presidio, use_gemini, use_gliner, entity_list
+                detection_engine, use_presidio, use_gemini, use_gliner, use_hideme, entity_list
             )
         except Exception as e:
             # Use SecurityAwareErrorHandler to log and create an error response for detector initialization.
@@ -147,7 +149,7 @@ class BatchDetectService(BaseDetectionService):
             # Process entity detection for the current file with the defined threshold.
             result = await BatchDetectService._process_detection_for_file(
                 extracted, filename, file_metadata[i], entity_list, detector,
-                detection_engine, use_presidio, use_gemini, use_gliner,
+                detection_engine, use_presidio, use_gemini, use_gliner, use_hideme,
                 remove_words=remove_words,
                 threshold=threshold
             )
@@ -283,6 +285,7 @@ class BatchDetectService(BaseDetectionService):
             use_presidio: bool,
             use_gemini: bool,
             use_gliner: bool,
+            use_hideme: bool,
             remove_words: Optional[str] = None,
             threshold: Optional[float] = None
     ) -> Dict[str, Any]:
@@ -303,6 +306,7 @@ class BatchDetectService(BaseDetectionService):
             use_presidio: Flag for using Presidio in hybrid mode.
             use_gemini: Flag for using Gemini in hybrid mode.
             use_gliner: Flag for using Gliner in hybrid mode.
+            use_hideme: Flag for using HIDEME in hybrid mode.
             remove_words: Optional words to remove from the detection output.
             threshold: Optional numeric threshold (0.00 to 1.00) used to filter detection results.
 
@@ -354,7 +358,8 @@ class BatchDetectService(BaseDetectionService):
                     "engines_used": {
                         "presidio": use_presidio,
                         "gemini": use_gemini,
-                        "gliner": use_gliner
+                        "gliner": use_gliner,
+                        "hideme": use_hideme
                     }
                 }
             else:
@@ -437,7 +442,7 @@ class BatchDetectService(BaseDetectionService):
                     )
 
                 # Replace original text in redaction mapping with sanitized values.
-                redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name=engine)
+                # redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name=engine)
                 # Append the detected entities from this engine.
                 combined_entities.extend(entities)
                 # Merge redaction mapping pages.
@@ -528,6 +533,7 @@ class BatchDetectService(BaseDetectionService):
             use_presidio: bool = True,
             use_gemini: bool = False,
             use_gliner: bool = False,
+            use_hideme: bool = False,
             entity_list: Optional[List[str]] = None
     ) -> Any:
         """
@@ -552,7 +558,8 @@ class BatchDetectService(BaseDetectionService):
                 config = {
                     "use_presidio": use_presidio,
                     "use_gemini": use_gemini,
-                    "use_gliner": use_gliner
+                    "use_gliner": use_gliner,
+                    "use_hideme": use_hideme
                 }
                 if entity_list:
                     config["entities"] = entity_list

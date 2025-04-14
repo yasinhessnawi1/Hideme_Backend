@@ -25,7 +25,6 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
-# Import service modules for batch detection and redaction.
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services import BatchDetectService, BatchRedactService
 from backend.app.services.batch_search_service import BatchSearchService
@@ -55,37 +54,39 @@ async def batch_detect_sensitive(
     """
     Process multiple files for entity detection in parallel with threshold-based filtering.
 
-    This endpoint receives a list of files along with optional parameters:
-      - requested_entities: A comma-separated string indicating which entities to detect.
-      - detection_engine: The detection engine to use (e.g., 'presidio', 'gemini', 'gliner', or 'hybrid').
-      - max_parallel_files: The maximum number of files to process concurrently.
-      - remove_words: Optional comma-separated words to remove from the file content before processing.
-      - threshold: Optional numeric threshold (0.00 to 1.00) for filtering detection results.
-                   Only entities with a confidence score greater than or equal to this value are retained.
-                   If not provided, a default (typically 0.85) will be used in the business logic.
+    Parameters:
+        request (Request): The incoming HTTP request.
+        files (List[UploadFile]): A list of files to be processed.
+        requested_entities (Optional[str]): Comma-separated entities to detect.
+        detection_engine (Optional[str]): The detection engine to use (e.g., 'presidio', 'gemini').
+        max_parallel_files (Optional[int]): Maximum number of concurrent file processes.
+        remove_words (Optional[str]): Comma-separated words to remove from content.
+        threshold (Optional[float]): Confidence threshold (0.00 to 1.00) for filtering detection results.
 
     Returns:
-        JSONResponse: A JSON response containing the detection results as returned by BatchDetectService.
-                      In case of an error, a secure error response is returned.
+        JSONResponse: JSON response with detection results or an error response.
     """
+    # Try block to validate the threshold value.
     try:
-        # Validate the provided threshold value.
-        validate_threshold_score(threshold)  # May raise HTTPException for invalid values.
+        # Call helper to validate the threshold score.
+        validate_threshold_score(threshold)
     except HTTPException as e:
-        # Securely handle threshold validation errors.
+        # Handle threshold validation errors securely.
         error_info = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_sensitive", endpoint=str(request.url)
-        )  # Get a sanitized error message.
-        status = error_info.get("status_code", 500)  # Determine response status.
-        # Return an error response in JSON format.
+        )
+        # Retrieve status code from error information.
+        status = error_info.get("status_code", 500)
+        # Return a JSON error response with the validation error details.
         return JSONResponse(
             content=error_info,
             status_code=status,
             media_type="application/json"
         )
 
-    # Create a unique operation ID using the current timestamp.
+    # Generate a unique operation ID using the current timestamp.
     operation_id = f"batch_detect_{int(time.time())}"
+    # Log the start of the batch detection process.
     log_info(f"[BATCH] Starting batch entity detection [operation_id={operation_id}]")
     try:
         # Map detection engine names to their corresponding enum values.
@@ -93,40 +94,39 @@ async def batch_detect_sensitive(
             "presidio": EntityDetectionEngine.PRESIDIO,
             "gemini": EntityDetectionEngine.GEMINI,
             "gliner": EntityDetectionEngine.GLINER,
+            "hideme": EntityDetectionEngine.HIDEME,
             "hybrid": EntityDetectionEngine.HYBRID
         }
-        # Validate the provided detection engine.
+        # Check if the provided detection engine is valid.
         if detection_engine not in engine_map:
+            # Return an error response for an invalid detection engine.
             return JSONResponse(
                 status_code=400,
                 content={"detail": f"Invalid detection engine. Must be one of: {', '.join(engine_map.keys())}"}
             )
-
-        # Retrieve the corresponding engine enum.
+        # Retrieve the enum corresponding to the provided detection engine.
         engine_enum = engine_map[detection_engine]
-
-        # Call the BatchDetectService to process the files with the provided parameters.
+        # Call the batch detection service to process the files with given parameters.
         result = await BatchDetectService.detect_entities_in_files(
             files=files,
             requested_entities=requested_entities,
             detection_engine=engine_enum,
             max_parallel_files=max_parallel_files,
-            use_presidio=True,
-            use_gemini=(detection_engine == "hybrid"),
             remove_words=remove_words,
             threshold=threshold
         )
-        # Return the detection result in a JSONResponse.
+        # Return the result in a JSON response.
         return JSONResponse(content=result)
     except Exception as e:
-        # Log unhandled exceptions with the operation ID.
+        # Log any unhandled exceptions with the operation ID.
         log_error(f"[BATCH] Unhandled exception in batch detection: {str(e)} [operation_id={operation_id}]")
-        # Securely handle the error and prepare a sanitized error response.
+        # Handle the exception securely and prepare a sanitized error message.
         error_response = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_hybrid", resource_id=str(request.url)
         )
-        status = error_response.get("status_code", 500)  # Set status code.
-        # Return the sanitized error response.
+        # Get the status code for the error response.
+        status = error_response.get("status_code", 500)
+        # Return the error response in JSON format.
         return JSONResponse(content=error_response, status_code=status)
 
 
@@ -140,57 +140,60 @@ async def batch_hybrid_detect_sensitive(
         use_presidio: bool = Form(True),
         use_gemini: bool = Form(False),
         use_gliner: bool = Form(False),
+        use_hideme: bool = Form(False),
         max_parallel_files: Optional[int] = Form(4),
         remove_words: Optional[str] = Form(None),
-        threshold: Optional[float] = Form(None)  # New threshold parameter.
+        threshold: Optional[float] = Form(None)
 ) -> JSONResponse:
     """
     Process multiple files using a hybrid detection approach with threshold-based filtering.
 
-    This endpoint combines multiple detection engines for comprehensive entity detection:
-      - Presidio for structured entities (e.g., emails, phone numbers).
-      - Gemini for broader, context-aware detection.
-      - GLiNER for specialized entity recognition (optional and more resource-intensive).
-
-    Optional parameters include:
-      - requested_entities: A comma-separated string of entities to detect.
-      - use_presidio, use_gemini, use_gliner: Boolean flags to enable specific detection engines.
-      - max_parallel_files: The maximum number of files to process concurrently.
-      - remove_words: Optional comma-separated words to remove before detection.
-      - threshold: Optional numeric threshold (0.00 to 1.00) for filtering detection results.
-                   Only entities with a confidence score greater than or equal to the threshold are retained.
+    Parameters:
+        request (Request): The incoming HTTP request.
+        files (List[UploadFile]): A list of files for detection.
+        requested_entities (Optional[str]): Comma-separated entities to detect.
+        use_presidio (bool): Flag to enable the Presidio detection engine.
+        use_gemini (bool): Flag to enable the Gemini detection engine.
+        use_gliner (bool): Flag to enable the GLiNER detection engine.
+        use_hideme (bool): Flag to enable the HideMe detection engine.
+        max_parallel_files (Optional[int]): Maximum number of files to process concurrently.
+        remove_words (Optional[str]): Comma-separated words to remove from the file content.
+        threshold (Optional[float]): Numeric threshold for filtering detection results.
 
     Returns:
-        JSONResponse: A JSON response containing the detection results as returned by BatchDetectService.
-                      If an error occurs, a secure error response is returned.
+        JSONResponse: JSON response with the detection results or an error response.
     """
+    # Attempt to validate the threshold value.
     try:
-        # Validate the threshold value.
+        # Validate the threshold value using the helper function.
         validate_threshold_score(threshold)
     except HTTPException as e:
-        # Securely handle threshold validation error.
+        # Handle the threshold validation exception securely.
         error_info = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_hybrid_sensitive", endpoint=str(request.url)
         )
+        # Extract status code from error information.
         status = error_info.get("status_code", 500)
-        # Return a JSON error response.
+        # Return a JSON error response with the validation error details.
         return JSONResponse(
             content=error_info,
             status_code=status,
             media_type="application/json"
         )
 
-    # Generate a unique operation ID.
+    # Create a unique operation ID using the current timestamp.
     operation_id = f"batch_hybrid_{int(time.time())}"
+    # Log the initiation of hybrid batch detection.
     log_info(f"[BATCH] Starting hybrid batch detection [operation_id={operation_id}]")
     try:
-        # Validate that at least one detection engine is enabled.
-        if not any([use_presidio, use_gemini, use_gliner]):
+        # Check if at least one detection engine is enabled.
+        if not any([use_presidio, use_gemini, use_gliner, use_hideme]):
+            # Return an error response if no detection engine is selected.
             return JSONResponse(
                 status_code=400,
                 content={"detail": "At least one detection engine must be selected"}
             )
-        # Use the BatchDetectService with the hybrid approach.
+        # Call the batch detection service using hybrid detection configuration.
         result = await BatchDetectService.detect_entities_in_files(
             files=files,
             requested_entities=requested_entities,
@@ -199,20 +202,22 @@ async def batch_hybrid_detect_sensitive(
             use_presidio=use_presidio,
             use_gemini=use_gemini,
             use_gliner=use_gliner,
+            use_hideme=use_hideme,
             remove_words=remove_words,
             threshold=threshold
         )
-        # Return the result in a JSON response.
+        # Return the detection results as a JSON response.
         return JSONResponse(content=result)
     except Exception as e:
-        # Log the exception with operation ID.
+        # Log any unhandled exceptions with the operation ID.
         log_error(f"[BATCH] Unhandled exception in hybrid detection: {str(e)} [operation_id={operation_id}]")
-        # Securely handle the error.
+        # Securely handle the exception and prepare a sanitized error message.
         error_response = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_hybrid", resource_id=str(request.url)
         )
+        # Retrieve the appropriate status code for the error response.
         status = error_response.get("status_code", 500)
-        # Return the sanitized error response.
+        # Return the sanitized error response as JSON.
         return JSONResponse(content=error_response, status_code=status)
 
 
@@ -231,21 +236,21 @@ async def batch_search_text(
 
     Parameters:
         request (Request): The incoming HTTP request.
-        files (List[UploadFile]): A list of PDF files to search.
-        search_terms (str): A single string containing the search terms. If multiple words are provided,
-                            each word is searched individually.
-        case_sensitive (bool): Indicates whether the search should be case-sensitive.
+        files (List[UploadFile]): List of PDF files to be searched.
+        search_terms (str): String of search terms (each word is searched individually).
+        case_sensitive (bool): Flag indicating if the search is case-sensitive.
         ai_search (bool): Flag to enable AI-powered search features.
-        max_parallel_files (Optional[int]): The maximum number of files to process concurrently.
+        max_parallel_files (Optional[int]): Maximum number of files to process concurrently.
 
     Returns:
-        JSONResponse: A JSON response containing detailed matching results, or a secure error response if an exception occurs.
+        JSONResponse: JSON response containing matching results or an error response.
     """
-    # Generate a unique operation ID.
+    # Generate a unique operation ID using the current timestamp.
     operation_id = f"batch_search_{int(time.time())}"
+    # Log the start of the batch text search operation.
     log_info(f"[BATCH] Starting batch text search [operation_id={operation_id}]")
     try:
-        # Delegate the batch text search to the BatchSearchService.
+        # Delegate the search operation to the BatchSearchService.
         result = await BatchSearchService.batch_search_text(
             files=files,
             search_terms=search_terms,
@@ -253,17 +258,18 @@ async def batch_search_text(
             case_sensitive=case_sensitive,
             ai_search=ai_search
         )
-        # Return the search result.
+        # Return the search results as a JSON response.
         return JSONResponse(content=result)
     except Exception as e:
-        # Log any unhandled exception.
+        # Log any exceptions that occur during the search.
         log_error(f"[BATCH] Unhandled exception in batch search: {str(e)} [operation_id={operation_id}]")
-        # Securely handle the error.
+        # Handle the exception securely using the error handler.
         error_response = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_search", resource_id=str(request.url)
         )
+        # Get the error response's status code.
         status = error_response.get("status_code", 500)
-        # Return the secure error response.
+        # Return the sanitized error response as JSON.
         return JSONResponse(content=error_response, status_code=status)
 
 
@@ -278,55 +284,56 @@ async def batch_find_words_by_bbox(
     """
     Find words in multiple PDF files based on the provided bounding box.
 
-    This endpoint accepts:
-      - files: A list of PDF files to process.
-      - bounding_box: A JSON string representing a bounding box. It should be a JSON object with keys:
-                      "x0", "y0", "x1", and "y1" (all float values) that define the coordinate region.
-
-    The processing logic for file reading, text extraction, and locating words within the bounding box
-    is delegated to BatchSearchService.
+    Parameters:
+        request (Request): The incoming HTTP request.
+        files (List[UploadFile]): List of PDF files to be processed.
+        bounding_box (str): JSON string representing a bounding box with keys: "x0", "y0", "x1", and "y1".
 
     Returns:
-        JSONResponse: A JSON response containing the batch search results, or a secure error response if an exception occurs.
+        JSONResponse: JSON response with the search results or an error response.
     """
+    # Attempt to parse the bounding_box JSON string.
     try:
-        # Parse the bounding_box JSON string.
+        # Convert the bounding_box string into a JSON object.
         bbox = json.loads(bounding_box)
-        # Define the required keys for the bounding box.
+        # Define the required keys for a valid bounding box.
         required_keys = {"x0", "y0", "x1", "y1"}
-        # Verify that bbox is a dict and contains all required keys.
+        # Verify that the bbox is a dictionary and contains all required keys.
         if not isinstance(bbox, dict) or not required_keys.issubset(bbox.keys()):
+            # Raise an HTTPException if the bounding box format is invalid.
             raise HTTPException(
                 status_code=400,
                 detail="Bounding box must be a JSON object with keys: x0, y0, x1, and y1"
             )
     except Exception as e:
-        # Log the error parsing the bounding box.
+        # Log the error encountered during bounding box parsing.
         log_error(f"Error parsing bounding box: {str(e)}")
-        # Return a JSON error response with status 400.
+        # Return a JSON response indicating invalid bounding box format.
         return JSONResponse(status_code=400, content={"detail": "Invalid bounding box format."})
 
-    # Generate a unique operation ID for this processing request.
+    # Generate a unique operation ID for the batch find words request.
     operation_id = f"batch_find_words_{int(time.time())}"
+    # Log the start of the batch find words operation.
     log_info(f"[BATCH] Starting batch find words operation [operation_id={operation_id}]")
     try:
-        # Delegate the task of finding words by bounding box to BatchSearchService.
+        # Delegate finding words by bounding box to the BatchSearchService.
         result = await BatchSearchService.find_words_by_bbox(
             files=files,
             bounding_box=bbox,
             operation_id=operation_id
         )
-        # Return the result.
+        # Return the results as a JSON response.
         return JSONResponse(content=result)
     except Exception as e:
-        # Log any exceptions encountered during processing.
+        # Log any unhandled exceptions that occur during processing.
         log_error(f"[BATCH] Unhandled exception in batch find words: {str(e)} [operation_id={operation_id}]")
-        # Securely handle the error.
+        # Securely handle the exception and prepare a sanitized error response.
         error_response = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_find_words", resource_id=str(request.url)
         )
+        # Retrieve the appropriate status code from the error response.
         status = error_response.get("status_code", 500)
-        # Return the secure error response.
+        # Return the sanitized error response as JSON.
         return JSONResponse(content=error_response, status_code=status)
 
 
@@ -344,25 +351,23 @@ async def batch_redact_documents(
     """
     Apply redactions to multiple documents and return them as a ZIP file.
 
-    Uses the centralized batch redaction service for efficient document redaction with streaming response,
-    background cleanup, and resource management.
-
     Parameters:
         request (Request): The incoming HTTP request.
-        background_tasks (BackgroundTasks): A BackgroundTasks instance to schedule cleanup tasks.
-        files (List[UploadFile]): A list of documents to be redacted.
-        redaction_mappings (str): A string representing the redaction mappings to apply.
-        remove_images (bool): Flag indicating whether images in the documents should also be redacted.
-        max_parallel_files (Optional[int]): Optional maximum number of files to process concurrently.
+        background_tasks (BackgroundTasks): Instance to schedule background tasks.
+        files (List[UploadFile]): List of documents to be redacted.
+        redaction_mappings (str): Redaction mappings as a string.
+        remove_images (bool): Flag indicating whether to remove images from the documents.
+        max_parallel_files (Optional[int]): Maximum number of files to process concurrently.
 
     Returns:
-        Response: A response containing the redacted documents as a ZIP file, or a secure error response if an exception occurs.
+        Response: A response containing the redacted documents as a ZIP file or an error response.
     """
-    # Generate a unique operation ID for the batch redaction.
+    # Generate a unique operation ID using the current timestamp.
     operation_id = f"batch_redact_{int(time.time())}"
+    # Log the initiation of the batch redaction process.
     log_info(f"[BATCH] Starting batch redaction [operation_id={operation_id}]")
     try:
-        # Invoke the BatchRedactService to process the redaction.
+        # Call the batch redaction service to process documents for redaction.
         response_obj = await BatchRedactService.batch_redact_documents(
             files=files,
             redaction_mappings=redaction_mappings,
@@ -373,12 +378,13 @@ async def batch_redact_documents(
         # Return the response object (e.g., ZIP file response).
         return response_obj
     except Exception as e:
-        # Log any unhandled exceptions with the operation ID.
+        # Log any unhandled exceptions that occur during redaction.
         log_error(f"[BATCH] Unhandled exception in batch redaction: {str(e)} [operation_id={operation_id}]")
-        # Securely handle the error to prevent leaking sensitive information.
+        # Handle the error securely to prevent exposing sensitive information.
         error_response = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_redact", resource_id=str(request.url)
         )
+        # Retrieve the error response status code.
         status = error_response.get("status_code", 500)
-        # Return a JSON response with the sanitized error information.
+        # Return a JSON response containing the sanitized error details.
         return JSONResponse(content=error_response, status_code=status)

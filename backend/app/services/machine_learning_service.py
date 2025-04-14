@@ -102,6 +102,8 @@ class MashinLearningService(BaseDetectionService):
                 detector = initialization_service.get_presidio_detector()
             elif self.detector_type == "gliner" and hasattr(initialization_service, "get_gliner_detector"):
                 detector = initialization_service.get_gliner_detector(entity_list)
+            elif self.detector_type == "hideme" and hasattr(initialization_service, "get_hideme_detector"):
+                detector = initialization_service.get_hideme_detector(entity_list)
             else:
                 return JSONResponse(
                     status_code=400,

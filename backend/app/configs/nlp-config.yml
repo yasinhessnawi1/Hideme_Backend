@@ -12,20 +12,20 @@ models:
 ner_model_configuration:
   # Mapping of model-specific entity labels to standardized entity names.
   model_to_presidio_entity_mapping:
-    PER: PERSON
-    PERSON: PERSON
-    LOC: LOCATION
-    LOCATION: LOCATION
-    GPE: LOCATION
-    GPE_LOC: LOCATION
-    GPE_ORG: ORGANIZATION
-    ORG: ORGANIZATION
-    ORGANIZATION: ORGANIZATION
-    DATE: DATE_TIME
-    TIME: DATE_TIME
-    NORP: NRP
-    DRV: PERSON
-    MISC: MEDICAL_LICENSE
+    PER: PERSON_P
+    PERSON: PERSON_P
+    LOC: LOCATION_P
+    LOCATION: LOCATION_P
+    GPE: LOCATION_P
+    GPE_LOC: LOCATION_P
+    GPE_ORG: ORGANIZATION_P
+    ORG: ORGANIZATION_P
+    ORGANIZATION: ORGANIZATION_P
+    DATE: DATE_TIME_P
+    TIME: DATE_TIME_P
+    NORP: NRP_P
+    DRV: PERSON_P
+    MISC: MEDICAL_LICENSE_P
 
   # Multiplier to adjust scores for entities with low confidence.
   low_confidence_score_multiplier: 0.4
@@ -36,7 +36,7 @@ ner_model_configuration:
     - ORG
 
   # Default score to assign when no score is provided.
-  default_score: 0.85
+  default_score: 0.8
 
   # List of labels that should be ignored during entity recognition.
   labels_to_ignore: [ "PROD", "EVT" ]
