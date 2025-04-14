@@ -40,9 +40,11 @@ func (us *UserSetting) TableName() string {
 
 // UserSettingsUpdate represents the data that can be updated for user settings.
 type UserSettingsUpdate struct {
-	RemoveImages   *bool   `json:"remove_images" validate:"omitempty"`
-	Theme          *string `json:"theme"`
-	AutoProcessing *bool   `json:"auto_processing"`
+	RemoveImages           *bool    `json:"remove_images" validate:"omitempty"`
+	Theme                  *string  `json:"theme"`
+	AutoProcessing         *bool    `json:"auto_processing"`
+	DetectionThreshold     *float64 `json:"detection_threshold" validate:"omitempty"`
+	UseBanlistForDetection *bool    `json:"use_banlist_for_detection" validate:"omitempty"`
 }
 
 // Apply updates the UserSetting with values from the update request.
@@ -55,5 +57,11 @@ func (s *UserSetting) Apply(update *UserSettingsUpdate) {
 	}
 	if update.AutoProcessing != nil {
 		s.AutoProcessing = *update.AutoProcessing
+	}
+	if update.DetectionThreshold != nil {
+		s.DetectionThreshold = *update.DetectionThreshold
+	}
+	if update.UseBanlistForDetection != nil {
+		s.UseBanlistForDetection = *update.UseBanlistForDetection
 	}
 }
