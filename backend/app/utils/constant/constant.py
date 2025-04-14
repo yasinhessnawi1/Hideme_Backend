@@ -27,6 +27,12 @@ DEFAULT_LOCK_TIMEOUT = 30.0  # 30 seconds for lock acquisition
 
 # Constants for configuration filenames to avoid duplicating literals
 GLINER_CONFIG_FILENAME = "gliner_config.json"
-CONFIG_FILENAME = "config.json"
 
 CHUNK_SIZE = 64 * 1024  # 64KB
+
+# Define constants for text replacements to handle Unicode issues in log messages.
+ERROR_WORD = "[ERROR]"
+WARNING_WORD = "[WARNING]"
+
+DEFAULT_BATCH_TIMEOUT = 600.0
+DEFAULT_ITEM_TIMEOUT = 600.0

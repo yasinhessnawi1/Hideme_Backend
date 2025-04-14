@@ -211,9 +211,12 @@ class ProcessingRecordKeeper:
                 "record_keeping": "Maintains records of all processing activities as required by GDPR Art. 30",
                 "processor_details": GDPR_DOCUMENTATION.get('processor_details', 'System processor details'),
                 "controller_details": GDPR_DOCUMENTATION.get('controller_details', 'System controller details'),
-                "processing_purposes": GDPR_DOCUMENTATION.get('processing_purposes', 'Entity detection and document redaction'),
-                "data_subject_categories": GDPR_DOCUMENTATION.get('data_subject_categories', 'Document subjects and mentioned individuals'),
-                "recipient_categories": GDPR_DOCUMENTATION.get('recipient_categories', 'None - processed data remains with controller'),
+                "processing_purposes": GDPR_DOCUMENTATION.get('processing_purposes',
+                                                              'Entity detection and document redaction'),
+                "data_subject_categories": GDPR_DOCUMENTATION.get('data_subject_categories',
+                                                                  'Document subjects and mentioned individuals'),
+                "recipient_categories": GDPR_DOCUMENTATION.get('recipient_categories',
+                                                               'None - processed data remains with controller'),
                 "retention_period": f"{self.record_retention_days} days",
                 "security_measures": "Anonymization, secure hashing, minimal data collection"
             },
@@ -229,7 +232,8 @@ class ProcessingRecordKeeper:
             },
             "legal_basis": {
                 "basis": GDPR_DOCUMENTATION.get('legal_basis', 'legitimate_interests'),
-                "documentation": GDPR_DOCUMENTATION.get('legal_basis_documentation', 'Processing necessary for enhancing document security and privacy')
+                "documentation": GDPR_DOCUMENTATION.get('legal_basis_documentation',
+                                                        'Processing necessary for enhancing document security and privacy')
             }
         }
         return compliance_info
@@ -274,7 +278,8 @@ class ProcessingRecordKeeper:
                 continue
 
         if deleted_count > 0:
-            log_info(f"[GDPR] Deleted {deleted_count} processing record files older than {self.record_retention_days} days")
+            log_info(
+                f"[GDPR] Deleted {deleted_count} processing record files older than {self.record_retention_days} days")
 
     def get_record_stats(self) -> Dict[str, Any]:
         """

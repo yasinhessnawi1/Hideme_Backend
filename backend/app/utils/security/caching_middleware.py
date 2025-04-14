@@ -263,12 +263,12 @@ class CacheMiddleware(BaseHTTPMiddleware):
     """
 
     def __init__(
-        self,
-        app: ASGIApp,
-        paths: List[str],
-        ttl: int = 300,
-        cache_key_builder: Optional[Callable[[Request], str]] = None,
-        content_hashing: bool = True
+            self,
+            app: ASGIApp,
+            paths: List[str],
+            ttl: int = 300,
+            cache_key_builder: Optional[Callable[[Request], str]] = None,
+            content_hashing: bool = True
     ):
         """
         Initialize the CacheMiddleware.
@@ -476,6 +476,7 @@ async def custom_file_cache_key_builder(request: Request) -> str:
     key = hashlib.sha256(key_str.encode()).hexdigest()
     return key
 
+
 def get_cached_response(key: str) -> Optional[Any]:
     """
     Retrieve a cached response.
@@ -515,6 +516,7 @@ def clear_cached_response(key: str) -> bool:
         True if the entry was cleared; otherwise, False.
     """
     return response_cache.delete(key)
+
 
 def _get_keys_by_prefix(cache: ResponseCache, prefix: str, timeout: float = 3.0) -> List[str]:
     """

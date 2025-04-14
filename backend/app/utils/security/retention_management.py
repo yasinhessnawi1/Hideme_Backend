@@ -70,6 +70,7 @@ class DocumentRetentionManager:
 
     def _start_cleanup_thread(self) -> None:
         """Start a background thread to periodically clean up expired files."""
+
         def cleanup_worker():
             while not self._stop_event.is_set():
                 self.cleanup_expired_files()
@@ -189,7 +190,8 @@ class DocumentRetentionManager:
                     os.fsync(f.fileno())
             os.unlink(path)
         except (OSError, IOError) as e:
-            log_warning(f"[GDPR] Secure deletion failed for file: {os.path.basename(path)} with error: {e}. Attempting regular deletion.")
+            log_warning(
+                f"[GDPR] Secure deletion failed for file: {os.path.basename(path)} with error: {e}. Attempting regular deletion.")
             try:
                 if os.path.exists(path):
                     os.unlink(path)
@@ -213,7 +215,6 @@ class DocumentRetentionManager:
         except (OSError, IOError) as e:
             log_warning(f"[GDPR] Failed to remove directory: {os.path.basename(path)} with error: {e}")
 
-
     def shutdown(self) -> None:
         """
         Clean up resources and stop the cleanup thread.
@@ -236,7 +237,8 @@ class DocumentRetentionManager:
                     self._secure_delete(file_path)
                     log_info(f"[GDPR] Removed file during shutdown: {os.path.basename(file_path)}")
                 except (OSError, IOError) as e:
-                    log_warning(f"[GDPR] Failed to remove file during shutdown: {os.path.basename(file_path)}. Error: {e}")
+                    log_warning(
+                        f"[GDPR] Failed to remove file during shutdown: {os.path.basename(file_path)}. Error: {e}")
 
         log_info("[GDPR] Retention manager shutdown complete")
 

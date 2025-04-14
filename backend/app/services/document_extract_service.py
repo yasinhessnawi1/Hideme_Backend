@@ -173,7 +173,7 @@ class DocumentExtractService:
         except Exception as e:
             # Log the error and create a secure error response if extraction fails
             log_error(f"[SECURITY] Error extracting text: {str(e)} [operation_id={operation_id}]")
-            error_response= SecurityAwareErrorHandler.handle_safe_error(
+            error_response = SecurityAwareErrorHandler.handle_safe_error(
                 e, "file_text_extraction", filename
             )
             return None, JSONResponse(content=error_response)

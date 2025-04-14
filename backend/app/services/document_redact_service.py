@@ -198,7 +198,7 @@ class DocumentRedactionService:
             except Exception as e:
                 # If parsing fails, log the error and generate a secure error response.
                 log_error(f"[SECURITY] Error parsing redaction mapping: {str(e)} [operation_id={operation_id}]")
-                error_response= SecurityAwareErrorHandler.handle_safe_error(
+                error_response = SecurityAwareErrorHandler.handle_safe_error(
                     e, "file_mapping_parse", filename
                 )
                 return {}, 0, JSONResponse(content=error_response)

@@ -66,10 +66,10 @@ class TextUtils:
 
     @staticmethod
     def map_offsets_to_bboxes(
-        full_text: str,
-        mapping: List[Tuple[Dict[str, Any], int, int]],
-        sensitive_offsets: Tuple[int, int],
-        padding: Dict[str, int] = None
+            full_text: str,
+            mapping: List[Tuple[Dict[str, Any], int, int]],
+            sensitive_offsets: Tuple[int, int],
+            padding: Dict[str, int] = None
     ) -> List[Dict[str, float]]:
         """
         Maps a sensitive text span (given as character offsets) to bounding boxes.
@@ -100,10 +100,10 @@ class TextUtils:
                 continue  # Skip words outside the entity span.
             # Append a new bounding box dictionary for the word with adjusted padding.
             word_bboxes.append({
-                "x0": word["x0"] - padding["left"],   # Adjust left boundary.
-                "y0": word["y0"] + padding["top"],      # Adjust top boundary.
-                "x1": word["x1"] + padding["right"],    # Adjust right boundary.
-                "y1": word["y1"] - padding["bottom"]      # Adjust bottom boundary.
+                "x0": word["x0"] - padding["left"],  # Adjust left boundary.
+                "y0": word["y0"] + padding["top"],  # Adjust top boundary.
+                "x1": word["x1"] + padding["right"],  # Adjust right boundary.
+                "y1": word["y1"] - padding["bottom"]  # Adjust bottom boundary.
             })
 
         # If no bounding boxes were identified, log a warning and return an empty list.

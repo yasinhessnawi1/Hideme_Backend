@@ -26,7 +26,7 @@ from fastapi.responses import JSONResponse
 
 from backend.app.utils.logging.logger import log_info, log_warning
 
-MAX_PDF_SIZE_BYTES =  10 * 1024 * 1024 # 10 MB per file
+MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB per file
 # Constants for multi-file validation
 TOTAL_MAX_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB total
 MAX_FILES_COUNT = 10
@@ -237,7 +237,8 @@ def validate_file_safety(content: bytes, filename: Optional[str] = None) -> Tupl
     return True, ""
 
 
-def validate_file_content(content: bytes, filename: Optional[str] = None, content_type: Optional[str] = None) -> Tuple[bool, str, Optional[str]]:
+def validate_file_content(content: bytes, filename: Optional[str] = None, content_type: Optional[str] = None) -> Tuple[
+    bool, str, Optional[str]]:
     """
     Perform comprehensive validation of a PDF file's content.
 
@@ -272,7 +273,8 @@ def validate_file_content(content: bytes, filename: Optional[str] = None, conten
     return True, "", detected_mime
 
 
-async def validate_file_content_async(content: bytes, filename: Optional[str] = None, content_type: Optional[str] = None) -> Tuple[bool, str, Optional[str]]:
+async def validate_file_content_async(content: bytes, filename: Optional[str] = None,
+                                      content_type: Optional[str] = None) -> Tuple[bool, str, Optional[str]]:
     """
     Asynchronously validate a PDF file's content.
 
@@ -292,7 +294,8 @@ async def validate_file_content_async(content: bytes, filename: Optional[str] = 
         return False, "Async validation error", None
 
 
-async def read_and_validate_file(file: UploadFile, operation_id: str) -> Tuple[Optional[bytes], Optional[JSONResponse], float]:
+async def read_and_validate_file(file: UploadFile, operation_id: str) -> Tuple[
+    Optional[bytes], Optional[JSONResponse], float]:
     """
     Reads and validates a single PDF file.
 
@@ -316,27 +319,33 @@ async def read_and_validate_file(file: UploadFile, operation_id: str) -> Tuple[O
     try:
         if not validate_mime_type(file.content_type, list(ALLOWED_MIME_TYPES["pdf"])):
             log_warning(f"[SECURITY] Unsupported file type: {file.content_type} [operation_id={operation_id}]")
-            return None, JSONResponse(status_code=415, content={"detail": "Only PDF files are supported", "operation_id": operation_id}), 0
+            return None, JSONResponse(status_code=415, content={"detail": "Only PDF files are supported",
+                                                                "operation_id": operation_id}), 0
 
         file_read_start = time.time()
         content = await file.read()
         file_read_time = time.time() - file_read_start
-        log_info(f"[SECURITY] File read completed in {file_read_time:.3f}s. Size: {len(content) / 1024:.1f}KB [operation_id={operation_id}]")
+        log_info(
+            f"[SECURITY] File read completed in {file_read_time:.3f}s. Size: {len(content) / 1024:.1f}KB [operation_id={operation_id}]")
 
         if len(content) > MAX_PDF_SIZE_BYTES:
-            log_warning(f"[SECURITY] PDF size exceeds limit: {len(content)/(1024*1024):.2f}MB > {MAX_PDF_SIZE_BYTES/(1024*1024):.2f}MB [operation_id={operation_id}]")
+            log_warning(
+                f"[SECURITY] PDF size exceeds limit: {len(content) / (1024 * 1024):.2f}MB > {MAX_PDF_SIZE_BYTES / (1024 * 1024):.2f}MB [operation_id={operation_id}]")
             return None, JSONResponse(
                 status_code=413,
-                content={"detail": f"PDF file size exceeds maximum allowed ({MAX_PDF_SIZE_BYTES // (1024*1024)}MB)", "operation_id": operation_id}
+                content={"detail": f"PDF file size exceeds maximum allowed ({MAX_PDF_SIZE_BYTES // (1024 * 1024)}MB)",
+                         "operation_id": operation_id}
             ), file_read_time
 
         is_valid, reason, _ = await validate_file_content_async(content, file.filename, file.content_type)
         if not is_valid:
             log_warning(f"[SECURITY] Invalid PDF content: {reason} [operation_id={operation_id}]")
-            return None, JSONResponse(status_code=415, content={"detail": reason, "operation_id": operation_id}), file_read_time
+            return None, JSONResponse(status_code=415,
+                                      content={"detail": reason, "operation_id": operation_id}), file_read_time
 
         return content, None, file_read_time
 
     except Exception as e:
         log_warning(f"[SECURITY] Exception in read_and_validate_file: {str(e)} [operation_id={operation_id}]")
-        return None, JSONResponse(status_code=500, content={"detail": "Internal Server Error", "operation_id": operation_id}), 0
+        return None, JSONResponse(status_code=500,
+                                  content={"detail": "Internal Server Error", "operation_id": operation_id}), 0

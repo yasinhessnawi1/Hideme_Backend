@@ -173,6 +173,7 @@ def deduplicate_redaction_mapping(redaction_mapping: Dict[str, Any]) -> Dict[str
 
     return sanitized_mapping
 
+
 def deduplicate_bbox(search_results: List[Dict[str, Any]], precision: int = 1) -> List[Dict[str, Any]]:
     """
     Remove duplicate search results based on the bounding box coordinates.

@@ -13,7 +13,7 @@ to the threshold are retained. Both the flat list of entities and the nested red
 """
 
 import time
-from typing import Optional, List
+from typing import Optional
 
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
@@ -102,6 +102,8 @@ class MashinLearningService(BaseDetectionService):
                 detector = initialization_service.get_presidio_detector()
             elif self.detector_type == "gliner" and hasattr(initialization_service, "get_gliner_detector"):
                 detector = initialization_service.get_gliner_detector(entity_list)
+            elif self.detector_type == "hideme" and hasattr(initialization_service, "get_hideme_detector"):
+                detector = initialization_service.get_hideme_detector(entity_list)
             else:
                 return JSONResponse(
                     status_code=400,
@@ -122,7 +124,8 @@ class MashinLearningService(BaseDetectionService):
                 log_error(f"[ML] {self.detector_type} detection returned no results [operation_id={operation_id}]")
                 return JSONResponse(
                     status_code=500,
-                    content={"detail": f"{self.detector_type} detection failed to return results", "operation_id": operation_id}
+                    content={"detail": f"{self.detector_type} detection failed to return results",
+                             "operation_id": operation_id}
                 )
             entities, redaction_mapping = detection_result
 

@@ -26,11 +26,9 @@ T = TypeVar('T')
 
 
 class SecureTempFileManager:
-
     # Registry of all created temporary files for cleanup tracking
     _temp_files_registry = set()
     _registry_lock = TimeoutLock("temp_files_registry_lock", LockPriority.MEDIUM, 3.0, is_instance_lock=True)
-
 
     @staticmethod
     async def _register_temp_file(file_path: str, retention_seconds: Optional[int] = None) -> None:
@@ -45,7 +43,7 @@ class SecureTempFileManager:
             with SecureTempFileManager._registry_lock.acquire_timeout(timeout=3.0) as acquired:
                 if not acquired:
                     log_warning(f"[SECURITY] Timeout registering temp file {os.path.basename(file_path)}, "
-                               "continuing without registry tracking")
+                                "continuing without registry tracking")
                 else:
                     SecureTempFileManager._temp_files_registry.add(file_path)
         except Exception as e:
@@ -57,10 +55,9 @@ class SecureTempFileManager:
         else:
             retention_manager.register_processed_file(file_path, TEMP_FILE_RETENTION_SECONDS)
 
-
     @staticmethod
     async def create_secure_temp_file_async(suffix: str = ".tmp", content: Optional[bytes] = None,
-                                          prefix: str = "secure_", retention_seconds: Optional[int] = None) -> str:
+                                            prefix: str = "secure_", retention_seconds: Optional[int] = None) -> str:
         """
         Asynchronously create a secure temporary file with optional content and register it for cleanup.
         This is the primary method to use for temporary file creation.
@@ -102,7 +99,6 @@ class SecureTempFileManager:
                 await asyncio.to_thread(SecureTempFileManager.secure_delete_file, temp_file.name)
             SecurityAwareErrorHandler.log_processing_error(e, "secure_temp_file_creation", trace_id=trace_id)
             raise e
-
 
     @staticmethod
     async def create_secure_temp_dir_async(prefix: str = "secure_dir_", retention_seconds: Optional[int] = None) -> str:
