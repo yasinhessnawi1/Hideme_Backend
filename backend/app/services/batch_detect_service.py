@@ -442,7 +442,7 @@ class BatchDetectService(BaseDetectionService):
                     )
 
                 # Replace original text in redaction mapping with sanitized values.
-                # redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name=engine)
+                redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name=engine)
                 # Append the detected entities from this engine.
                 combined_entities.extend(entities)
                 # Merge redaction mapping pages.

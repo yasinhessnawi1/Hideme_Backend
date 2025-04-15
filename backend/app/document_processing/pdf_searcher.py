@@ -301,7 +301,7 @@ class PDFSearcher:
                     }
                     # Append a dictionary of the matching word's bounding box.
                     page_matches.append({
-                        "bbox": bbox
+                        "bbox": bbox,
                     })
             # Return a dictionary with the page number and match results, along with the match count.
             return {"page": page_number, "matches": page_matches}, len(page_matches)
@@ -559,12 +559,14 @@ class PDFSearcher:
             if not bboxes:
                 log_debug(f"Page {page_number}: No bounding boxes found for offsets {s}-{e}")
                 continue
-            # Merge the bounding boxes into one.
-            merged_bbox = TextUtils.merge_bounding_boxes(bboxes)
-            # Append the merged bounding box to the match results.
-            page_matches.append({"bbox": merged_bbox})
+            # Merge the bounding boxes and get the merged data (which includes composite and per-line boxes).
+            merged_data = TextUtils.merge_bounding_boxes(bboxes)
+            # Here, choose the composite bounding box (that covers all lines).
+            final_bbox = merged_data["composite"]
+            # Append the composite bounding box to the match results.
+            page_matches.append({"bbox": final_bbox})
             # Log the merged bounding box result.
-            log_debug(f"Page {page_number}: Merged bounding box for offsets {s}-{e}: {merged_bbox}")
+            log_debug(f"Page {page_number}: Merged composite bounding box for offsets {s}-{e}: {final_bbox}")
         # Return the page result along with the count of matches.
         return {"page": page_number, "matches": page_matches}, len(page_matches)
 
