@@ -13,14 +13,13 @@ import json
 import os
 import shutil
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 
 import torch
 from transformers import AutoConfig
 
 from backend.app.entity_detection.base import BaseEntityDetector
-
 from backend.app.utils.helpers.gliner_helper import GLiNERHelper
 from backend.app.utils.helpers.json_helper import validate_gliner_requested_entities
 from backend.app.utils.helpers.text_utils import TextUtils

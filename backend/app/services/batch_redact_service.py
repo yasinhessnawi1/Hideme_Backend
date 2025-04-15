@@ -16,6 +16,7 @@ from fastapi import UploadFile, BackgroundTasks
 from starlette.responses import JSONResponse, StreamingResponse
 
 from backend.app.document_processing.pdf_redactor import PDFRedactionService
+from backend.app.utils.constant.constant import MAX_FILES_COUNT, DEFAULT_CONTENT_TYPE, CHUNK_SIZE
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_batch_operation
@@ -23,10 +24,7 @@ from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.parallel.core import ParallelProcessingCore
 from backend.app.utils.system_utils.secure_file_utils import SecureTempFileManager
 from backend.app.utils.security.processing_records import record_keeper
-from backend.app.utils.validation.file_validation import read_and_validate_file, sanitize_filename, MAX_FILES_COUNT
-
-CHUNK_SIZE = 64 * 1024  # 64KB for streaming responses
-DEFAULT_CONTENT_TYPE = "application/octet-stream"
+from backend.app.utils.validation.file_validation import read_and_validate_file, sanitize_filename
 
 
 class BatchRedactService:

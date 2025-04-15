@@ -12,11 +12,12 @@ from fastapi import UploadFile
 
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.document_processing.pdf_searcher import PDFSearcher
+from backend.app.utils.constant.constant import MAX_FILES_COUNT
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_batch_operation
 from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.security.processing_records import record_keeper
-from backend.app.utils.validation.file_validation import read_and_validate_file, MAX_FILES_COUNT
+from backend.app.utils.validation.file_validation import read_and_validate_file
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 
 

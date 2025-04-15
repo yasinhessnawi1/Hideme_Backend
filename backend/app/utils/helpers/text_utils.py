@@ -182,106 +182,98 @@ class TextUtils:
     @staticmethod
     def _cap_height(box: Dict[str, Any], max_height: float) -> Dict[str, Any]:
         """
-        Adjust the bottom coordinate of a bounding box if its height exceeds max_height.
+        Limit the height of a bounding box to max_height.
 
         Args:
             box: A bounding box dictionary with keys "x0", "y0", "x1", "y1".
-            max_height: The maximum allowable height.
+            max_height: The maximum allowed height of the merged box.
 
         Returns:
-            The adjusted bounding box dictionary.
+            The bounding box with its height capped if it exceeds max_height.
         """
+        # Compute the height of the box.
         if (box["y1"] - box["y0"]) > max_height:
+            # Adjust the bottom coordinate so the height equals max_height.
             box["y1"] = box["y0"] + max_height
         return box
 
     @staticmethod
     def _merge_group(boxes: List[Dict[str, Any]], max_height: float) -> Dict[str, Any]:
         """
-        Merge a list (group) of bounding boxes into one.
-
-        This helper computes the min x0, y0 and max x1, y1 over the list and then applies the
-        height cap using _cap_height.
+        Merge a list of bounding boxes into one bounding box.
 
         Args:
-            boxes: A list of bounding boxes.
-            max_height: The maximum height to allow for the merged box.
+            boxes: A list of bounding boxes to merge.
+            max_height: The maximum allowed height for the merged box.
 
         Returns:
-            A merged bounding box dictionary.
+            A single bounding box covering all input boxes, with its height capped.
         """
+        # Calculate the smallest x0 and y0 from all boxes.
         merged = {
-            "x0": min(b["x0"] for b in boxes),
-            "y0": min(b["y0"] for b in boxes),
-            "x1": max(b["x1"] for b in boxes),
-            "y1": max(b["y1"] for b in boxes)
+            "x0": min(b["x0"] for b in boxes),  # Left boundary: smallest x0.
+            "y0": min(b["y0"] for b in boxes),  # Top boundary: smallest y0.
+            "x1": max(b["x1"] for b in boxes),  # Right boundary: largest x1.
+            "y1": max(b["y1"] for b in boxes)  # Bottom boundary: largest y1.
         }
+        # Apply height restriction to ensure the merged box doesn't exceed max_height.
         return TextUtils._cap_height(merged, max_height)
 
     @staticmethod
     def merge_bounding_boxes(bboxes: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Merge multiple bounding boxes using a context-aware approach that preserves multi-line information.
+        Merge multiple bounding boxes into a composite box along with per-line boxes.
 
-        This function groups input bounding boxes based on their vertical (y₀) positions. It uses
-        a locally defined threshold (5.0 pixels) to decide whether two boxes should be considered
-        as belonging to the same line. Then, it merges the boxes in each line into a single box.
-
-        The function returns a dictionary with the following keys:
-
-          - "composite": A single bounding box that encompasses all input boxes.
-          - "lines": A list of merged bounding boxes, one per detected line.
-
-        This approach ensures that if an entity is detected across multiple lines, no information
-        is lost—both the overall region and per–line regions are returned. All code using this
-        function will get consistent, centralized behavior.
+        The function uses a vertical threshold of 5.0 pixels to decide whether boxes belong
+        to the same line. It then merges boxes in each line individually and also merges all boxes
+        into a single (composite) box. The maximum allowed height is set to 20 pixels.
 
         Args:
-            bboxes (List[Dict[str, Any]]): A list of bounding boxes.
-                Each bounding box is a dict with keys "x0", "y0", "x1", "y1".
+            bboxes: A list of bounding box dictionaries each with keys "x0", "y0", "x1", "y1".
 
         Returns:
-            Dict[str, Any]: A dictionary with:
-                "composite": Dict[str, Any] – the merged bounding box covering all lines,
-                "lines": List[Dict[str, Any]] – a list of merged bounding boxes (one per line).
+            A dictionary with:
+              - "composite": A merged bounding box covering all input boxes.
+              - "lines": A list of merged bounding boxes for each detected line.
 
         Raises:
-            ValueError: If no bounding boxes are provided.
+            ValueError: If the input list is empty.
         """
+        # Validate that there is at least one bounding box.
         if not bboxes:
             raise ValueError("No bounding boxes to merge.")
 
-        # If there's only one bounding box, return it as both the composite and the only line.
+        # If only one box exists, return it for both composite and per-line.
         if len(bboxes) == 1:
             return {"composite": bboxes[0], "lines": [bboxes[0]]}
 
-        # Local threshold to decide if bounding boxes are on the same line.
+        # Define the threshold for grouping boxes on the same line.
         line_threshold = 5.0
-        # Maximum allowed height.
+        # Define the maximum height allowed for a merged box.
         max_height = 20
 
-        # Sort the bounding boxes by their y0 (the top coordinate).
+        # Sort the input boxes by their top coordinate (y0)
         bboxes.sort(key=lambda b: b["y0"])
 
-        # Group bounding boxes into lines. Consecutive boxes with y0 differences
-        # within the threshold are considered part of the same line.
+        # Group boxes into lines: boxes whose y0 values differ by less than or equal to line_threshold.
         groups: List[List[Dict[str, Any]]] = []
-        current_group = [bboxes[0]]
+        current_group = [bboxes[0]]  # Start the first group with the first box.
         for bbox in bboxes[1:]:
+            # If the current box is nearly on the same line as the previous one...
             if abs(bbox["y0"] - current_group[-1]["y0"]) <= line_threshold:
-                current_group.append(bbox)
+                current_group.append(bbox)  # Add it to the current group.
             else:
-                groups.append(current_group)
-                current_group = [bbox]
-        groups.append(current_group)
+                groups.append(current_group)  # Save the finished group.
+                current_group = [bbox]  # Start a new group.
+        groups.append(current_group)  # Append the final group.
 
-        # Merge each group using the helper function.
+        # Merge each group into a single bounding box.
         merged_lines = [TextUtils._merge_group(group, max_height) for group in groups]
 
-        # Compute the composite bounding box using the same helper for all boxes.
+        # Merge all boxes together to form a composite bounding box.
         composite_box = TextUtils._merge_group(bboxes, max_height)
 
-        # Return both the composite bounding box and the list of per-line merged boxes.
+        # Return a dictionary with both the composite bounding box and per-line merged boxes.
         return {"composite": composite_box, "lines": merged_lines}
 
 
