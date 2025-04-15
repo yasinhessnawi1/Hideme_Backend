@@ -11,7 +11,7 @@ information is leaked and to enable robust distributed tracing and logging.
 import asyncio
 import time
 from abc import ABC
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, Any, List, Tuple, Optional, Union
 
 from backend.app.domain.interfaces import EntityDetector
@@ -317,78 +317,88 @@ class BaseEntityDetector(EntityDetector, ABC):
         """
         Process a single sanitized entity to determine all occurrences in the text.
 
-        This method finds all occurrences of the entity's text in the full text, maps them to bounding boxes,
-        and constructs both the processed entity metadata and sensitive redaction items.
+        This method finds all occurrences of the entity's text within the full text,
+        maps each occurrence to corresponding bounding boxes, and then processes the boxes.
+        It leverages the new merge_bounding_boxes function in TextUtils, which groups boxes
+        into lines and returns both a composite box and per–line boxes. This version always
+        uses the composite bounding box (covering all lines) so that each occurrence generates
+        a single sensitive item.
 
         Args:
             sanitized_entity: A dictionary representing the sanitized entity.
             full_text: The complete text from which to extract the entity.
-            mapping: Mapping from text positions to bounding boxes.
+            mapping: Mapping information from text positions to bounding boxes.
 
         Returns:
             A tuple containing:
-              - local_processed: List of processed entity metadata (with start, end, and score).
-              - local_sensitive: List of sensitive items with bounding box info.
+              - local_processed: A list of processed entity metadata dictionaries.
+              - local_sensitive: A list of sensitive item dictionaries, each with redaction details.
         """
         # Initialize local lists to store processed metadata and sensitive redaction items.
         local_processed = []
         local_sensitive = []
-        # Retrieve the text representation of the entity.
+
+        # Retrieve the text for the entity using the helper method.
         entity_text = self._get_entity_text(sanitized_entity, full_text)
-        # If the entity text could not be determined, log a warning and return empty lists.
         if not entity_text:
             log_warning("[WARNING] Could not determine entity text after sanitization. Skipping entity.")
             return local_processed, local_sensitive
+
         try:
-            # Recompute the character offsets where the entity text occurs in the full text.
+            # Find all occurrences of entity_text in full_text.
             matches = TextUtils.recompute_offsets(full_text, entity_text)
         except Exception as exc:
-            # Log errors during offset recomputation.
             SecurityAwareErrorHandler.log_processing_error(exc, "recompute_offsets")
             return local_processed, local_sensitive
-        # If no matches are found, log a warning and return empty lists.
+
         if not matches:
             log_warning("[WARNING] No matches found for entity '{0}', skipping".format(entity_text))
             return local_processed, local_sensitive
-        # Deduplicate matches based on their (start, end) offsets.
+
+        # Deduplicate matches based on (start, end) offsets.
         unique_matches = {}
         for start_offset, end_offset in matches:
             key = (start_offset, end_offset)
             if key not in unique_matches:
                 unique_matches[key] = (start_offset, end_offset)
-        # Process each unique match to determine its bounding boxes.
+
+        # Process each unique occurrence of the entity.
         for start_offset, end_offset in unique_matches.values():
             try:
-                # Map the character offsets back to bounding boxes using TextUtils.
+                # Map the character offsets back to word bounding boxes.
                 bboxes = TextUtils.map_offsets_to_bboxes(full_text, mapping, (start_offset, end_offset))
             except Exception as exc:
-                # Log errors encountered in mapping offsets to bounding boxes.
                 SecurityAwareErrorHandler.log_processing_error(exc, "map_offsets_to_bboxes")
                 continue
-            # If no bounding boxes are returned, skip this match.
+
+            # Skip this occurrence if no bounding boxes were found.
             if not bboxes:
                 continue
-            # Merge multiple bounding boxes into one if necessary.
-            merged_bbox = TextUtils.merge_bounding_boxes(bboxes)
-            # Build a sensitive item dictionary with redaction details.
+
+            # Use the centralized merge_bounding_boxes which returns both a composite box and per–line boxes.
+            merged_data = TextUtils.merge_bounding_boxes(bboxes)
+            # Always use the composite bounding box (covering all lines).
+            final_bbox = merged_data["composite"]
+
+            # Create a single sensitive item for this occurrence.
             sensitive_item = {
                 "original_text": full_text[start_offset:end_offset],
                 "entity_type": sanitized_entity["entity_type"],
                 "start": start_offset,
                 "end": end_offset,
                 "score": sanitized_entity["score"],
-                "bbox": merged_bbox
+                "bbox": final_bbox
             }
-            # Append the sensitive item to the local sensitive list.
             local_sensitive.append(sensitive_item)
-            # Build the processed entity metadata.
+
+            # Append the processed entity metadata for this occurrence.
             local_processed.append({
                 "entity_type": sanitized_entity["entity_type"],
                 "start": start_offset,
                 "end": end_offset,
                 "score": sanitized_entity["score"]
             })
-        # Return the processed entity metadata and sensitive item list.
+
         return local_processed, local_sensitive
 
     def _update_entity_metrics(self, processed_entities: List[Dict[str, Any]], processing_time: float) -> None:
