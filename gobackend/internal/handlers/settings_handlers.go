@@ -344,3 +344,30 @@ func (h *SettingsHandler) DeleteModelEntity(w http.ResponseWriter, r *http.Reque
 	// Return success
 	utils.NoContent(w)
 }
+
+// DeleteModelEntityByMethodID deletes a model entities by setting ID
+func (h *SettingsHandler) DeleteModelEntityByMethodID(w http.ResponseWriter, r *http.Request) {
+	// Get the user ID from the context
+	userID, ok := auth.GetUserID(r)
+	if !ok {
+		utils.Unauthorized(w, "Authentication required")
+		return
+	}
+
+	// Get the entity ID from the URL
+	methodIDStr := chi.URLParam(r, "methodID")
+	methodID, err := strconv.ParseInt(methodIDStr, 10, 64)
+	if err != nil {
+		utils.BadRequest(w, "Invalid entity ID", nil)
+		return
+	}
+
+	// Delete the entity
+	if err := h.settingsService.DeleteModelEntityByMethodID(r.Context(), userID, methodID); err != nil {
+		utils.ErrorFromAppError(w, utils.ParseError(err))
+		return
+	}
+
+	// Return success
+	utils.NoContent(w)
+}

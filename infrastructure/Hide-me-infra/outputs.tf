@@ -86,10 +86,6 @@ output "app_port" {
   value       = module.compute.app_port
 }
 
-output "assets_bucket_name" {
-  description = "The name of the storage bucket for application assets"
-  value       = module.compute.assets_bucket_name
-}
 
 output "github_ssh_key_secret_id" {
   description = "The ID of the Secret Manager secret containing the GitHub SSH key"

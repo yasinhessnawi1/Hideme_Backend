@@ -54,16 +54,6 @@ output "app_port" {
   value       = var.app_port
 }
 
-output "assets_bucket_name" {
-  description = "The name of the storage bucket for application assets"
-  value       = google_storage_bucket.app_assets.name
-}
-
-output "assets_bucket_url" {
-  description = "The URL of the storage bucket for application assets"
-  value       = google_storage_bucket.app_assets.url
-}
-
 output "github_ssh_key_secret_id" {
   description = "The ID of the Secret Manager secret containing the GitHub SSH key"
   value       = google_secret_manager_secret.github_ssh_key.id

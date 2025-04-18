@@ -106,7 +106,7 @@ resource "google_compute_health_check" "app_health_check" {
 
 # Create a regional managed instance group for high availability
 resource "google_compute_region_instance_group_manager" "app_instance_group" {
-  name                      = "${var.instance_name}-instance-group"
+  name                      = "${var.instance_name}-instance-group-manager"
   project                   = var.project
   region                    = var.region
   base_instance_name        = var.instance_name
@@ -178,49 +178,11 @@ resource "google_compute_region_autoscaler" "app_autoscaler" {
     scale_in_control {
       time_window_sec = 300
       max_scaled_in_replicas {
-        fixed = 2
+        fixed = 1
       }
     }
   }
 }
-
-# Create a Cloud Storage bucket for application assets and backups
-resource "google_storage_bucket" "app_assets" {
-  name          = "hide-me-assets-${var.environment}-${random_id.bucket_suffix.hex}"
-  project       = var.project
-  location      = var.region
-  storage_class = "STANDARD"
-
-  # Enable versioning for recovery
-  versioning {
-    enabled = true
-  }
-
-  # Set lifecycle rules for cost optimization
-  lifecycle_rule {
-    condition {
-      age = 30
-    }
-    action {
-      type          = "SetStorageClass"
-      storage_class = "NEARLINE"
-    }
-  }
-
-  lifecycle_rule {
-    condition {
-      age = 90
-    }
-    action {
-      type          = "SetStorageClass"
-      storage_class = "COLDLINE"
-    }
-  }
-
-  # Enable uniform bucket-level access for security
-  uniform_bucket_level_access = true
-}
-
 # Generate a random suffix for globally unique bucket names
 resource "random_id" "bucket_suffix" {
   byte_length = 4

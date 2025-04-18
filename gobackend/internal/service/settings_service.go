@@ -374,3 +374,24 @@ func (s *SettingsService) DeleteModelEntity(ctx context.Context, userID int64, e
 
 	return nil
 }
+
+func (s *SettingsService) DeleteModelEntityByMethodID(ctx context.Context, userID int64, methodID int64) error {
+	// Get user settings
+	settings, err := s.GetUserSettings(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// Delete the model entities by method ID
+	if err := s.modelEntityRepo.DeleteByMethodID(ctx, settings.ID, methodID); err != nil {
+		return fmt.Errorf("failed to delete model entities by method ID: %w", err)
+	}
+
+	log.Info().
+		Int64("user_id", userID).
+		Int64("method_id", methodID).
+		Msg("Model entities deleted by method ID")
+
+	return nil
+
+}

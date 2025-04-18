@@ -149,6 +149,7 @@ func (s *Server) SetupRoutes() {
 				r.Get("/{methodID}", s.Handlers.SettingsHandler.GetModelEntities)
 				r.Post("/", s.Handlers.SettingsHandler.AddModelEntities)
 				r.Delete("/{entityID}", s.Handlers.SettingsHandler.DeleteModelEntity)
+				r.Delete("/delete_entities_by_method_id/{methodID}", s.Handlers.SettingsHandler.DeleteModelEntityByMethodID)
 			})
 		})
 
@@ -256,7 +257,7 @@ func getAllowedOrigins() []string {
 
 	// Default hardcoded values if environment variable is not set
 	// Include both HTTP and HTTPS for localhost to be safe
-	defaultOrigins := []string{"https://www.hidemeai.com",  "https://hidemeai.com","http://localhost:5173", "https://localhost:5173"}
+	defaultOrigins := []string{"https://www.hidemeai.com", "https://hidemeai.com", "http://localhost:5173", "https://localhost:5173"}
 	log.Info().Strs("allowed_origins", defaultOrigins).Msg("Using default CORS allowed origins")
 	return defaultOrigins
 }
