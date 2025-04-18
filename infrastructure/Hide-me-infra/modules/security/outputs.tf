@@ -28,6 +28,7 @@ output "db_credentials_secret_id" {
   description = "ID of the secret containing database credentials"
   value       = google_secret_manager_secret.db_credentials.id
 }
+/*
 
 output "security_policy_id" {
   description = "ID of the Cloud Armor security policy"
@@ -38,6 +39,8 @@ output "security_policy_name" {
   description = "Name of the Cloud Armor security policy"
   value       = google_compute_security_policy.security_policy.name
 }
+
+ */
 
 output "service_account_email" {
   description = "Email address of the application service account (alias for app_service_account_email)"

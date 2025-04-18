@@ -129,7 +129,10 @@ module "load_balancer" {
   health_check_port    = var.health_check_port
   static_ip_name       = var.static_ip_name
   domain_name          = var.domain_name # Using root domain variable
+  /*
   security_policy_name = module.security.security_policy_name
+
+   */
   depends_on           = [module.vpc, module.compute]
 }
 

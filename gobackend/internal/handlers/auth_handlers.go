@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/go-chi/chi/v5"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
@@ -87,13 +88,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Set the refresh token as an HTTP-only cookie
 	refreshExpiry := h.jwtService.Config.RefreshExpiry
+	secure := r.TLS != nil || !strings.Contains(h.jwtService.Config.Issuer, "localhost")
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
-		SameSite: http.SameSiteStrictMode,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(refreshExpiry.Seconds()),
 		Expires:  time.Now().Add(refreshExpiry),
 	})

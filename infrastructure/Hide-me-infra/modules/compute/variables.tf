@@ -116,7 +116,6 @@ variable "db_password" {
 variable "db_host" {
   description = "Database host address"
   type        = string
-  default     = "10.25.0.2"
 }
 
 variable "db_port" {

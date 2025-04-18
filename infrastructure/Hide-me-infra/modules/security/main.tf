@@ -201,12 +201,13 @@ resource "google_secret_manager_secret_version" "db_credentials_version" {
     database = var.db_name
   })
 }
-
+/*
 # Create a Cloud Armor security policy with enhanced rules
 resource "google_compute_security_policy" "security_policy" {
   name        = "hide-me-security-policy-${var.environment}"
   project     = var.project
   description = "Security policy for Hide Me application"
+
 
   # Default rule (deny all)
   rule {
@@ -304,3 +305,5 @@ resource "google_compute_security_policy" "security_policy" {
     description = "Local File Inclusion protection"
   }
 }
+
+ */

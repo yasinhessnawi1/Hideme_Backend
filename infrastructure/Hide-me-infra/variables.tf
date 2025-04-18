@@ -205,7 +205,6 @@ variable "domain" {
 variable "db_host" {
   description = "Database IP address to associate with the database"
   type        = string
-  default     = "10.25.0.2"
 }
 variable "go_domain" {
   description = "Domain name for the Go application"
