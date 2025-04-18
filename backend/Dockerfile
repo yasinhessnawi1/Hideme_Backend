@@ -34,4 +34,4 @@ COPY . .
 EXPOSE 8000
 
 # Run the FastAPI app via Uvicorn.
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000",  "--timeout-keep-alive", "600", "--limit-concurrency", "100", "--workers", "2"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000",  "--timeout-keep-alive", "600", "--limit-concurrency", "100"]
