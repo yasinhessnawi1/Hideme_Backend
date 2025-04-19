@@ -80,14 +80,6 @@ func TestUserService_GetUserByID(t *testing.T) {
 	}
 }
 
-func TestUserService_UpdateUser(t *testing.T) {
-
-}
-
-func TestUserService_ChangePassword(t *testing.T) {
-
-}
-
 func TestUserService_DeleteUser(t *testing.T) {
 	// Setup
 	userRepo := NewMockUserRepository()
@@ -485,4 +477,12 @@ func TestUserService_InvalidateSession(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for non-existent session")
 	}
+}
+
+func TestUserService_UpdateUser(t *testing.T) {
+
+}
+
+func TestUserService_ChangePassword(t *testing.T) {
+
 }

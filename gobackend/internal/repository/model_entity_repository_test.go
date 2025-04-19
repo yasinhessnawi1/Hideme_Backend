@@ -16,7 +16,7 @@ import (
 )
 
 // setupModelEntityRepositoryTest creates a new test database connection and mock
-func setupModelEntityRepositoryTest(t *testing.T) (*repository.MysqlModelEntityRepository, sqlmock.Sqlmock, func()) {
+func setupModelEntityRepositoryTest(t *testing.T) (*repository.PostgresModelEntityRepository, sqlmock.Sqlmock, func()) {
 	// Create a new SQL mock database
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -25,7 +25,7 @@ func setupModelEntityRepositoryTest(t *testing.T) (*repository.MysqlModelEntityR
 	dbPool := &database.Pool{DB: db}
 
 	// Create a new repository with the mocked database
-	repo := repository.NewModelEntityRepository(dbPool).(*repository.MysqlModelEntityRepository)
+	repo := repository.NewModelEntityRepository(dbPool).(*repository.PostgresModelEntityRepository)
 
 	// Return the repository, mock and a cleanup function
 	return repo, mock, func() {
@@ -45,17 +45,20 @@ func TestModelEntityRepository_Create(t *testing.T) {
 		EntityText: "Credit Card",
 	}
 
+	// Set up for PostgreSQL RETURNING clause
+	rows := sqlmock.NewRows([]string{"model_entity_id"}).AddRow(1)
+
 	// Expected query with placeholders for the arguments
-	mock.ExpectExec("INSERT INTO model_entities").
+	mock.ExpectQuery("INSERT INTO model_entities").
 		WithArgs(entity.SettingID, entity.MethodID, entity.EntityText).
-		WillReturnResult(sqlmock.NewResult(1, 1))
+		WillReturnRows(rows)
 
 	// Execute the method being tested
 	err := repo.Create(context.Background(), entity)
 
 	// Assert the results
 	assert.NoError(t, err)
-	assert.Equal(t, int64(1), entity.ID) // ID should be set from LastInsertId
+	assert.Equal(t, int64(1), entity.ID) // ID should be set from RETURNING clause
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -72,7 +75,7 @@ func TestModelEntityRepository_Create_Error(t *testing.T) {
 	}
 
 	// Mock database error
-	mock.ExpectExec("INSERT INTO model_entities").
+	mock.ExpectQuery("INSERT INTO model_entities").
 		WithArgs(entity.SettingID, entity.MethodID, entity.EntityText).
 		WillReturnError(errors.New("database error"))
 
@@ -107,14 +110,18 @@ func TestModelEntityRepository_CreateBatch(t *testing.T) {
 	// Set up transaction expectations
 	mock.ExpectBegin()
 
-	// Each entity will be inserted
-	mock.ExpectExec("INSERT INTO model_entities").
-		WithArgs(entities[0].SettingID, entities[0].MethodID, entities[0].EntityText).
-		WillReturnResult(sqlmock.NewResult(1, 1))
+	// For PostgreSQL, each entity insertion returns its ID
+	rows1 := sqlmock.NewRows([]string{"model_entity_id"}).AddRow(1)
+	rows2 := sqlmock.NewRows([]string{"model_entity_id"}).AddRow(2)
 
-	mock.ExpectExec("INSERT INTO model_entities").
+	// Each entity will be inserted
+	mock.ExpectQuery("INSERT INTO model_entities").
+		WithArgs(entities[0].SettingID, entities[0].MethodID, entities[0].EntityText).
+		WillReturnRows(rows1)
+
+	mock.ExpectQuery("INSERT INTO model_entities").
 		WithArgs(entities[1].SettingID, entities[1].MethodID, entities[1].EntityText).
-		WillReturnResult(sqlmock.NewResult(2, 1))
+		WillReturnRows(rows2)
 
 	mock.ExpectCommit()
 
@@ -123,7 +130,7 @@ func TestModelEntityRepository_CreateBatch(t *testing.T) {
 
 	// Assert the results
 	assert.NoError(t, err)
-	assert.Equal(t, int64(1), entities[0].ID) // IDs should be set from LastInsertId
+	assert.Equal(t, int64(1), entities[0].ID) // IDs should be set from query results
 	assert.Equal(t, int64(2), entities[1].ID)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -151,12 +158,13 @@ func TestModelEntityRepository_CreateBatch_Error(t *testing.T) {
 	mock.ExpectBegin()
 
 	// First entity inserts successfully
-	mock.ExpectExec("INSERT INTO model_entities").
+	rows1 := sqlmock.NewRows([]string{"model_entity_id"}).AddRow(1)
+	mock.ExpectQuery("INSERT INTO model_entities").
 		WithArgs(entities[0].SettingID, entities[0].MethodID, entities[0].EntityText).
-		WillReturnResult(sqlmock.NewResult(1, 1))
+		WillReturnRows(rows1)
 
 	// Second entity fails
-	mock.ExpectExec("INSERT INTO model_entities").
+	mock.ExpectQuery("INSERT INTO model_entities").
 		WithArgs(entities[1].SettingID, entities[1].MethodID, entities[1].EntityText).
 		WillReturnError(errors.New("database error"))
 
@@ -190,7 +198,7 @@ func TestModelEntityRepository_GetByID(t *testing.T) {
 		AddRow(entity.ID, entity.SettingID, entity.MethodID, entity.EntityText)
 
 	// Expected query with placeholder for the ID
-	mock.ExpectQuery("SELECT model_entity_id, setting_id, method_id, entity_text FROM model_entities WHERE model_entity_id = ?").
+	mock.ExpectQuery("SELECT model_entity_id, setting_id, method_id, entity_text FROM model_entities WHERE model_entity_id = \\$1").
 		WithArgs(id).
 		WillReturnRows(rows)
 
@@ -215,7 +223,7 @@ func TestModelEntityRepository_GetByID_NotFound(t *testing.T) {
 	id := int64(999)
 
 	// Mock database response - empty result
-	mock.ExpectQuery("SELECT model_entity_id, setting_id, method_id, entity_text FROM model_entities WHERE model_entity_id = ?").
+	mock.ExpectQuery("SELECT model_entity_id, setting_id, method_id, entity_text FROM model_entities WHERE model_entity_id = \\$1").
 		WithArgs(id).
 		WillReturnError(sql.ErrNoRows)
 
@@ -229,19 +237,152 @@ func TestModelEntityRepository_GetByID_NotFound(t *testing.T) {
 }
 
 func TestModelEntityRepository_GetBySettingID(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupModelEntityRepositoryTest(t)
+	defer cleanup()
 
+	// Set up test data
+	settingID := int64(100)
+	entities := []*models.ModelEntity{
+		{
+			ID:         1,
+			SettingID:  settingID,
+			MethodID:   5,
+			EntityText: "Credit Card",
+		},
+		{
+			ID:         2,
+			SettingID:  settingID,
+			MethodID:   6,
+			EntityText: "SSN",
+		},
+	}
+
+	// Set up query result
+	rows := sqlmock.NewRows([]string{"model_entity_id", "setting_id", "method_id", "entity_text"})
+	for _, entity := range entities {
+		rows.AddRow(entity.ID, entity.SettingID, entity.MethodID, entity.EntityText)
+	}
+
+	// Expected query with placeholder for the setting ID
+	mock.ExpectQuery("SELECT model_entity_id, setting_id, method_id, entity_text FROM model_entities WHERE setting_id = \\$1 ORDER BY method_id, entity_text").
+		WithArgs(settingID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetBySettingID(context.Background(), settingID)
+
+	// Assert the results
+	assert.NoError(t, err)
+	assert.Len(t, results, 2)
+	assert.Equal(t, entities[0].ID, results[0].ID)
+	assert.Equal(t, entities[1].ID, results[1].ID)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestModelEntityRepository_GetBySettingIDAndMethodID(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupModelEntityRepositoryTest(t)
+	defer cleanup()
 
+	// Set up test data
+	settingID := int64(100)
+	methodID := int64(5)
+	entities := []*models.ModelEntityWithMethod{
+		{
+			ModelEntity: models.ModelEntity{
+				ID:         1,
+				SettingID:  settingID,
+				MethodID:   methodID,
+				EntityText: "Credit Card",
+			},
+			MethodName: "Regex Search",
+		},
+		{
+			ModelEntity: models.ModelEntity{
+				ID:         2,
+				SettingID:  settingID,
+				MethodID:   methodID,
+				EntityText: "SSN",
+			},
+			MethodName: "Regex Search",
+		},
+	}
+
+	// Set up query result
+	rows := sqlmock.NewRows([]string{"model_entity_id", "setting_id", "method_id", "entity_text", "method_name"})
+	for _, entity := range entities {
+		rows.AddRow(entity.ID, entity.SettingID, entity.MethodID, entity.EntityText, entity.MethodName)
+	}
+
+	// Expected query with placeholder for setting ID and method ID
+	mock.ExpectQuery("SELECT me.model_entity_id, me.setting_id, me.method_id, me.entity_text, dm.method_name FROM model_entities me JOIN detection_methods dm ON me.method_id = dm.method_id WHERE me.setting_id = \\$1 AND me.method_id = \\$2 ORDER BY me.entity_text").
+		WithArgs(settingID, methodID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetBySettingIDAndMethodID(context.Background(), settingID, methodID)
+
+	// Assert the results
+	assert.NoError(t, err)
+	assert.Len(t, results, 2)
+	assert.Equal(t, entities[0].ID, results[0].ID)
+	assert.Equal(t, entities[0].MethodName, results[0].MethodName)
+	assert.Equal(t, entities[1].ID, results[1].ID)
+	assert.Equal(t, entities[1].MethodName, results[1].MethodName)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestModelEntityRepository_Update(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupModelEntityRepositoryTest(t)
+	defer cleanup()
 
+	// Set up test data
+	entity := &models.ModelEntity{
+		ID:         1,
+		SettingID:  100,
+		MethodID:   5,
+		EntityText: "Updated Text",
+	}
+
+	// Expected query with placeholders
+	mock.ExpectExec("UPDATE model_entities SET entity_text = \\$1 WHERE model_entity_id = \\$2").
+		WithArgs(entity.EntityText, entity.ID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	// Execute the method being tested
+	err := repo.Update(context.Background(), entity)
+
+	// Assert the results
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestModelEntityRepository_Update_NotFound(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupModelEntityRepositoryTest(t)
+	defer cleanup()
 
+	// Set up test data
+	entity := &models.ModelEntity{
+		ID:         999,
+		SettingID:  100,
+		MethodID:   5,
+		EntityText: "Updated Text",
+	}
+
+	// Expected query with placeholders, but no rows affected
+	mock.ExpectExec("UPDATE model_entities SET entity_text = \\$1 WHERE model_entity_id = \\$2").
+		WithArgs(entity.EntityText, entity.ID).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	// Execute the method being tested
+	err := repo.Update(context.Background(), entity)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestModelEntityRepository_Delete(t *testing.T) {
@@ -253,7 +394,7 @@ func TestModelEntityRepository_Delete(t *testing.T) {
 	id := int64(1)
 
 	// Expected query with placeholder for the ID
-	mock.ExpectExec("DELETE FROM model_entities WHERE model_entity_id = ?").
+	mock.ExpectExec("DELETE FROM model_entities WHERE model_entity_id = \\$1").
 		WithArgs(id).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -274,7 +415,7 @@ func TestModelEntityRepository_Delete_NotFound(t *testing.T) {
 	id := int64(999)
 
 	// Expected query with placeholder for the ID, but no rows affected
-	mock.ExpectExec("DELETE FROM model_entities WHERE model_entity_id = ?").
+	mock.ExpectExec("DELETE FROM model_entities WHERE model_entity_id = \\$1").
 		WithArgs(id).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
@@ -295,7 +436,7 @@ func TestModelEntityRepository_DeleteBySettingID(t *testing.T) {
 	settingID := int64(100)
 
 	// Expected query with placeholder for the setting ID
-	mock.ExpectExec("DELETE FROM model_entities WHERE setting_id = ?").
+	mock.ExpectExec("DELETE FROM model_entities WHERE setting_id = \\$1").
 		WithArgs(settingID).
 		WillReturnResult(sqlmock.NewResult(0, 3)) // 3 entities deleted
 
@@ -308,5 +449,23 @@ func TestModelEntityRepository_DeleteBySettingID(t *testing.T) {
 }
 
 func TestModelEntityRepository_DeleteByMethodID(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupModelEntityRepositoryTest(t)
+	defer cleanup()
 
+	// Set up test data
+	settingID := int64(100)
+	methodID := int64(5)
+
+	// Expected query with placeholders for setting ID and method ID
+	mock.ExpectExec("DELETE FROM model_entities WHERE setting_id = \\$1 AND method_id = \\$2").
+		WithArgs(settingID, methodID).
+		WillReturnResult(sqlmock.NewResult(0, 2)) // 2 entities deleted
+
+	// Execute the method being tested
+	err := repo.DeleteByMethodID(context.Background(), settingID, methodID)
+
+	// Assert the results
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }

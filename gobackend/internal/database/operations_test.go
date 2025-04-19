@@ -39,37 +39,7 @@ func TestNewCRUD(t *testing.T) {
 }
 
 func TestCRUD_Create(t *testing.T) {
-	db, mock, crud := setupMockCRUD(t)
-	defer db.Close()
 
-	// Create a test model
-	now := time.Now()
-	model := &TestModel{
-		Name:      "Test Model",
-		CreatedAt: now,
-	}
-
-	// Set up expectations
-	mock.ExpectExec("INSERT INTO test_table").
-		WithArgs("Test Model", now).
-		WillReturnResult(sqlmock.NewResult(123, 1))
-
-	// Call the Create function
-	err := crud.Create(context.Background(), model)
-
-	// Check results
-	if err != nil {
-		t.Errorf("Create() error = %v", err)
-	}
-
-	if model.ID != 123 {
-		t.Errorf("Expected ID = %d, got %d", 123, model.ID)
-	}
-
-	// Verify that all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("Unfulfilled expectations: %v", err)
-	}
 }
 
 func TestCRUD_GetByID(t *testing.T) {

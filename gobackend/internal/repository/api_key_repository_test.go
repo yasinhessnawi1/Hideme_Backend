@@ -17,7 +17,7 @@ import (
 )
 
 // setupAPIKeyRepositoryTest creates a new test database connection and mock
-func setupAPIKeyRepositoryTest(t *testing.T) (*repository.MysqlAPIKeyRepository, sqlmock.Sqlmock, func()) {
+func setupAPIKeyRepositoryTest(t *testing.T) (*repository.PostgresAPIKeyRepository, sqlmock.Sqlmock, func()) {
 	// Create a new SQL mock database
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -26,7 +26,7 @@ func setupAPIKeyRepositoryTest(t *testing.T) (*repository.MysqlAPIKeyRepository,
 	dbPool := &database.Pool{DB: db}
 
 	// Create a new repository with the mocked database
-	repo := repository.NewAPIKeyRepository(dbPool).(*repository.MysqlAPIKeyRepository)
+	repo := repository.NewAPIKeyRepository(dbPool).(*repository.PostgresAPIKeyRepository)
 
 	// Return the repository, mock and a cleanup function
 	return repo, mock, func() {
@@ -115,7 +115,7 @@ func TestAPIKeyRepository_GetByID(t *testing.T) {
 		AddRow(apiKey.ID, apiKey.UserID, apiKey.APIKeyHash, apiKey.Name, apiKey.ExpiresAt, apiKey.CreatedAt)
 
 	// Expected query with placeholder for the ID
-	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = ?").
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\$1").
 		WithArgs(id).
 		WillReturnRows(rows)
 
@@ -142,7 +142,7 @@ func TestAPIKeyRepository_GetByID_NotFound(t *testing.T) {
 	id := "nonexistent-id"
 
 	// Mock database response - empty result
-	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = ?").
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\$1").
 		WithArgs(id).
 		WillReturnError(sql.ErrNoRows)
 
@@ -182,7 +182,7 @@ func TestAPIKeyRepository_VerifyKey(t *testing.T) {
 		AddRow(apiKey.ID, apiKey.UserID, apiKey.APIKeyHash, apiKey.Name, apiKey.ExpiresAt, apiKey.CreatedAt)
 
 	// Expected query with placeholders for key ID, hash, and time
-	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\? AND api_key_hash = \\? AND expires_at > \\?").
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\$1 AND api_key_hash = \\$2 AND expires_at > \\$3").
 		WithArgs(keyID, keyHash, sqlmock.AnyArg()).
 		WillReturnRows(rows)
 
@@ -210,7 +210,7 @@ func TestAPIKeyRepository_VerifyKey_Expired(t *testing.T) {
 	keyHash := "key-hash"
 
 	// Mock database response - no rows for valid key
-	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\? AND api_key_hash = \\? AND expires_at > \\?").
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\$1 AND api_key_hash = \\$2 AND expires_at > \\$3").
 		WithArgs(keyID, keyHash, sqlmock.AnyArg()).
 		WillReturnError(sql.ErrNoRows)
 
@@ -218,7 +218,7 @@ func TestAPIKeyRepository_VerifyKey_Expired(t *testing.T) {
 	expiredRows := sqlmock.NewRows([]string{"expires_at"}).
 		AddRow(time.Now().Add(-time.Hour)) // Expired time
 
-	mock.ExpectQuery("SELECT expires_at FROM api_keys WHERE key_id = \\?").
+	mock.ExpectQuery("SELECT expires_at FROM api_keys WHERE key_id = \\$1").
 		WithArgs(keyID).
 		WillReturnRows(expiredRows)
 
@@ -240,7 +240,7 @@ func TestAPIKeyRepository_Delete(t *testing.T) {
 	id := "key-id"
 
 	// Expected query with placeholder for the ID
-	mock.ExpectExec("DELETE FROM api_keys WHERE key_id = \\?").
+	mock.ExpectExec("DELETE FROM api_keys WHERE key_id = \\$1").
 		WithArgs(id).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -261,7 +261,7 @@ func TestAPIKeyRepository_Delete_NotFound(t *testing.T) {
 	id := "nonexistent-id"
 
 	// Expected query with placeholder for the ID, but no rows affected
-	mock.ExpectExec("DELETE FROM api_keys WHERE key_id = \\?").
+	mock.ExpectExec("DELETE FROM api_keys WHERE key_id = \\$1").
 		WithArgs(id).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
@@ -282,7 +282,7 @@ func TestAPIKeyRepository_DeleteByUserID(t *testing.T) {
 	userID := int64(100)
 
 	// Expected query with placeholder for the user ID
-	mock.ExpectExec("DELETE FROM api_keys WHERE user_id = \\?").
+	mock.ExpectExec("DELETE FROM api_keys WHERE user_id = \\$1").
 		WithArgs(userID).
 		WillReturnResult(sqlmock.NewResult(0, 3)) // 3 rows affected
 
@@ -300,7 +300,7 @@ func TestAPIKeyRepository_DeleteExpired(t *testing.T) {
 	defer cleanup()
 
 	// Expected query with placeholder for current time
-	mock.ExpectExec("DELETE FROM api_keys WHERE expires_at < \\?").
+	mock.ExpectExec("DELETE FROM api_keys WHERE expires_at < \\$1").
 		WithArgs(sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 5)) // 5 expired keys deleted
 

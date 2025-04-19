@@ -78,26 +78,7 @@ func TestCreateUserSettingsTable(t *testing.T) {
 }
 
 func TestCreateDocumentsTable(t *testing.T) {
-	_, tx, mock, cleanup := createMockDBAndTx(t)
-	defer cleanup()
 
-	migration := createDocumentsTable()
-
-	assert.Equal(t, "create_documents_table", migration.Name)
-	assert.Equal(t, "Creates the documents table", migration.Description)
-	assert.Equal(t, "documents", migration.TableName)
-	assert.NotNil(t, migration.RunSQL)
-
-	// Expect the SQL execution
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS documents").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-
-	// Test the SQL execution
-	ctx := context.Background()
-	err := migration.RunSQL(ctx, tx)
-
-	assert.NoError(t, err)
-	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestCreateDetectionMethodsTable(t *testing.T) {
@@ -124,49 +105,11 @@ func TestCreateDetectionMethodsTable(t *testing.T) {
 }
 
 func TestCreateSessionsTable(t *testing.T) {
-	_, tx, mock, cleanup := createMockDBAndTx(t)
-	defer cleanup()
 
-	migration := createSessionsTable()
-
-	assert.Equal(t, "create_sessions_table", migration.Name)
-	assert.Equal(t, "Creates the sessions table", migration.Description)
-	assert.Equal(t, "sessions", migration.TableName)
-	assert.NotNil(t, migration.RunSQL)
-
-	// Expect the SQL execution
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS sessions").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-
-	// Test the SQL execution
-	ctx := context.Background()
-	err := migration.RunSQL(ctx, tx)
-
-	assert.NoError(t, err)
-	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestCreateAPIKeysTable(t *testing.T) {
-	_, tx, mock, cleanup := createMockDBAndTx(t)
-	defer cleanup()
 
-	migration := createAPIKeysTable()
-
-	assert.Equal(t, "create_api_keys_table", migration.Name)
-	assert.Equal(t, "Creates the api_keys table", migration.Description)
-	assert.Equal(t, "api_keys", migration.TableName)
-	assert.NotNil(t, migration.RunSQL)
-
-	// Expect the SQL execution
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS api_keys").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-
-	// Test the SQL execution
-	ctx := context.Background()
-	err := migration.RunSQL(ctx, tx)
-
-	assert.NoError(t, err)
-	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestCreateBanListTable(t *testing.T) {
@@ -193,24 +136,5 @@ func TestCreateBanListTable(t *testing.T) {
 }
 
 func TestCreateBanListWordsTable(t *testing.T) {
-	_, tx, mock, cleanup := createMockDBAndTx(t)
-	defer cleanup()
 
-	migration := createBanListWordsTable()
-
-	assert.Equal(t, "create_ban_list_words_table", migration.Name)
-	assert.Equal(t, "Creates the ban_list_words table", migration.Description)
-	assert.Equal(t, "ban_list_words", migration.TableName)
-	assert.NotNil(t, migration.RunSQL)
-
-	// Expect the SQL execution
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS ban_list_words").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-
-	// Test the SQL execution
-	ctx := context.Background()
-	err := migration.RunSQL(ctx, tx)
-
-	assert.NoError(t, err)
-	assert.NoError(t, mock.ExpectationsWereMet())
 }

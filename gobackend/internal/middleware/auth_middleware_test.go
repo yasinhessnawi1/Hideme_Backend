@@ -1,25 +1,84 @@
 package middleware_test
 
 /*
+
 import (
 	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/middleware"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// MockJWTValidator is a mock implementation of the JWTValidator interface
-type MockJWTValidator struct {
-	ValidateTokenFunc func(tokenString string, expectedType string) (*auth.CustomClaims, error)
+// MockJWTService is a complete mock implementation of auth.JWTService
+type MockJWTService struct {
+	Config                          *config.JWTSettings
+	ValidateTokenFunc               func(tokenString string, expectedType string) (*auth.CustomClaims, error)
+	ParseTokenWithoutValidationFunc func(tokenString string) (string, error)
+	GenerateAccessTokenFunc         func(userID int64, username, email string) (string, string, error)
+	GenerateRefreshTokenFunc        func(userID int64, username, email string) (string, string, error)
+	ExtractUserIDFromTokenFunc      func(tokenString string) (int64, error)
+	RefreshTokensFunc               func(refreshToken, userID int64, username, email string) (string, string, string, string, error)
+	GetConfigFunc                   func() *config.JWTSettings
 }
 
-func (m *MockJWTValidator) ValidateToken(tokenString string, expectedType string) (*auth.CustomClaims, error) {
+// ValidateToken implements the interface method
+func (m *MockJWTService) ValidateToken(tokenString string, expectedType string) (*auth.CustomClaims, error) {
 	return m.ValidateTokenFunc(tokenString, expectedType)
+}
+
+// ParseTokenWithoutValidation implements the interface method
+func (m *MockJWTService) ParseTokenWithoutValidation(tokenString string) (string, error) {
+	if m.ParseTokenWithoutValidationFunc != nil {
+		return m.ParseTokenWithoutValidationFunc(tokenString)
+	}
+	return "", errors.New("not implemented")
+}
+
+// GenerateAccessToken implements the interface method
+func (m *MockJWTService) GenerateAccessToken(userID int64, username, email string) (string, string, error) {
+	if m.GenerateAccessTokenFunc != nil {
+		return m.GenerateAccessTokenFunc(userID, username, email)
+	}
+	return "", "", errors.New("not implemented")
+}
+
+// GenerateRefreshToken implements the interface method
+func (m *MockJWTService) GenerateRefreshToken(userID int64, username, email string) (string, string, error) {
+	if m.GenerateRefreshTokenFunc != nil {
+		return m.GenerateRefreshTokenFunc(userID, username, email)
+	}
+	return "", "", errors.New("not implemented")
+}
+
+// ExtractUserIDFromToken implements the interface method
+func (m *MockJWTService) ExtractUserIDFromToken(tokenString string) (int64, error) {
+	if m.ExtractUserIDFromTokenFunc != nil {
+		return m.ExtractUserIDFromTokenFunc(tokenString)
+	}
+	return 0, errors.New("not implemented")
+}
+
+// RefreshTokens implements the interface method
+func (m *MockJWTService) RefreshTokens(refreshToken, userID int64, username, email string) (string, string, string, string, error) {
+	if m.RefreshTokensFunc != nil {
+		return m.RefreshTokensFunc(refreshToken, userID, username, email)
+	}
+	return "", "", "", "", errors.New("not implemented")
+}
+
+// GetConfig implements the interface method
+func (m *MockJWTService) GetConfig() *config.JWTSettings {
+	if m.GetConfigFunc != nil {
+		return m.GetConfigFunc()
+	}
+	return m.Config
 }
 
 // MockHandler is a simple http.Handler implementation for testing middleware
@@ -50,18 +109,24 @@ func (m *MockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func TestJWTAuth(t *testing.T) {
 	tests := []struct {
 		name            string
-		setupAuth       func() *MockJWTValidator
+		setupAuth       func() *MockJWTService
 		authHeader      string
 		cookie          *http.Cookie
 		expectedStatus  int
 		shouldCallNext  bool
 		expectedUserID  int64
-		expectedContext map[ContextKey]interface{}
+		expectedContext map[auth.ContextKey]interface{}
 	}{
 		{
 			name: "Valid JWT in Authorization header",
-			setupAuth: func() *MockJWTValidator {
-				return &MockJWTValidator{
+			setupAuth: func() *MockJWTService {
+				return &MockJWTService{
+					Config: &config.JWTSettings{
+						Secret:        "test-secret",
+						Expiry:        15 * time.Minute,
+						RefreshExpiry: 7 * 24 * time.Hour,
+						Issuer:        "test-issuer",
+					},
 					ValidateTokenFunc: func(tokenString string, expectedType string) (*auth.CustomClaims, error) {
 						if tokenString == "valid-token" && expectedType == "access" {
 							return &auth.CustomClaims{
@@ -86,8 +151,14 @@ func TestJWTAuth(t *testing.T) {
 		},
 		{
 			name: "Valid JWT in cookie",
-			setupAuth: func() *MockJWTValidator {
-				return &MockJWTValidator{
+			setupAuth: func() *MockJWTService {
+				return &MockJWTService{
+					Config: &config.JWTSettings{
+						Secret:        "test-secret",
+						Expiry:        15 * time.Minute,
+						RefreshExpiry: 7 * 24 * time.Hour,
+						Issuer:        "test-issuer",
+					},
 					ValidateTokenFunc: func(tokenString string, expectedType string) (*auth.CustomClaims, error) {
 						if tokenString == "valid-token" && expectedType == "access" {
 							return &auth.CustomClaims{
@@ -115,8 +186,9 @@ func TestJWTAuth(t *testing.T) {
 		},
 		{
 			name: "Missing Authorization header",
-			setupAuth: func() *MockJWTValidator {
-				return &MockJWTValidator{
+			setupAuth: func() *MockJWTService {
+				return &MockJWTService{
+					Config: &config.JWTSettings{},
 					ValidateTokenFunc: func(tokenString string, expectedType string) (*auth.CustomClaims, error) {
 						return nil, errors.New("invalid token")
 					},
@@ -127,8 +199,9 @@ func TestJWTAuth(t *testing.T) {
 		},
 		{
 			name: "Invalid Bearer format",
-			setupAuth: func() *MockJWTValidator {
-				return &MockJWTValidator{
+			setupAuth: func() *MockJWTService {
+				return &MockJWTService{
+					Config: &config.JWTSettings{},
 					ValidateTokenFunc: func(tokenString string, expectedType string) (*auth.CustomClaims, error) {
 						return nil, errors.New("invalid token")
 					},
@@ -140,8 +213,9 @@ func TestJWTAuth(t *testing.T) {
 		},
 		{
 			name: "Invalid token",
-			setupAuth: func() *MockJWTValidator {
-				return &MockJWTValidator{
+			setupAuth: func() *MockJWTService {
+				return &MockJWTService{
+					Config: &config.JWTSettings{},
 					ValidateTokenFunc: func(tokenString string, expectedType string) (*auth.CustomClaims, error) {
 						return nil, utils.NewInvalidTokenError()
 					},
@@ -153,8 +227,9 @@ func TestJWTAuth(t *testing.T) {
 		},
 		{
 			name: "Expired token",
-			setupAuth: func() *MockJWTValidator {
-				return &MockJWTValidator{
+			setupAuth: func() *MockJWTService {
+				return &MockJWTService{
+					Config: &config.JWTSettings{},
 					ValidateTokenFunc: func(tokenString string, expectedType string) (*auth.CustomClaims, error) {
 						return nil, utils.NewExpiredTokenError()
 					},
@@ -168,7 +243,7 @@ func TestJWTAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock JWT validator
+			// Create a mock JWT service
 			mockJWT := tt.setupAuth()
 
 			// Create a mock handler to verify it gets called
@@ -556,7 +631,5 @@ func TestSecurityHeaders(t *testing.T) {
 		t.Errorf("Handler returned unexpected body: got %v want %v", body, "Success")
 	}
 }
-
-
 
 */

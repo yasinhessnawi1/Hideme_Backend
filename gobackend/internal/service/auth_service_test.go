@@ -372,7 +372,95 @@ func TestNewAuthService(t *testing.T) {
 }
 
 func TestAuthService_RegisterUser(t *testing.T) {
+	// Setup
+	userRepo := NewMockUserRepository()
+	sessionRepo := NewMockSessionRepository()
+	apiKeyRepo := NewMockAPIKeyRepository()
+	jwtService := auth.NewJWTService(&config.JWTSettings{})
+	passwordCfg := &auth.PasswordConfig{
+		Memory:      16 * 1024, // Use minimal settings for faster tests
+		Iterations:  1,
+		Parallelism: 1,
+		SaltLength:  16,
+		KeyLength:   32,
+	}
+	apiKeyCfg := &config.APIKeySettings{}
 
+	service := NewAuthService(userRepo, sessionRepo, apiKeyRepo, jwtService, passwordCfg, apiKeyCfg)
+
+	// Test case 1: Successful registration
+	reg := &models.UserRegistration{
+		Username:        "newuser",
+		Email:           "newuser@example.com",
+		Password:        "password123",
+		ConfirmPassword: "password123",
+	}
+
+	user, err := service.RegisterUser(context.Background(), reg)
+	if err != nil {
+		t.Errorf("RegisterUser() error = %v", err)
+	}
+
+	if user == nil {
+		t.Fatal("Expected non-nil user")
+	}
+
+	if user.Username != reg.Username {
+		t.Errorf("Expected Username = %s, got %s", reg.Username, user.Username)
+	}
+
+	if user.Email != reg.Email {
+		t.Errorf("Expected Email = %s, got %s", reg.Email, user.Email)
+	}
+
+	// Verify the user was saved to the repository
+	savedUser, err := userRepo.GetByUsername(context.Background(), reg.Username)
+	if err != nil {
+		t.Errorf("Failed to get saved user: %v", err)
+	}
+
+	if savedUser.ID != user.ID {
+		t.Errorf("Expected ID = %d, got %d", user.ID, savedUser.ID)
+	}
+
+	// Test case 2: Password mismatch
+	reg = &models.UserRegistration{
+		Username:        "anotheruser",
+		Email:           "another@example.com",
+		Password:        "password123",
+		ConfirmPassword: "password456", // Different from Password
+	}
+
+	_, err = service.RegisterUser(context.Background(), reg)
+	if err == nil {
+		t.Error("Expected error for password mismatch")
+	}
+
+	// Test case 3: Duplicate username
+	reg = &models.UserRegistration{
+		Username:        "newuser", // Already exists
+		Email:           "different@example.com",
+		Password:        "password123",
+		ConfirmPassword: "password123",
+	}
+
+	_, err = service.RegisterUser(context.Background(), reg)
+	if err == nil {
+		t.Error("Expected error for duplicate username")
+	}
+
+	// Test case 4: Duplicate email
+	reg = &models.UserRegistration{
+		Username:        "uniqueuser",
+		Email:           "newuser@example.com", // Already exists
+		Password:        "password123",
+		ConfirmPassword: "password123",
+	}
+
+	_, err = service.RegisterUser(context.Background(), reg)
+	if err == nil {
+		t.Error("Expected error for duplicate email")
+	}
 }
 
 func TestAuthService_AuthenticateUser(t *testing.T) {
@@ -508,7 +596,81 @@ func TestAuthService_Logout(t *testing.T) {
 }
 
 func TestAuthService_LogoutAll(t *testing.T) {
+	// Setup
+	userRepo := NewMockUserRepository()
+	sessionRepo := NewMockSessionRepository()
+	apiKeyRepo := NewMockAPIKeyRepository()
+	jwtService := auth.NewJWTService(&config.JWTSettings{
+		Secret:        "test-secret",
+		Expiry:        15 * time.Minute,
+		RefreshExpiry: 7 * 24 * time.Hour,
+		Issuer:        "test-issuer",
+	})
+	passwordCfg := auth.DefaultPasswordConfig()
+	apiKeyCfg := &config.APIKeySettings{}
 
+	service := NewAuthService(userRepo, sessionRepo, apiKeyRepo, jwtService, passwordCfg, apiKeyCfg)
+
+	// Create a test user
+	user := &models.User{
+		Username:  "testuser",
+		Email:     "test@example.com",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	err := userRepo.Create(context.Background(), user)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Create multiple sessions for the user
+	for i := 0; i < 3; i++ {
+		_, refreshJWTID, err := jwtService.GenerateRefreshToken(user.ID, user.Username, user.Email)
+		if err != nil {
+			t.Fatalf("Failed to generate refresh token: %v", err)
+		}
+
+		session := models.NewSession(user.ID, refreshJWTID, jwtService.Config.RefreshExpiry)
+		err = sessionRepo.Create(context.Background(), session)
+		if err != nil {
+			t.Fatalf("Failed to create session: %v", err)
+		}
+	}
+
+	// Verify sessions were created
+	sessions, err := sessionRepo.GetActiveByUserID(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("Failed to get active sessions: %v", err)
+	}
+
+	if len(sessions) != 3 {
+		t.Errorf("Expected 3 active sessions, got %d", len(sessions))
+	}
+
+	// Test logout all
+	err = service.LogoutAll(context.Background(), user.ID)
+
+	// Check results
+	if err != nil {
+		t.Errorf("LogoutAll() error = %v", err)
+	}
+
+	// Verify all sessions were deleted
+	sessions, err = sessionRepo.GetActiveByUserID(context.Background(), user.ID)
+	if err != nil {
+		t.Errorf("Failed to get active sessions: %v", err)
+	}
+
+	if len(sessions) != 0 {
+		t.Errorf("Expected 0 active sessions after logout all, got %d", len(sessions))
+	}
+
+	// Test with non-existent user
+	err = service.LogoutAll(context.Background(), int64(999))
+	if err != nil {
+		t.Errorf("LogoutAll() with non-existent user ID should not return error, got: %v", err)
+	}
 }
 
 func TestAuthService_CreateAPIKey(t *testing.T) {

@@ -17,7 +17,7 @@ import (
 )
 
 // setupSessionRepositoryTest creates a new test database connection and mock
-func setupSessionRepositoryTest(t *testing.T) (*repository.MysqlSessionRepository, sqlmock.Sqlmock, func()) {
+func setupSessionRepositoryTest(t *testing.T) (*repository.PostgresSessionRepository, sqlmock.Sqlmock, func()) {
 	// Create a new SQL mock database
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -26,7 +26,7 @@ func setupSessionRepositoryTest(t *testing.T) (*repository.MysqlSessionRepositor
 	dbPool := &database.Pool{DB: db}
 
 	// Create a new repository with the mocked database
-	repo := repository.NewSessionRepository(dbPool).(*repository.MysqlSessionRepository)
+	repo := repository.NewSessionRepository(dbPool).(*repository.PostgresSessionRepository)
 
 	// Return the repository, mock and a cleanup function
 	return repo, mock, func() {
@@ -112,7 +112,7 @@ func TestSessionRepository_GetByID(t *testing.T) {
 		AddRow(session.ID, session.UserID, session.JWTID, session.ExpiresAt, session.CreatedAt)
 
 	// Expected query with placeholder for the ID
-	mock.ExpectQuery("SELECT session_id, user_id, jwt_id, expires_at, created_at FROM sessions WHERE session_id = ?").
+	mock.ExpectQuery("SELECT session_id, user_id, jwt_id, expires_at, created_at FROM sessions WHERE session_id = \\$1").
 		WithArgs(id).
 		WillReturnRows(rows)
 
@@ -138,7 +138,7 @@ func TestSessionRepository_GetByID_NotFound(t *testing.T) {
 	id := "nonexistent-session"
 
 	// Mock database response - empty result
-	mock.ExpectQuery("SELECT session_id, user_id, jwt_id, expires_at, created_at FROM sessions WHERE session_id = ?").
+	mock.ExpectQuery("SELECT session_id, user_id, jwt_id, expires_at, created_at FROM sessions WHERE session_id = \\$1").
 		WithArgs(id).
 		WillReturnError(sql.ErrNoRows)
 
@@ -172,7 +172,7 @@ func TestSessionRepository_GetByJWTID(t *testing.T) {
 		AddRow(session.ID, session.UserID, session.JWTID, session.ExpiresAt, session.CreatedAt)
 
 	// Expected query with placeholder for the JWT ID
-	mock.ExpectQuery("SELECT session_id, user_id, jwt_id, expires_at, created_at FROM sessions WHERE jwt_id = ?").
+	mock.ExpectQuery("SELECT session_id, user_id, jwt_id, expires_at, created_at FROM sessions WHERE jwt_id = \\$1").
 		WithArgs(jwtID).
 		WillReturnRows(rows)
 
@@ -198,7 +198,7 @@ func TestSessionRepository_GetByJWTID_NotFound(t *testing.T) {
 	jwtID := "nonexistent-jwt"
 
 	// Mock database response - empty result
-	mock.ExpectQuery("SELECT session_id, user_id, jwt_id, expires_at, created_at FROM sessions WHERE jwt_id = ?").
+	mock.ExpectQuery("SELECT session_id, user_id, jwt_id, expires_at, created_at FROM sessions WHERE jwt_id = \\$1").
 		WithArgs(jwtID).
 		WillReturnError(sql.ErrNoRows)
 
@@ -212,7 +212,50 @@ func TestSessionRepository_GetByJWTID_NotFound(t *testing.T) {
 }
 
 func TestSessionRepository_GetActiveByUserID(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupSessionRepositoryTest(t)
+	defer cleanup()
 
+	// Set up test data
+	userID := int64(100)
+	now := time.Now()
+	sessions := []*models.Session{
+		{
+			ID:        "session1",
+			UserID:    userID,
+			JWTID:     "jwt1",
+			ExpiresAt: now.Add(24 * time.Hour),
+			CreatedAt: now,
+		},
+		{
+			ID:        "session2",
+			UserID:    userID,
+			JWTID:     "jwt2",
+			ExpiresAt: now.Add(48 * time.Hour),
+			CreatedAt: now.Add(time.Hour),
+		},
+	}
+
+	// Set up query result
+	rows := sqlmock.NewRows([]string{"session_id", "user_id", "jwt_id", "expires_at", "created_at"})
+	for _, session := range sessions {
+		rows.AddRow(session.ID, session.UserID, session.JWTID, session.ExpiresAt, session.CreatedAt)
+	}
+
+	// Expected query with placeholders for user ID and current time
+	mock.ExpectQuery("SELECT session_id, user_id, jwt_id, expires_at, created_at FROM sessions WHERE user_id = \\$1 AND expires_at > \\$2 ORDER BY created_at DESC").
+		WithArgs(userID, sqlmock.AnyArg()).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetActiveByUserID(context.Background(), userID)
+
+	// Assert the results
+	assert.NoError(t, err)
+	assert.Len(t, results, 2)
+	assert.Equal(t, sessions[0].ID, results[0].ID)
+	assert.Equal(t, sessions[1].ID, results[1].ID)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestSessionRepository_Delete(t *testing.T) {
@@ -224,7 +267,7 @@ func TestSessionRepository_Delete(t *testing.T) {
 	id := "session123"
 
 	// Expected query with placeholder for the ID
-	mock.ExpectExec("DELETE FROM sessions WHERE session_id = ?").
+	mock.ExpectExec("DELETE FROM sessions WHERE session_id = \\$1").
 		WithArgs(id).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -245,7 +288,7 @@ func TestSessionRepository_Delete_NotFound(t *testing.T) {
 	id := "nonexistent-session"
 
 	// Expected query with placeholder for the ID, but no rows affected
-	mock.ExpectExec("DELETE FROM sessions WHERE session_id = ?").
+	mock.ExpectExec("DELETE FROM sessions WHERE session_id = \\$1").
 		WithArgs(id).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
@@ -266,7 +309,7 @@ func TestSessionRepository_DeleteByJWTID(t *testing.T) {
 	jwtID := "jwt456"
 
 	// Expected query with placeholder for the JWT ID
-	mock.ExpectExec("DELETE FROM sessions WHERE jwt_id = ?").
+	mock.ExpectExec("DELETE FROM sessions WHERE jwt_id = \\$1").
 		WithArgs(jwtID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -287,7 +330,7 @@ func TestSessionRepository_DeleteByJWTID_NotFound(t *testing.T) {
 	jwtID := "nonexistent-jwt"
 
 	// Expected query with placeholder for the JWT ID, but no rows affected
-	mock.ExpectExec("DELETE FROM sessions WHERE jwt_id = ?").
+	mock.ExpectExec("DELETE FROM sessions WHERE jwt_id = \\$1").
 		WithArgs(jwtID).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
@@ -308,7 +351,7 @@ func TestSessionRepository_DeleteByUserID(t *testing.T) {
 	userID := int64(100)
 
 	// Expected query with placeholder for the user ID
-	mock.ExpectExec("DELETE FROM sessions WHERE user_id = ?").
+	mock.ExpectExec("DELETE FROM sessions WHERE user_id = \\$1").
 		WithArgs(userID).
 		WillReturnResult(sqlmock.NewResult(0, 3)) // 3 sessions deleted
 
@@ -326,7 +369,7 @@ func TestSessionRepository_DeleteExpired(t *testing.T) {
 	defer cleanup()
 
 	// Expected query with placeholder for current time
-	mock.ExpectExec("DELETE FROM sessions WHERE expires_at < ?").
+	mock.ExpectExec("DELETE FROM sessions WHERE expires_at < \\$1").
 		WithArgs(sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 5)) // 5 expired sessions deleted
 
@@ -348,7 +391,7 @@ func TestSessionRepository_IsValidSession(t *testing.T) {
 	jwtID := "jwt456"
 
 	// Set up query result - session exists and is not expired
-	rows := sqlmock.NewRows([]string{"exists"}).AddRow(1)
+	rows := sqlmock.NewRows([]string{"exists"}).AddRow(true)
 
 	// Expected query with placeholders for JWT ID and current time
 	mock.ExpectQuery("SELECT EXISTS").
@@ -373,7 +416,7 @@ func TestSessionRepository_IsValidSession_Invalid(t *testing.T) {
 	jwtID := "invalid-jwt"
 
 	// Set up query result - session doesn't exist or is expired
-	rows := sqlmock.NewRows([]string{"exists"}).AddRow(0)
+	rows := sqlmock.NewRows([]string{"exists"}).AddRow(false)
 
 	// Expected query with placeholders for JWT ID and current time
 	mock.ExpectQuery("SELECT EXISTS").
