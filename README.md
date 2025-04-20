@@ -162,6 +162,99 @@ The API will be available at `http://localhost:8000`.
    ```bash
    docker-compose down
    ```
+## Running Tests & Coverage
+
+We use **pytest** along with **pytest-cov** to validate functionality and measure test coverage for the `backend.app` package.
+
+1. **Install testing dependencies**:
+   ```bash
+   pip install pytest pytest-cov
+   ```
+
+2. **Run tests and generate an HTML coverage report**:
+   ```bash
+   pytest --cov=backend.app --cov-report=html
+   start htmlcov/index.html  # On macOS/Linux: open htmlcov/index.html
+   ```
+
+The generated report (as of **2025-04-20**) shows an overall test coverage of **87%**:
+
+| File                                               | statements | missing | excluded | coverage |
+|----------------------------------------------------|-----------:|--------:|---------:|---------:|
+| backend/app/__init__.py                            |          3 |       0 |        0 |    100% |
+| backend/app/api/__init__.py                        |          0 |       0 |        0 |    100% |
+| backend/app/api/main.py                            |        166 |      29 |        0 |     83% |
+| backend/app/api/routes/__init__.py                 |          7 |       0 |        0 |    100% |
+| backend/app/api/routes/ai_routes.py                |         31 |       5 |        0 |     84% |
+| backend/app/api/routes/batch_routes.py             |        112 |      12 |        0 |     89% |
+| backend/app/api/routes/machine_learning.py         |         82 |       8 |        0 |     90% |
+| backend/app/api/routes/metadata_routes.py          |        126 |       3 |        0 |     98% |
+| backend/app/api/routes/pdf_routes.py               |         36 |       0 |        0 |    100% |
+| backend/app/api/routes/status_routes.py            |        112 |      23 |        0 |     79% |
+| backend/app/configs/__init__.py                    |          0 |       0 |        0 |    100% |
+| backend/app/configs/config_singleton.py            |         31 |       4 |        0 |     87% |
+| backend/app/configs/gdpr_config.py                 |         10 |       0 |        0 |    100% |
+| backend/app/configs/gemini_config.py               |          8 |       0 |        0 |    100% |
+| backend/app/configs/gliner_config.py               |          7 |       0 |        0 |    100% |
+| backend/app/configs/hideme_config.py               |          7 |       0 |        0 |    100% |
+| backend/app/configs/presidio_config.py             |          4 |       0 |        0 |    100% |
+| backend/app/document_processing/__init__.py        |          0 |       0 |        0 |    100% |
+| backend/app/document_processing/detection_updater.py |       126 |      27 |        0 |     79% |
+| backend/app/document_processing/pdf_extractor.py   |        170 |      28 |        0 |     84% |
+| backend/app/document_processing/pdf_redactor.py    |        192 |      33 |        0 |     83% |
+| backend/app/document_processing/pdf_searcher.py    |        196 |      26 |        0 |     87% |
+| backend/app/domain/__init__.py                     |          2 |       0 |        0 |    100% |
+| backend/app/domain/interfaces.py                   |         23 |       6 |        0 |     74% |
+| backend/app/entity_detection/__init__.py           |          8 |       0 |        0 |    100% |
+| backend/app/entity_detection/base.py               |        203 |      21 |        0 |     90% |
+| backend/app/entity_detection/engines.py            |          7 |       0 |        0 |    100% |
+| backend/app/entity_detection/gemini.py             |        163 |      16 |        0 |     90% |
+| backend/app/entity_detection/gliner.py             |         14 |       1 |        0 |     93% |
+| backend/app/entity_detection/glinerbase.py         |        438 |     254 |        0 |     42% |
+| backend/app/entity_detection/hideme.py             |         14 |       1 |        0 |     93% |
+| backend/app/entity_detection/hybrid.py             |        230 |      54 |        0 |     77% |
+| backend/app/entity_detection/presidio.py           |        165 |      50 |        0 |     70% |
+| backend/app/services/__init__.py                   |          4 |       0 |        0 |    100% |
+| backend/app/services/ai_detect_service.py          |         54 |       5 |        0 |     91% |
+| backend/app/services/base_detect_service.py        |        135 |       5 |        0 |     96% |
+| backend/app/services/batch_detect_service.py       |        185 |      17 |        0 |     91% |
+| backend/app/services/batch_redact_service.py       |        187 |       8 |        0 |     96% |
+| backend/app/services/batch_search_service.py       |        137 |      24 |        0 |     82% |
+| backend/app/services/document_extract_service.py   |         56 |       1 |        0 |     98% |
+| backend/app/services/document_redact_service.py    |         65 |       3 |        0 |     95% |
+| backend/app/services/initialization_service.py     |        425 |      46 |        0 |     89% |
+| backend/app/services/machine_learning_service.py   |         61 |       4 |        0 |     93% |
+| backend/app/utils/__init__.py                      |          2 |       0 |        0 |    100% |
+| backend/app/utils/constant/__init__.py             |          0 |       0 |        0 |    100% |
+| backend/app/utils/constant/constant.py             |         36 |       0 |        0 |    100% |
+| backend/app/utils/helpers/__init__.py              |          5 |       0 |        0 |    100% |
+| backend/app/utils/helpers/gemini_helper.py         |        124 |      10 |        0 |     92% |
+| backend/app/utils/helpers/gemini_usage_manager.py  |         73 |       7 |        0 |     90% |
+| backend/app/utils/helpers/gliner_helper.py         |         78 |       0 |        0 |    100% |
+| backend/app/utils/helpers/json_helper.py           |        127 |       7 |        0 |     94% |
+| backend/app/utils/helpers/ml_models_helper.py      |         25 |       0 |        0 |    100% |
+| backend/app/utils/helpers/text_utils.py            |        105 |       0 |        0 |    100% |
+| backend/app/utils/logging/__init__.py              |          0 |       0 |        0 |    100% |
+| backend/app/utils/logging/logger.py                |         32 |       0 |        0 |    100% |
+| backend/app/utils/logging/secure_logging.py        |         15 |       0 |        0 |    100% |
+| backend/app/utils/parallel/__init__.py             |          0 |       0 |        0 |    100% |
+| backend/app/utils/parallel/core.py                 |        205 |       9 |        0 |     96% |
+| backend/app/utils/security/__init__.py             |          0 |       0 |        0 |    100% |
+| backend/app/utils/security/caching_middleware.py   |        239 |      19 |        0 |     92% |
+| backend/app/utils/security/processing_records.py   |        109 |      13 |        0 |     88% |
+| backend/app/utils/security/rate_limiting.py        |        101 |       3 |        0 |     97% |
+| backend/app/utils/security/retention_management.py |        128 |       6 |        0 |     95% |
+| backend/app/utils/system_utils/__init__.py         |          0 |       0 |        0 |    100% |
+| backend/app/utils/system_utils/error_handling.py   |        281 |      30 |        0 |     89% |
+| backend/app/utils/system_utils/memory_management.py|        347 |      50 |        0 |     86% |
+| backend/app/utils/system_utils/secure_file_utils.py|        112 |      14 |        0 |     88% |
+| backend/app/utils/system_utils/synchronization_utils.py |      311 |      20 |        0 |     94% |
+| backend/app/utils/validation/__init__.py           |          0 |       0 |        0 |    100% |
+| backend/app/utils/validation/data_minimization.py  |        129 |       6 |        0 |     95% |
+| backend/app/utils/validation/file_validation.py    |        143 |       5 |        0 |     97% |
+| backend/app/utils/validation/sanitize_utils.py     |         99 |       1 |        0 |     99% |
+| **Total**                                         |       6828 |     914 |        0 |    **87%** |
+
 
 ## Project Structure
 

@@ -4,10 +4,11 @@ import glob
 import pandas as pd
 import numpy as np
 import logging
+
+from spacy.matcher import levenshtein
 from tqdm import tqdm
 from collections import Counter, defaultdict
 import torch
-from textdistance import levenshtein
 import matplotlib.pyplot as plt
 import seaborn as sns
 from concurrent.futures import ThreadPoolExecutor

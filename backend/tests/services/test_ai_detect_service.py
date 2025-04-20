@@ -1,32 +1,7 @@
-import warnings
-import pytest
-
-# 1) Silence all "builtin type … has no __module__ attribute" DeprecationWarnings
-warnings.filterwarnings(
-    "ignore",
-    message=r"builtin type .* has no __module__ attribute",
-    category=DeprecationWarning,
-)
-
-# 2) Silence the "coroutine … was never awaited" RuntimeWarning
-warnings.filterwarnings(
-    "ignore",
-    message=r"coroutine .* was never awaited",
-    category=RuntimeWarning,
-)
-
-# 3) Teach pytest to filter them, too
-pytestmark = [
-    pytest.mark.filterwarnings(
-        "ignore:builtin type .* has no __module__ attribute:DeprecationWarning"
-    ),
-    pytest.mark.filterwarnings(
-        "ignore:coroutine .* was never awaited:RuntimeWarning"
-    ),
-]
-
 import json
+
 import unittest
+
 from unittest.mock import patch, AsyncMock
 
 from fastapi.responses import JSONResponse
@@ -37,6 +12,7 @@ from backend.app.services.ai_detect_service import AIDetectService
 class DummyUploadFile:
     def __init__(self, filename='doc.pdf', content_type='application/pdf'):
         self.filename = filename
+
         self.content_type = content_type
 
 
@@ -65,24 +41,44 @@ class TestAIDetectService(unittest.IsolatedAsyncioTestCase):
     @patch('backend.app.services.ai_detect_service.record_keeper.record_processing')
     @patch('backend.app.services.ai_detect_service.BaseDetectionService.compute_statistics',
            return_value={'entity_density': 50})
-    async def test_detect_success(self, mock_stats, mock_record, mock_response, mock_replace, mock_detect,
-                                  mock_init, mock_minimize, mock_context, mock_log):
+    async def test_detect_success(
+            self,
+            mock_stats,
+            mock_record,
+            mock_response,
+            mock_replace,
+            mock_detect,
+            mock_init,
+            mock_minimize,
+            mock_context,
+            mock_log
+    ):
+        # Test successful detection returns JSONResponse with result "ok"
         file = DummyUploadFile()
+
         mock_context.return_value = ({'pages': [{'words': ['a']}]}, b'binary', ['NAME'], {}, None)
+
         mock_detect.return_value = (([{'text': 'John'}], {'pages': []}), None)
 
         response = await AIDetectService().detect(file, requested_entities='["NAME"]')
 
         self.assertIsInstance(response, JSONResponse)
+
         self.assertEqual(json.loads(response.body.decode()), {"result": "ok"})
+
         mock_record.assert_called_once()
+
         mock_response.assert_called_once()
 
     @patch('backend.app.services.ai_detect_service.BaseDetectionService.prepare_detection_context')
     async def test_detect_preparation_error(self, mock_context):
+        # Test detection returns prep error JSONResponse when preparation fails
         file = DummyUploadFile()
+
         mock_context.return_value = (None, None, None, None, JSONResponse(content={'error': 'prep'}))
+
         response = await AIDetectService().detect(file, requested_entities=None)
+
         self.assertEqual(json.loads(response.body), {'error': 'prep'})
 
     @patch('backend.app.services.ai_detect_service.BaseDetectionService.prepare_detection_context')
@@ -91,10 +87,15 @@ class TestAIDetectService(unittest.IsolatedAsyncioTestCase):
            new_callable=lambda: DummyInitializationService())
     @patch('backend.app.services.ai_detect_service.AIDetectService.perform_detection', new_callable=AsyncMock)
     async def test_detect_detection_error(self, mock_detect, mock_init, mock_min, mock_context):
+        # Test detection returns detection error JSONResponse when perform_detection fails
         file = DummyUploadFile()
+
         mock_context.return_value = ({'pages': []}, b'b', ['EMAIL'], {}, None)
+
         mock_detect.return_value = (None, JSONResponse(content={'error': 'detection'}))
+
         response = await AIDetectService().detect(file, requested_entities=None)
+
         self.assertEqual(json.loads(response.body), {'error': 'detection'})
 
     @patch('backend.app.services.ai_detect_service.BaseDetectionService.prepare_detection_context')
@@ -103,11 +104,17 @@ class TestAIDetectService(unittest.IsolatedAsyncioTestCase):
            new_callable=lambda: DummyInitializationService())
     @patch('backend.app.services.ai_detect_service.AIDetectService.perform_detection', new_callable=AsyncMock)
     async def test_detect_no_results(self, mock_detect, mock_init, mock_min, mock_context):
+        # Test detection returns 500 error if no results returned
         file = DummyUploadFile()
+
         mock_context.return_value = ({'pages': []}, b'b', ['EMAIL'], {}, None)
+
         mock_detect.return_value = (None, None)
+
         response = await AIDetectService().detect(file, requested_entities=None)
+
         self.assertEqual(response.status_code, 500)
+
         self.assertIn('Detection failed to return results', response.body.decode())
 
     @patch('backend.app.services.ai_detect_service.BaseDetectionService.prepare_detection_context')
@@ -135,14 +142,21 @@ class TestAIDetectService(unittest.IsolatedAsyncioTestCase):
             mock_min,
             mock_context
     ):
+        # Test detection returns safe error JSONResponse when statistics computation fails
         file = DummyUploadFile()
+
         mock_context.return_value = ({'pages': [{'words': []}]}, b'b', ['EMAIL'], {}, None)
+
         mock_detect.return_value = (([{'text': 'John'}], {'pages': []}), None)
 
         response = await AIDetectService().detect(file, requested_entities='["EMAIL"]')
 
         self.assertEqual(response.status_code, 500)
+
         content = response.body.decode()
+
         self.assertIn('"error_type":"Exception"', content)
+
         self.assertIn('"error_id":"fake-id"', content)
+
         self.assertIn('"trace_id":"trace_123"', content)
