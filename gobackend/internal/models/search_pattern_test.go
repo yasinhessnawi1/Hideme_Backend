@@ -12,7 +12,7 @@ func TestSearchPattern_TableName(t *testing.T) {
 	pattern := &models.SearchPattern{
 		ID:          1,
 		SettingID:   100,
-		PatternType: models.PatternTypeRegex,
+		PatternType: models.PatternType("regx"),
 		PatternText: "\\d{4}-\\d{4}-\\d{4}-\\d{4}",
 	}
 
@@ -23,14 +23,15 @@ func TestSearchPattern_TableName(t *testing.T) {
 
 func TestPatternTypeConstants(t *testing.T) {
 	// Verify the pattern type constants
-	assert.Equal(t, models.PatternType("Regex"), models.PatternTypeRegex)
-	assert.Equal(t, models.PatternType("Normal"), models.PatternTypeNormal)
+	assert.Equal(t, models.PatternType("ai_search"), models.AISearch)
+	assert.Equal(t, models.PatternType("normal"), models.Normal)
+	assert.Equal(t, models.PatternType("case_sensitive"), models.CaseSensitive)
 }
 
 func TestNewSearchPattern(t *testing.T) {
 	// Test parameters
 	settingID := int64(100)
-	patternType := models.PatternTypeRegex
+	patternType := models.PatternType("regx")
 	patternText := "\\d{3}-\\d{2}-\\d{4}" // SSN pattern
 
 	// Create a new search pattern
@@ -50,8 +51,9 @@ func TestValidatePatternType(t *testing.T) {
 		patternType models.PatternType
 		isValid     bool
 	}{
-		{"Valid Regex", models.PatternTypeRegex, true},
-		{"Valid Normal", models.PatternTypeNormal, true},
+		{"Valid AISearch", models.AISearch, true},
+		{"Valid Normal", models.Normal, true},
+		{"Valid CaseSensitive", models.CaseSensitive, true},
 		{"Invalid Empty", "", false},
 		{"Invalid Type", models.PatternType("Invalid"), false},
 	}
@@ -68,24 +70,24 @@ func TestValidatePatternType(t *testing.T) {
 func TestSearchPatternCreate(t *testing.T) {
 	// Create a test create request
 	createRequest := &models.SearchPatternCreate{
-		PatternType: "Regex",
+		PatternType: "ai_search",
 		PatternText: "\\d{3}-\\d{2}-\\d{4}",
 	}
 
 	// Verify the fields
-	assert.Equal(t, "Regex", createRequest.PatternType)
+	assert.Equal(t, "ai_search", createRequest.PatternType)
 	assert.Equal(t, "\\d{3}-\\d{2}-\\d{4}", createRequest.PatternText)
 }
 
 func TestSearchPatternUpdate(t *testing.T) {
 	// Create a test update request
 	updateRequest := &models.SearchPatternUpdate{
-		PatternType: "Normal",
+		PatternType: "normal",
 		PatternText: "confidential",
 	}
 
 	// Verify the fields
-	assert.Equal(t, "Normal", updateRequest.PatternType)
+	assert.Equal(t, "normal", updateRequest.PatternType)
 	assert.Equal(t, "confidential", updateRequest.PatternText)
 
 	// Test partial update with only pattern text

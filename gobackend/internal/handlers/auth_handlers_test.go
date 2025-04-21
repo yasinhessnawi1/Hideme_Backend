@@ -1,6 +1,5 @@
 package handlers
 
-/*
 import (
 	"bytes"
 	"context"
@@ -1351,5 +1350,3 @@ func TestDeleteAPIKey(t *testing.T) {
 }
 
 // Additional tests for LogoutAll, VerifyToken, and ValidateAPIKey would follow a similar pattern
-
-*/

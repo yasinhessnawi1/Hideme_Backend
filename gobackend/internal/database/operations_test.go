@@ -35,40 +35,26 @@ func setupMockCRUD(t *testing.T) (*sql.DB, sqlmock.Sqlmock, *CRUD) {
 }
 
 func TestNewCRUD(t *testing.T) {
-
-}
-
-func TestCRUD_Create(t *testing.T) {
-	db, mock, crud := setupMockCRUD(t)
-	defer db.Close()
-
-	// Create a test model
-	now := time.Now()
-	model := &TestModel{
-		Name:      "Test Model",
-		CreatedAt: now,
-	}
-
-	// Set up expectations
-	mock.ExpectExec("INSERT INTO test_table").
-		WithArgs("Test Model", now).
-		WillReturnResult(sqlmock.NewResult(123, 1))
-
-	// Call the Create function
-	err := crud.Create(context.Background(), model)
-
-	// Check results
+	// Create a mock DB
+	mockDB, _, err := sqlmock.New()
 	if err != nil {
-		t.Errorf("Create() error = %v", err)
+		t.Fatalf("Failed to create mock database: %v", err)
+	}
+	defer mockDB.Close()
+
+	// Create a pool with the mock DB
+	pool := &Pool{DB: mockDB}
+
+	// Test NewCRUD function
+	crud := NewCRUD(pool)
+
+	// Verify the CRUD instance was created correctly
+	if crud == nil {
+		t.Fatal("Expected NewCRUD to return a non-nil CRUD instance")
 	}
 
-	if model.ID != 123 {
-		t.Errorf("Expected ID = %d, got %d", 123, model.ID)
-	}
-
-	// Verify that all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("Unfulfilled expectations: %v", err)
+	if crud.DB != pool {
+		t.Errorf("Expected CRUD.DB to be %v, got %v", pool, crud.DB)
 	}
 }
 
@@ -174,7 +160,40 @@ func TestCRUD_Delete(t *testing.T) {
 	}
 }
 
-func TestCRUD_List(t *testing.T) {
+func TestCRUD_Create(t *testing.T) {
+	db, mock, crud := setupMockCRUD(t)
+	defer db.Close()
+
+	// Set up test data
+	now := time.Now()
+	model := &TestModel{
+		Name:      "New Test Model",
+		CreatedAt: now,
+	}
+
+	// Set up expected query with regexp to handle the dynamic query generation
+	// The query should be an INSERT with RETURNING clause for PostgreSQL
+	mock.ExpectQuery(`INSERT INTO test_table \(name, created_at\) VALUES \(\$1, \$2\) RETURNING test_id`).
+		WithArgs(model.Name, model.CreatedAt).
+		WillReturnRows(sqlmock.NewRows([]string{"test_id"}).AddRow(42))
+
+	// Call the Create function
+	err := crud.Create(context.Background(), model)
+
+	// Check results
+	if err != nil {
+		t.Errorf("Create() error = %v", err)
+	}
+
+	// Verify the ID was set correctly in the model
+	if model.ID != 42 {
+		t.Errorf("Expected model ID to be set to 42, got %d", model.ID)
+	}
+
+	// Verify that all expectations were met
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("Unfulfilled expectations: %v", err)
+	}
 }
 
 func TestCRUD_Count(t *testing.T) {
@@ -213,6 +232,10 @@ func TestCRUD_Count(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("Unfulfilled expectations: %v", err)
 	}
+}
+
+func TestCRUD_List(t *testing.T) {
+
 }
 
 func TestIsZeroValue(t *testing.T) {

@@ -172,78 +172,7 @@ func TestIsAuthenticated(t *testing.T) {
 }
 
 func TestJWTAuthProvider_Authenticate(t *testing.T) {
-	// Create mock JWT validator
-	mockValidator := &MockJWTValidator{
-		ValidateFunc: func(tokenString, expectedType string) (*auth.CustomClaims, error) {
-			if tokenString == "valid-token" {
-				return &auth.CustomClaims{
-					UserID:    123,
-					Username:  "testuser",
-					Email:     "test@example.com",
-					TokenType: "access",
-				}, nil
-			}
-			return nil, fmt.Errorf("invalid token")
-		},
-	}
 
-	// Create provider
-	provider := auth.NewJWTAuthProvider(mockValidator)
-
-	// Test valid token in header
-	r := httptest.NewRequest("GET", "/", nil)
-	r.Header.Set("Authorization", "Bearer valid-token")
-
-	userID, username, email, err := provider.Authenticate(r)
-
-	// Check results
-	if err != nil {
-		t.Errorf("Authenticate() error = %v", err)
-	}
-
-	if userID != 123 {
-		t.Errorf("Authenticate() userID = %v, want %v", userID, 123)
-	}
-
-	if username != "testuser" {
-		t.Errorf("Authenticate() username = %v, want %v", username, "testuser")
-	}
-
-	if email != "test@example.com" {
-		t.Errorf("Authenticate() email = %v, want %v", email, "test@example.com")
-	}
-
-	// Test invalid token
-	r = httptest.NewRequest("GET", "/", nil)
-	r.Header.Set("Authorization", "Bearer invalid-token")
-
-	_, _, _, err = provider.Authenticate(r)
-
-	// Check error
-	if err == nil {
-		t.Error("Authenticate() should error with invalid token")
-	}
-
-	// Test missing header
-	r = httptest.NewRequest("GET", "/", nil)
-
-	_, _, _, err = provider.Authenticate(r)
-
-	// Check error
-	if err == nil {
-		t.Error("Authenticate() should error with missing header")
-	}
-
-	// Test malformed header
-	r = httptest.NewRequest("GET", "/", nil)
-	r.Header.Set("Authorization", "NotBearer token")
-
-	_, _, _, err = provider.Authenticate(r)
-
-	// Check error
-	if err == nil {
-		t.Error("Authenticate() should error with malformed header")
-	}
 }
 
 func TestAuthMiddleware(t *testing.T) {

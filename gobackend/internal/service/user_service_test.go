@@ -80,14 +80,6 @@ func TestUserService_GetUserByID(t *testing.T) {
 	}
 }
 
-func TestUserService_UpdateUser(t *testing.T) {
-
-}
-
-func TestUserService_ChangePassword(t *testing.T) {
-
-}
-
 func TestUserService_DeleteUser(t *testing.T) {
 	// Setup
 	userRepo := NewMockUserRepository()
@@ -485,4 +477,306 @@ func TestUserService_InvalidateSession(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for non-existent session")
 	}
+}
+
+func TestUserService_UpdateUser(t *testing.T) {
+	// Setup
+	userRepo := NewMockUserRepository()
+	sessionRepo := NewMockSessionRepository()
+	apiKeyRepo := NewMockAPIKeyRepository()
+	passwordCfg := auth.DefaultPasswordConfig()
+
+	service := NewUserService(userRepo, sessionRepo, apiKeyRepo, passwordCfg)
+
+	// Create a test user
+	user := &models.User{
+		Username:     "testuser",
+		Email:        "test@example.com",
+		PasswordHash: "hashed-password",
+		Salt:         "salt-value",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	err := userRepo.Create(context.Background(), user)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Create another user to test duplicate checks
+	otherUser := &models.User{
+		Username:     "otheruser",
+		Email:        "other@example.com",
+		PasswordHash: "hashed-password",
+		Salt:         "salt-value",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	err = userRepo.Create(context.Background(), otherUser)
+	if err != nil {
+		t.Fatalf("Failed to create other user: %v", err)
+	}
+
+	// Test cases
+	tests := []struct {
+		name        string
+		userID      int64
+		update      *models.UserUpdate
+		expectError bool
+		checkFields func(t *testing.T, user *models.User)
+	}{
+		{
+			name:   "Update username",
+			userID: user.ID,
+			update: &models.UserUpdate{
+				Username: "newusername",
+			},
+			expectError: false,
+			checkFields: func(t *testing.T, u *models.User) {
+				if u.Username != "newusername" {
+					t.Errorf("Expected username = %s, got %s", "newusername", u.Username)
+				}
+			},
+		},
+		{
+			name:   "Update email",
+			userID: user.ID,
+			update: &models.UserUpdate{
+				Email: "new@example.com",
+			},
+			expectError: false,
+			checkFields: func(t *testing.T, u *models.User) {
+				if u.Email != "new@example.com" {
+					t.Errorf("Expected email = %s, got %s", "new@example.com", u.Email)
+				}
+			},
+		},
+		{
+			name:   "Update both username and email",
+			userID: user.ID,
+			update: &models.UserUpdate{
+				Username: "newestname",
+				Email:    "newest@example.com",
+			},
+			expectError: false,
+			checkFields: func(t *testing.T, u *models.User) {
+				if u.Username != "newestname" {
+					t.Errorf("Expected username = %s, got %s", "newestname", u.Username)
+				}
+				if u.Email != "newest@example.com" {
+					t.Errorf("Expected email = %s, got %s", "newest@example.com", u.Email)
+				}
+			},
+		},
+		{
+			name:        "Update with no changes",
+			userID:      user.ID,
+			update:      &models.UserUpdate{},
+			expectError: false,
+			checkFields: func(t *testing.T, u *models.User) {
+				// No changes expected
+			},
+		},
+		{
+			name:   "Update with duplicate username",
+			userID: user.ID,
+			update: &models.UserUpdate{
+				Username: "otheruser", // This username is already taken
+			},
+			expectError: true,
+			checkFields: nil,
+		},
+		{
+			name:   "Update with duplicate email",
+			userID: user.ID,
+			update: &models.UserUpdate{
+				Email: "other@example.com", // This email is already taken
+			},
+			expectError: true,
+			checkFields: nil,
+		},
+		{
+			name:   "Update non-existent user",
+			userID: 999, // Non-existent user ID
+			update: &models.UserUpdate{
+				Username: "doesntmatter",
+			},
+			expectError: true,
+			checkFields: nil,
+		},
+	}
+
+	// Run tests
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			updatedUser, err := service.UpdateUser(context.Background(), tt.userID, tt.update)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if updatedUser == nil {
+				t.Fatal("Expected non-nil user")
+				return
+			}
+
+			// Verify fields were updated correctly
+			if tt.checkFields != nil {
+				tt.checkFields(t, updatedUser)
+			}
+
+			// Check that sensitive information is sanitized
+			if updatedUser.PasswordHash != "" {
+				t.Error("Expected empty PasswordHash in sanitized user")
+			}
+
+			if updatedUser.Salt != "" {
+				t.Error("Expected empty Salt in sanitized user")
+			}
+		})
+	}
+}
+
+func TestUserService_ChangePassword(t *testing.T) {
+	// Setup
+	userRepo := NewMockUserRepository()
+	sessionRepo := NewMockSessionRepository()
+	apiKeyRepo := NewMockAPIKeyRepository()
+	passwordCfg := auth.DefaultPasswordConfig()
+
+	service := NewUserService(userRepo, sessionRepo, apiKeyRepo, passwordCfg)
+
+	// Create a test user
+	user := &models.User{
+		Username:     "testuser",
+		Email:        "test@example.com",
+		PasswordHash: "hashed-password",
+		Salt:         "salt-value",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	err := userRepo.Create(context.Background(), user)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Create sessions for the user
+	session1 := &models.Session{
+		ID:        "session1",
+		UserID:    user.ID,
+		JWTID:     "jwt1",
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		CreatedAt: time.Now(),
+	}
+
+	err = sessionRepo.Create(context.Background(), session1)
+	if err != nil {
+		t.Fatalf("Failed to create session: %v", err)
+	}
+
+	session2 := &models.Session{
+		ID:        "session2",
+		UserID:    user.ID,
+		JWTID:     "jwt2",
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		CreatedAt: time.Now(),
+	}
+
+	err = sessionRepo.Create(context.Background(), session2)
+	if err != nil {
+		t.Fatalf("Failed to create session: %v", err)
+	}
+
+	// Test valid password change
+	t.Run("Valid password change", func(t *testing.T) {
+		err := service.ChangePassword(context.Background(), user.ID, "NewValidPassword123!")
+		if err != nil {
+			t.Errorf("ChangePassword() error = %v", err)
+			return
+		}
+
+		// Check that user's password was updated
+		updatedUser, err := userRepo.GetByID(context.Background(), user.ID)
+		if err != nil {
+			t.Errorf("Failed to get updated user: %v", err)
+			return
+		}
+
+		if updatedUser.PasswordHash == "hashed-password" {
+			t.Error("Expected password hash to change")
+		}
+
+		// Verify all sessions were invalidated
+		sessions, err := sessionRepo.GetActiveByUserID(context.Background(), user.ID)
+		if err != nil {
+			t.Errorf("Failed to get active sessions: %v", err)
+			return
+		}
+
+		if len(sessions) != 0 {
+			t.Errorf("Expected 0 active sessions after password change, got %d", len(sessions))
+		}
+	})
+
+	// Reset the user and sessions for next test
+	user.PasswordHash = "hashed-password"
+	user.Salt = "salt-value"
+	err = userRepo.Update(context.Background(), user)
+	if err != nil {
+		t.Fatalf("Failed to reset user: %v", err)
+	}
+
+	// Recreate the sessions
+	err = sessionRepo.Create(context.Background(), session1)
+	if err != nil {
+		t.Fatalf("Failed to recreate session: %v", err)
+	}
+
+	err = sessionRepo.Create(context.Background(), session2)
+	if err != nil {
+		t.Fatalf("Failed to recreate session: %v", err)
+	}
+
+	// Test invalid password
+	t.Run("Invalid password", func(t *testing.T) {
+		err := service.ChangePassword(context.Background(), user.ID, "short")
+		if err == nil {
+			t.Error("Expected error for invalid password, got nil")
+			return
+		}
+
+		// Verify sessions were not invalidated
+		sessions, err := sessionRepo.GetActiveByUserID(context.Background(), user.ID)
+		if err != nil {
+			t.Errorf("Failed to get active sessions: %v", err)
+			return
+		}
+
+		if len(sessions) != 2 {
+			t.Errorf("Expected 2 active sessions, got %d", len(sessions))
+		}
+	})
+
+	// Test non-existent user
+	t.Run("Non-existent user", func(t *testing.T) {
+		err := service.ChangePassword(context.Background(), 999, "ValidPassword123!")
+		if err == nil {
+			t.Error("Expected error for non-existent user, got nil")
+		}
+	})
+
+	// Test with password hashing error
+	t.Run("Password hashing error", func(t *testing.T) {
+
+	})
 }

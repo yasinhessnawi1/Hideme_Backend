@@ -59,6 +59,7 @@ func RequestLogger(requestID, userID, method, path string) zerolog.Logger {
 	return logger.Logger()
 }
 
+/*
 // ContextLogger creates a logger with the given context values
 func ContextLogger(context map[string]interface{}) zerolog.Logger {
 	contextEvent := log.With()
@@ -82,6 +83,8 @@ func ContextLogger(context map[string]interface{}) zerolog.Logger {
 	}
 	return contextEvent.Logger()
 }
+
+*/
 
 // LogHTTPRequest logs an HTTP request with request details
 func LogHTTPRequest(requestID, method, path, remoteAddr, userAgent string, statusCode int, latency time.Duration) {

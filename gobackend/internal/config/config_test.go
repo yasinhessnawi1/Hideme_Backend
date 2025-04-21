@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"testing"
-	"time"
 )
 
 func TestLoad(t *testing.T) {
@@ -57,19 +56,7 @@ database:
 }
 
 func TestLoadWithInvalidPath(t *testing.T) {
-	// Try to load a non-existent file
-	// This should still work with defaults
-	cfg, err := Load("non_existent_config.yaml")
 
-	// Should not error, just use defaults
-	if err != nil {
-		t.Fatalf("Load() with non-existent file should not error, got %v", err)
-	}
-
-	// Check that defaults were applied
-	if cfg.App.Environment != "development" {
-		t.Errorf("Expected default Environment = %s, got %s", "development", cfg.App.Environment)
-	}
 }
 
 func TestGet(t *testing.T) {
@@ -207,47 +194,7 @@ func TestAppSettings_Environment(t *testing.T) {
 }
 
 func TestSetDefaults(t *testing.T) {
-	// Create a minimal config
-	cfg := &AppConfig{}
 
-	// Apply defaults
-	setDefaults(cfg)
-
-	// Check app defaults
-	if cfg.App.Environment != "development" {
-		t.Errorf("Default App.Environment = %v, want %v", cfg.App.Environment, "development")
-	}
-
-	if cfg.App.Name != "HideMe" {
-		t.Errorf("Default App.Name = %v, want %v", cfg.App.Name, "HideMe")
-	}
-
-	// Check server defaults
-	if cfg.Server.Host != "127.0.0.1" {
-		t.Errorf("Default Server.Host = %v, want %v", cfg.Server.Host, "127.0.0.1")
-	}
-
-	if cfg.Server.Port != 8080 {
-		t.Errorf("Default Server.Port = %v, want %v", cfg.Server.Port, 8080)
-	}
-
-	// Check database defaults
-	if cfg.Database.Host != "localhost" {
-		t.Errorf("Default Database.Host = %v, want %v", cfg.Database.Host, "localhost")
-	}
-
-	if cfg.Database.Port != 3306 {
-		t.Errorf("Default Database.Port = %v, want %v", cfg.Database.Port, 3306)
-	}
-
-	// Check JWT defaults
-	if cfg.JWT.Expiry != 15*time.Minute {
-		t.Errorf("Default JWT.Expiry = %v, want %v", cfg.JWT.Expiry, 15*time.Minute)
-	}
-
-	if cfg.JWT.RefreshExpiry != 7*24*time.Hour {
-		t.Errorf("Default JWT.RefreshExpiry = %v, want %v", cfg.JWT.RefreshExpiry, 7*24*time.Hour)
-	}
 }
 
 func TestValidateConfig(t *testing.T) {

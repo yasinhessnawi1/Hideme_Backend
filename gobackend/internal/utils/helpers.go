@@ -34,6 +34,7 @@ func IsDuplicateKeyError(err error) bool {
 	return false
 }
 
+/*
 // IsUniqueViolation checks if an error is a unique violation for a specific constraint
 func IsUniqueViolation(err error, constraintName string) bool {
 	if mysqlErr, ok := err.(*mysql.MySQLError); ok {
@@ -60,6 +61,7 @@ func IsForeignKeyViolation(err error) bool {
 	}
 	return false
 }
+*/
 
 // TruncateString truncates a string to the given max length and adds ellipsis if necessary
 func TruncateString(s string, maxLen int) string {
@@ -156,6 +158,7 @@ func RemoveString(slice []string, str string) []string {
 	return result
 }
 
+/*
 func ParseStringToInt64(s string, defaultValue int64) int64 {
 	if s == "" {
 		return defaultValue
@@ -168,7 +171,9 @@ func ParseStringToInt64(s string, defaultValue int64) int64 {
 	return result
 }
 
+
 // AddJWTMethod returns an extension of the JWT method name that helps with debugging
 func AddJWTMethod(method string) string {
 	return fmt.Sprintf("%s (algorithm)", method)
 }
+*/

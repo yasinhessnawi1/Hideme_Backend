@@ -9,18 +9,17 @@ import (
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
 // AuthHandler handles authentication-related routes
 type AuthHandler struct {
-	authService *service.AuthService
-	jwtService  *auth.JWTService
+	authService AuthServiceInterface
+	jwtService  JWTServiceInterface
 }
 
 // NewAuthHandler creates a new AuthHandler
-func NewAuthHandler(authService *service.AuthService, jwtService *auth.JWTService) *AuthHandler {
+func NewAuthHandler(authService AuthServiceInterface, jwtService JWTServiceInterface) *AuthHandler {
 	if authService == nil {
 		panic("authService cannot be nil")
 	}
@@ -81,14 +80,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ensure we have a valid configuration
-	if h.jwtService.Config == nil {
+	if h.jwtService.GetConfig() == nil {
 		utils.InternalServerError(w, errors.New("JWT configuration not initialized"))
 		return
 	}
 
 	// Set the refresh token as an HTTP-only cookie
-	refreshExpiry := h.jwtService.Config.RefreshExpiry
-	secure := r.TLS != nil || !strings.Contains(h.jwtService.Config.Issuer, "localhost")
+	refreshExpiry := h.jwtService.GetConfig().RefreshExpiry
+	secure := r.TLS != nil || !strings.Contains(h.jwtService.GetConfig().Issuer, "localhost")
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
@@ -105,7 +104,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		"user":         user,
 		"access_token": accessToken,
 		"token_type":   "Bearer",
-		"expires_in":   int(h.jwtService.Config.Expiry.Seconds()),
+		"expires_in":   int(h.jwtService.GetConfig().Expiry.Seconds()),
 	})
 }
 

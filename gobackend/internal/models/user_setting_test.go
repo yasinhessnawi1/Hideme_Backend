@@ -1,182 +1,229 @@
 package models_test
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 )
 
-func TestNewUserSetting(t *testing.T) {
-	// Test parameters
-	userID := int64(123)
-
-	// Create a new user setting
-	setting := models.NewUserSetting(userID)
-
-	// Check values
-	if setting.UserID != userID {
-		t.Errorf("Expected UserID = %d, got %d", userID, setting.UserID)
+func TestUserSetting_TableName(t *testing.T) {
+	// Create a test user setting
+	setting := &models.UserSetting{
+		ID:                     1,
+		UserID:                 100,
+		RemoveImages:           true,
+		Theme:                  "dark",
+		AutoProcessing:         true,
+		DetectionThreshold:     0.75,
+		UseBanlistForDetection: true,
+		CreatedAt:              time.Now(),
+		UpdatedAt:              time.Now(),
 	}
 
-	// RemoveImages should default to false
-	if setting.RemoveImages {
-		t.Error("Expected RemoveImages to default to false")
-	}
-
-	// Check created and updated times
-	if setting.CreatedAt.IsZero() {
-		t.Error("CreatedAt should not be zero")
-	}
-
-	if setting.UpdatedAt.IsZero() {
-		t.Error("UpdatedAt should not be zero")
-	}
-
-	// CreatedAt and UpdatedAt should be the same for a new setting
-	if !setting.CreatedAt.Equal(setting.UpdatedAt) {
-		t.Errorf("CreatedAt (%v) should equal UpdatedAt (%v)", setting.CreatedAt, setting.UpdatedAt)
-	}
+	// Verify the table name
+	tableName := setting.TableName()
+	assert.Equal(t, "user_settings", tableName, "TableName should return the correct database table name")
 }
 
-func TestUserSetting_TableName(t *testing.T) {
-	setting := &models.UserSetting{}
+func TestNewUserSetting(t *testing.T) {
+	// Test parameters
+	userID := int64(100)
 
-	tableName := setting.TableName()
+	// Create a new user setting
+	now := time.Now()
+	setting := models.NewUserSetting(userID)
 
-	if tableName != "user_settings" {
-		t.Errorf("Expected TableName = %s, got %s", "user_settings", tableName)
-	}
+	// Verify default values were set correctly
+	assert.NotNil(t, setting, "NewUserSetting should return a non-nil UserSetting")
+	assert.Equal(t, userID, setting.UserID, "UserSetting should have the provided user ID")
+	assert.Equal(t, true, setting.RemoveImages, "RemoveImages should default to true")
+	assert.Equal(t, "system", setting.Theme, "Theme should default to 'system'")
+	assert.Equal(t, true, setting.AutoProcessing, "AutoProcessing should default to true")
+	assert.Equal(t, 0.50, setting.DetectionThreshold, "DetectionThreshold should default to 0.50")
+	assert.Equal(t, true, setting.UseBanlistForDetection, "UseBanlistForDetection should default to true")
+	assert.WithinDuration(t, now, setting.CreatedAt, time.Second, "CreatedAt should be set to current time")
+	assert.WithinDuration(t, now, setting.UpdatedAt, time.Second, "UpdatedAt should be set to current time")
+	assert.Equal(t, int64(0), setting.ID, "A new UserSetting should have zero ID until saved to database")
 }
 
 func TestUserSetting_Apply(t *testing.T) {
-	// Create a setting with initial values
-	setting := &models.UserSetting{
-		ID:           123,
-		UserID:       456,
-		RemoveImages: false,
-		CreatedAt:    time.Now().Add(-1 * time.Hour), // 1 hour ago
-		UpdatedAt:    time.Now().Add(-1 * time.Hour), // 1 hour ago
-	}
-
-	// Create an update
-	removeImages := true
-	update := &models.UserSettingsUpdate{
-		RemoveImages: &removeImages,
-	}
-
-	// Store the original updated time
-	originalUpdatedAt := setting.UpdatedAt
-
-	// Apply the update after a short delay
-	time.Sleep(10 * time.Millisecond) // Ensure updated time will be different
-	setting.Apply(update)
-
-	// Check that the value was updated
-	if !setting.RemoveImages {
-		t.Error("Expected RemoveImages to be updated to true")
-	}
-
-	// Check that UpdatedAt was updated
-	if !setting.UpdatedAt.After(originalUpdatedAt) {
-		t.Error("Expected UpdatedAt to be updated")
-	}
-
-	// Create an update with nil values (should not change)
-	setting.RemoveImages = true
-	update = &models.UserSettingsUpdate{
-		RemoveImages: nil,
-	}
-
-	// Store the updated time
-	originalUpdatedAt = setting.UpdatedAt
-
-	// Apply the update after a short delay
-	time.Sleep(10 * time.Millisecond)
-	setting.Apply(update)
-
-	// Check that the value was not changed
-	if !setting.RemoveImages {
-		t.Error("Expected RemoveImages to remain true")
-	}
-
-	// Check that UpdatedAt was still updated
-	if !setting.UpdatedAt.After(originalUpdatedAt) {
-		t.Error("Expected UpdatedAt to be updated even with no changes")
-	}
-}
-
-func TestUserSettingsUpdate(t *testing.T) {
-	// Create test cases
+	// Setup test cases
 	testCases := []struct {
 		name           string
 		update         *models.UserSettingsUpdate
-		initialSetting *models.UserSetting
-		expectedImages bool
+		expectedValues map[string]interface{}
 	}{
 		{
-			name: "Update RemoveImages to true",
+			name: "Update RemoveImages",
 			update: &models.UserSettingsUpdate{
-				RemoveImages: boolPtr(true),
+				RemoveImages: getBoolPtr(false),
 			},
-			initialSetting: &models.UserSetting{
-				ID:           1,
-				UserID:       100,
-				RemoveImages: false,
-				CreatedAt:    time.Now().Add(-24 * time.Hour),
-				UpdatedAt:    time.Now().Add(-24 * time.Hour),
+			expectedValues: map[string]interface{}{
+				"RemoveImages": false,
 			},
-			expectedImages: true,
 		},
 		{
-			name: "Update RemoveImages to false",
+			name: "Update Theme",
 			update: &models.UserSettingsUpdate{
-				RemoveImages: boolPtr(false),
+				Theme: getStringPtr("dark"),
 			},
-			initialSetting: &models.UserSetting{
-				ID:           1,
-				UserID:       100,
-				RemoveImages: true,
-				CreatedAt:    time.Now().Add(-24 * time.Hour),
-				UpdatedAt:    time.Now().Add(-24 * time.Hour),
+			expectedValues: map[string]interface{}{
+				"Theme": "dark",
 			},
-			expectedImages: false,
 		},
 		{
-			name: "No RemoveImages update",
+			name: "Update AutoProcessing",
 			update: &models.UserSettingsUpdate{
-				RemoveImages: nil,
+				AutoProcessing: getBoolPtr(false),
 			},
-			initialSetting: &models.UserSetting{
-				ID:           1,
-				UserID:       100,
-				RemoveImages: true,
-				CreatedAt:    time.Now().Add(-24 * time.Hour),
-				UpdatedAt:    time.Now().Add(-24 * time.Hour),
+			expectedValues: map[string]interface{}{
+				"AutoProcessing": false,
 			},
-			expectedImages: true, // Should remain unchanged
+		},
+		{
+			name: "Update DetectionThreshold",
+			update: &models.UserSettingsUpdate{
+				DetectionThreshold: getFloat64Ptr(0.85),
+			},
+			expectedValues: map[string]interface{}{
+				"DetectionThreshold": 0.85,
+			},
+		},
+		{
+			name: "Update UseBanlistForDetection",
+			update: &models.UserSettingsUpdate{
+				UseBanlistForDetection: getBoolPtr(false),
+			},
+			expectedValues: map[string]interface{}{
+				"UseBanlistForDetection": false,
+			},
+		},
+		{
+			name: "Update multiple fields",
+			update: &models.UserSettingsUpdate{
+				RemoveImages:           getBoolPtr(false),
+				Theme:                  getStringPtr("light"),
+				AutoProcessing:         getBoolPtr(false),
+				DetectionThreshold:     getFloat64Ptr(0.90),
+				UseBanlistForDetection: getBoolPtr(false),
+			},
+			expectedValues: map[string]interface{}{
+				"RemoveImages":           false,
+				"Theme":                  "light",
+				"AutoProcessing":         false,
+				"DetectionThreshold":     0.90,
+				"UseBanlistForDetection": false,
+			},
+		},
+		{
+			name:           "Update with nil values (should not change)",
+			update:         &models.UserSettingsUpdate{},
+			expectedValues: map[string]interface{}{}, // No changes expected
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Record initial timestamp
-			initialUpdatedAt := tc.initialSetting.UpdatedAt
+			// Create a base setting with default values
+			setting := models.NewUserSetting(100)
 
 			// Apply the update
-			now := time.Now()
-			tc.initialSetting.Apply(tc.update)
+			setting.Apply(tc.update)
 
-			// Verify the updates were applied correctly
-			assert.Equal(t, tc.expectedImages, tc.initialSetting.RemoveImages, "RemoveImages should be updated correctly")
-			assert.WithinDuration(t, now, tc.initialSetting.UpdatedAt, time.Second, "UpdatedAt should be updated to current time")
-			assert.NotEqual(t, initialUpdatedAt, tc.initialSetting.UpdatedAt, "UpdatedAt timestamp should be changed")
+			// Verify all expected values
+			for field, expected := range tc.expectedValues {
+				switch field {
+				case "RemoveImages":
+					assert.Equal(t, expected, setting.RemoveImages)
+				case "Theme":
+					assert.Equal(t, expected, setting.Theme)
+				case "AutoProcessing":
+					assert.Equal(t, expected, setting.AutoProcessing)
+				case "DetectionThreshold":
+					assert.Equal(t, expected, setting.DetectionThreshold)
+				case "UseBanlistForDetection":
+					assert.Equal(t, expected, setting.UseBanlistForDetection)
+				}
+			}
 		})
 	}
 }
 
-// Helper function to create a pointer to a bool
-func boolPtr(b bool) *bool {
-	return &b
+func TestUserSettingsUpdate(t *testing.T) {
+	// Test creating a UserSettingsUpdate with all fields
+	removeImages := true
+	theme := "dark"
+	autoProcessing := false
+	detectionThreshold := 0.75
+	useBanlistForDetection := false
+
+	update := &models.UserSettingsUpdate{
+		RemoveImages:           &removeImages,
+		Theme:                  &theme,
+		AutoProcessing:         &autoProcessing,
+		DetectionThreshold:     &detectionThreshold,
+		UseBanlistForDetection: &useBanlistForDetection,
+	}
+
+	// Verify all fields are set correctly
+	assert.NotNil(t, update.RemoveImages)
+	assert.Equal(t, removeImages, *update.RemoveImages)
+	assert.NotNil(t, update.Theme)
+	assert.Equal(t, theme, *update.Theme)
+	assert.NotNil(t, update.AutoProcessing)
+	assert.Equal(t, autoProcessing, *update.AutoProcessing)
+	assert.NotNil(t, update.DetectionThreshold)
+	assert.Equal(t, detectionThreshold, *update.DetectionThreshold)
+	assert.NotNil(t, update.UseBanlistForDetection)
+	assert.Equal(t, useBanlistForDetection, *update.UseBanlistForDetection)
+}
+
+func TestUserSetting_EmptyUpdateHandling(t *testing.T) {
+	// Create a setting with specific values
+	setting := &models.UserSetting{
+		ID:                     1,
+		UserID:                 100,
+		RemoveImages:           true,
+		Theme:                  "dark",
+		AutoProcessing:         true,
+		DetectionThreshold:     0.75,
+		UseBanlistForDetection: true,
+		CreatedAt:              time.Now(),
+		UpdatedAt:              time.Now(),
+	}
+
+	// Store original values
+	originalValues := map[string]interface{}{
+		"RemoveImages":           setting.RemoveImages,
+		"Theme":                  setting.Theme,
+		"AutoProcessing":         setting.AutoProcessing,
+		"DetectionThreshold":     setting.DetectionThreshold,
+		"UseBanlistForDetection": setting.UseBanlistForDetection,
+	}
+
+	// Apply an empty update
+	emptyUpdate := &models.UserSettingsUpdate{}
+	setting.Apply(emptyUpdate)
+
+	// Verify nothing changed
+	assert.Equal(t, originalValues["RemoveImages"], setting.RemoveImages)
+	assert.Equal(t, originalValues["Theme"], setting.Theme)
+	assert.Equal(t, originalValues["AutoProcessing"], setting.AutoProcessing)
+	assert.Equal(t, originalValues["DetectionThreshold"], setting.DetectionThreshold)
+	assert.Equal(t, originalValues["UseBanlistForDetection"], setting.UseBanlistForDetection)
+}
+
+// Helper functions for creating pointers
+func getBoolPtr(v bool) *bool {
+	return &v
+}
+
+func getStringPtr(v string) *string {
+	return &v
+}
+
+func getFloat64Ptr(v float64) *float64 {
+	return &v
 }

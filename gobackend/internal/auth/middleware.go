@@ -23,10 +23,14 @@ const (
 	RequestIDContextKey ContextKey = "request_id"
 )
 
+/*
+
 // JWTValidator defines the validation method required for JWT auth
 type JWTValidator interface {
 	ValidateToken(tokenString string, expectedType string) (*CustomClaims, error)
 }
+
+*/
 
 // AuthProvider defines methods for different authentication mechanisms
 type AuthProvider interface {

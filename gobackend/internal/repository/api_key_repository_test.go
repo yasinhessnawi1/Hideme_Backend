@@ -16,8 +16,33 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
 )
 
+// Mock error types for testing specific error paths
+type mockRowsError struct {
+	sqlmock.Rows
+}
+
+func (m *mockRowsError) Err() error {
+	return errors.New("rows error")
+}
+
+type mockRowsCloseError struct {
+	sqlmock.Rows
+}
+
+func (m *mockRowsCloseError) Close() error {
+	return errors.New("close error")
+}
+
+type mockRowsScanError struct {
+	sqlmock.Rows
+}
+
+func (m *mockRowsScanError) Scan(dest ...interface{}) error {
+	return errors.New("scan error")
+}
+
 // setupAPIKeyRepositoryTest creates a new test database connection and mock
-func setupAPIKeyRepositoryTest(t *testing.T) (*repository.MysqlAPIKeyRepository, sqlmock.Sqlmock, func()) {
+func setupAPIKeyRepositoryTest(t *testing.T) (*repository.PostgresAPIKeyRepository, sqlmock.Sqlmock, func()) {
 	// Create a new SQL mock database
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -26,7 +51,7 @@ func setupAPIKeyRepositoryTest(t *testing.T) (*repository.MysqlAPIKeyRepository,
 	dbPool := &database.Pool{DB: db}
 
 	// Create a new repository with the mocked database
-	repo := repository.NewAPIKeyRepository(dbPool).(*repository.MysqlAPIKeyRepository)
+	repo := repository.NewAPIKeyRepository(dbPool).(*repository.PostgresAPIKeyRepository)
 
 	// Return the repository, mock and a cleanup function
 	return repo, mock, func() {
@@ -115,7 +140,7 @@ func TestAPIKeyRepository_GetByID(t *testing.T) {
 		AddRow(apiKey.ID, apiKey.UserID, apiKey.APIKeyHash, apiKey.Name, apiKey.ExpiresAt, apiKey.CreatedAt)
 
 	// Expected query with placeholder for the ID
-	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = ?").
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\$1").
 		WithArgs(id).
 		WillReturnRows(rows)
 
@@ -142,7 +167,7 @@ func TestAPIKeyRepository_GetByID_NotFound(t *testing.T) {
 	id := "nonexistent-id"
 
 	// Mock database response - empty result
-	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = ?").
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\$1").
 		WithArgs(id).
 		WillReturnError(sql.ErrNoRows)
 
@@ -156,7 +181,135 @@ func TestAPIKeyRepository_GetByID_NotFound(t *testing.T) {
 }
 
 func TestAPIKeyRepository_GetByUserID(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupAPIKeyRepositoryTest(t)
+	defer cleanup()
 
+	// Set up test data
+	userID := int64(100)
+	now := time.Now()
+	apiKeys := []*models.APIKey{
+		{
+			ID:         "key-1",
+			UserID:     userID,
+			APIKeyHash: "hash-1",
+			Name:       "Key 1",
+			ExpiresAt:  now.Add(24 * time.Hour),
+			CreatedAt:  now,
+		},
+		{
+			ID:         "key-2",
+			UserID:     userID,
+			APIKeyHash: "hash-2",
+			Name:       "Key 2",
+			ExpiresAt:  now.Add(48 * time.Hour),
+			CreatedAt:  now.Add(time.Hour),
+		},
+	}
+
+	// Set up query result
+	rows := sqlmock.NewRows([]string{"key_id", "user_id", "api_key_hash", "name", "expires_at", "created_at"})
+	for _, apiKey := range apiKeys {
+		rows.AddRow(apiKey.ID, apiKey.UserID, apiKey.APIKeyHash, apiKey.Name, apiKey.ExpiresAt, apiKey.CreatedAt)
+	}
+
+	// Expected query with placeholder for the user ID
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE user_id = \\$1 ORDER BY created_at DESC").
+		WithArgs(userID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetByUserID(context.Background(), userID)
+
+	// Assert the results
+	assert.NoError(t, err)
+	assert.Len(t, results, 2)
+	for i, result := range results {
+		assert.Equal(t, apiKeys[i].ID, result.ID)
+		assert.Equal(t, apiKeys[i].UserID, result.UserID)
+		assert.Equal(t, apiKeys[i].APIKeyHash, result.APIKeyHash)
+		assert.Equal(t, apiKeys[i].Name, result.Name)
+		assert.WithinDuration(t, apiKeys[i].ExpiresAt, result.ExpiresAt, time.Second)
+		assert.WithinDuration(t, apiKeys[i].CreatedAt, result.CreatedAt, time.Second)
+	}
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestAPIKeyRepository_GetByUserID_QueryError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupAPIKeyRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+
+	// Mock database error
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE user_id = \\$1 ORDER BY created_at DESC").
+		WithArgs(userID).
+		WillReturnError(errors.New("query error"))
+
+	// Execute the method being tested
+	results, err := repo.GetByUserID(context.Background(), userID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, results)
+	assert.Contains(t, err.Error(), "failed to get API keys by user ID")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestAPIKeyRepository_GetByUserID_ScanError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupAPIKeyRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+
+	// Set up a row with invalid data that will cause a scan error
+	rows := sqlmock.NewRows([]string{"key_id", "user_id", "api_key_hash", "name", "expires_at", "created_at"}).
+		AddRow("key-1", "invalid-user-id", "hash-1", "Key 1", time.Now(), time.Now()) // invalid type for user_id
+
+	// Expected query
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE user_id = \\$1 ORDER BY created_at DESC").
+		WithArgs(userID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetByUserID(context.Background(), userID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, results)
+	assert.Contains(t, err.Error(), "failed to scan API key row")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestAPIKeyRepository_GetByUserID_RowsErr(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupAPIKeyRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+
+	// Create a custom rows mock that returns an error on Err()
+	rows := sqlmock.NewRows([]string{"key_id", "user_id", "api_key_hash", "name", "expires_at", "created_at"}).
+		AddRow("key-1", userID, "hash-1", "Key 1", time.Now(), time.Now()).
+		RowError(0, errors.New("row error"))
+
+	// Expected query
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE user_id = \\$1 ORDER BY created_at DESC").
+		WithArgs(userID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetByUserID(context.Background(), userID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestAPIKeyRepository_VerifyKey(t *testing.T) {
@@ -182,7 +335,7 @@ func TestAPIKeyRepository_VerifyKey(t *testing.T) {
 		AddRow(apiKey.ID, apiKey.UserID, apiKey.APIKeyHash, apiKey.Name, apiKey.ExpiresAt, apiKey.CreatedAt)
 
 	// Expected query with placeholders for key ID, hash, and time
-	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\? AND api_key_hash = \\? AND expires_at > \\?").
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\$1 AND api_key_hash = \\$2 AND expires_at > \\$3").
 		WithArgs(keyID, keyHash, sqlmock.AnyArg()).
 		WillReturnRows(rows)
 
@@ -210,7 +363,7 @@ func TestAPIKeyRepository_VerifyKey_Expired(t *testing.T) {
 	keyHash := "key-hash"
 
 	// Mock database response - no rows for valid key
-	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\? AND api_key_hash = \\? AND expires_at > \\?").
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\$1 AND api_key_hash = \\$2 AND expires_at > \\$3").
 		WithArgs(keyID, keyHash, sqlmock.AnyArg()).
 		WillReturnError(sql.ErrNoRows)
 
@@ -218,9 +371,37 @@ func TestAPIKeyRepository_VerifyKey_Expired(t *testing.T) {
 	expiredRows := sqlmock.NewRows([]string{"expires_at"}).
 		AddRow(time.Now().Add(-time.Hour)) // Expired time
 
-	mock.ExpectQuery("SELECT expires_at FROM api_keys WHERE key_id = \\?").
+	mock.ExpectQuery("SELECT expires_at FROM api_keys WHERE key_id = \\$1").
 		WithArgs(keyID).
 		WillReturnRows(expiredRows)
+
+	// Execute the method being tested
+	result, err := repo.VerifyKey(context.Background(), keyID, keyHash)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestAPIKeyRepository_VerifyKey_InvalidToken(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupAPIKeyRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	keyID := "key-id"
+	keyHash := "key-hash"
+
+	// Mock database response - no rows for valid key
+	mock.ExpectQuery("SELECT key_id, user_id, api_key_hash, name, expires_at, created_at FROM api_keys WHERE key_id = \\$1 AND api_key_hash = \\$2 AND expires_at > \\$3").
+		WithArgs(keyID, keyHash, sqlmock.AnyArg()).
+		WillReturnError(sql.ErrNoRows)
+
+	// Mock the expiry check query - key doesn't exist
+	mock.ExpectQuery("SELECT expires_at FROM api_keys WHERE key_id = \\$1").
+		WithArgs(keyID).
+		WillReturnError(sql.ErrNoRows)
 
 	// Execute the method being tested
 	result, err := repo.VerifyKey(context.Background(), keyID, keyHash)
@@ -240,7 +421,7 @@ func TestAPIKeyRepository_Delete(t *testing.T) {
 	id := "key-id"
 
 	// Expected query with placeholder for the ID
-	mock.ExpectExec("DELETE FROM api_keys WHERE key_id = \\?").
+	mock.ExpectExec("DELETE FROM api_keys WHERE key_id = \\$1").
 		WithArgs(id).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -261,7 +442,7 @@ func TestAPIKeyRepository_Delete_NotFound(t *testing.T) {
 	id := "nonexistent-id"
 
 	// Expected query with placeholder for the ID, but no rows affected
-	mock.ExpectExec("DELETE FROM api_keys WHERE key_id = \\?").
+	mock.ExpectExec("DELETE FROM api_keys WHERE key_id = \\$1").
 		WithArgs(id).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
@@ -270,6 +451,31 @@ func TestAPIKeyRepository_Delete_NotFound(t *testing.T) {
 
 	// Assert the results
 	assert.Error(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestAPIKeyRepository_Delete_RowsAffectedError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupAPIKeyRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := "key-id"
+
+	// Create a custom result that returns an error for RowsAffected()
+	result := sqlmock.NewErrorResult(errors.New("rows affected error"))
+
+	// Expected query
+	mock.ExpectExec("DELETE FROM api_keys WHERE key_id = \\$1").
+		WithArgs(id).
+		WillReturnResult(result)
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get rows affected")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -282,7 +488,7 @@ func TestAPIKeyRepository_DeleteByUserID(t *testing.T) {
 	userID := int64(100)
 
 	// Expected query with placeholder for the user ID
-	mock.ExpectExec("DELETE FROM api_keys WHERE user_id = \\?").
+	mock.ExpectExec("DELETE FROM api_keys WHERE user_id = \\$1").
 		WithArgs(userID).
 		WillReturnResult(sqlmock.NewResult(0, 3)) // 3 rows affected
 
@@ -294,13 +500,35 @@ func TestAPIKeyRepository_DeleteByUserID(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestAPIKeyRepository_DeleteByUserID_Error(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupAPIKeyRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+
+	// Expected query that returns an error
+	mock.ExpectExec("DELETE FROM api_keys WHERE user_id = \\$1").
+		WithArgs(userID).
+		WillReturnError(errors.New("database error"))
+
+	// Execute the method being tested
+	err := repo.DeleteByUserID(context.Background(), userID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete API keys by user ID")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestAPIKeyRepository_DeleteExpired(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupAPIKeyRepositoryTest(t)
 	defer cleanup()
 
 	// Expected query with placeholder for current time
-	mock.ExpectExec("DELETE FROM api_keys WHERE expires_at < \\?").
+	mock.ExpectExec("DELETE FROM api_keys WHERE expires_at < \\$1").
 		WithArgs(sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 5)) // 5 expired keys deleted
 
@@ -310,5 +538,48 @@ func TestAPIKeyRepository_DeleteExpired(t *testing.T) {
 	// Assert the results
 	assert.NoError(t, err)
 	assert.Equal(t, int64(5), count)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestAPIKeyRepository_DeleteExpired_QueryError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupAPIKeyRepositoryTest(t)
+	defer cleanup()
+
+	// Expected query that returns an error
+	mock.ExpectExec("DELETE FROM api_keys WHERE expires_at < \\$1").
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnError(errors.New("database error"))
+
+	// Execute the method being tested
+	count, err := repo.DeleteExpired(context.Background())
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Equal(t, int64(0), count)
+	assert.Contains(t, err.Error(), "failed to delete expired API keys")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestAPIKeyRepository_DeleteExpired_RowsAffectedError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupAPIKeyRepositoryTest(t)
+	defer cleanup()
+
+	// Create a custom result that returns an error for RowsAffected()
+	result := sqlmock.NewErrorResult(errors.New("rows affected error"))
+
+	// Expected query
+	mock.ExpectExec("DELETE FROM api_keys WHERE expires_at < \\$1").
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnResult(result)
+
+	// Execute the method being tested
+	count, err := repo.DeleteExpired(context.Background())
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Equal(t, int64(0), count)
+	assert.Contains(t, err.Error(), "failed to get rows affected")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

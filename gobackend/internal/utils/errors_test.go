@@ -1,10 +1,12 @@
 package utils_test
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 	"testing"
 
+	"github.com/lib/pq"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
@@ -169,6 +171,155 @@ func TestNewNotFoundError(t *testing.T) {
 	}
 }
 
+func TestNewUnauthorizedError(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+		want    string
+	}{
+		{
+			name:    "With message",
+			message: "Custom unauthorized message",
+			want:    "Custom unauthorized message",
+		},
+		{
+			name:    "Empty message",
+			message: "",
+			want:    "Authentication required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			appErr := utils.NewUnauthorizedError(tt.message)
+
+			if appErr.Error() != tt.want {
+				t.Errorf("NewUnauthorizedError().Error() = %v, want %v", appErr.Error(), tt.want)
+			}
+
+			if appErr.StatusCode != http.StatusUnauthorized {
+				t.Errorf("NewUnauthorizedError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusUnauthorized)
+			}
+
+			if !errors.Is(appErr.Unwrap(), utils.ErrUnauthorized) {
+				t.Errorf("NewUnauthorizedError().Unwrap() = %v, want %v", appErr.Unwrap(), utils.ErrUnauthorized)
+			}
+		})
+	}
+}
+
+func TestNewForbiddenError(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+		want    string
+	}{
+		{
+			name:    "With message",
+			message: "Custom forbidden message",
+			want:    "Custom forbidden message",
+		},
+		{
+			name:    "Empty message",
+			message: "",
+			want:    "You don't have permission to access this resource",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			appErr := utils.NewForbiddenError(tt.message)
+
+			if appErr.Error() != tt.want {
+				t.Errorf("NewForbiddenError().Error() = %v, want %v", appErr.Error(), tt.want)
+			}
+
+			if appErr.StatusCode != http.StatusForbidden {
+				t.Errorf("NewForbiddenError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusForbidden)
+			}
+
+			if !errors.Is(appErr.Unwrap(), utils.ErrForbidden) {
+				t.Errorf("NewForbiddenError().Unwrap() = %v, want %v", appErr.Unwrap(), utils.ErrForbidden)
+			}
+		})
+	}
+}
+
+func TestNewInternalServerError(t *testing.T) {
+	baseErr := errors.New("internal error")
+	appErr := utils.NewInternalServerError(baseErr)
+
+	if appErr.Error() != "An internal server error occurred" {
+		t.Errorf("NewInternalServerError().Error() = %v, want %v", appErr.Error(), "An internal server error occurred")
+	}
+
+	if appErr.StatusCode != http.StatusInternalServerError {
+		t.Errorf("NewInternalServerError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusInternalServerError)
+	}
+
+	if !errors.Is(appErr.Unwrap(), utils.ErrInternalServer) {
+		t.Errorf("NewInternalServerError().Unwrap() = %v, want %v", appErr.Unwrap(), utils.ErrInternalServer)
+	}
+
+	if appErr.DevInfo != baseErr.Error() {
+		t.Errorf("NewInternalServerError().DevInfo = %v, want %v", appErr.DevInfo, baseErr.Error())
+	}
+
+	// Test with nil error
+	nilErr := utils.NewInternalServerError(nil)
+	if nilErr.DevInfo != "" {
+		t.Errorf("NewInternalServerError(nil).DevInfo = %v, want empty string", nilErr.DevInfo)
+	}
+}
+
+func TestNewInvalidCredentialsError(t *testing.T) {
+	appErr := utils.NewInvalidCredentialsError()
+
+	if appErr.Error() != "Invalid username or password" {
+		t.Errorf("NewInvalidCredentialsError().Error() = %v, want %v", appErr.Error(), "Invalid username or password")
+	}
+
+	if appErr.StatusCode != http.StatusUnauthorized {
+		t.Errorf("NewInvalidCredentialsError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusUnauthorized)
+	}
+
+	if !errors.Is(appErr.Unwrap(), utils.ErrInvalidCredentials) {
+		t.Errorf("NewInvalidCredentialsError().Unwrap() = %v, want %v", appErr.Unwrap(), utils.ErrInvalidCredentials)
+	}
+}
+
+func TestNewExpiredTokenError(t *testing.T) {
+	appErr := utils.NewExpiredTokenError()
+
+	if appErr.Error() != "Token has expired" {
+		t.Errorf("NewExpiredTokenError().Error() = %v, want %v", appErr.Error(), "Token has expired")
+	}
+
+	if appErr.StatusCode != http.StatusUnauthorized {
+		t.Errorf("NewExpiredTokenError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusUnauthorized)
+	}
+
+	if !errors.Is(appErr.Unwrap(), utils.ErrExpiredToken) {
+		t.Errorf("NewExpiredTokenError().Unwrap() = %v, want %v", appErr.Unwrap(), utils.ErrExpiredToken)
+	}
+}
+
+func TestNewInvalidTokenError(t *testing.T) {
+	appErr := utils.NewInvalidTokenError()
+
+	if appErr.Error() != "Invalid token" {
+		t.Errorf("NewInvalidTokenError().Error() = %v, want %v", appErr.Error(), "Invalid token")
+	}
+
+	if appErr.StatusCode != http.StatusUnauthorized {
+		t.Errorf("NewInvalidTokenError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusUnauthorized)
+	}
+
+	if !errors.Is(appErr.Unwrap(), utils.ErrInvalidToken) {
+		t.Errorf("NewInvalidTokenError().Unwrap() = %v, want %v", appErr.Unwrap(), utils.ErrInvalidToken)
+	}
+}
+
 func TestIsNotFoundError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -206,6 +357,107 @@ func TestIsNotFoundError(t *testing.T) {
 	}
 }
 
+func TestIsDuplicateError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "Duplicate error",
+			err:  utils.NewDuplicateError("User", "email", "test@example.com"),
+			want: true,
+		},
+		{
+			name: "Basic duplicate error",
+			err:  utils.ErrDuplicate,
+			want: true,
+		},
+		{
+			name: "Other app error",
+			err:  utils.NewBadRequestError("Bad request"),
+			want: false,
+		},
+		{
+			name: "Standard error",
+			err:  errors.New("standard error"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := utils.IsDuplicateError(tt.err); got != tt.want {
+				t.Errorf("IsDuplicateError() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsValidationError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "Validation error",
+			err:  utils.NewValidationError("field", "message"),
+			want: true,
+		},
+		{
+			name: "Basic validation error",
+			err:  utils.ErrValidation,
+			want: true,
+		},
+		{
+			name: "Other app error",
+			err:  utils.NewBadRequestError("Bad request"),
+			want: false,
+		},
+		{
+			name: "Standard error",
+			err:  errors.New("standard error"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := utils.IsValidationError(tt.err); got != tt.want {
+				t.Errorf("IsValidationError() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStatusCode(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+	}{
+		{
+			name:       "AppError",
+			err:        utils.NewValidationError("field", "message"),
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "Standard error",
+			err:        errors.New("standard error"),
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := utils.StatusCode(tt.err); got != tt.wantStatus {
+				t.Errorf("StatusCode() = %v, want %v", got, tt.wantStatus)
+			}
+		})
+	}
+}
+
 func TestParseError(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -238,6 +490,42 @@ func TestParseError(t *testing.T) {
 			wantType:   utils.ErrForbidden,
 		},
 		{
+			name:       "Bad request error",
+			err:        utils.ErrBadRequest,
+			wantStatus: http.StatusBadRequest,
+			wantType:   utils.ErrBadRequest,
+		},
+		{
+			name:       "Validation error",
+			err:        utils.ErrValidation,
+			wantStatus: http.StatusBadRequest,
+			wantType:   utils.ErrValidation,
+		},
+		{
+			name:       "Duplicate error",
+			err:        utils.ErrDuplicate,
+			wantStatus: http.StatusConflict,
+			wantType:   utils.ErrDuplicate,
+		},
+		{
+			name:       "Invalid credentials error",
+			err:        utils.ErrInvalidCredentials,
+			wantStatus: http.StatusUnauthorized,
+			wantType:   utils.ErrInvalidCredentials,
+		},
+		{
+			name:       "Expired token error",
+			err:        utils.ErrExpiredToken,
+			wantStatus: http.StatusUnauthorized,
+			wantType:   utils.ErrExpiredToken,
+		},
+		{
+			name:       "Invalid token error",
+			err:        utils.ErrInvalidToken,
+			wantStatus: http.StatusUnauthorized,
+			wantType:   utils.ErrInvalidToken,
+		},
+		{
 			name:       "Standard error",
 			err:        errors.New("standard error"),
 			wantStatus: http.StatusInternalServerError,
@@ -258,31 +546,124 @@ func TestParseError(t *testing.T) {
 			}
 		})
 	}
+
+	// Test PostgreSQL errors
+	t.Run("PostgreSQL unique violation", func(t *testing.T) {
+		// Create a PostgreSQL unique violation error
+		pqErr := &pq.Error{
+			Code:       "23505",
+			Constraint: "idx_users_email",
+		}
+
+		appErr := utils.ParseError(pqErr)
+		if appErr.StatusCode != http.StatusConflict {
+			t.Errorf("ParseError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusConflict)
+		}
+		if !errors.Is(appErr.Unwrap(), utils.ErrDuplicate) {
+			t.Errorf("ParseError().Unwrap() = %v, want %v", appErr.Unwrap(), utils.ErrDuplicate)
+		}
+	})
+
+	t.Run("PostgreSQL foreign key violation", func(t *testing.T) {
+		// Create a PostgreSQL foreign key violation error
+		pqErr := &pq.Error{
+			Code: "23503",
+		}
+
+		appErr := utils.ParseError(pqErr)
+		if appErr.StatusCode != http.StatusBadRequest {
+			t.Errorf("ParseError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("PostgreSQL not null violation", func(t *testing.T) {
+		// Create a PostgreSQL not null violation error
+		pqErr := &pq.Error{
+			Code:   "23502",
+			Column: "email",
+		}
+
+		appErr := utils.ParseError(pqErr)
+		if appErr.StatusCode != http.StatusBadRequest {
+			t.Errorf("ParseError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusBadRequest)
+		}
+		if appErr.Field != "email" {
+			t.Errorf("ParseError().Field = %v, want %v", appErr.Field, "email")
+		}
+	})
+
+	t.Run("SQL no rows error", func(t *testing.T) {
+		appErr := utils.ParseError(sql.ErrNoRows)
+		if appErr.StatusCode != http.StatusNotFound {
+			t.Errorf("ParseError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusNotFound)
+		}
+	})
+
+	t.Run("Error with 'duplicate key' in message", func(t *testing.T) {
+		err := errors.New("error: duplicate key value violates unique constraint")
+		appErr := utils.ParseError(err)
+		if appErr.StatusCode != http.StatusConflict {
+			t.Errorf("ParseError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusConflict)
+		}
+	})
+
+	t.Run("Error with 'unique constraint' in message", func(t *testing.T) {
+		err := errors.New("error: violates unique constraint")
+		appErr := utils.ParseError(err)
+		if appErr.StatusCode != http.StatusConflict {
+			t.Errorf("ParseError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusConflict)
+		}
+	})
+
+	t.Run("Error with 'not found' in message", func(t *testing.T) {
+		err := errors.New("record not found")
+		appErr := utils.ParseError(err)
+		if appErr.StatusCode != http.StatusNotFound {
+			t.Errorf("ParseError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusNotFound)
+		}
+	})
+
+	t.Run("Error with 'no rows' in message", func(t *testing.T) {
+		err := errors.New("no rows returned")
+		appErr := utils.ParseError(err)
+		if appErr.StatusCode != http.StatusNotFound {
+			t.Errorf("ParseError().StatusCode = %v, want %v", appErr.StatusCode, http.StatusNotFound)
+		}
+	})
 }
 
-func TestStatusCode(t *testing.T) {
-	tests := []struct {
-		name       string
-		err        error
-		wantStatus int
-	}{
-		{
-			name:       "AppError",
-			err:        utils.NewValidationError("field", "message"),
-			wantStatus: http.StatusBadRequest,
-		},
-		{
-			name:       "Standard error",
-			err:        errors.New("standard error"),
-			wantStatus: http.StatusInternalServerError,
-		},
+func TestNewValidationErrorWithDetails(t *testing.T) {
+	details := map[string]string{
+		"username": "Username is required",
+		"email":    "Email must be valid",
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := utils.StatusCode(tt.err); got != tt.wantStatus {
-				t.Errorf("StatusCode() = %v, want %v", got, tt.wantStatus)
-			}
-		})
+	appErr := utils.NewValidationErrorWithDetails("Multiple validation errors", details)
+
+	if appErr.Error() != "Multiple validation errors" {
+		t.Errorf("NewValidationErrorWithDetails().Error() = %v, want %v", appErr.Error(), "Multiple validation errors")
+	}
+
+	if appErr.StatusCode != http.StatusBadRequest {
+		t.Errorf("NewValidationErrorWithDetails().StatusCode = %v, want %v", appErr.StatusCode, http.StatusBadRequest)
+	}
+
+	if !errors.Is(appErr.Unwrap(), utils.ErrValidation) {
+		t.Errorf("NewValidationErrorWithDetails().Unwrap() = %v, want %v", appErr.Unwrap(), utils.ErrValidation)
+	}
+
+	// Check that details were converted correctly
+	if appErr.Details == nil {
+		t.Errorf("NewValidationErrorWithDetails().Details is nil")
+	} else {
+		usernameMsg, ok := appErr.Details["username"]
+		if !ok || usernameMsg != "Username is required" {
+			t.Errorf("Details['username'] = %v, want %v", usernameMsg, "Username is required")
+		}
+
+		emailMsg, ok := appErr.Details["email"]
+		if !ok || emailMsg != "Email must be valid" {
+			t.Errorf("Details['email'] = %v, want %v", emailMsg, "Email must be valid")
+		}
 	}
 }
