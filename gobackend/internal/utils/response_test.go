@@ -2,6 +2,7 @@ package utils_test
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -51,29 +52,22 @@ func TestJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a response recorder
 			rr := httptest.NewRecorder()
-
-			// Call the function being tested
 			utils.JSON(rr, tt.statusCode, tt.data)
 
-			// Check status code
 			if status := rr.Code; status != tt.wantStatus {
 				t.Errorf("handler returned wrong status code: got %v want %v", status, tt.wantStatus)
 			}
 
-			// Check content type
 			if ctype := rr.Header().Get("Content-Type"); ctype != "application/json" {
 				t.Errorf("handler returned wrong content type: got %v want application/json", ctype)
 			}
 
-			// Parse the response body
 			var response map[string]interface{}
 			if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
 				t.Fatalf("Could not parse response body: %v", err)
 			}
 
-			// Check the body content
 			if !reflect.DeepEqual(response, tt.wantBody) {
 				t.Errorf("handler returned unexpected body: got %v want %v", response, tt.wantBody)
 			}
@@ -128,29 +122,22 @@ func TestError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a response recorder
 			rr := httptest.NewRecorder()
-
-			// Call the function being tested
 			utils.Error(rr, tt.statusCode, tt.code, tt.message, tt.details)
 
-			// Check status code
 			if status := rr.Code; status != tt.wantStatus {
 				t.Errorf("handler returned wrong status code: got %v want %v", status, tt.wantStatus)
 			}
 
-			// Check content type
 			if ctype := rr.Header().Get("Content-Type"); ctype != "application/json" {
 				t.Errorf("handler returned wrong content type: got %v want application/json", ctype)
 			}
 
-			// Parse the response body
 			var response map[string]interface{}
 			if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
 				t.Fatalf("Could not parse response body: %v", err)
 			}
 
-			// Check the body content
 			if !reflect.DeepEqual(response, tt.wantBody) {
 				t.Errorf("handler returned unexpected body: got %v want %v", response, tt.wantBody)
 			}
@@ -158,39 +145,454 @@ func TestError(t *testing.T) {
 	}
 }
 
-func TestPaginated(t *testing.T) {
-	data := []string{"item1", "item2", "item3"}
-
-	// Create a response recorder
-	rr := httptest.NewRecorder()
-
-	// Call the function being tested
-	utils.Paginated(rr, http.StatusOK, data, 2, 10, 25)
-
-	// Check status code
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
+func TestErrorFromAppError(t *testing.T) {
+	tests := []struct {
+		name     string
+		appError *utils.AppError
+		wantCode string
+	}{
+		{
+			name: "NotFound error",
+			appError: &utils.AppError{
+				Err:        utils.ErrNotFound,
+				StatusCode: http.StatusNotFound,
+				Message:    "Resource not found",
+			},
+			wantCode: "not_found",
+		},
+		{
+			name: "BadRequest error",
+			appError: &utils.AppError{
+				Err:        utils.ErrBadRequest,
+				StatusCode: http.StatusBadRequest,
+				Message:    "Invalid input",
+			},
+			wantCode: "bad_request",
+		},
+		{
+			name: "Unauthorized error",
+			appError: &utils.AppError{
+				Err:        utils.ErrUnauthorized,
+				StatusCode: http.StatusUnauthorized,
+				Message:    "Not authorized",
+			},
+			wantCode: "unauthorized",
+		},
+		{
+			name: "Forbidden error",
+			appError: &utils.AppError{
+				Err:        utils.ErrForbidden,
+				StatusCode: http.StatusForbidden,
+				Message:    "Access denied",
+			},
+			wantCode: "forbidden",
+		},
+		{
+			name: "Validation error",
+			appError: &utils.AppError{
+				Err:        utils.ErrValidation,
+				StatusCode: http.StatusBadRequest,
+				Message:    "Validation failed",
+				Field:      "email",
+			},
+			wantCode: "validation_error",
+		},
+		{
+			name: "Duplicate error",
+			appError: &utils.AppError{
+				Err:        utils.ErrDuplicate,
+				StatusCode: http.StatusConflict,
+				Message:    "Resource already exists",
+			},
+			wantCode: "duplicate_resource",
+		},
+		{
+			name: "InvalidCredentials error",
+			appError: &utils.AppError{
+				Err:        utils.ErrInvalidCredentials,
+				StatusCode: http.StatusUnauthorized,
+				Message:    "Invalid credentials",
+			},
+			wantCode: "invalid_credentials",
+		},
+		{
+			name: "ExpiredToken error",
+			appError: &utils.AppError{
+				Err:        utils.ErrExpiredToken,
+				StatusCode: http.StatusUnauthorized,
+				Message:    "Token expired",
+			},
+			wantCode: "token_expired",
+		},
+		{
+			name: "InvalidToken error",
+			appError: &utils.AppError{
+				Err:        utils.ErrInvalidToken,
+				StatusCode: http.StatusUnauthorized,
+				Message:    "Invalid token",
+			},
+			wantCode: "token_invalid",
+		},
+		{
+			name: "Default error",
+			appError: &utils.AppError{
+				Err:        errors.New("some error"),
+				StatusCode: http.StatusInternalServerError,
+				Message:    "Internal error",
+			},
+			wantCode: "internal_error",
+		},
 	}
 
-	// Parse the response body
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			utils.ErrorFromAppError(rr, tt.appError)
+
+			var response map[string]interface{}
+			if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+				t.Fatalf("Could not parse response body: %v", err)
+			}
+
+			if !response["success"].(bool) != true {
+				t.Error("Expected success to be false")
+			}
+
+			errorInfo := response["error"].(map[string]interface{})
+			if errorInfo["code"] != tt.wantCode {
+				t.Errorf("Expected error code %s, got %s", tt.wantCode, errorInfo["code"])
+			}
+
+			if errorInfo["message"] != tt.appError.Message {
+				t.Errorf("Expected error message %s, got %s", tt.appError.Message, errorInfo["message"])
+			}
+
+			if tt.appError.Field != "" {
+				details := errorInfo["details"].(map[string]interface{})
+				if _, ok := details[tt.appError.Field]; !ok {
+					t.Errorf("Expected field %s in error details", tt.appError.Field)
+				}
+			}
+		})
+	}
+}
+
+func TestNoContent(t *testing.T) {
+	rr := httptest.NewRecorder()
+	utils.NoContent(rr)
+
+	if status := rr.Code; status != http.StatusNoContent {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusNoContent)
+	}
+
+	if body := rr.Body.String(); body != "" {
+		t.Errorf("expected empty body, got %v", body)
+	}
+}
+
+func TestBadRequest(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+		details map[string]string
+	}{
+		{
+			name:    "With message",
+			message: "Invalid input",
+			details: nil,
+		},
+		{
+			name:    "With details",
+			message: "Validation failed",
+			details: map[string]string{"field": "value"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			utils.BadRequest(rr, tt.message, tt.details)
+
+			if status := rr.Code; status != http.StatusBadRequest {
+				t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusBadRequest)
+			}
+
+			var response map[string]interface{}
+			if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+				t.Fatalf("Could not parse response body: %v", err)
+			}
+
+			errorInfo := response["error"].(map[string]interface{})
+			if errorInfo["code"] != "bad_request" {
+				t.Errorf("expected error code bad_request, got %v", errorInfo["code"])
+			}
+
+			if errorInfo["message"] != tt.message {
+				t.Errorf("expected message %v, got %v", tt.message, errorInfo["message"])
+			}
+		})
+	}
+}
+
+func TestUnauthorized(t *testing.T) {
+	tests := []struct {
+		name        string
+		message     string
+		wantMessage string
+	}{
+		{
+			name:        "With custom message",
+			message:     "Please log in",
+			wantMessage: "Please log in",
+		},
+		{
+			name:        "With empty message",
+			message:     "",
+			wantMessage: "Authentication required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			utils.Unauthorized(rr, tt.message)
+
+			if status := rr.Code; status != http.StatusUnauthorized {
+				t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusUnauthorized)
+			}
+
+			var response map[string]interface{}
+			if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+				t.Fatalf("Could not parse response body: %v", err)
+			}
+
+			errorInfo := response["error"].(map[string]interface{})
+			if errorInfo["code"] != "unauthorized" {
+				t.Errorf("expected error code unauthorized, got %v", errorInfo["code"])
+			}
+
+			if errorInfo["message"] != tt.wantMessage {
+				t.Errorf("expected message %v, got %v", tt.wantMessage, errorInfo["message"])
+			}
+		})
+	}
+}
+
+func TestForbidden(t *testing.T) {
+	tests := []struct {
+		name        string
+		message     string
+		wantMessage string
+	}{
+		{
+			name:        "With custom message",
+			message:     "Access denied",
+			wantMessage: "Access denied",
+		},
+		{
+			name:        "With empty message",
+			message:     "",
+			wantMessage: "You don't have permission to access this resource",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			utils.Forbidden(rr, tt.message)
+
+			if status := rr.Code; status != http.StatusForbidden {
+				t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusForbidden)
+			}
+
+			var response map[string]interface{}
+			if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+				t.Fatalf("Could not parse response body: %v", err)
+			}
+
+			errorInfo := response["error"].(map[string]interface{})
+			if errorInfo["code"] != "forbidden" {
+				t.Errorf("expected error code forbidden, got %v", errorInfo["code"])
+			}
+
+			if errorInfo["message"] != tt.wantMessage {
+				t.Errorf("expected message %v, got %v", tt.wantMessage, errorInfo["message"])
+			}
+		})
+	}
+}
+
+func TestNotFound(t *testing.T) {
+	tests := []struct {
+		name        string
+		message     string
+		wantMessage string
+	}{
+		{
+			name:        "With custom message",
+			message:     "User not found",
+			wantMessage: "User not found",
+		},
+		{
+			name:        "With empty message",
+			message:     "",
+			wantMessage: "The requested resource could not be found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			utils.NotFound(rr, tt.message)
+
+			if status := rr.Code; status != http.StatusNotFound {
+				t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusNotFound)
+			}
+
+			var response map[string]interface{}
+			if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+				t.Fatalf("Could not parse response body: %v", err)
+			}
+
+			errorInfo := response["error"].(map[string]interface{})
+			if errorInfo["code"] != "not_found" {
+				t.Errorf("expected error code not_found, got %v", errorInfo["code"])
+			}
+
+			if errorInfo["message"] != tt.wantMessage {
+				t.Errorf("expected message %v, got %v", tt.wantMessage, errorInfo["message"])
+			}
+		})
+	}
+}
+
+func TestMethodNotAllowed(t *testing.T) {
+	rr := httptest.NewRecorder()
+	utils.MethodNotAllowed(rr)
+
+	if status := rr.Code; status != http.StatusMethodNotAllowed {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusMethodNotAllowed)
+	}
+
 	var response map[string]interface{}
 	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Could not parse response body: %v", err)
 	}
 
-	// Check success flag
+	errorInfo := response["error"].(map[string]interface{})
+	if errorInfo["code"] != "method_not_allowed" {
+		t.Errorf("expected error code method_not_allowed, got %v", errorInfo["code"])
+	}
+}
+
+func TestConflict(t *testing.T) {
+	message := "Resource already exists"
+	rr := httptest.NewRecorder()
+	utils.Conflict(rr, message)
+
+	if status := rr.Code; status != http.StatusConflict {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusConflict)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Could not parse response body: %v", err)
+	}
+
+	errorInfo := response["error"].(map[string]interface{})
+	if errorInfo["code"] != "conflict" {
+		t.Errorf("expected error code conflict, got %v", errorInfo["code"])
+	}
+
+	if errorInfo["message"] != message {
+		t.Errorf("expected message %v, got %v", message, errorInfo["message"])
+	}
+}
+
+func TestInternalServerError(t *testing.T) {
+	err := errors.New("something went wrong")
+	rr := httptest.NewRecorder()
+	utils.InternalServerError(rr, err)
+
+	if status := rr.Code; status != http.StatusInternalServerError {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusInternalServerError)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Could not parse response body: %v", err)
+	}
+
+	errorInfo := response["error"].(map[string]interface{})
+	if errorInfo["code"] != "internal_error" {
+		t.Errorf("expected error code internal_error, got %v", errorInfo["code"])
+	}
+
+	if errorInfo["message"] != "An internal server error occurred" {
+		t.Errorf("expected generic error message, got %v", errorInfo["message"])
+	}
+}
+
+func TestValidationError(t *testing.T) {
+	errors := map[string]string{
+		"username": "Username is required",
+		"email":    "Invalid email format",
+	}
+
+	rr := httptest.NewRecorder()
+	utils.ValidationError(rr, errors)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusBadRequest)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Could not parse response body: %v", err)
+	}
+
+	errorInfo := response["error"].(map[string]interface{})
+	if errorInfo["code"] != "validation_error" {
+		t.Errorf("expected error code validation_error, got %v", errorInfo["code"])
+	}
+
+	if errorInfo["message"] != "Validation failed" {
+		t.Errorf("expected message 'Validation failed', got %v", errorInfo["message"])
+	}
+
+	details := errorInfo["details"].(map[string]interface{})
+	for key, expectedValue := range errors {
+		if value, ok := details[key]; !ok || value != expectedValue {
+			t.Errorf("expected detail %s to be %s, got %v", key, expectedValue, value)
+		}
+	}
+}
+
+func TestPaginated(t *testing.T) {
+	data := []string{"item1", "item2", "item3"}
+
+	rr := httptest.NewRecorder()
+	utils.Paginated(rr, http.StatusOK, data, 2, 10, 25)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Could not parse response body: %v", err)
+	}
+
 	success, ok := response["success"].(bool)
 	if !ok || !success {
 		t.Errorf("Success flag: got %v want true", success)
 	}
 
-	// Check data
 	responseData, ok := response["data"].([]interface{})
 	if !ok || len(responseData) != len(data) {
 		t.Errorf("Data: got %v want %v", responseData, data)
 	}
 
-	// Check metadata
 	meta, ok := response["meta"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("Response does not contain meta object")
@@ -200,7 +602,7 @@ func TestPaginated(t *testing.T) {
 		"page":        float64(2),
 		"page_size":   float64(10),
 		"total_items": float64(25),
-		"total_pages": float64(3), // 25 items with page size 10 = 3 pages
+		"total_pages": float64(3),
 	}
 
 	for key, expectedValue := range expectedMeta {
@@ -232,26 +634,25 @@ func TestGetPaginationParams(t *testing.T) {
 		{
 			name:        "Invalid page",
 			queryParams: map[string]string{"page": "invalid"},
-			wantPage:    1, // Default
+			wantPage:    1,
 			wantSize:    20,
 		},
 		{
 			name:        "Page size too large",
 			queryParams: map[string]string{"page_size": "200"},
 			wantPage:    1,
-			wantSize:    100, // Maximum
+			wantSize:    100,
 		},
 		{
 			name:        "Page size too small",
 			queryParams: map[string]string{"page_size": "0"},
 			wantPage:    1,
-			wantSize:    1, // Minimum
+			wantSize:    1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create request with query parameters
 			req := httptest.NewRequest("GET", "/", nil)
 			q := req.URL.Query()
 			for key, value := range tt.queryParams {
@@ -259,7 +660,6 @@ func TestGetPaginationParams(t *testing.T) {
 			}
 			req.URL.RawQuery = q.Encode()
 
-			// Get pagination parameters
 			params := utils.GetPaginationParams(req)
 
 			if params.Page != tt.wantPage {

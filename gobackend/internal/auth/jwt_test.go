@@ -262,6 +262,23 @@ func TestValidateToken(t *testing.T) {
 		t.Fatalf("Failed to generate wrong type test token: %v", err)
 	}
 
+	// Generate token with wrong signing method
+	wrongSigningMethodToken := jwt.New(jwt.SigningMethodNone)
+	wrongSigningMethodToken.Claims = jwt.MapClaims{
+		"user_id":    999,
+		"username":   "wrongmethod",
+		"email":      "wrongmethod@example.com",
+		"token_type": "access",
+		"exp":        time.Now().Add(15 * time.Minute).Unix(),
+		"iat":        time.Now().Unix(),
+		"nbf":        time.Now().Unix(),
+		"iss":        cfg.Issuer,
+		"sub":        "999",
+		"jti":        "wrong-method-id",
+	}
+
+	wrongSigningMethodTokenString, _ := wrongSigningMethodToken.SignedString([]byte(""))
+
 	// Test cases
 	tests := []struct {
 		name        string
@@ -300,6 +317,13 @@ func TestValidateToken(t *testing.T) {
 		{
 			name:        "Empty token",
 			token:       "",
+			tokenType:   "access",
+			shouldError: true,
+			errorType:   utils.ErrInvalidToken,
+		},
+		{
+			name:        "Wrong signing method",
+			token:       wrongSigningMethodTokenString,
 			tokenType:   "access",
 			shouldError: true,
 			errorType:   utils.ErrInvalidToken,
@@ -346,7 +370,83 @@ func TestValidateToken(t *testing.T) {
 }
 
 func TestParseTokenWithoutValidation(t *testing.T) {
+	// Create config
+	cfg := &config.JWTSettings{
+		Secret:        "test-secret",
+		Expiry:        15 * time.Minute,
+		RefreshExpiry: 7 * 24 * time.Hour,
+		Issuer:        "test-issuer",
+	}
 
+	// Create service
+	service := auth.NewJWTService(cfg)
+
+	// Test cases
+	tests := []struct {
+		name          string
+		setupToken    func() string
+		expectedError bool
+		expectedID    string
+	}{
+		{
+			name: "Valid token",
+			setupToken: func() string {
+				token, _, _ := service.GenerateAccessToken(123, "testuser", "test@example.com")
+				return token
+			},
+			expectedError: false,
+		},
+		{
+			name: "Expired token - should still extract ID",
+			setupToken: func() string {
+				claims := auth.CustomClaims{
+					UserID:    456,
+					Username:  "expireduser",
+					Email:     "expired@example.com",
+					TokenType: "access",
+					RegisteredClaims: jwt.RegisteredClaims{
+						ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)),
+						IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
+						NotBefore: jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
+						Issuer:    cfg.Issuer,
+						Subject:   "456",
+						ID:        "expired-id",
+					},
+				}
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+				tokenString, _ := token.SignedString([]byte(cfg.Secret))
+				return tokenString
+			},
+			expectedError: false,
+			expectedID:    "expired-id",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup token
+			token := tt.setupToken()
+
+			// Parse token
+			id, err := service.ParseTokenWithoutValidation(token)
+
+			// Check error
+			if (err != nil) != tt.expectedError {
+				t.Errorf("ParseTokenWithoutValidation() error = %v, expectedError %v", err, tt.expectedError)
+				return
+			}
+
+			// For specific cases, check the extracted ID
+			if tt.name == "Expired token - should still extract ID" && id != tt.expectedID {
+				t.Errorf("ParseTokenWithoutValidation() id = %v, want %v", id, tt.expectedID)
+			}
+
+			// If no error expected, check if ID is not empty
+			if !tt.expectedError && id == "" {
+				t.Error("Expected non-empty token ID")
+			}
+		})
+	}
 }
 
 func TestExtractUserIDFromToken(t *testing.T) {
@@ -387,8 +487,118 @@ func TestExtractUserIDFromToken(t *testing.T) {
 	if err == nil {
 		t.Error("ExtractUserIDFromToken() should error with invalid token")
 	}
+
+	// Test expired token
+	expiredClaims := auth.CustomClaims{
+		UserID:    456,
+		Username:  "expireduser",
+		Email:     "expired@example.com",
+		TokenType: "access",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
+			NotBefore: jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
+			Issuer:    cfg.Issuer,
+			Subject:   "456",
+			ID:        "expired-id",
+		},
+	}
+	expiredToken := jwt.NewWithClaims(jwt.SigningMethodHS256, expiredClaims)
+	expiredTokenString, _ := expiredToken.SignedString([]byte(cfg.Secret))
+	_, err = service.ExtractUserIDFromToken(expiredTokenString)
+	if err == nil {
+		t.Error("ExtractUserIDFromToken() should error with expired token")
+	}
 }
 
 func TestRefreshTokens(t *testing.T) {
+	// Create config
+	cfg := &config.JWTSettings{
+		Secret:        "test-secret",
+		Expiry:        15 * time.Minute,
+		RefreshExpiry: 7 * 24 * time.Hour,
+		Issuer:        "test-issuer",
+	}
 
+	// Create service
+	service := auth.NewJWTService(cfg)
+
+	// Setup test cases
+	type testCase struct {
+		name         string
+		refreshToken int64
+		userID       int64
+		username     string
+		email        string
+		expectError  bool
+	}
+
+	tests := []testCase{
+		{
+			name:         "Invalid user ID",
+			refreshToken: 123, // This will be replaced with a real token
+			userID:       456, // Different from token's userID
+			username:     "testuser",
+			email:        "test@example.com",
+			expectError:  true,
+		},
+		{
+			name:         "Invalid refresh token",
+			refreshToken: 999, // Invalid token
+			userID:       123,
+			username:     "testuser",
+			email:        "test@example.com",
+			expectError:  true,
+		},
+	}
+
+	// Run the tests
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Call RefreshTokens
+			accessToken, accessJWTID, newRefreshToken, refreshJWTID, err := service.RefreshTokens(tt.refreshToken, tt.userID, tt.username, tt.email)
+
+			// Check error
+			if (err != nil) != tt.expectError {
+				t.Errorf("RefreshTokens() error = %v, expectError %v", err, tt.expectError)
+				return
+			}
+
+			// If success, check the returned tokens
+			if !tt.expectError {
+				// Check if tokens are not empty
+				if accessToken == "" {
+					t.Error("Expected non-empty access token")
+				}
+				if accessJWTID == "" {
+					t.Error("Expected non-empty access JWT ID")
+				}
+				if newRefreshToken == "" {
+					t.Error("Expected non-empty refresh token")
+				}
+				if refreshJWTID == "" {
+					t.Error("Expected non-empty refresh JWT ID")
+				}
+
+				// Validate the new tokens
+				accessClaims, err := service.ValidateToken(accessToken, "access")
+				if err != nil {
+					t.Errorf("Failed to validate new access token: %v", err)
+					return
+				}
+				if accessClaims.UserID != tt.userID {
+					t.Errorf("Access token has wrong user ID: got %v, want %v", accessClaims.UserID, tt.userID)
+				}
+
+				refreshClaims, err := service.ValidateToken(newRefreshToken, "refresh")
+				if err != nil {
+					t.Errorf("Failed to validate new refresh token: %v", err)
+					return
+				}
+				if refreshClaims.UserID != tt.userID {
+					t.Errorf("Refresh token has wrong user ID: got %v, want %v", refreshClaims.UserID, tt.userID)
+				}
+			}
+		})
+	}
 }

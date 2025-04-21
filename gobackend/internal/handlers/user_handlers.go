@@ -5,17 +5,16 @@ import (
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
 // UserHandler handles user-related routes
 type UserHandler struct {
-	userService *service.UserService
+	userService UserServiceInterface // Changed from *service.UserService
 }
 
 // NewUserHandler creates a new UserHandler
-func NewUserHandler(userService *service.UserService) *UserHandler {
+func NewUserHandler(userService UserServiceInterface) *UserHandler { // Changed parameter type
 	return &UserHandler{
 		userService: userService,
 	}

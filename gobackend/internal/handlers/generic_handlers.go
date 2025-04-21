@@ -7,17 +7,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
 // GenericHandler handles generic database operations
 type GenericHandler struct {
-	dbService *service.DatabaseService
+	dbService DatabaseServiceInterface
 }
 
 // NewGenericHandler creates a new GenericHandler
-func NewGenericHandler(dbService *service.DatabaseService) *GenericHandler {
+func NewGenericHandler(dbService DatabaseServiceInterface) *GenericHandler {
 	return &GenericHandler{
 		dbService: dbService,
 	}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -82,6 +83,29 @@ func TestBanListRepository_GetByID_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestBanListRepository_GetByID_OtherError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Mock database error (not ErrNoRows)
+	mock.ExpectQuery("SELECT ban_id, setting_id FROM ban_lists WHERE ban_id = \\$1").
+		WithArgs(id).
+		WillReturnError(errors.New("database connection error"))
+
+	// Execute the method being tested
+	result, err := repo.GetByID(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to get ban list by ID")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestBanListRepository_GetBySettingID(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupBanListRepositoryTest(t)
@@ -132,6 +156,29 @@ func TestBanListRepository_GetBySettingID_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestBanListRepository_GetBySettingID_OtherError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	settingID := int64(100)
+
+	// Mock database error (not ErrNoRows)
+	mock.ExpectQuery("SELECT ban_id, setting_id FROM ban_lists WHERE setting_id = \\$1").
+		WithArgs(settingID).
+		WillReturnError(errors.New("database connection error"))
+
+	// Execute the method being tested
+	result, err := repo.GetBySettingID(context.Background(), settingID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to get ban list by setting ID")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestBanListRepository_CreateBanList(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupBanListRepositoryTest(t)
@@ -168,11 +215,13 @@ func TestBanListRepository_CreateBanList_DuplicateError(t *testing.T) {
 	// Set up test data
 	settingID := int64(100)
 
-	// Mock a duplicate key error - use a PostgreSQL-style error
-	duplicateErr := errors.New(`pq: duplicate key value violates unique constraint "idx_setting_id_1"`)
-	mock.ExpectQuery("INSERT INTO ban_lists").
+	// Mock a PostgreSQL duplicate key error
+	pqErr := &pq.Error{
+		Code: "23505", // PostgreSQL error code for unique_violation
+	}
+	mock.ExpectQuery("INSERT INTO ban_lists \\(setting_id\\) VALUES \\(\\$1\\) RETURNING ban_id").
 		WithArgs(settingID).
-		WillReturnError(duplicateErr)
+		WillReturnError(pqErr)
 
 	// Execute the method being tested
 	result, err := repo.CreateBanList(context.Background(), settingID)
@@ -180,6 +229,30 @@ func TestBanListRepository_CreateBanList_DuplicateError(t *testing.T) {
 	// Assert the results
 	assert.Error(t, err)
 	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "already exists")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBanListRepository_CreateBanList_OtherError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	settingID := int64(100)
+
+	// Mock a general database error (not a duplicate key error)
+	mock.ExpectQuery("INSERT INTO ban_lists \\(setting_id\\) VALUES \\(\\$1\\) RETURNING ban_id").
+		WithArgs(settingID).
+		WillReturnError(errors.New("database connection error"))
+
+	// Execute the method being tested
+	result, err := repo.CreateBanList(context.Background(), settingID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to create ban list")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -235,6 +308,86 @@ func TestBanListRepository_Delete_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestBanListRepository_Delete_WordsError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Set up transaction expectations
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM ban_list_words WHERE ban_id = \\$1").
+		WithArgs(id).
+		WillReturnError(errors.New("failed to delete words"))
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete ban list words")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBanListRepository_Delete_BanListError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Set up transaction expectations
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM ban_list_words WHERE ban_id = \\$1").
+		WithArgs(id).
+		WillReturnResult(sqlmock.NewResult(0, 2))
+	mock.ExpectExec("DELETE FROM ban_lists WHERE ban_id = \\$1").
+		WithArgs(id).
+		WillReturnError(errors.New("failed to delete ban list"))
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete ban list")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBanListRepository_Delete_RowsAffectedError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Set up transaction expectations
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM ban_list_words WHERE ban_id = \\$1").
+		WithArgs(id).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	// Return a result that has an error when RowsAffected is called
+	result := sqlmock.NewErrorResult(errors.New("rows affected error"))
+	mock.ExpectExec("DELETE FROM ban_lists WHERE ban_id = \\$1").
+		WithArgs(id).
+		WillReturnResult(result)
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get rows affected")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestBanListRepository_GetBanListWords(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupBanListRepositoryTest(t)
@@ -264,6 +417,57 @@ func TestBanListRepository_GetBanListWords(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestBanListRepository_GetBanListWords_QueryError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	banListID := int64(1)
+
+	// Mock database error
+	mock.ExpectQuery("SELECT word FROM ban_list_words WHERE ban_id = \\$1 ORDER BY word").
+		WithArgs(banListID).
+		WillReturnError(errors.New("database error"))
+
+	// Execute the method being tested
+	result, err := repo.GetBanListWords(context.Background(), banListID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to get ban list words")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBanListRepository_GetBanListWords_RowsError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	banListID := int64(1)
+
+	// Set up query result with a row error
+	rows := sqlmock.NewRows([]string{"word"}).
+		AddRow("word1").
+		RowError(0, errors.New("row error"))
+
+	// Expected query
+	mock.ExpectQuery("SELECT word FROM ban_list_words WHERE ban_id = \\$1 ORDER BY word").
+		WithArgs(banListID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	result, err := repo.GetBanListWords(context.Background(), banListID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "error iterating ban list words")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestBanListRepository_AddWords(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupBanListRepositoryTest(t)
@@ -290,6 +494,47 @@ func TestBanListRepository_AddWords(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestBanListRepository_AddWords_EmptyList(t *testing.T) {
+	// Set up the test
+	repo, _, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data - empty words list
+	banListID := int64(1)
+	words := []string{}
+
+	// Execute the method being tested
+	err := repo.AddWords(context.Background(), banListID, words)
+
+	// Assert the results - should return nil without errors
+	assert.NoError(t, err)
+}
+
+func TestBanListRepository_AddWords_InsertError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	banListID := int64(1)
+	words := []string{"word1", "word2", "word3"}
+
+	// Set up transaction expectations
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT INTO ban_list_words \\(ban_id, word\\) VALUES \\(\\$1, \\$2\\) ON CONFLICT").
+		WithArgs(banListID, words[0]).
+		WillReturnError(errors.New("insert error"))
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.AddWords(context.Background(), banListID, words)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to add word to ban list")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestBanListRepository_RemoveWords(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupBanListRepositoryTest(t)
@@ -313,6 +558,47 @@ func TestBanListRepository_RemoveWords(t *testing.T) {
 
 	// Assert the results
 	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBanListRepository_RemoveWords_EmptyList(t *testing.T) {
+	// Set up the test
+	repo, _, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data - empty words list
+	banListID := int64(1)
+	words := []string{}
+
+	// Execute the method being tested
+	err := repo.RemoveWords(context.Background(), banListID, words)
+
+	// Assert the results - should return nil without errors
+	assert.NoError(t, err)
+}
+
+func TestBanListRepository_RemoveWords_DeleteError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	banListID := int64(1)
+	words := []string{"word1", "word2", "word3"}
+
+	// Set up transaction expectations
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM ban_list_words WHERE ban_id = \\$1 AND word = \\$2").
+		WithArgs(banListID, words[0]).
+		WillReturnError(errors.New("delete error"))
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.RemoveWords(context.Background(), banListID, words)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to remove word from ban list")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -365,5 +651,29 @@ func TestBanListRepository_WordExists_DoesNotExist(t *testing.T) {
 	// Assert the results
 	assert.NoError(t, err)
 	assert.False(t, exists)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBanListRepository_WordExists_QueryError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupBanListRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	banListID := int64(1)
+	word := "test"
+
+	// Mock database error
+	mock.ExpectQuery("SELECT EXISTS").
+		WithArgs(banListID, word).
+		WillReturnError(errors.New("database error"))
+
+	// Execute the method being tested
+	exists, err := repo.WordExists(context.Background(), banListID, word)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.False(t, exists)
+	assert.Contains(t, err.Error(), "failed to check if word exists in ban list")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

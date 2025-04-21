@@ -145,6 +145,29 @@ func TestPatternRepository_GetByID_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestPatternRepository_GetByID_Error(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupPatternRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Mock general database error
+	mock.ExpectQuery("SELECT pattern_id, setting_id, pattern_type, pattern_text FROM search_patterns WHERE pattern_id = \\$1").
+		WithArgs(id).
+		WillReturnError(errors.New("database error"))
+
+	// Execute the method being tested
+	result, err := repo.GetByID(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get search pattern by ID")
+	assert.Nil(t, result)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestPatternRepository_GetBySettingID(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupPatternRepositoryTest(t)
@@ -186,6 +209,106 @@ func TestPatternRepository_GetBySettingID(t *testing.T) {
 	assert.Len(t, results, 2)
 	assert.Equal(t, patterns[0].ID, results[0].ID)
 	assert.Equal(t, patterns[1].ID, results[1].ID)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPatternRepository_GetBySettingID_Error(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupPatternRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	settingID := int64(100)
+
+	// Mock database error
+	mock.ExpectQuery("SELECT pattern_id, setting_id, pattern_type, pattern_text FROM search_patterns WHERE setting_id = \\$1 ORDER BY pattern_id").
+		WithArgs(settingID).
+		WillReturnError(errors.New("database error"))
+
+	// Execute the method being tested
+	results, err := repo.GetBySettingID(context.Background(), settingID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get search patterns by setting ID")
+	assert.Nil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPatternRepository_GetBySettingID_ScanError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupPatternRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	settingID := int64(100)
+
+	// Create rows with invalid data to cause scan error
+	rows := sqlmock.NewRows([]string{"pattern_id", "setting_id", "pattern_type", "pattern_text"}).
+		AddRow("invalid_id", settingID, "regex", "pattern") // invalid_id should cause scan error
+
+	mock.ExpectQuery("SELECT pattern_id, setting_id, pattern_type, pattern_text FROM search_patterns WHERE setting_id = \\$1 ORDER BY pattern_id").
+		WithArgs(settingID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetBySettingID(context.Background(), settingID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to scan search pattern row")
+	assert.Nil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPatternRepository_GetBySettingID_RowsError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupPatternRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	settingID := int64(100)
+
+	// Create rows with a row error
+	rows := sqlmock.NewRows([]string{"pattern_id", "setting_id", "pattern_type", "pattern_text"}).
+		AddRow(1, settingID, "regex", "pattern").
+		RowError(0, errors.New("row error"))
+
+	mock.ExpectQuery("SELECT pattern_id, setting_id, pattern_type, pattern_text FROM search_patterns WHERE setting_id = \\$1 ORDER BY pattern_id").
+		WithArgs(settingID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetBySettingID(context.Background(), settingID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "error iterating search pattern rows")
+	assert.Nil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPatternRepository_GetBySettingID_EmptyResult(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupPatternRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	settingID := int64(100)
+
+	// Create empty rows to test the empty result scenario
+	rows := sqlmock.NewRows([]string{"pattern_id", "setting_id", "pattern_type", "pattern_text"})
+
+	mock.ExpectQuery("SELECT pattern_id, setting_id, pattern_type, pattern_text FROM search_patterns WHERE setting_id = \\$1 ORDER BY pattern_id").
+		WithArgs(settingID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetBySettingID(context.Background(), settingID)
+
+	// Assert the results
+	assert.NoError(t, err)
+	assert.Empty(t, results)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -241,6 +364,63 @@ func TestPatternRepository_Update_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestPatternRepository_Update_Error(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupPatternRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	pattern := &models.SearchPattern{
+		ID:          1,
+		SettingID:   100,
+		PatternType: models.PatternType("regex"),
+		PatternText: "\\d{4}-\\d{4}-\\d{4}-\\d{4}",
+	}
+
+	// Mock database error
+	mock.ExpectExec("UPDATE search_patterns SET pattern_type = \\$1, pattern_text = \\$2 WHERE pattern_id = \\$3").
+		WithArgs(pattern.PatternType, pattern.PatternText, pattern.ID).
+		WillReturnError(errors.New("database error"))
+
+	// Execute the method being tested
+	err := repo.Update(context.Background(), pattern)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to update search pattern")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPatternRepository_Update_RowsAffectedError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupPatternRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	pattern := &models.SearchPattern{
+		ID:          1,
+		SettingID:   100,
+		PatternType: models.PatternType("regex"),
+		PatternText: "\\d{4}-\\d{4}-\\d{4}-\\d{4}",
+	}
+
+	// Create a custom result that returns an error for RowsAffected()
+	result := sqlmock.NewErrorResult(errors.New("rows affected error"))
+
+	// Expected query with placeholders
+	mock.ExpectExec("UPDATE search_patterns SET pattern_type = \\$1, pattern_text = \\$2 WHERE pattern_id = \\$3").
+		WithArgs(pattern.PatternType, pattern.PatternText, pattern.ID).
+		WillReturnResult(result)
+
+	// Execute the method being tested
+	err := repo.Update(context.Background(), pattern)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get rows affected")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestPatternRepository_Delete(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupPatternRepositoryTest(t)
@@ -283,6 +463,53 @@ func TestPatternRepository_Delete_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestPatternRepository_Delete_Error(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupPatternRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Mock database error
+	mock.ExpectExec("DELETE FROM search_patterns WHERE pattern_id = \\$1").
+		WithArgs(id).
+		WillReturnError(errors.New("database error"))
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete search pattern")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPatternRepository_Delete_RowsAffectedError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupPatternRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Create a custom result that returns an error for RowsAffected()
+	result := sqlmock.NewErrorResult(errors.New("rows affected error"))
+
+	// Expected query with placeholder for the ID
+	mock.ExpectExec("DELETE FROM search_patterns WHERE pattern_id = \\$1").
+		WithArgs(id).
+		WillReturnResult(result)
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get rows affected")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestPatternRepository_DeleteBySettingID(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupPatternRepositoryTest(t)
@@ -301,5 +528,27 @@ func TestPatternRepository_DeleteBySettingID(t *testing.T) {
 
 	// Assert the results
 	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPatternRepository_DeleteBySettingID_Error(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupPatternRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	settingID := int64(100)
+
+	// Mock database error
+	mock.ExpectExec("DELETE FROM search_patterns WHERE setting_id = \\$1").
+		WithArgs(settingID).
+		WillReturnError(errors.New("database error"))
+
+	// Execute the method being tested
+	err := repo.DeleteBySettingID(context.Background(), settingID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete search patterns by setting ID")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

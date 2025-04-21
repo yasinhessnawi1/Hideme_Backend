@@ -153,6 +153,29 @@ func TestDocumentRepository_GetByID_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestDocumentRepository_GetByID_OtherError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Mock database error (not ErrNoRows)
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE document_id = \\$1").
+		WithArgs(id).
+		WillReturnError(errors.New("database connection error"))
+
+	// Execute the method being tested
+	result, err := repo.GetByID(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to get document by ID")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestDocumentRepository_GetByUserID(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupDocumentRepositoryTest(t)
@@ -212,6 +235,141 @@ func TestDocumentRepository_GetByUserID(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestDocumentRepository_GetByUserID_CountError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+	page := 1
+	pageSize := 10
+
+	// Mock count query error
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM documents WHERE user_id = \\$1").
+		WithArgs(userID).
+		WillReturnError(errors.New("count query error"))
+
+	// Execute the method being tested
+	results, count, err := repo.GetByUserID(context.Background(), userID, page, pageSize)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to count documents")
+	assert.Equal(t, 0, count)
+	assert.Nil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_GetByUserID_QueryError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+	page := 1
+	pageSize := 10
+	offset := (page - 1) * pageSize
+	totalCount := 15
+
+	// Setup for count query
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(totalCount)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM documents WHERE user_id = \\$1").
+		WithArgs(userID).
+		WillReturnRows(countRows)
+
+	// Mock main query error
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
+		WithArgs(userID, pageSize, offset).
+		WillReturnError(errors.New("query error"))
+
+	// Execute the method being tested
+	results, count, err := repo.GetByUserID(context.Background(), userID, page, pageSize)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get documents by user ID")
+	assert.Equal(t, 0, count)
+	assert.Nil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_GetByUserID_ScanError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+	page := 1
+	pageSize := 10
+	offset := (page - 1) * pageSize
+	totalCount := 15
+
+	// Setup for count query
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(totalCount)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM documents WHERE user_id = \\$1").
+		WithArgs(userID).
+		WillReturnRows(countRows)
+
+	// Setup for main query with invalid data to cause scan error
+	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified"}).
+		AddRow("invalid_id", userID, "doc1", time.Now(), time.Now()) // invalid_id will cause scan error
+
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
+		WithArgs(userID, pageSize, offset).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, count, err := repo.GetByUserID(context.Background(), userID, page, pageSize)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to scan document row")
+	assert.Equal(t, 0, count)
+	assert.Nil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_GetByUserID_RowsError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+	page := 1
+	pageSize := 10
+	offset := (page - 1) * pageSize
+	totalCount := 15
+
+	// Setup for count query
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(totalCount)
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM documents WHERE user_id = \\$1").
+		WithArgs(userID).
+		WillReturnRows(countRows)
+
+	// Setup for main query with row error
+	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified"}).
+		AddRow(1, userID, "doc1", time.Now(), time.Now()).
+		RowError(0, errors.New("row error"))
+
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
+		WithArgs(userID, pageSize, offset).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, count, err := repo.GetByUserID(context.Background(), userID, page, pageSize)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "error iterating document rows")
+	assert.Equal(t, 0, count)
+	assert.Nil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestDocumentRepository_Update(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupDocumentRepositoryTest(t)
@@ -237,6 +395,67 @@ func TestDocumentRepository_Update(t *testing.T) {
 
 	// Assert the results
 	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_Update_Error(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	now := time.Now()
+	doc := &models.Document{
+		ID:                 1,
+		UserID:             100,
+		HashedDocumentName: "hashed_name",
+		UploadTimestamp:    now.Add(-time.Hour),
+		LastModified:       now,
+	}
+
+	// Mock database error
+	mock.ExpectExec("UPDATE documents SET last_modified = \\$1 WHERE document_id = \\$2").
+		WithArgs(sqlmock.AnyArg(), doc.ID).
+		WillReturnError(errors.New("database error"))
+
+	// Execute the method being tested
+	err := repo.Update(context.Background(), doc)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to update document")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_Update_RowsAffectedError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	now := time.Now()
+	doc := &models.Document{
+		ID:                 1,
+		UserID:             100,
+		HashedDocumentName: "hashed_name",
+		UploadTimestamp:    now.Add(-time.Hour),
+		LastModified:       now,
+	}
+
+	// Create a custom result that returns an error for RowsAffected()
+	result := sqlmock.NewErrorResult(errors.New("rows affected error"))
+
+	// Mock the update with error result
+	mock.ExpectExec("UPDATE documents SET last_modified = \\$1 WHERE document_id = \\$2").
+		WithArgs(sqlmock.AnyArg(), doc.ID).
+		WillReturnResult(result)
+
+	// Execute the method being tested
+	err := repo.Update(context.Background(), doc)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get rows affected")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -291,6 +510,88 @@ func TestDocumentRepository_Delete(t *testing.T) {
 
 	// Assert the results
 	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_Delete_EntitiesError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Set up transaction expectations with error in entities deletion
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM detected_entities WHERE document_id = \\$1").
+		WithArgs(id).
+		WillReturnError(errors.New("entities deletion error"))
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete detected entities")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_Delete_DocumentError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Set up transaction expectations with error in document deletion
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM detected_entities WHERE document_id = \\$1").
+		WithArgs(id).
+		WillReturnResult(sqlmock.NewResult(0, 3))
+	mock.ExpectExec("DELETE FROM documents WHERE document_id = \\$1").
+		WithArgs(id).
+		WillReturnError(errors.New("document deletion error"))
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete document")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_Delete_RowsAffectedError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Set up transaction expectations with rows affected error
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM detected_entities WHERE document_id = \\$1").
+		WithArgs(id).
+		WillReturnResult(sqlmock.NewResult(0, 3))
+
+	// Create a custom result that returns an error for RowsAffected()
+	result := sqlmock.NewErrorResult(errors.New("rows affected error"))
+
+	mock.ExpectExec("DELETE FROM documents WHERE document_id = \\$1").
+		WithArgs(id).
+		WillReturnResult(result)
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get rows affected")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -363,8 +664,304 @@ func TestDocumentRepository_DeleteByUserID(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestDocumentRepository_GetDetectedEntities(t *testing.T) {
+func TestDocumentRepository_DeleteByUserID_GetDocumentsError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
 
+	// Set up test data
+	userID := int64(100)
+
+	// Set up transaction expectations with error in getting document IDs
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT document_id FROM documents WHERE user_id = \\$1").
+		WithArgs(userID).
+		WillReturnError(errors.New("get documents error"))
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.DeleteByUserID(context.Background(), userID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get document IDs")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_DeleteByUserID_ScanError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+
+	// Set up transaction expectations with scan error
+	mock.ExpectBegin()
+
+	// Create rows with invalid data to cause scan error
+	rows := sqlmock.NewRows([]string{"document_id"}).
+		AddRow("invalid_id") // String instead of int64 will cause scan error
+
+	mock.ExpectQuery("SELECT document_id FROM documents WHERE user_id = \\$1").
+		WithArgs(userID).
+		WillReturnRows(rows)
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.DeleteByUserID(context.Background(), userID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to scan document ID")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_DeleteByUserID_RowsError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+
+	// Set up transaction expectations with rows error
+	mock.ExpectBegin()
+
+	// Create rows with an error
+	rows := sqlmock.NewRows([]string{"document_id"}).
+		AddRow(1).
+		RowError(0, errors.New("row iteration error"))
+
+	mock.ExpectQuery("SELECT document_id FROM documents WHERE user_id = \\$1").
+		WithArgs(userID).
+		WillReturnRows(rows)
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.DeleteByUserID(context.Background(), userID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "error iterating document ID rows")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_DeleteByUserID_DeleteEntitiesError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+	docIDs := []int64{1, 2}
+
+	// Set up transaction expectations with delete entities error
+	mock.ExpectBegin()
+
+	// First get document IDs
+	rows := sqlmock.NewRows([]string{"document_id"})
+	for _, id := range docIDs {
+		rows.AddRow(id)
+	}
+	mock.ExpectQuery("SELECT document_id FROM documents WHERE user_id = \\$1").
+		WithArgs(userID).
+		WillReturnRows(rows)
+
+	// Error on first entity deletion
+	mock.ExpectExec("DELETE FROM detected_entities WHERE document_id = \\$1").
+		WithArgs(docIDs[0]).
+		WillReturnError(errors.New("delete entities error"))
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.DeleteByUserID(context.Background(), userID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete detected entities")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_DeleteByUserID_DeleteDocumentsError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	userID := int64(100)
+	docIDs := []int64{1, 2}
+
+	// Set up transaction expectations with delete documents error
+	mock.ExpectBegin()
+
+	// First get document IDs
+	rows := sqlmock.NewRows([]string{"document_id"})
+	for _, id := range docIDs {
+		rows.AddRow(id)
+	}
+	mock.ExpectQuery("SELECT document_id FROM documents WHERE user_id = \\$1").
+		WithArgs(userID).
+		WillReturnRows(rows)
+
+	// Delete entities successfully for each document
+	for _, id := range docIDs {
+		mock.ExpectExec("DELETE FROM detected_entities WHERE document_id = \\$1").
+			WithArgs(id).
+			WillReturnResult(sqlmock.NewResult(0, 2))
+	}
+
+	// Error on document deletion
+	mock.ExpectExec("DELETE FROM documents WHERE user_id = \\$1").
+		WithArgs(userID).
+		WillReturnError(errors.New("delete documents error"))
+	mock.ExpectRollback()
+
+	// Execute the method being tested
+	err := repo.DeleteByUserID(context.Background(), userID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete documents by user ID")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_GetDetectedEntities(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	documentID := int64(1)
+	now := time.Now()
+	entities := []*models.DetectedEntityWithMethod{
+		{
+			DetectedEntity: models.DetectedEntity{
+				ID:                1,
+				DocumentID:        documentID,
+				MethodID:          1,
+				EntityName:        "Credit Card",
+				RedactionSchema:   models.RedactionSchema{Page: 1, StartX: 10, StartY: 20, EndX: 30, EndY: 40, RedactionMethod: "blackout"},
+				DetectedTimestamp: now,
+			},
+			MethodName:     "ML Model",
+			HighlightColor: "#FF0000",
+		},
+		{
+			DetectedEntity: models.DetectedEntity{
+				ID:                2,
+				DocumentID:        documentID,
+				MethodID:          2,
+				EntityName:        "SSN",
+				RedactionSchema:   models.RedactionSchema{Page: 1, StartX: 50, StartY: 60, EndX: 70, EndY: 80, RedactionMethod: "mask"},
+				DetectedTimestamp: now.Add(-time.Hour),
+			},
+			MethodName:     "Regex",
+			HighlightColor: "#00FF00",
+		},
+	}
+
+	// Set up query result
+	rows := sqlmock.NewRows([]string{"entity_id", "document_id", "method_id", "entity_name", "redaction_schema", "detected_timestamp", "method_name", "highlight_color"})
+	for _, entity := range entities {
+		schemaJSON, _ := entity.RedactionSchema.Value()
+		rows.AddRow(entity.ID, entity.DocumentID, entity.MethodID, entity.EntityName, schemaJSON, entity.DetectedTimestamp, entity.MethodName, entity.HighlightColor)
+	}
+
+	// Expected query with placeholder for document ID
+	mock.ExpectQuery("SELECT de\\.entity_id, de\\.document_id, de\\.method_id, de\\.entity_name, de\\.redaction_schema, de\\.detected_timestamp, dm\\.method_name, dm\\.highlight_color FROM detected_entities de JOIN detection_methods dm ON de\\.method_id = dm\\.method_id WHERE de\\.document_id = \\$1 ORDER BY de\\.detected_timestamp DESC").
+		WithArgs(documentID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetDetectedEntities(context.Background(), documentID)
+
+	// Assert the results
+	assert.NoError(t, err)
+	assert.Len(t, results, 2)
+	assert.Equal(t, entities[0].ID, results[0].ID)
+	assert.Equal(t, entities[0].EntityName, results[0].EntityName)
+	assert.Equal(t, entities[0].MethodName, results[0].MethodName)
+	assert.Equal(t, entities[1].ID, results[1].ID)
+	assert.Equal(t, entities[1].EntityName, results[1].EntityName)
+	assert.Equal(t, entities[1].MethodName, results[1].MethodName)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_GetDetectedEntities_QueryError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	documentID := int64(1)
+
+	// Mock query error
+	mock.ExpectQuery("SELECT de\\.entity_id, de\\.document_id, de\\.method_id, de\\.entity_name, de\\.redaction_schema, de\\.detected_timestamp, dm\\.method_name, dm\\.highlight_color FROM detected_entities de JOIN detection_methods dm ON de\\.method_id = dm\\.method_id WHERE de\\.document_id = \\$1 ORDER BY de\\.detected_timestamp DESC").
+		WithArgs(documentID).
+		WillReturnError(errors.New("query error"))
+
+	// Execute the method being tested
+	results, err := repo.GetDetectedEntities(context.Background(), documentID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, results)
+	assert.Contains(t, err.Error(), "failed to get detected entities")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_GetDetectedEntities_ScanError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	documentID := int64(1)
+
+	// Set up query result with invalid data to cause scan error
+	rows := sqlmock.NewRows([]string{"entity_id", "document_id", "method_id", "entity_name", "redaction_schema", "detected_timestamp", "method_name", "highlight_color"}).
+		AddRow("invalid_id", documentID, 1, "Credit Card", "{}", time.Now(), "ML Model", "#FF0000") // invalid_id will cause scan error
+
+	mock.ExpectQuery("SELECT de\\.entity_id, de\\.document_id, de\\.method_id, de\\.entity_name, de\\.redaction_schema, de\\.detected_timestamp, dm\\.method_name, dm\\.highlight_color FROM detected_entities de JOIN detection_methods dm ON de\\.method_id = dm\\.method_id WHERE de\\.document_id = \\$1 ORDER BY de\\.detected_timestamp DESC").
+		WithArgs(documentID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetDetectedEntities(context.Background(), documentID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, results)
+	assert.Contains(t, err.Error(), "failed to scan detected entity row")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_GetDetectedEntities_RowsError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	documentID := int64(1)
+
+	// Set up query result with row error
+	rows := sqlmock.NewRows([]string{"entity_id", "document_id", "method_id", "entity_name", "redaction_schema", "detected_timestamp", "method_name", "highlight_color"}).
+		AddRow(1, documentID, 1, "Credit Card", "{}", time.Now(), "ML Model", "#FF0000").
+		RowError(0, errors.New("row iteration error"))
+
+	mock.ExpectQuery("SELECT de\\.entity_id, de\\.document_id, de\\.method_id, de\\.entity_name, de\\.redaction_schema, de\\.detected_timestamp, dm\\.method_name, dm\\.highlight_color FROM detected_entities de JOIN detection_methods dm ON de\\.method_id = dm\\.method_id WHERE de\\.document_id = \\$1 ORDER BY de\\.detected_timestamp DESC").
+		WithArgs(documentID).
+		WillReturnRows(rows)
+
+	// Execute the method being tested
+	results, err := repo.GetDetectedEntities(context.Background(), documentID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, results)
+	assert.Contains(t, err.Error(), "error iterating detected entity rows")
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestDocumentRepository_AddDetectedEntity(t *testing.T) {
@@ -409,6 +1006,45 @@ func TestDocumentRepository_AddDetectedEntity(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestDocumentRepository_AddDetectedEntity_Error(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	now := time.Now()
+	schema := models.RedactionSchema{
+		Page:            1,
+		StartX:          10.5,
+		StartY:          20.5,
+		EndX:            30.5,
+		EndY:            40.5,
+		RedactionMethod: "blackout",
+	}
+	schemaJSON, _ := schema.Value()
+
+	entity := &models.DetectedEntity{
+		DocumentID:        1,
+		MethodID:          1,
+		EntityName:        "Credit Card",
+		RedactionSchema:   schema,
+		DetectedTimestamp: now,
+	}
+
+	// Mock query error
+	mock.ExpectQuery("INSERT INTO detected_entities").
+		WithArgs(entity.DocumentID, entity.MethodID, entity.EntityName, schemaJSON, entity.DetectedTimestamp).
+		WillReturnError(errors.New("insert error"))
+
+	// Execute the method being tested
+	err := repo.AddDetectedEntity(context.Background(), entity)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create detected entity")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestDocumentRepository_DeleteDetectedEntity(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupDocumentRepositoryTest(t)
@@ -427,6 +1063,53 @@ func TestDocumentRepository_DeleteDetectedEntity(t *testing.T) {
 
 	// Assert the results
 	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_DeleteDetectedEntity_Error(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	entityID := int64(100)
+
+	// Mock query error
+	mock.ExpectExec("DELETE FROM detected_entities WHERE entity_id = \\$1").
+		WithArgs(entityID).
+		WillReturnError(errors.New("delete error"))
+
+	// Execute the method being tested
+	err := repo.DeleteDetectedEntity(context.Background(), entityID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete detected entity")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_DeleteDetectedEntity_RowsAffectedError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	entityID := int64(100)
+
+	// Create a custom result that returns an error for RowsAffected()
+	result := sqlmock.NewErrorResult(errors.New("rows affected error"))
+
+	// Mock the deletion with error result
+	mock.ExpectExec("DELETE FROM detected_entities WHERE entity_id = \\$1").
+		WithArgs(entityID).
+		WillReturnResult(result)
+
+	// Execute the method being tested
+	err := repo.DeleteDetectedEntity(context.Background(), entityID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get rows affected")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -508,5 +1191,28 @@ func TestDocumentRepository_GetDocumentSummary_NotFound(t *testing.T) {
 	// Assert the results
 	assert.Error(t, err)
 	assert.Nil(t, result)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDocumentRepository_GetDocumentSummary_OtherError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupDocumentRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	documentID := int64(1)
+
+	// Mock database error (not ErrNoRows)
+	mock.ExpectQuery("SELECT d\\.document_id, d\\.hashed_document_name, d\\.upload_timestamp, d\\.last_modified, COUNT\\(de\\.entity_id\\) AS entity_count FROM documents d LEFT JOIN detected_entities de ON d\\.document_id = de\\.document_id WHERE d\\.document_id = \\$1 GROUP BY d\\.document_id").
+		WithArgs(documentID).
+		WillReturnError(errors.New("database error"))
+
+	// Execute the method being tested
+	result, err := repo.GetDocumentSummary(context.Background(), documentID)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to get document summary")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

@@ -206,8 +206,9 @@ func (s *Server) setupServices() error {
 func (s *Server) setupHandlers() error {
 	// Initialize handlers with proper dependency injection
 	s.Handlers = &Handlers{
-		AuthHandler:     handlers.NewAuthHandler(services.authService, s.authProviders.JWTService),
-		UserHandler:     handlers.NewUserHandler(services.userService),
+		AuthHandler: handlers.NewAuthHandler(services.authService, s.authProviders.JWTService),
+		UserHandler: handlers.NewUserHandler(services.userService),
+		// services.settingsService implicitly implements handlers.SettingsServiceInterface
 		SettingsHandler: handlers.NewSettingsHandler(services.settingsService),
 		GenericHandler:  handlers.NewGenericHandler(services.dbService),
 	}

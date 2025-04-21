@@ -7,17 +7,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
 // SettingsHandler handles settings-related routes
 type SettingsHandler struct {
-	settingsService *service.SettingsService
+	settingsService SettingsServiceInterface
 }
 
 // NewSettingsHandler creates a new SettingsHandler
-func NewSettingsHandler(settingsService *service.SettingsService) *SettingsHandler {
+func NewSettingsHandler(settingsService SettingsServiceInterface) *SettingsHandler {
 	return &SettingsHandler{
 		settingsService: settingsService,
 	}

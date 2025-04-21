@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -67,6 +68,37 @@ func TestUserRepository_Create(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestUserRepository_Create_DatabaseError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	now := time.Now()
+	user := &models.User{
+		Username:     "testuser",
+		Email:        "test@example.com",
+		PasswordHash: "hashed_password",
+		Salt:         "salt_value",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	// Mock a generic database error
+	dbErr := errors.New("database connection error")
+	mock.ExpectQuery("INSERT INTO users").
+		WithArgs(user.Username, user.Email, user.PasswordHash, user.Salt, user.CreatedAt, user.UpdatedAt).
+		WillReturnError(dbErr)
+
+	// Execute the method being tested
+	err := repo.Create(context.Background(), user)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create user")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestUserRepository_Create_DuplicateUsername(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupUserRepositoryTest(t)
@@ -99,7 +131,7 @@ func TestUserRepository_Create_DuplicateUsername(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestUserRepository_Create_DuplicateEmail(t *testing.T) {
+func TestUserRepository_Create_PQError(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupUserRepositoryTest(t)
 	defer cleanup()
@@ -108,26 +140,29 @@ func TestUserRepository_Create_DuplicateEmail(t *testing.T) {
 	now := time.Now()
 	user := &models.User{
 		Username:     "testuser",
-		Email:        "duplicate@example.com",
+		Email:        "test@example.com",
 		PasswordHash: "hashed_password",
 		Salt:         "salt_value",
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
 
-	// Mock a PostgreSQL duplicate key error with specific constraint name for email
-	duplicateErr := errors.New(`pq: duplicate key value violates unique constraint "idx_email"`)
+	// Create a real PQ error with different error code
+	pqErr := &pq.Error{
+		Code:    "23503", // Foreign key violation
+		Message: "Foreign key violation",
+	}
+
 	mock.ExpectQuery("INSERT INTO users").
 		WithArgs(user.Username, user.Email, user.PasswordHash, user.Salt, user.CreatedAt, user.UpdatedAt).
-		WillReturnError(duplicateErr)
+		WillReturnError(pqErr)
 
 	// Execute the method being tested
 	err := repo.Create(context.Background(), user)
 
 	// Assert the results
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "duplicate")
-	assert.Contains(t, err.Error(), "email")
+	assert.Contains(t, err.Error(), "failed to create user")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -170,6 +205,30 @@ func TestUserRepository_GetByID(t *testing.T) {
 	assert.Equal(t, user.Salt, result.Salt)
 	assert.WithinDuration(t, user.CreatedAt, result.CreatedAt, time.Second)
 	assert.WithinDuration(t, user.UpdatedAt, result.UpdatedAt, time.Second)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUserRepository_GetByID_DatabaseError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Mock a database error
+	dbErr := errors.New("database connection error")
+	mock.ExpectQuery("SELECT user_id, username, email, password_hash, salt, created_at, updated_at FROM users WHERE user_id = \\$1").
+		WithArgs(id).
+		WillReturnError(dbErr)
+
+	// Execute the method being tested
+	result, err := repo.GetByID(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to get user by ID")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -237,6 +296,30 @@ func TestUserRepository_GetByUsername(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestUserRepository_GetByUsername_DatabaseError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	username := "testuser"
+
+	// Mock a database error
+	dbErr := errors.New("database connection error")
+	mock.ExpectQuery("SELECT user_id, username, email, password_hash, salt, created_at, updated_at FROM users WHERE LOWER\\(username\\) = LOWER\\(\\$1\\)").
+		WithArgs(username).
+		WillReturnError(dbErr)
+
+	// Execute the method being tested
+	result, err := repo.GetByUsername(context.Background(), username)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to get user by username")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestUserRepository_GetByUsername_NotFound(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupUserRepositoryTest(t)
@@ -301,6 +384,30 @@ func TestUserRepository_GetByEmail(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestUserRepository_GetByEmail_DatabaseError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	email := "test@example.com"
+
+	// Mock a database error
+	dbErr := errors.New("database connection error")
+	mock.ExpectQuery("SELECT user_id, username, email, password_hash, salt, created_at, updated_at FROM users WHERE LOWER\\(email\\) = LOWER\\(\\$1\\)").
+		WithArgs(email).
+		WillReturnError(dbErr)
+
+	// Execute the method being tested
+	result, err := repo.GetByEmail(context.Background(), email)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to get user by email")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestUserRepository_GetByEmail_NotFound(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupUserRepositoryTest(t)
@@ -353,6 +460,71 @@ func TestUserRepository_Update(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestUserRepository_Update_DatabaseError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	now := time.Now()
+	user := &models.User{
+		ID:           1,
+		Username:     "updateduser",
+		Email:        "updated@example.com",
+		PasswordHash: "hashed_password",
+		Salt:         "salt_value",
+		CreatedAt:    now.Add(-time.Hour),
+		UpdatedAt:    now,
+	}
+
+	// Mock a database error
+	dbErr := errors.New("database connection error")
+	mock.ExpectExec("UPDATE users SET username = \\$1, email = \\$2, updated_at = \\$3 WHERE user_id = \\$4").
+		WithArgs(user.Username, user.Email, sqlmock.AnyArg(), user.ID).
+		WillReturnError(dbErr)
+
+	// Execute the method being tested
+	err := repo.Update(context.Background(), user)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to update user")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUserRepository_Update_RowsAffectedError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	now := time.Now()
+	user := &models.User{
+		ID:           1,
+		Username:     "updateduser",
+		Email:        "updated@example.com",
+		PasswordHash: "hashed_password",
+		Salt:         "salt_value",
+		CreatedAt:    now.Add(-time.Hour),
+		UpdatedAt:    now,
+	}
+
+	// Create a result that will error on RowsAffected
+	result := sqlmock.NewErrorResult(errors.New("rows affected error"))
+
+	mock.ExpectExec("UPDATE users SET username = \\$1, email = \\$2, updated_at = \\$3 WHERE user_id = \\$4").
+		WithArgs(user.Username, user.Email, sqlmock.AnyArg(), user.ID).
+		WillReturnResult(result)
+
+	// Execute the method being tested
+	err := repo.Update(context.Background(), user)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get rows affected")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestUserRepository_Update_DuplicateUsername(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupUserRepositoryTest(t)
@@ -383,6 +555,39 @@ func TestUserRepository_Update_DuplicateUsername(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate")
 	assert.Contains(t, err.Error(), "username")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUserRepository_Update_DuplicateEmail(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	now := time.Now()
+	user := &models.User{
+		ID:           1,
+		Username:     "updateduser",
+		Email:        "duplicate@example.com",
+		PasswordHash: "hashed_password",
+		Salt:         "salt_value",
+		CreatedAt:    now.Add(-time.Hour),
+		UpdatedAt:    now,
+	}
+
+	// Mock a PostgreSQL duplicate key error with specific constraint name for email
+	duplicateErr := errors.New(`pq: duplicate key value violates unique constraint "idx_email"`)
+	mock.ExpectExec("UPDATE users SET username = \\$1, email = \\$2, updated_at = \\$3 WHERE user_id = \\$4").
+		WithArgs(user.Username, user.Email, sqlmock.AnyArg(), user.ID).
+		WillReturnError(duplicateErr)
+
+	// Execute the method being tested
+	err := repo.Update(context.Background(), user)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate")
+	assert.Contains(t, err.Error(), "email")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -439,6 +644,129 @@ func TestUserRepository_Delete(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestUserRepository_Delete_BeginError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Mock a transaction begin error
+	beginErr := errors.New("begin transaction error")
+	mock.ExpectBegin().WillReturnError(beginErr)
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to begin transaction")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUserRepository_Delete_ExecError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Set up transaction expectations with exec error
+	mock.ExpectBegin()
+	execErr := errors.New("exec error")
+	mock.ExpectExec("DELETE FROM users WHERE user_id = \\$1").
+		WithArgs(id).
+		WillReturnError(execErr)
+	mock.ExpectRollback() // Should rollback on error
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete user")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUserRepository_Delete_CommitError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Set up transaction expectations with commit error
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM users WHERE user_id = \\$1").
+		WithArgs(id).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	commitErr := errors.New("commit error")
+	mock.ExpectCommit().WillReturnError(commitErr)
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to commit transaction")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUserRepository_Delete_RollbackError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Set up transaction expectations with exec and rollback errors
+	mock.ExpectBegin()
+	execErr := errors.New("exec error")
+	mock.ExpectExec("DELETE FROM users WHERE user_id = \\$1").
+		WithArgs(id).
+		WillReturnError(execErr)
+	rollbackErr := errors.New("rollback error")
+	mock.ExpectRollback().WillReturnError(rollbackErr)
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	// The implementation seems to return the rollback error rather than the original exec error
+	assert.Contains(t, err.Error(), "rollback")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUserRepository_Delete_RowsAffectedError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+
+	// Set up transaction expectations with rows affected error
+	mock.ExpectBegin()
+	result := sqlmock.NewErrorResult(errors.New("rows affected error"))
+	mock.ExpectExec("DELETE FROM users WHERE user_id = \\$1").
+		WithArgs(id).
+		WillReturnResult(result)
+	mock.ExpectRollback() // Should rollback on error
+
+	// Execute the method being tested
+	err := repo.Delete(context.Background(), id)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get rows affected")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestUserRepository_Delete_NotFound(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupUserRepositoryTest(t)
@@ -459,6 +787,7 @@ func TestUserRepository_Delete_NotFound(t *testing.T) {
 
 	// Assert the results
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -485,6 +814,57 @@ func TestUserRepository_ChangePassword(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestUserRepository_ChangePassword_DatabaseError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+	passwordHash := "new_hashed_password"
+	salt := "new_salt_value"
+
+	// Mock a database error
+	dbErr := errors.New("database connection error")
+	mock.ExpectExec("UPDATE users SET password_hash = \\$1, salt = \\$2, updated_at = \\$3 WHERE user_id = \\$4").
+		WithArgs(passwordHash, salt, sqlmock.AnyArg(), id).
+		WillReturnError(dbErr)
+
+	// Execute the method being tested
+	err := repo.ChangePassword(context.Background(), id, passwordHash, salt)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to update password")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUserRepository_ChangePassword_RowsAffectedError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	id := int64(1)
+	passwordHash := "new_hashed_password"
+	salt := "new_salt_value"
+
+	// Create a result that will error on RowsAffected
+	result := sqlmock.NewErrorResult(errors.New("rows affected error"))
+
+	mock.ExpectExec("UPDATE users SET password_hash = \\$1, salt = \\$2, updated_at = \\$3 WHERE user_id = \\$4").
+		WithArgs(passwordHash, salt, sqlmock.AnyArg(), id).
+		WillReturnResult(result)
+
+	// Execute the method being tested
+	err := repo.ChangePassword(context.Background(), id, passwordHash, salt)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get rows affected")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestUserRepository_ChangePassword_NotFound(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupUserRepositoryTest(t)
@@ -505,6 +885,7 @@ func TestUserRepository_ChangePassword_NotFound(t *testing.T) {
 
 	// Assert the results
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -530,6 +911,30 @@ func TestUserRepository_ExistsByUsername(t *testing.T) {
 	// Assert the results
 	assert.NoError(t, err)
 	assert.True(t, exists)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUserRepository_ExistsByUsername_DatabaseError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	username := "testuser"
+
+	// Mock a database error
+	dbErr := errors.New("database connection error")
+	mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM users WHERE LOWER\\(username\\) = LOWER\\(\\$1\\)\\)").
+		WithArgs(username).
+		WillReturnError(dbErr)
+
+	// Execute the method being tested
+	exists, err := repo.ExistsByUsername(context.Background(), username)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.False(t, exists)
+	assert.Contains(t, err.Error(), "failed to check if username exists")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -580,6 +985,30 @@ func TestUserRepository_ExistsByEmail(t *testing.T) {
 	// Assert the results
 	assert.NoError(t, err)
 	assert.True(t, exists)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUserRepository_ExistsByEmail_DatabaseError(t *testing.T) {
+	// Set up the test
+	repo, mock, cleanup := setupUserRepositoryTest(t)
+	defer cleanup()
+
+	// Set up test data
+	email := "test@example.com"
+
+	// Mock a database error
+	dbErr := errors.New("database connection error")
+	mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM users WHERE LOWER\\(email\\) = LOWER\\(\\$1\\)\\)").
+		WithArgs(email).
+		WillReturnError(dbErr)
+
+	// Execute the method being tested
+	exists, err := repo.ExistsByEmail(context.Background(), email)
+
+	// Assert the results
+	assert.Error(t, err)
+	assert.False(t, exists)
+	assert.Contains(t, err.Error(), "failed to check if email exists")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 

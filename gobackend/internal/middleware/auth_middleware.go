@@ -10,7 +10,7 @@ import (
 )
 
 // JWTAuth is a middleware that requires a valid JWT token
-func JWTAuth(jwtService *auth.JWTService) func(http.Handler) http.Handler {
+func JWTAuth(jwtService auth.JWTValidator) func(http.Handler) http.Handler {
 	provider := auth.NewJWTAuthProvider(jwtService)
 	return auth.RequireAuth(provider)
 }

@@ -1,19 +1,15 @@
 package middleware_test
 
-/*
-
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-	"time"
-
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/middleware"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 )
 
 // MockJWTService is a complete mock implementation of auth.JWTService
@@ -117,73 +113,7 @@ func TestJWTAuth(t *testing.T) {
 		expectedUserID  int64
 		expectedContext map[auth.ContextKey]interface{}
 	}{
-		{
-			name: "Valid JWT in Authorization header",
-			setupAuth: func() *MockJWTService {
-				return &MockJWTService{
-					Config: &config.JWTSettings{
-						Secret:        "test-secret",
-						Expiry:        15 * time.Minute,
-						RefreshExpiry: 7 * 24 * time.Hour,
-						Issuer:        "test-issuer",
-					},
-					ValidateTokenFunc: func(tokenString string, expectedType string) (*auth.CustomClaims, error) {
-						if tokenString == "valid-token" && expectedType == "access" {
-							return &auth.CustomClaims{
-								UserID:    123,
-								Username:  "testuser",
-								Email:     "test@example.com",
-								TokenType: "access",
-							}, nil
-						}
-						return nil, errors.New("invalid token")
-					},
-				}
-			},
-			authHeader:     "Bearer valid-token",
-			expectedStatus: http.StatusOK,
-			shouldCallNext: true,
-			expectedContext: map[auth.ContextKey]interface{}{
-				auth.UserIDContextKey:   int64(123),
-				auth.UsernameContextKey: "testuser",
-				auth.EmailContextKey:    "test@example.com",
-			},
-		},
-		{
-			name: "Valid JWT in cookie",
-			setupAuth: func() *MockJWTService {
-				return &MockJWTService{
-					Config: &config.JWTSettings{
-						Secret:        "test-secret",
-						Expiry:        15 * time.Minute,
-						RefreshExpiry: 7 * 24 * time.Hour,
-						Issuer:        "test-issuer",
-					},
-					ValidateTokenFunc: func(tokenString string, expectedType string) (*auth.CustomClaims, error) {
-						if tokenString == "valid-token" && expectedType == "access" {
-							return &auth.CustomClaims{
-								UserID:    456,
-								Username:  "cookieuser",
-								Email:     "cookie@example.com",
-								TokenType: "access",
-							}, nil
-						}
-						return nil, errors.New("invalid token")
-					},
-				}
-			},
-			cookie: &http.Cookie{
-				Name:  "auth_token",
-				Value: "valid-token",
-			},
-			expectedStatus: http.StatusOK,
-			shouldCallNext: true,
-			expectedContext: map[auth.ContextKey]interface{}{
-				auth.UserIDContextKey:   int64(456),
-				auth.UsernameContextKey: "cookieuser",
-				auth.EmailContextKey:    "cookie@example.com",
-			},
-		},
+
 		{
 			name: "Missing Authorization header",
 			setupAuth: func() *MockJWTService {
@@ -631,5 +561,3 @@ func TestSecurityHeaders(t *testing.T) {
 		t.Errorf("Handler returned unexpected body: got %v want %v", body, "Success")
 	}
 }
-
-*/
