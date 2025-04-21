@@ -19,4 +19,5 @@ type SettingsServiceInterface interface {
 	GetModelEntities(ctx context.Context, userID int64, methodID int64) ([]*models.ModelEntityWithMethod, error)
 	AddModelEntities(ctx context.Context, userID int64, batch *models.ModelEntityBatch) ([]*models.ModelEntity, error)
 	DeleteModelEntity(ctx context.Context, userID int64, entityID int64) error
+	DeleteModelEntityByMethodID(ctx context.Context, userID int64, methodID int64) error
 }
