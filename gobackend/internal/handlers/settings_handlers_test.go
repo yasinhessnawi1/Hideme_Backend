@@ -109,6 +109,11 @@ func (m *MockSettingsService) DeleteModelEntity(ctx context.Context, userID int6
 	return args.Error(0)
 }
 
+func (m *MockSettingsService) DeleteModelEntityByMethodID(ctx context.Context, userID int64, methodID int64) error {
+	args := m.Called(ctx, userID, methodID)
+	return args.Error(0)
+}
+
 // Helper functions for testing
 func setupSettingsTest(t *testing.T) (*handlers.SettingsHandler, *MockSettingsService) {
 	mockService := new(MockSettingsService)
