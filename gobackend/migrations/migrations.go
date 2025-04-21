@@ -93,6 +93,11 @@ func (m *Migrator) RunMigrations(ctx context.Context) error {
 		Dur("duration", time.Since(startTime)).
 		Msg("Database migrations completed")
 
+	if err := m.ensureUserSettingsColumns(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to ensure user_settings columns")
+		// Don't return error to avoid breaking existing migrations
+	}
+
 	return nil
 }
 
@@ -174,6 +179,66 @@ func (m *Migrator) tableExists(ctx context.Context, tableName string) (bool, err
 	var count int
 	err := m.db.QueryRowContext(ctx, query, tableName).Scan(&count)
 	return count > 0, err
+}
+
+// ensureUserSettingsColumns ensures that the user_settings table has all required columns
+func (m *Migrator) ensureUserSettingsColumns(ctx context.Context) error {
+	// Check if the detection_threshold column exists
+	var columnExists bool
+	query := `
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_name = 'user_settings'
+			AND column_name = 'detection_threshold'
+		)
+	`
+
+	err := m.db.QueryRowContext(ctx, query).Scan(&columnExists)
+	if err != nil {
+		return fmt.Errorf("failed to check if detection_threshold column exists: %w", err)
+	}
+
+	// Add the column if it doesn't exist
+	if !columnExists {
+		log.Info().Msg("Adding missing detection_threshold column to user_settings table")
+
+		alterQuery := `ALTER TABLE user_settings ADD COLUMN detection_threshold DECIMAL(5, 2) DEFAULT 0.50`
+		_, err = m.db.ExecContext(ctx, alterQuery)
+		if err != nil {
+			return fmt.Errorf("failed to add detection_threshold column: %w", err)
+		}
+
+		log.Info().Msg("Successfully added detection_threshold column")
+	}
+
+	// Also check for use_banlist_for_detection column
+	err = m.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_name = 'user_settings'
+			AND column_name = 'use_banlist_for_detection'
+		)
+	`).Scan(&columnExists)
+
+	if err != nil {
+		return fmt.Errorf("failed to check if use_banlist_for_detection column exists: %w", err)
+	}
+
+	if !columnExists {
+		log.Info().Msg("Adding missing use_banlist_for_detection column to user_settings table")
+
+		alterQuery := `ALTER TABLE user_settings ADD COLUMN use_banlist_for_detection BOOLEAN DEFAULT TRUE`
+		_, err = m.db.ExecContext(ctx, alterQuery)
+		if err != nil {
+			return fmt.Errorf("failed to add use_banlist_for_detection column: %w", err)
+		}
+
+		log.Info().Msg("Successfully added use_banlist_for_detection column")
+	}
+
+	return nil
 }
 
 // GetMigrations returns all migrations
