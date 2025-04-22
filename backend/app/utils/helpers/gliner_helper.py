@@ -40,7 +40,7 @@ class GLiNERHelper:
         # Start with the provided text as base key data.
         key_data = text
         # If requested_entities is provided, sort them and append to the key data.
-        if requested_entities:
+        if requested_entities is not None:
             key_data += '|' + ','.join(sorted(requested_entities))
         # Generate an MD5 hash of the combined key data.
         return hashlib.md5(key_data.encode('utf-8')).hexdigest()
@@ -106,14 +106,16 @@ class GLiNERHelper:
         current_chunk = []
         # Initialize the current character count to zero.
         current_length = 0
+
         # Loop through each word in the sentence.
         for word in words:
             # Calculate additional length including a preceding space if needed.
             additional = len(word) if not current_chunk else len(word) + 1
             # If adding this word exceeds the max_chars limit...
             if current_length + additional > max_chars:
-                # Join current words into a chunk and add to chunks.
-                chunks.append(" ".join(current_chunk))
+                # Only append if the current_chunk is not empty.
+                if current_chunk:
+                    chunks.append(" ".join(current_chunk))
                 # Start a new chunk with the current word.
                 current_chunk = [word]
                 # Reset the current length based on the current word's length.
@@ -123,6 +125,7 @@ class GLiNERHelper:
                 current_chunk.append(word)
                 # Update the current length with the additional characters.
                 current_length += additional
+
         # If there are any words left in the current chunk, join and append them.
         if current_chunk:
             chunks.append(" ".join(current_chunk))

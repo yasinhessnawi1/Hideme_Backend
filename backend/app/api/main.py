@@ -16,6 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
 
 # Importing the API routers for various modules.
 from backend.app.api.routes import (
@@ -391,7 +393,7 @@ def create_app() -> FastAPI:
                     exp, "api_process_time_header", endpoint=str(request.url)
                 )
                 status = error_info.get("status_code", 500)
-                return Response(
+                return JSONResponse(
                     content=error_info,
                     status_code=status,
                     media_type=JSON_MEDIA_TYPE

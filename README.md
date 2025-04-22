@@ -1,109 +1,33 @@
-# HideMeAI Backend
+# Hideme_Backend
 
-### Progress Report
+A comprehensive backend service for detecting and redacting sensitive information in documents with a focus on Norwegian
+language support, GDPR compliance, and high performance.
 
-Backend is under development, the following is the current status of the backend:
+## Project Overview
 
-- ✅ API structure
-- ✅ API routes
-- ✅ API functionality
-- 🔄 API testing
-- 🔄 API documentation
-- ✅ Presidio integration
-- ✅ GLiNER integration
-- ✅ Gemini integration
-- ✅ Hybrid integration
-- ✅ PDF processing
-- ✅ Batch processing
-- ✅ Memory management
-- ✅ Rate limiting
-- ✅ Error handling
-- ✅ GDPR compliance
-- ✅ Security measures
-- ✅ Distributed tracing
-- ✅ Performance optimization
-- ✅ Configuration settings
-- ✅ Docker setup
-- ✅ Deployment scripts
-- ✅ Logging and monitoring
-- ✅ File and input validation
-- ❌ Database integration
-- ❌ User authentication
-- ❌ User management and API endpoints
-- 🔄 Multiple file formats support
-- 🔄 Comprehensive testing suite
-- ✅ CI/CD pipeline integration
+Hideme_Backend is a FastAPI-based service designed to detect, extract, and redact sensitive information from documents,
+particularly PDFs. It employs multiple detection engines including:
 
-- ⏳ Future enhancements to be determined
+- **Presidio**: Microsoft's PII detection library
+- **Gemini**: Google's generative AI for entity detection
+- **GLiNER**: A specialized NER model for sensitive data detection
+- **HIDEME**: A custom-trained model for Norwegian-specific sensitive data
 
-**Legend:**
+The system is built with security, performance, and GDPR compliance as core principles, featuring rate limiting,
+caching, memory optimization, and secure error handling. It supports both individual file processing and batch
+operations, making it suitable for enterprise-level document processing needs.
 
-- ✅ Completed
-- 🔄 In Progress
-- ❌ Not Started
-- ⏳ Planned for Future
+## Key Features
 
-## Overview
-
-HideMeAI is a secure document processing system designed to detect and redact sensitive information in various file
-formats (primarily PDFs, but also DOCx and text files). The system combines multiple entity detection engines to
-identify potentially sensitive information, following GDPR compliance guidelines with robust security measures.
-
-## Core Components
-
-### 1. Entity Detection Engines
-
-The system uses three primary entity detection engines that can be used individually or combined through a hybrid
-approach:
-
-#### A. Presidio Entity Detector (`presidio.py`)
-
-- Microsoft Presidio-based detection for standardized entity types
-- Configured with custom rules especially for Norwegian formats
-- Handles common entity types (email, phone numbers, identification numbers, etc.)
-- Includes Norwegian-specific recognizers for `NO_FODSELSNUMMER`, `NO_PHONE_NUMBER`, etc.
-
-#### B. GLiNER Entity Detector (`gliner.py`)
-
-- Uses the GLiNER machine learning model for detecting a wide variety of entity types
-- Model ID: "urchade/gliner_multi_pii-v1"
-- Detects entities like names, addresses, identification numbers across many languages
-- Features model caching and memory-optimized processing
-- Special handling for Norwegian language pronouns to avoid false positives
-
-#### C. Gemini Entity Detector (`gemini.py`)
-
-- Uses Google's Gemini API for detecting entities
-- Processes text with specialized prompts for entity detection
-- Detects complex contextual entities and rare entity types
-- Features advanced request throttling and quota management
-
-#### D. Hybrid Entity Detector (`hybrid.py`)
-
-- Combines results from multiple detection engines
-- Can be configured to use any combination of engines
-- Processes documents in parallel across engines
-- Merges and deduplicates the entities detected by each engine
-
-### 2. Document Processing
-
-#### PDF Processing (`pdf.py`)
-
-- Text extraction and position mapping from PDF documents
-- Redaction capabilities to remove sensitive information
-- Handles in-memory processing and streaming for large documents
-- Supports page-by-page processing to optimize memory usage
-
-### 3. Security & Performance Features
-
-- **Memory Management**: Adaptive memory usage with resource monitoring
-- **Buffer Pool**: Optimized buffer reuse to reduce memory allocation overhead
-- **Rate Limiting**: Request throttling for API endpoints
-- **Data Minimization**: GDPR-compliant data processing
-- **Error Handling**: Secure error handling to prevent information leakage
-- **File Validation**: Comprehensive content-type and signature validation
-- **Secure Temporary Files**: Secure creation and deletion of temporary files
-- **Processing Records**: GDPR-compliant audit trails without storing sensitive data
+- Multiple detection engines with hybrid detection capabilities
+- PDF processing (extraction, redaction, searching)
+- Batch processing for multiple files
+- Norwegian language support with specialized entity types
+- GDPR-compliant data handling with secure deletion
+- Rate limiting and caching for performance optimization
+- Memory management for handling large documents
+- Comprehensive error handling with security focus
+- Health and status monitoring endpoints
 
 ## Key Algorithms
 
@@ -121,7 +45,7 @@ The system extracts text from documents while preserving positional information:
    c. Store in a structured format for entity detection
 ```
 
-#### 2. Text Segmentation Algorithm (GLiNER)
+#### 2. Text Segmentation Algorithm (GLiNER AND HIDEME)
 
 GLiNER processes text in segments to handle token limits:
 
@@ -134,15 +58,7 @@ GLiNER processes text in segments to handle token limits:
    c. Merge and deduplicate entities
 ```
 
-#### 3. Entity Deduplication Algorithm
-
-```
-1. Create a unique key for each entity based on (entity_type, start, end)
-2. For duplicate entities (same key), keep the one with highest confidence score
-3. Remove overlapping entities using priority rules
-```
-
-#### 4. Redaction Mapping Algorithm
+#### 3. Redaction Mapping Algorithm
 
 ```
 1. For each detected entity:
@@ -159,724 +75,559 @@ GLiNER processes text in segments to handle token limits:
    a. Extract entities with confidence scores
    b. Track processing time and success/failure
 3. Combine results from all engines
-4. Deduplicate combined entities
-5. Prepare unified redaction mapping
+4. Prepare unified redaction mapping
 ```
 
-### File Processing & Memory Management
+## Setup Instructions
 
-#### Streaming Large File Algorithm
+### Prerequisites
 
-```
-1. For files > threshold:
-   a. Process in chunks (64KB by default)
-   b. Yield each chunk for processing
-   c. Clear memory between chunks
-2. For small files:
-   a. Process entirely in memory
-```
-
-#### Adaptive Resource Allocation
-
-```
-1. Monitor system resources (CPU, memory)
-2. Calculate optimal parallel workers based on:
-   a. Available CPU cores
-   b. Available memory
-   c. Current memory pressure
-   d. File sizes
-3. Adjust thresholds based on system state
-```
-
-## PDF Lifecycle and Processing Scenarios
-
-The system handles PDFs through different processing paths depending on file size, memory availability, and operation
-type. Understanding these pathways is crucial for optimizing performance and resource usage.
-
-### PDF Processing Lifecycle
-
-1. **Intake Phase**
-    - File upload validation (MIME type, size limits)
-    - Initial security screening
-    - Determination of processing strategy (in-memory vs. file-based)
-
-2. **Text Extraction Phase**
-    - Extraction of text with positional information
-    - Creation of internal document representation
-    - Application of data minimization rules
-
-3. **Entity Detection Phase**
-    - Processing through selected detection engines
-    - Entity identification and classification
-    - Creation of redaction mapping
-
-4. **Redaction Phase**
-    - Application of redaction boxes based on mapping
-    - Generation of redacted document
-    - Optional sanitization of document metadata
-
-5. **Delivery Phase**
-    - Streaming output to client
-    - Cleanup of temporary resources
-    - Recording of processing metrics
-
-### Processing Scenarios
-
-#### Scenario 1: Small PDF Processing (In-Memory)
-
-- **Trigger**: PDF size < `IN_MEMORY_THRESHOLD` (default: 10MB)
-- **Flow**:
-    1. PDF loaded entirely into memory as byte array
-    2. Text extraction performed directly on memory buffer
-    3. Entity detection applied to extracted text
-    4. Redaction applied directly in memory
-    5. Resulting PDF streamed from memory to client
-    6. No temporary files created, all processing in RAM
-- **Benefits**: Faster processing, no I/O overhead, no cleanup required
-- **Example**: A 2MB contract document processed entirely in RAM
-
-```
-Client -> API -> [Memory Buffer] -> Detection -> Redaction -> Client
-```
-
-#### Scenario 2: Medium PDF Processing (Hybrid Approach)
-
-- **Trigger**: PDF size between `IN_MEMORY_THRESHOLD` and `LARGE_FILE_THRESHOLD` (10MB-50MB)
-- **Flow**:
-    1. PDF initially loaded into memory
-    2. If memory pressure detected (>80%), content moved to secure temp file
-    3. Text extraction performed, results kept in memory
-    4. Entity detection applied to in-memory text representation
-    5. Redaction applied, reading from temp file if created
-    6. Output streamed to client
-    7. Temp files securely deleted with overwriting
-- **Benefits**: Balance between performance and memory usage
-- **Example**: A 15MB report document with images
-
-```
-Client -> API -> [Memory/Temp File] -> Detection -> Redaction -> Client
-                          |
-                    [Secure Deletion]
-```
-
-#### Scenario 3: Large PDF Processing (Streaming)
-
-- **Trigger**: PDF size > `LARGE_FILE_THRESHOLD` (default: 50MB)
-- **Flow**:
-    1. PDF content streamed to secure temporary file
-    2. Text extraction performed page-by-page with streaming
-    3. Entity detection applied to pages incrementally
-    4. Redaction applied with page-based processing
-    5. Output document streamed to client in chunks
-    6. Temp files securely deleted with shredding
-- **Benefits**: Minimal memory footprint, can handle very large files
-- **Example**: A 100MB medical record with many pages and images
-
-```
-Client -> API -> [Temp File] -> [Page 1] -> Detection -> Redaction -> [Output Chunk 1] -> Client
-                                [Page 2] -> Detection -> Redaction -> [Output Chunk 2] -> ...
-                                    |
-                            [Secure Deletion]
-```
-
-#### Scenario 4: Emergency Processing (Fallback Mode)
-
-- **Trigger**: System under high memory pressure (>90%) or resource contention
-- **Flow**:
-    1. Immediate creation of temporary file regardless of PDF size
-    2. Reduced parallelism and threading
-    3. Simplified entity detection (may use only Presidio engine)
-    4. Basic redaction without advanced features
-    5. Output streamed with larger chunk size to reduce overhead
-- **Benefits**: Ensures service availability under extreme load
-- **Example**: System under high load processing multiple concurrent requests
-
-```
-Client -> API -> [Temp File] -> [Simplified Detection] -> [Basic Redaction] -> Client
-                                          |
-                                  [Secure Deletion]
-```
-
-### Key Decision Points
-
-The system determines the processing path based on these factors:
-
-1. **File Size Check**
-   ``` python
-   use_in_memory = file_size < IN_MEMORY_THRESHOLD
-   use_streaming = file_size > LARGE_FILE_THRESHOLD
-   ```
-
-2. **Memory Pressure Check**
-   ``` python
-   if memory_monitor.get_memory_usage() > MEMORY_THRESHOLD:
-       # Fall back to file-based processing even for smaller files
-       use_in_memory = False
-   ```
-
-3. **Resource Contention Check**
-   ``` python
-   # Using the AsyncTimeoutLock for controlled resource access
-   async with pdf_lock.acquire_timeout(timeout=10.0) as acquired:
-       if not acquired:
-           # Fall back to emergency processing path
-   ```
-
-4. **Processing Time Optimization**
-   ``` python
-   # For entity detection, adjust timeout based on file size
-   timeout = min(30.0 + (file_size / (1024 * 1024) * 2), 120.0)  # 30s base + 2s per MB, max 120s
-   ```
-
-### Performance Impact
-
-The table below shows approximate performance metrics for different PDF sizes:
-
-| PDF Size | Processing Mode | Memory Usage | Processing Time | Temp Files |
-|----------|-----------------|--------------|-----------------|------------|
-| 1MB      | In-Memory       | ~10MB        | 1-2s            | None       |
-| 10MB     | Hybrid          | ~50MB        | 5-10s           | Sometimes  |
-| 50MB     | Streaming       | ~100MB       | 20-40s          | Always     |
-| 100MB+   | Streaming       | ~150MB       | 60s+            | Always     |
-
-## Configuration Settings
+- Python 3.10+
+- Redis (optional, for distributed caching and rate limiting)
+- Docker and Docker Compose (for containerized deployment)
 
 ### Environment Variables
 
-| Variable                     | Description                                     | Default                                   |
-|------------------------------|-------------------------------------------------|-------------------------------------------|
-| `MEMORY_THRESHOLD`           | Memory usage percentage threshold for cleanup   | `80.0`                                    |
-| `CRITICAL_MEMORY_THRESHOLD`  | Critical memory threshold for emergency cleanup | `90.0`                                    |
-| `MEMORY_CHECK_INTERVAL`      | Interval for memory checks (seconds)            | `5.0`                                     |
-| `ENABLE_MEMORY_MONITORING`   | Enable memory monitoring                        | `true`                                    |
-| `ADAPTIVE_MEMORY_THRESHOLDS` | Adapt thresholds based on system resources      | `true`                                    |
-| `MAX_PDF_SIZE_BYTES`         | Maximum PDF file size in bytes                  | `25 * 1024 * 1024` (25MB)                 |
-| `MAX_TEXT_SIZE_BYTES`        | Maximum text file size in bytes                 | `10 * 1024 * 1024` (10MB)                 |
-| `MAX_DOCX_SIZE_BYTES`        | Maximum DOCX file size in bytes                 | `20 * 1024 * 1024` (20MB)                 |
-| `MAX_BATCH_SIZE_BYTES`       | Maximum batch processing size in bytes          | `50 * 1024 * 1024` (50MB)                 |
-| `MAX_FILE_COUNT`             | Maximum number of files in a batch              | `20`                                      |
-| `IN_MEMORY_THRESHOLD`        | Size threshold for in-memory processing         | `10485760` (10MB)                         |
-| `MAX_BUFFER_POOL_SIZE`       | Maximum memory for buffer pooling               | `52428800` (50MB)                         |
-| `USE_BUFFER_POOL`            | Enable buffer pooling                           | `true`                                    |
-| `RANDOMIZE_FILENAMES`        | Add random suffix to sanitized filenames        | `false`                                   |
-| `BLOCK_PDF_JAVASCRIPT`       | Block PDFs containing JavaScript                | `false`                                   |
-| `BLOCK_OFFICE_MACROS`        | Block Office documents with macros              | `true`                                    |
-| `VALIDATE_ZIP_CONTENTS`      | Validate content of ZIP files                   | `true`                                    |
-| `ERROR_LOG_PATH`             | Path for detailed error logs                    | `app/logs/error_logs/detailed_errors.log` |
-| `ERROR_JSON_LOGGING`         | Use JSON format for error logging               | `true`                                    |
-| `ENABLE_DISTRIBUTED_TRACING` | Enable distributed tracing                      | `false`                                   |
-| `SERVICE_NAME`               | Service name for tracing                        | `document_processing`                     |
-| `REDIS_URL`                  | Redis URL for distributed rate limiting         | None                                      |
-| `RATE_LIMIT_RPM`             | Requests per minute for rate limiting           | `60`                                      |
-| `ADMIN_RATE_LIMIT_RPM`       | Admin requests per minute                       | `120`                                     |
-| `ANON_RATE_LIMIT_RPM`        | Anonymous requests per minute                   | `30`                                      |
-| `RATE_LIMIT_BURST`           | Burst allowance for rate limiting               | `10`                                      |
-| `GLINER_MODEL_DIR`           | Directory for GLiNER model storage              | `{base}/models/gliner`                    |
-| `EXTRACTION_DEBUG`           | Enable debug logging for extraction             | `false`                                   |
+Create a `.env` file in the project root with the following variables:
 
-### GLiNER Configuration
+```
+# API Configuration
+API_VERSION=1.0.0
+API_HOST=0.0.0.0
+API_PORT=8000
+DEBUG=False
 
-``` python
-# Located in gliner_config.py
-GLINER_MODEL_NAME = "urchade/gliner_multi_pii-v1"
-GLINER_MODEL_DIR = os.environ.get("GLINER_MODEL_DIR", os.path.join(...))
-GLINER_MODEL_PATH = os.path.join(GLINER_MODEL_DIR, "gliner_multi_pii-v1.pt")
+# Gemini API
+GEMINI_API_KEY=your_gemini_api_key
+
+# Redis (Optional)
+REDIS_URL=redis://redis:6379/0
+
+# Rate Limiting
+RATE_LIMIT_RPM=60
+ADMIN_RATE_LIMIT_RPM=120
+ANON_RATE_LIMIT_RPM=30
+RATE_LIMIT_BURST=30
+
+# Security
+METRICS_API_KEY=your_metrics_api_key
 ```
 
-### GDPR Configuration
+### Local Setup
 
-``` python
-# Located in gdpr_config.py
-TEMP_FILE_RETENTION_SECONDS = 3600  # 1 hour
-REDACTED_FILE_RETENTION_SECONDS = 86400  # 24 hours
-LEGAL_BASIS = "legitimate_interest"
-DATA_MINIMIZATION_RULES = {
-    "keep_metadata": False,
-    "strip_document_authors": True,
-    "strip_timestamp": True,
-    "required_fields_only": True,
-}
-MAX_DETECTOR_CACHE_SIZE = 1000
-```
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/Hideme_Backend.git
+   cd Hideme_Backend
+   ```
 
-### Memory Management Parameters
+2. Create and activate a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-``` python
-# In memory_management.py
-MAX_PARALLELISM = 12  # Hard limit on parallelism regardless of cores
-DEFAULT_TIMEOUT = 300.0  # Default timeout for batch processing (5 minutes)
-MIN_MEMORY_PER_WORKER = 250 * 1024 * 1024  # 250 MB per worker minimum
-MAX_MEMORY_PERCENTAGE = 80  # Maximum percentage of memory to use
-```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### Batch Processing Parameters
+4. Download required NLP models:
+   ```bash
+   python -m spacy download nb_core_news_lg
+   ```
 
-``` python
-# In batch_processing_helper.py
-MAX_PARALLELISM = 12
-DEFAULT_TIMEOUT = 300.0  # 5 minutes
-MIN_MEMORY_PER_WORKER = 250 * 1024 * 1024  # 250 MB
-MAX_MEMORY_PERCENTAGE = 80
-```
+5. Run the application:
+   ```bash
+   python backend/main.py
+   ```
 
-### Security Parameters
+The API will be available at `http://localhost:8000`.
 
-File validation thresholds are defined in `file_validation.py`:
+### Docker Setup
 
-``` python
-MAX_PDF_SIZE_BYTES = 25 * 1024 * 1024  # 25MB
-MAX_TEXT_SIZE_BYTES = 10 * 1024 * 1024  # 10MB
-MAX_DOCX_SIZE_BYTES = 20 * 1024 * 1024  # 20MB
-MAX_BATCH_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
-MAX_FILE_COUNT = 20
-```
+1. Build and start the containers:
+   ```bash
+   docker-compose up -d
+   ```
 
-## Folder Structure
+2. The API will be available at `http://localhost:8000`.
+
+3. Check the logs:
+   ```bash
+   docker-compose logs -f
+   ```
+
+4. Stop the containers:
+   ```bash
+   docker-compose down
+   ```
+## Running Tests & Coverage
+
+We use **pytest** along with **pytest-cov** to validate functionality and measure test coverage for the `backend.app` package.
+
+1. **Install testing dependencies**:
+   ```bash
+   pip install pytest pytest-cov
+   ```
+
+2. **Run tests and generate an HTML coverage report**:
+   ```bash
+   pytest --cov=backend.app --cov-report=html
+   start htmlcov/index.html  # On macOS/Linux: open htmlcov/index.html
+   ```
+
+The generated report (as of **2025-04-20**) shows an overall test coverage of **87%**:
+
+| File                                               | statements | missing | excluded | coverage |
+|----------------------------------------------------|-----------:|--------:|---------:|---------:|
+| backend/app/__init__.py                            |          3 |       0 |        0 |    100% |
+| backend/app/api/__init__.py                        |          0 |       0 |        0 |    100% |
+| backend/app/api/main.py                            |        166 |      29 |        0 |     83% |
+| backend/app/api/routes/__init__.py                 |          7 |       0 |        0 |    100% |
+| backend/app/api/routes/ai_routes.py                |         31 |       5 |        0 |     84% |
+| backend/app/api/routes/batch_routes.py             |        112 |      12 |        0 |     89% |
+| backend/app/api/routes/machine_learning.py         |         82 |       8 |        0 |     90% |
+| backend/app/api/routes/metadata_routes.py          |        126 |       3 |        0 |     98% |
+| backend/app/api/routes/pdf_routes.py               |         36 |       0 |        0 |    100% |
+| backend/app/api/routes/status_routes.py            |        112 |      23 |        0 |     79% |
+| backend/app/configs/__init__.py                    |          0 |       0 |        0 |    100% |
+| backend/app/configs/config_singleton.py            |         31 |       4 |        0 |     87% |
+| backend/app/configs/gdpr_config.py                 |         10 |       0 |        0 |    100% |
+| backend/app/configs/gemini_config.py               |          8 |       0 |        0 |    100% |
+| backend/app/configs/gliner_config.py               |          7 |       0 |        0 |    100% |
+| backend/app/configs/hideme_config.py               |          7 |       0 |        0 |    100% |
+| backend/app/configs/presidio_config.py             |          4 |       0 |        0 |    100% |
+| backend/app/document_processing/__init__.py        |          0 |       0 |        0 |    100% |
+| backend/app/document_processing/detection_updater.py |       126 |      27 |        0 |     79% |
+| backend/app/document_processing/pdf_extractor.py   |        170 |      28 |        0 |     84% |
+| backend/app/document_processing/pdf_redactor.py    |        192 |      33 |        0 |     83% |
+| backend/app/document_processing/pdf_searcher.py    |        196 |      26 |        0 |     87% |
+| backend/app/domain/__init__.py                     |          2 |       0 |        0 |    100% |
+| backend/app/domain/interfaces.py                   |         23 |       6 |        0 |     74% |
+| backend/app/entity_detection/__init__.py           |          8 |       0 |        0 |    100% |
+| backend/app/entity_detection/base.py               |        203 |      21 |        0 |     90% |
+| backend/app/entity_detection/engines.py            |          7 |       0 |        0 |    100% |
+| backend/app/entity_detection/gemini.py             |        163 |      16 |        0 |     90% |
+| backend/app/entity_detection/gliner.py             |         14 |       1 |        0 |     93% |
+| backend/app/entity_detection/glinerbase.py         |        438 |     254 |        0 |     42% |
+| backend/app/entity_detection/hideme.py             |         14 |       1 |        0 |     93% |
+| backend/app/entity_detection/hybrid.py             |        230 |      54 |        0 |     77% |
+| backend/app/entity_detection/presidio.py           |        165 |      50 |        0 |     70% |
+| backend/app/services/__init__.py                   |          4 |       0 |        0 |    100% |
+| backend/app/services/ai_detect_service.py          |         54 |       5 |        0 |     91% |
+| backend/app/services/base_detect_service.py        |        135 |       5 |        0 |     96% |
+| backend/app/services/batch_detect_service.py       |        185 |      17 |        0 |     91% |
+| backend/app/services/batch_redact_service.py       |        187 |       8 |        0 |     96% |
+| backend/app/services/batch_search_service.py       |        137 |      24 |        0 |     82% |
+| backend/app/services/document_extract_service.py   |         56 |       1 |        0 |     98% |
+| backend/app/services/document_redact_service.py    |         65 |       3 |        0 |     95% |
+| backend/app/services/initialization_service.py     |        425 |      46 |        0 |     89% |
+| backend/app/services/machine_learning_service.py   |         61 |       4 |        0 |     93% |
+| backend/app/utils/__init__.py                      |          2 |       0 |        0 |    100% |
+| backend/app/utils/constant/__init__.py             |          0 |       0 |        0 |    100% |
+| backend/app/utils/constant/constant.py             |         36 |       0 |        0 |    100% |
+| backend/app/utils/helpers/__init__.py              |          5 |       0 |        0 |    100% |
+| backend/app/utils/helpers/gemini_helper.py         |        124 |      10 |        0 |     92% |
+| backend/app/utils/helpers/gemini_usage_manager.py  |         73 |       7 |        0 |     90% |
+| backend/app/utils/helpers/gliner_helper.py         |         78 |       0 |        0 |    100% |
+| backend/app/utils/helpers/json_helper.py           |        127 |       7 |        0 |     94% |
+| backend/app/utils/helpers/ml_models_helper.py      |         25 |       0 |        0 |    100% |
+| backend/app/utils/helpers/text_utils.py            |        105 |       0 |        0 |    100% |
+| backend/app/utils/logging/__init__.py              |          0 |       0 |        0 |    100% |
+| backend/app/utils/logging/logger.py                |         32 |       0 |        0 |    100% |
+| backend/app/utils/logging/secure_logging.py        |         15 |       0 |        0 |    100% |
+| backend/app/utils/parallel/__init__.py             |          0 |       0 |        0 |    100% |
+| backend/app/utils/parallel/core.py                 |        205 |       9 |        0 |     96% |
+| backend/app/utils/security/__init__.py             |          0 |       0 |        0 |    100% |
+| backend/app/utils/security/caching_middleware.py   |        239 |      19 |        0 |     92% |
+| backend/app/utils/security/processing_records.py   |        109 |      13 |        0 |     88% |
+| backend/app/utils/security/rate_limiting.py        |        101 |       3 |        0 |     97% |
+| backend/app/utils/security/retention_management.py |        128 |       6 |        0 |     95% |
+| backend/app/utils/system_utils/__init__.py         |          0 |       0 |        0 |    100% |
+| backend/app/utils/system_utils/error_handling.py   |        281 |      30 |        0 |     89% |
+| backend/app/utils/system_utils/memory_management.py|        347 |      50 |        0 |     86% |
+| backend/app/utils/system_utils/secure_file_utils.py|        112 |      14 |        0 |     88% |
+| backend/app/utils/system_utils/synchronization_utils.py |      311 |      20 |        0 |     94% |
+| backend/app/utils/validation/__init__.py           |          0 |       0 |        0 |    100% |
+| backend/app/utils/validation/data_minimization.py  |        129 |       6 |        0 |     95% |
+| backend/app/utils/validation/file_validation.py    |        143 |       5 |        0 |     97% |
+| backend/app/utils/validation/sanitize_utils.py     |         99 |       1 |        0 |     99% |
+| **Total**                                         |       6828 |     914 |        0 |    **87%** |
+
+
+## Project Structure
+
+The project follows a modular architecture with the following structure:
 
 ```
 backend/
 ├── app/
-│   ├── api/
-│   │   ├── routes/
-│   │   │   ├── __init__.py
-│   │   │   ├── ai_routes.py
-│   │   │   ├── batch_routes.py
-│   │   │   ├── machine_learning.py
-│   │   │   ├── hybrid_routes.py
-│   │   │   ├── metadata_routes.py
-│   │   │   ├── pdf_routes.py
-│   │   │   └── status_routes.py
+│   ├── api/                              # API routes and endpoints
 │   │   ├── __init__.py
-│   │   ├── main.py
-│   │   └── models.py
-│   ├── configs/
+│   │   ├── main.py                       # API initialization
+│   │   └── routes/                       # Route definitions
+│   │       ├── __init__.py
+│   │       ├── ai_routes.py
+│   │       ├── batch_routes.py
+│   │       ├── machine_learning.py
+│   │       ├── metadata_routes.py
+│   │       ├── pdf_routes.py
+│   │       └── status_routes.py
+│   ├── configs/                          # Configuration files
 │   │   ├── __init__.py
 │   │   ├── analyzer-config.yml
 │   │   ├── config_singleton.py
 │   │   ├── gdpr_config.py
 │   │   ├── gemini_config.py
 │   │   ├── gliner_config.py
+│   │   ├── hideme_config.py
 │   │   ├── nlp-config.yml
 │   │   ├── presidio_config.py
 │   │   └── recognizers-config.yml
-│   ├── document_processing/
+│   ├── domain/                           # Domain interfaces and models
 │   │   ├── __init__.py
-│   │   └── pdf.py
-│   ├── domain/
+│   │   └── interfaces.py
+│   ├── document_processing/              # PDF processing utilities
 │   │   ├── __init__.py
-│   │   ├── interfaces.py
-│   │   └── models.py
-│   ├── entity_detection/
+│   │   ├── detection_updater.py
+│   │   ├── pdf_extractor.py
+│   │   ├── pdf_redactor.py
+│   │   └── pdf_searcher.py
+│   ├── entity_detection/                 # Entity detection engines
 │   │   ├── __init__.py
 │   │   ├── base.py
+│   │   ├── engines.py
 │   │   ├── gemini.py
 │   │   ├── gliner.py
+│   │   ├── glinerbase.py
+│   │   ├── hideme.py
 │   │   ├── hybrid.py
 │   │   └── presidio.py
-│   ├── factory/
+│   ├── services/                         # Business logic and service layers
 │   │   ├── __init__.py
-│   │   └── document_processing_factory.py
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── batch_processing_service.py
-│   │   ├── configuration.py
-│   │   ├── document_processing.py
-│   │   └── initialization_service.py
-│   └── utils/ (to be refactored into separate modules)
+│   │   ├── ai_detect_service.py
+│   │   ├── base_detect_service.py
+│   │   ├── batch_detect_service.py
+│   │   ├── batch_redact_service.py
+│   │   ├── batch_search_service.py
+│   │   ├── document_extract_service.py
+│   │   ├── document_redact_service.py
+│   │   ├── initialization_service.py
+│   │   └── machine_learning_service.py
+│   └── utils/                            # Utility modules
 │       ├── __init__.py
-│       ├── batch_processing_utils.py
-│       ├── buffer_pool.py
-│       ├── caching_middleware.py
-│       ├── common_detection.py
-│       ├── data_minimization.py
-│       ├── document_processing_utils.py
-│       ├── error_handling.py
-│       ├── file_validation.py
-│       ├── logger.py
-│       ├── memory_management.py
-│       ├── processing_records.py
-│       ├── rate_limiting.py
-│       ├── retention_management.py
-│       ├── sanitize_utils.py
-│       ├── secure_file_utils.py
-│       ├── secure_logging.py
-│       ├── synchronization_utils.py
-│       └── helpers/
+│       ├── constant/                     # Constants
+│       │   ├── __init__.py
+│       │   └── constant.py
+│       ├── helpers/                      # Helper functions
+│       │   ├── __init__.py
+│       │   ├── gemini_helper.py
+│       │   ├── gemini_usage_manager.py
+│       │   ├── gliner_helper.py
+│       │   ├── json_helper.py
+│       │   ├── ml_models_helper.py
+│       │   └── text_utils.py
+│       ├── logging/                      # Logging utilities
+│       │   ├── __init__.py
+│       │   ├── logger.py
+│       │   └── secure_logging.py
+│       ├── parallel/                     # Parallel processing utilities
+│       │   ├── __init__.py
+│       │   └── core.py
+│       ├── security/                     # Security features
+│       │   ├── __init__.py
+│       │   ├── caching_middleware.py
+│       │   ├── processing_records.py
+│       │   ├── rate_limiting.py
+│       │   └── retention_management.py
+│       ├── system_utils/                 # System utilities
+│       │   ├── __init__.py
+│       │   ├── error_handling.py
+│       │   ├── memory_management.py
+│       │   ├── secure_file_utils.py
+│       │   └── synchronization_utils.py
+│       └── validation/                   # Input validation utilities
 │           ├── __init__.py
-│           ├── batch_processing_helper.py
-│           ├── gemini_helper.py
-│           ├── gemini_usage_manager.py
-│           ├── hybrid_detection_helper.py
-│           ├── json_helper.py
-│           ├── ml_models_helper.py
-│           ├── parallel_helper.py
-│           └── text_utils.py
-├── models/
-├── logs/
-├── requirements.txt
-├── main.py
-├── Dockerfile
-├── docker-compose.yml
-└── .env  
-```
-
-## API Routes and Endpoints
-
-The HideMeAI backend exposes several RESTful endpoints organized by functionality. Each endpoint is designed with memory
-optimization, error handling, and rate limiting in mind.
-
-### System Status Endpoints
-
-#### Basic Status Check
+│           ├── data_minimization.py
+│           ├── file_validation.py
+│           └── sanitize_utils.py
+├── tests/                                # Test cases
+├── docker-compose.yml                    # Docker Compose configuration
+├── Dockerfile                            # Docker build instructions
+├── main.py                               # Application entry point
+└── requirements.txt                      # Python dependencies
 
 ```
-GET /status
+
+## Configuration Files
+
+### presidio_config.py
+
+Configures Microsoft Presidio for entity detection with Norwegian language support. Defines available entity types for
+detection, including Norwegian-specific entities like:
+
+- `NO_FODSELSNUMMER_P` (Norwegian national identity number)
+- `NO_PHONE_NUMBER_P` (Norwegian phone numbers)
+- `NO_ADDRESS_P` (Norwegian addresses)
+- `NO_BANK_ACCOUNT_P` (Norwegian bank account numbers)
+- `NO_COMPANY_NUMBER_P` (Norwegian organization numbers)
+- `NO_LICENSE_PLATE_P` (Norwegian license plates)
+
+### nlp-config.yml
+
+Configures the NLP engine (spaCy) for entity recognition:
+
+```yaml
+nlp_engine_name: spacy
+models:
+  - lang_code: nb               # Norwegian Bokmål
+    model_name: nb_core_news_lg # Large Norwegian language model
 ```
 
-**Description**: Provides basic status information about the API.
+Includes mappings from model-specific entity labels to standardized entity names and confidence score adjustments.
 
-**Response**:
+### hideme_config.py
 
-```json
+Configures the custom HIDEME model for Norwegian-specific entity detection:
+
+- Model name: `yasin9999/gliner_finetuned_v1`
+- Local storage path for downloaded model
+- Supported entity types (21 types including Norwegian-specific entities)
+
+### gliner_config.py
+
+Configures the GLiNER model for entity detection:
+
+- Model name: `urchade/gliner_multi_pii-v1`
+- Local storage path for downloaded model
+- Supported entity types (33 types of personal information)
+
+### gemini_config.py
+
+Configures Google's Gemini AI for entity detection:
+
+- Prompt templates for entity detection
+- System instructions for Norwegian language processing
+- Available entity types with detailed descriptions
+
+### gdpr_config.py
+
+GDPR-related configuration settings:
+
+- Retention periods for temporary and redacted files
+- Data minimization rules
+- Anonymization configuration
+- Processing record settings
+- Data subject rights support
+- GDPR documentation
+
+## API Routes
+
+### AI Detection
+
+#### POST /ai/detect
+
+Detects sensitive information in a document using AI-based detection.
+
+**Parameters:**
+
+- `file`: The document to analyze (multipart/form-data)
+- `requested_entities`: Optional comma-separated list of entities to detect
+- `remove_words`: Optional comma-separated list of words to remove
+- `threshold`: Optional confidence threshold (0.0-1.0)
+
+**Response:**
+
+``` json
 {
-  "status": "success",
-  "timestamp": 1709372851.456789,
-  "api_version": "1.0.0"
-}
-```
-
-**Rate Limit**: 60 requests per minute
-
-#### Health Check
-
-```
-GET /health
-```
-
-**Description**: Provides detailed health information about the system, including CPU usage, memory usage, and service
-status.
-
-**Response**:
-
-```json
-{
-  "status": "healthy",
-  "timestamp": 1709372851.456789,
-  "services": {
-    "api": "online",
-    "document_processing": "online"
-  },
-  "process": {
-    "cpu_percent": 12.5,
-    "memory_percent": 34.2,
-    "threads_count": 8,
-    "uptime": 3600.5
-  },
-  "memory": {
-    "current_usage": 45.3,
-    "peak_usage": 67.8,
-    "last_check": 1709372841.123456
-  },
-  "cache": {
-    "cache_size": 15,
-    "cached_endpoints": [
-      "api_status",
-      "entities_list"
-    ]
-  }
-}
-```
-
-**Rate Limit**: 30 requests per minute
-
-#### Performance Metrics
-
-```
-GET /metrics
-```
-
-**Description**: Provides detailed performance metrics for monitoring. Requires an API key.
-
-**Headers**:
-
-- `X-API-Key`: Required for authentication
-
-**Response**:
-
-```json
-{
-  "timestamp": 1709372851.456789,
-  "system": {
-    "cpu_percent": 15.7,
-    "memory_percent": 67.2,
-    "memory_available": 4294967296,
-    "memory_total": 8589934592
-  },
-  "process": {
-    "cpu_percent": 12.5,
-    "memory_rss": 536870912,
-    "memory_percent": 6.25,
-    "threads_count": 8,
-    "open_files": 24,
-    "connections": 12
-  },
-  "memory_monitor": {
-    "current_usage": 45.3,
-    "peak_usage": 67.8,
-    "cleanup_count": 3
-  },
-  "cache": {
-    "cache_size": 15,
-    "cache_keys": 15
-  }
-}
-```
-
-**Rate Limit**: 15 requests per minute
-
-#### Readiness Check
-
-```
-GET /readiness
-```
-
-**Description**: Used by load balancers to determine if the service is ready to accept requests.
-
-**Response** (status code 200 if ready, 503 if not ready):
-
-```json
-{
-  "ready": true,
-  "services": {
-    "presidio_ready": true,
-    "gemini_ready": true,
-    "gliner_ready": true
-  },
-  "memory": {
-    "usage_percent": 65.7,
-    "status": "ok"
-  }
-}
-```
-
-**Rate Limit**: 60 requests per minute
-
-### Entity Detection Endpoints
-
-#### Presidio Detection
-
-```
-POST /ml/detect
-```
-
-**Description**: Detects sensitive information using Microsoft's Presidio NER engine, which is optimized for standard
-PII patterns.
-
-**Form Data**:
-
-- `file`: The document file to process (PDF, text, etc.)
-- `requested_entities` (optional): Comma-separated list of entity types to detect
-
-**Response**:
-
-```json
-{
-    "redaction_mapping": {
-        "pages": [
-            {
-                "page": 1,
-                "sensitive": [
-                    {
-                        "original_text": "Jeanett Lofthagen",
-                        "entity_type": "PERSON",
-                        "start": 91,
-                        "end": 108,
-                        "score": 0.85,
-                        "bbox": {
-                            "x0": 283.909912109375,
-                            "y0": 789.9979858398438,
-                            "x1": 351.92486572265625,
-                            "y1": 795.3807983398438
-                        }
-                    },
-                    {
-                        "original_text": "Jeanett Lofthagen",
-                        "entity_type": "PERSON",
-                        "start": 400,
-                        "end": 417,
-                        "score": 0.85,
-                        "bbox": {
-                            "x0": 364.2444152832031,
-                            "y0": 313.8487548828125,
-                            "x1": 452.3438415527344,
-                            "y1": 322.1804504394531
-                        }
-                    },
-                    {
-                        "original_text": "Synnøve Goli Ellingstad",
-                        "entity_type": "PERSON",
-                        "start": 357,
-                        "end": 380,
-                        "score": 0.85,
-                        "bbox": {
-                            "x0": 150.86439514160156,
-                            "y0": 313.8487548828125,
-                            "x1": 267.67254638671875,
-                            "y1": 322.1804504394531
-                        }
-                    },
-                    {
-                        "original_text": "Simen Vien Østdahl",
-                        "entity_type": "PERSON",
-                        "start": 445,
-                        "end": 463,
-                        "score": 0.85,
-                        "bbox": {
-                            "x0": 141.14251708984375,
-                            "y0": 326.5687561035156,
-                            "x1": 238.3805694580078,
-                            "y1": 334.90045166015625
-                        }
-                    },
-                    {
-                        "original_text": "TSE-prøver",
-                        "entity_type": "PERSON",
-                        "start": 779,
-                        "end": 789,
-                        "score": 0.85,
-                        "bbox": {
-                            "x0": 241.4066619873047,
-                            "y0": 441.04876708984375,
-                            "x1": 298.2532958984375,
-                            "y1": 449.3804626464844
-                        }
-                    }
-                ]
-            },
-            {
-                "page": 2,
-                "sensitive": [
-                    {
-                        "original_text": "Vera",
-                        "entity_type": "PERSON",
-                        "start": 885,
-                        "end": 889,
-                        "score": 0.85,
-                        "bbox": {
-                            "x0": 291.4853210449219,
-                            "y0": 343.3687744140625,
-                            "x1": 317.7847900390625,
-                            "y1": 351.7004699707031
-                        }
-                    },
-                    {
-                        "original_text": "Karl Ove Stadheim Jensen",
-                        "entity_type": "PERSON",
-                        "start": 2308,
-                        "end": 2332,
-                        "score": 0.85,
-                        "bbox": {
-                            "x0": 70.800048828125,
-                            "y0": 710.0887451171875,
-                            "x1": 201.71017456054688,
-                            "y1": 718.42041015625
-                        }
-                    }
-                ]
+  "redaction_mapping": {
+    "pages": [
+      {
+        "page": 1,
+        "sensitive": [
+          {
+            "engine": "gemini",
+            "entity_type": "PERSON-G",
+            "start": 91,
+            "end": 108,
+            "score": 0.95,
+            "bbox": {
+              "x0": 283.909912109375,
+              "y0": 789.9979858398438,
+              "x1": 351.92486572265625,
+              "y1": 795.3807983398438
             }
+          },
+          {
+            "engine": "gemini",
+            "entity_type": "EMAIL-G",
+            "start": 130,
+            "end": 150,
+            "score": 0.97,
+            "bbox": {
+              "x0": 251.7693328857422,
+              "y0": 809.43798828125,
+              "x1": 354.3266296386719,
+              "y1": 814.82080078125
+            }
+          }
         ]
+      }
+    ]
+  },
+  "entities_detected": {
+    "total": 2,
+    "by_type": {
+      "PERSON-G": 1,
+      "EMAIL-G": 1
     },
-    "entities_detected": {
-        "total": 7,
-        "by_type": {
-            "PERSON": 7
-        },
-        "by_page": {
-            "page_1": 5,
-            "page_2": 2
-        }
-    },
-    "performance": {
-        "file_read_time": 0.0,
-        "extraction_time": 0.019001007080078125,
-        "detector_init_time": 0,
-        "detection_time": 0.6280515193939209,
-        "total_time": 0.651054859161377,
-        "words_count": 613,
-        "pages_count": 2,
-        "entity_density": 11.419249592169658,
-        "sanitize_time": 0.0
-    },
-    "file_info": {
-        "filename": "Inspeksjonsrapport med skriftlig veiledning.pdf",
-        "content_type": "application/pdf",
-        "size": "0.07 MB"
-    },
-    "model_info": {
-        "engine": "presidio"
-    },
-    "_debug": {
-        "memory_usage": 5.640750038473376,
-        "peak_memory": 22.677722953216374,
-        "operation_id": "presidio_detect_1743251687"
+    "by_page": {
+      "page_1": 2
     }
+  },
+  "processing_time": 0.89
+}
+
+```
+
+### Presidio, Gliner and HideMe Detection
+
+#### POST /ml/detect
+
+Detects sensitive information in a document using Presidio detection.
+
+**Parameters:**
+
+- `file`: The document to analyze (multipart/form-data)
+- `requested_entities`: Optional comma-separated list of entities to detect
+- `remove_words`: Optional comma-separated list of words to remove
+- `threshold`: Optional confidence threshold (0.0-1.0)
+
+**Response:**
+
+``` json
+{
+  "redaction_mapping": {
+    "pages": [
+      {
+        "page": 1,
+        "sensitive": [
+          {
+            "engine": "presidio",
+            "entity_type": "ORGANIZATION_P",
+            "start": 0,
+            "end": 11,
+            "score": 0.8,
+            "bbox": {
+              "x0": 70.800048828125,
+              "y0": 789.9979858398438,
+              "x1": 111.3972396850586,
+              "y1": 795.3807983398438
+            }
+          }
+          {
+            /* Additional sensitive blocks */
+          }
+        ]
+      },
+      {
+        /* Page 2 sensitive entities */
+      }
+    ]
+  },
+  "entities_detected": {
+    "total": 26,
+    "by_type": {
+      "ORGANIZATION_P": 6,
+      "PERSON_P": 7,
+      "NO_PHONE_NUMBER_P": 4,
+      "EMAIL_ADDRESS_P": 1,
+      "NO_ADDRESS_P": 2,
+      "DATE_TIME_P": 4,
+      "LOCATION_P": 2
+    },
+    "by_page": {
+      "page_1": 15,
+      "page_2": 11
+    }
+  },
+  "performance": {
+    "file_read_time": 0.0,
+    "extraction_time": 0.04659,
+    "detection_time": 1.15947,
+    "total_time": 1.21662,
+    "words_count": 613,
+    "pages_count": 2,
+    "entity_density": 50.571,
+    "sanitize_time": 0.000839
+  },
+  "file_info": {
+    "filename": "Anspeksjonsrapport.pdf",
+    "content_type": "application/pdf",
+    "size": "0.07 MB"
+  },
+  "model_info": {
+    "engine": "presidio"
+  },
+  "_debug": {
+    "memory_usage": 0.38156,
+    "peak_memory": 36.37794
+  }
 }
 ```
 
-**Rate Limit**: 10 requests per minute
+#### POST /ml/gl_detect
 
-#### GLiNER Detection
+Detects sensitive information in a document using Gliner detection.
 
-```
-POST /ml/gl_detect
-```
+**Parameters:**
 
-**Description**: Detects sensitive information using the GLiNER machine learning model, which is effective at detecting
-complex entity types that traditional NER systems might miss.
+- `file`: The document to analyze (multipart/form-data)
+- `requested_entities`: Optional comma-separated list of entities to detect
+- `remove_words`: Optional comma-separated list of words to remove
+- `threshold`: Optional confidence threshold (0.0-1.0)
 
-**Form Data**:
+**Response:** Same as `/ml/detect`
 
-- `file`: The document file to process (PDF, text, etc.)
-- `requested_entities` (optional): Comma-separated list of entity types to detect
+#### POST /ml/hm_detect
 
-**Response**: Similar to Presidio detection but with `"engine": "gliner"`
+Detects sensitive information in a document using HideMe detection.
 
-**Rate Limit**: 10 requests per minute
+**Parameters:**
 
-#### Gemini AI Detection
+- `file`: The document to analyze (multipart/form-data)
+- `requested_entities`: Optional comma-separated list of entities to detect
+- `remove_words`: Optional comma-separated list of words to remove
+- `threshold`: Optional confidence threshold (0.0-1.0)
 
-```
-POST /ai/detect
-```
+**Response:** Same as `/ml/detect`
 
-**Description**: Detects sensitive information using Google's Gemini AI API, which can identify complex contextual
-entities.
+### PDF Processing
 
-**Form Data**:
+#### POST /pdf/redact
 
-- `file`: The document file to process (PDF, text, etc.)
-- `requested_entities` (optional): Comma-separated list of entity types to detect
+Applies redactions to a PDF file based on a provided redaction mapping.
 
-**Response**: Similar to Presidio detection but with `"engine": "gemini"`
+**Parameters:**
 
-**Rate Limit**: 10 requests per minute
+- `file`: The PDF file to redact (multipart/form-data)
+- `redaction_mapping`: JSON string defining areas to redact
+- `remove_images`: Boolean flag to remove images (default: false)
 
+**Response:**
 
-### PDF Processing Endpoints
+- Redacted PDF file as a stream
 
-#### PDF Text Extraction
+#### POST /pdf/extract
 
-```
-POST /pdf/extract
-```
+Extracts text with positions from a PDF file.
 
-**Description**: Extracts text with positions from a PDF file, optimized for memory efficiency with large files.
+**Parameters:**
 
-**Form Data**:
+- `file`: The PDF file to extract text from (multipart/form-data)
 
-- `file`: The PDF file to process
-
-**Response**:
+**Response:**
 
 ```json
 {
@@ -885,637 +636,430 @@ POST /pdf/extract
       "page": 1,
       "words": [
         {
-          "text": "Example",
-          "x0": 100,
-          "y0": 200,
-          "x1": 150,
-          "y1": 220
+          "x0": 70.800048828125,
+          "y0": 787.9979858398438,
+          "x1": 111.3972396850586,
+          "y1": 797.3807983398438
+        },
+        {
+          "x0": 70.800048828125,
+          "y0": 797.5979614257812,
+          "x1": 91.99494171142578,
+          "y1": 806.9807739257812
         }
       ]
     }
-  ],
-   "performance": {
-        "file_read_time": 0.0,
-        "extraction_time": 0.012547731399536133,
-        "total_time": 0.018546104431152344,
-        "pages_count": 2,
-        "words_count": 613,
-        "operation_id": "pdf_extract_1743252072.9976451"
-    },
-    "file_info": {
-        "filename": "Inspeksjonsrapport med skriftlig veiledning.pdf",
-        "content_type": "application/pdf",
-        "size": "0.07 MB"
-    }
+  ]
 }
 ```
 
-**Rate Limit**: 15 requests per minute
+### Batch Processing
 
-#### PDF Redaction
+#### POST /batch/detect
 
-```
-POST /pdf/redact
-```
+Processes multiple files for entity detection in parallel by using one engine.
 
-**Description**: Applies redactions to a PDF file based on a provided redaction mapping.
+**Parameters:**
 
-**Form Data**:
+- `files`: List of files to process (multipart/form-data)
+- `requested_entities`: Optional comma-separated list of entities to detect
+- `detection_engine`: Detection engine to use (default: "presidio")
+- `max_parallel_files`: Maximum number of concurrent file processes (default: 4)
+- `remove_words`: Optional comma-separated list of words to remove
+- `threshold`: Optional confidence threshold (0.0-1.0)
 
-- `file`: The PDF file to process
-- `redaction_mapping`: JSON string containing the positions to redact
-- `remove_images`:  Boolean whether to redact all images in the file. (Default false)
-
-
-**Response**: The redacted PDF file as a stream with the following headers:
-
-- `Content-Disposition`: "attachment; filename=redacted.pdf"
-- `X-Redaction-Time`: Processing time in seconds
-- `X-Total-Time`: Total request time in seconds
-- `X-Redactions-Applied`: Number of redactions applied
-- `X-Memory-Usage`: Current memory usage percentage
-- `X-Peak-Memory`: Peak memory usage percentage
-- `X-Operation-ID`: Unique operation identifier
-
-**Rate Limit**: 10 requests per minute
-
-### Batch Processing Endpoints
-
-#### Batch Entity Detection
-
-```
-POST /batch/detect
-```
-
-**Description**: Processes multiple files for entity detection in parallel.
-
-**Form Data**:
-
-- `files`: List of files to process
-- `requested_entities` (optional): Comma-separated list of entity types to detect
-- `detection_engine` (optional): Engine to use ("presidio", "gemini", "gliner")
-- `max_parallel_files` (optional): Maximum number of files to process in parallel
-
-**Response**:
-
-``` json
-
-{
-    "batch_summary": {
-        "batch_id": "5c460d55-914e-4021-8c3f-83074a71b02c",
-        "total_files": 2,
-        "successful": 2,
-        "failed": 0,
-        "total_time": 1.2733795642852783,
-        "workers": 4
-    },
-    "file_results": [
-        {
-            "file": "Inspeksjonsrapport-2.pdf",
-            "status": "success",
-            "results": {
-                "redaction_mapping": {
-                    "pages": [
-                        {
-                            "page": 1,
-                            "sensitive": [
-                                {
-                                    "original_text": "Astrid Holm",
-                                    "entity_type": "PERSON",
-                                    "start": 15,
-                                    "end": 26,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 147.44161987304688,
-                                        "y0": 72.75343322753906,
-                                        "x1": 203.49172973632812,
-                                        "y1": 82.2332763671875
-                                    }
-                                },
-                                {
-                                    "original_text": "Astrid Holm",
-                                    "entity_type": "PERSON",
-                                    "start": 314,
-                                    "end": 325,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 147.32015991210938,
-                                        "y0": 146.8134307861328,
-                                        "x1": 203.3813018798828,
-                                        "y1": 156.29327392578125
-                                    }
-                                },
-                                {
-                                    "original_text": "Eva Hansen",
-                                    "entity_type": "PERSON",
-                                    "start": 284,
-                                    "end": 294,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 437.5617370605469,
-                                        "y0": 132.2934112548828,
-                                        "x1": 493.5455627441406,
-                                        "y1": 141.77325439453125
-                                    }
-                                },
-                                {
-                                    "original_text": "Kari Nordmann",
-                                    "entity_type": "PERSON",
-                                    "start": 367,
-                                    "end": 380,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 401.6597595214844,
-                                        "y0": 146.8134307861328,
-                                        "x1": 476.5109558105469,
-                                        "y1": 156.29327392578125
-                                    }
-                                },
-                                {
-                                    "original_text": "Kontrollpunkter",
-                                    "entity_type": "PERSON",
-                                    "start": 1431,
-                                    "end": 1446,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 70.8239974975586,
-                                        "y0": 426.6834411621094,
-                                        "x1": 150.4776153564453,
-                                        "y1": 436.16326904296875
-                                    }
-                                },
-                                {
-                                    "original_text": "HMS-rutiner",
-                                    "entity_type": "PERSON",
-                                    "start": 1515,
-                                    "end": 1526,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 106.81999969482422,
-                                        "y0": 471.70343017578125,
-                                        "x1": 164.85919189453125,
-                                        "y1": 481.1832580566406
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "page": 2,
-                            "sensitive": []
-                        },
-                        {
-                            "page": 3,
-                            "sensitive": [
-                                {
-                                    "original_text": "Astrid Holm",
-                                    "entity_type": "PERSON",
-                                    "start": 361,
-                                    "end": 372,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 70.8239974975586,
-                                        "y0": 289.7634582519531,
-                                        "x1": 127.1169662475586,
-                                        "y1": 299.2432861328125
-                                    }
-                                }
-                            ]
-                        }
-                    ]
-                },
-                "entities_detected": {
-                    "total": 6,
-                    "by_type": {
-                        "PERSON": 6
-                    },
-                    "by_page": {
-                        "page_1": 6,
-                        "page_2": 0,
-                        "page_3": 1
-                    }
-                },
-                "performance": {
-                    "words_count": 745,
-                    "pages_count": 3,
-                    "entity_density": 8.053691275167786,
-                    "sanitize_time": 0.0
-                },
-                "file_info": {
-                    "filename": "Inspeksjonsrapport-2.pdf",
-                    "content_type": "application/pdf",
-                    "size": "0.06 MB"
-                },
-                "model_info": {
-                    "engine": "PRESIDIO"
-                }
-            }
-        },
-        {
-            "file": "Inspeksjonsrapport-3.pdf",
-            "status": "success",
-            "results": {
-                "redaction_mapping": {
-                    "pages": [
-                        {
-                            "page": 1,
-                            "sensitive": [
-                                {
-                                    "original_text": "Lars Mikkelsen",
-                                    "entity_type": "PERSON",
-                                    "start": 91,
-                                    "end": 105,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 147.44161987304688,
-                                        "y0": 101.81343078613281,
-                                        "x1": 217.8105926513672,
-                                        "y1": 111.29327392578125
-                                    }
-                                },
-                                {
-                                    "original_text": "AS Storgata",
-                                    "entity_type": "PERSON",
-                                    "start": 258,
-                                    "end": 269,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 182.0188751220703,
-                                        "y0": 233.6934356689453,
-                                        "x1": 195.34414672851562,
-                                        "y1": 243.17327880859375
-                                    }
-                                },
-                                {
-                                    "original_text": "AS Storgata",
-                                    "entity_type": "PERSON",
-                                    "start": 258,
-                                    "end": 269,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 70.8239974975586,
-                                        "y0": 248.21339416503906,
-                                        "x1": 110.97648620605469,
-                                        "y1": 257.6932373046875
-                                    }
-                                },
-                                {
-                                    "original_text": "Ingrid Bergman",
-                                    "entity_type": "PERSON",
-                                    "start": 491,
-                                    "end": 505,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 402.6090393066406,
-                                        "y0": 388.1634216308594,
-                                        "x1": 474.2696228027344,
-                                        "y1": 397.64324951171875
-                                    }
-                                },
-                                {
-                                    "original_text": "Ola Nordmann",
-                                    "entity_type": "PERSON",
-                                    "start": 525,
-                                    "end": 537,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 147.32015991210938,
-                                        "y0": 402.6834411621094,
-                                        "x1": 217.34686279296875,
-                                        "y1": 412.16326904296875
-                                    }
-                                },
-                                {
-                                    "original_text": "Erik Hjermelund",
-                                    "entity_type": "PERSON",
-                                    "start": 578,
-                                    "end": 593,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 412.7101135253906,
-                                        "y0": 402.6834411621094,
-                                        "x1": 488.95233154296875,
-                                        "y1": 412.16326904296875
-                                    }
-                                },
-                                {
-                                    "original_text": "Erik Hjermelund",
-                                    "entity_type": "PERSON",
-                                    "start": 1330,
-                                    "end": 1345,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 70.8239974975586,
-                                        "y0": 722.5333862304688,
-                                        "x1": 147.19871520996094,
-                                        "y1": 732.0132446289062
-                                    }
-                                },
-                                {
-                                    "original_text": "Markus Hjermelund",
-                                    "entity_type": "PERSON",
-                                    "start": 608,
-                                    "end": 625,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 125.26223754882812,
-                                        "y0": 417.20343017578125,
-                                        "x1": 222.09408569335938,
-                                        "y1": 426.6832580566406
-                                    }
-                                },
-                                {
-                                    "original_text": "Markus Hjermelund",
-                                    "entity_type": "PERSON",
-                                    "start": 1486,
-                                    "end": 1503,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 365.647216796875,
-                                        "y0": 737.0494384765625,
-                                        "x1": 462.3575744628906,
-                                        "y1": 746.529296875
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "page": 2,
-                            "sensitive": [
-                                {
-                                    "original_text": "Kontrollpunkter",
-                                    "entity_type": "PERSON",
-                                    "start": 0,
-                                    "end": 15,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 70.8239974975586,
-                                        "y0": 72.75343322753906,
-                                        "x1": 150.4776153564453,
-                                        "y1": 82.2332763671875
-                                    }
-                                },
-                                {
-                                    "original_text": "A. Pedersen",
-                                    "entity_type": "PERSON",
-                                    "start": 950,
-                                    "end": 961,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 122.72303771972656,
-                                        "y0": 532.6633911132812,
-                                        "x1": 182.65924072265625,
-                                        "y1": 542.1432495117188
-                                    }
-                                },
-                                {
-                                    "original_text": "K. Johansen",
-                                    "entity_type": "PERSON",
-                                    "start": 965,
-                                    "end": 976,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 198.61204528808594,
-                                        "y0": 532.6633911132812,
-                                        "x1": 258.31634521484375,
-                                        "y1": 542.1432495117188
-                                    }
-                                },
-                                {
-                                    "original_text": "Erik Hjermelund",
-                                    "entity_type": "PERSON",
-                                    "start": 1027,
-                                    "end": 1042,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 484.2941589355469,
-                                        "y0": 532.6633911132812,
-                                        "x1": 502.035400390625,
-                                        "y1": 542.1432495117188
-                                    }
-                                },
-                                {
-                                    "original_text": "Erik Hjermelund",
-                                    "entity_type": "PERSON",
-                                    "start": 1027,
-                                    "end": 1042,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 70.8239974975586,
-                                        "y0": 547.1834106445312,
-                                        "x1": 127.16112518310547,
-                                        "y1": 556.6632690429688
-                                    }
-                                },
-                                {
-                                    "original_text": "Gnager-ekskrementer",
-                                    "entity_type": "PERSON",
-                                    "start": 1429,
-                                    "end": 1448,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 70.8239974975586,
-                                        "y0": 732.1334228515625,
-                                        "x1": 174.6761474609375,
-                                        "y1": 741.61328125
-                                    }
-                                },
-                                {
-                                    "original_text": "Markus Hjermelund",
-                                    "entity_type": "PERSON",
-                                    "start": 1470,
-                                    "end": 1487,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 269.0570373535156,
-                                        "y0": 732.1334228515625,
-                                        "x1": 362.6982727050781,
-                                        "y1": 741.61328125
-                                    }
-                                }
-                            ]
-                        },
-                        {
-                            "page": 3,
-                            "sensitive": [
-                                {
-                                    "original_text": "Nina Solberg",
-                                    "entity_type": "PERSON",
-                                    "start": 352,
-                                    "end": 364,
-                                    "score": 0.85,
-                                    "bbox": {
-                                        "x0": 70.8239974975586,
-                                        "y0": 310.7634582519531,
-                                        "x1": 131.55503845214844,
-                                        "y1": 320.2432861328125
-                                    }
-                                }
-                            ]
-                        }
-                    ]
-                },
-                "entities_detected": {
-                    "total": 14,
-                    "by_type": {
-                        "PERSON": 14
-                    },
-                    "by_page": {
-                        "page_1": 9,
-                        "page_2": 7,
-                        "page_3": 1
-                    }
-                },
-                "performance": {
-                    "words_count": 475,
-                    "pages_count": 3,
-                    "entity_density": 29.473684210526315,
-                    "sanitize_time": 0.0
-                },
-                "file_info": {
-                    "filename": "Inspeksjonsrapport-3.pdf",
-                    "content_type": "application/pdf",
-                    "size": "0.07 MB"
-                },
-                "model_info": {
-                    "engine": "PRESIDIO"
-                }
-            }
-        }
-    ],
-}
-
-```
-
-**Rate Limit**: 10 requests per minute
-
-#### Batch Document Redaction
-
-```
-POST /batch/redact
-```
-
-**Description**: Applies redactions to multiple documents in parallel and returns them as a ZIP file.
-
-**Form Data**:
-
-- `files`: List of files to process
-- `redaction_mappings`: JSON string containing the redaction mappings for each file
-- `max_parallel_files` (optional): Maximum number of files to process in parallel
-- `remove_images`:  Boolean whether to redact all images in the file. (Default false)
-
-**Response**: ZIP file containing all redacted documents with the following headers:
-
-- `Content-Disposition`: "attachment; filename=redacted_documents.zip"
-- `X-Redaction-Time`: Processing time in seconds
-- `X-Total-Time`: Total request time in seconds
-- `X-Files-Processed`: Number of files processed
-- `X-Operation-ID`: Unique operation identifier
-
-**Rate Limit**: 3 requests per minute
-
-#### Batch Hybrid Detection
-
-```
-POST /batch/hybrid_detect
-```
-
-**Description**: Processes multiple files using hybrid detection across multiple engines.
-
-**Form Data**:
-
-- `files`: List of files to process
-- `requested_entities` (optional): Comma-separated list of entity types to detect
-- `use_presidio` (optional): Boolean flag to enable Presidio (default: true)
-- `use_gemini` (optional): Boolean flag to enable Gemini (default: true)
-- `use_gliner` (optional): Boolean flag to enable GLiNER (default: false)
-- `max_parallel_files` (optional): Maximum number of files to process in parallel
-
-**Response**: Similar to batch detection but with hybrid engine information
-
-**Rate Limit**: 10 requests per minute
-
-#### Batch Text Extraction
-
-```
-POST /batch/search
-```
-
-**Description**: Extracts text with positions from multiple files in parallel.
-
-**Form Data**:
-
-- `files`: List of files to process
-- `max_parallel_files` (optional): Maximum number of files to process in parallel
-
-**Response**:
+**Response:**
 
 ``` json
 {
   "batch_summary": {
+    "batch_id": "23804f68-af4d-4fcf-99da-26776a307982",
     "total_files": 3,
     "successful": 3,
     "failed": 0,
-    "total_pages": 15,
-    "total_words": 7500,
-    "total_time": 1.567,
-    "workers": 3,
-    "operation_id": "batch_extract_1709372851",
-    "lock_used": true
+    "total_time": 19.4925537109375,
+    "workers": 4
   },
   "file_results": [
     {
-      "file": "document1.pdf",
+      "file": "Anspeksjonsrapport.pdf",
+      "status": "success",
+      "results": {
+        "redaction_mapping": {
+          "pages": [
+            {
+              "page": 1,
+              "sensitive": [
+                {
+                  "engine": "hideme",
+                  "entity_type": "PERSON-H",
+                  "start": 91,
+                  "end": 108,
+                  "score": 0.985205352306366,
+                  "bbox": {
+                    "x0": 283.909912109375,
+                    "y0": 789.9979858398438,
+                    "x1": 351.92486572265625,
+                    "y1": 795.3807983398438
+                  }
+                },
+                {
+                  /* Additional sensitive entity objects */
+                }
+              ]
+            },
+            {
+              "page": 2,
+              "sensitive": [
+                {
+                  "engine": "hideme",
+                  "entity_type": "DATE_TIME-H",
+                  "start": 56,
+                  "end": 66,
+                  "score": 0.9432600736618042,
+                  "bbox": {
+                    "x0": 393.42767333984375,
+                    "y0": 30.592365264892578,
+                    "x1": 433.42529296875,
+                    "y1": 35.439002990722656
+                  }
+                }
+                {
+                  /* More sensitive entities on page 2 */
+                }
+              ]
+            }
+          ]
+        },
+        "entities_detected": {
+          "total": 15,
+          "by_type": {
+            "PERSON-H": 7,
+            "NO_PHONE_NUMBER-H": 1,
+            "EMAIL_ADDRESS-H": 1,
+            "NO_ADDRESS-H": 2,
+            "DATE_TIME-H": 4
+          },
+          "by_page": {
+            "page_1": 11,
+            "page_2": 4
+          }
+        },
+        "performance": {
+          "words_count": 613,
+          "pages_count": 2,
+          "entity_density": 53.833605220228385,
+          "sanitize_time": 0.00112152099609375
+        },
+        "file_info": {
+          "filename": "Anspeksjonsrapport.pdf",
+          "content_type": "application/pdf",
+          "size": "0.07 MB"
+        },
+        "model_info": {
+          "engine": "HIDEME"
+        }
+      }
+    },
+    {
+      /* Responses for Bekymringsmelding.pdf and BekymringsmeldingWithImage.pdf follow similar structure */
+    }
+  ],
+  "_debug": {
+    "memory_usage": 8.159359097921785,
+    "peak_memory": 36.377941030219056,
+    "operation_id": "23804f68-af4d-4fcf-99da-26776a307982"
+  }
+}
+```
+
+#### POST /batch/hybrid_detect
+
+Processes multiple files using a hybrid detection approach (multiple engines).
+
+**Parameters:**
+
+- `files`: List of files to process (multipart/form-data)
+- `requested_entities`: Optional comma-separated list of entities to detect
+- `use_presidio`: Flag to enable Presidio detection (default: true)
+- `use_gemini`: Flag to enable Gemini detection (default: false)
+- `use_gliner`: Flag to enable GLiNER detection (default: false)
+- `use_hideme`: Flag to enable HIDEME detection (default: false)
+- `max_parallel_files`: Maximum number of concurrent file processes (default: 4)
+- `remove_words`: Optional comma-separated list of words to remove
+- `threshold`: Optional confidence threshold (0.0-1.0)
+
+**Response:** Same as `/batch/detect`
+
+#### POST /batch/search
+
+Searches for specific terms in multiple PDF files in parallel.
+
+**Parameters:**
+
+- `files`: List of PDF files to search (multipart/form-data)
+- `search_terms`: String of search terms
+- `case_sensitive`: Flag for case-sensitive search (default: false)
+- `ai_search`: Flag to enable AI-powered search (default: false)
+- `max_parallel_files`: Maximum number of concurrent file processes (default: 4)
+
+**Response:**
+
+``` json
+{
+  "batch_summary": {
+    "batch_id": "search-41834a51-6380-4033-b02e-47ecd2eec3ca",
+    "total_files": 1,
+    "successful": 1,
+    "failed": 0,
+    "total_matches": 4,
+    "search_term": "Jeanett, Lofthagen",
+    "query_time": 0.13
+  },
+  "file_results": [
+    {
+      "file": "Anspeksjonsrapport.pdf",
       "status": "success",
       "results": {
         "pages": [
           {
             "page": 1,
-            "words": [/* Word objects with positions */]
+            "matches": [
+              {
+                "bbox": {
+                  "x0": 283.909912109375,
+                  "y0": 787.9979858398438,
+                  "x1": 311.77276611328125,
+                  "y1": 797.3807983398438
+                }
+              },
+              {
+                /* More matching bounding boxes */
+              }
+            ]
+          },
+          {
+            "page": 2,
+            "matches": []
           }
         ],
-         "empty_pages": [],
-    "total_document_pages": 2,
-    "content_pages": 2,
-    "_minimization_meta": {
-        "applied_at": 1743252073.0151935,
-        "required_fields_only": true,
-        "fields_retained": [
-            "empty_pages",
-            "total_document_pages",
-            "content_pages"
-        ]
-    },
-         "performance": {
-        "file_read_time": 0.0,
-        "extraction_time": 0.012547731399536133,
-        "total_time": 0.018546104431152344,
-        "pages_count": 2,
-        "words_count": 613,
-        "operation_id": "pdf_extract_1743252072.9976451"
-    },
-    "file_info": {
-        "filename": "document1.pdf",
-        "content_type": "application/pdf",
-        "size": "0.07 MB"
-    },
-    /* Results for additional files */
-  ]
+        "match_count": 4
+      }
+    }
+  ],
+  "_debug": {
+    "memory_usage": 8.218977653715642,
+    "peak_memory": 36.377941030219056,
+    "operation_id": "search-41834a51-6380-4033-b02e-47ecd2eec3ca"
+  }
 }
 ```
 
-**Rate Limit**: 15 requests per minute
+#### POST /batch/find_words
 
-### Metadata Endpoints
+Find words in multiple PDF files based on the provided bounding box.
 
-#### Available Detection Engines
+**Parameters:**
 
+- `files`: List of PDF files to search (multipart/form-data)
+- `bounding_box`: JSON string representing a bounding box with keys: "x0", "y0", "x1", and "y1".
+
+**Response:**
+
+```json
+{
+  "batch_summary": {
+    "batch_id": "batch_find_words_1744718497",
+    "total_files": 1,
+    "successful": 1,
+    "failed": 0,
+    "total_matches": 1,
+    "search_term": "Bounding Box: {'x0': 70.800048828125, 'y0': 132.64877319335938, 'x1': 175.97254943847656, 'y1': 152.64877319335938}",
+    "query_time": 0.02
+  },
+  "file_results": [
+    {
+      "file": "Anspeksjonsrapport.pdf",
+      "status": "success",
+      "results": {
+        "pages": [
+          {
+            "page": 1,
+            "matches": [
+              {
+                "bbox": {
+                  "x0": 70.800048828125,
+                  "y0": 132.64877319335938,
+                  "x1": 175.97254943847656,
+                  "y1": 152.64877319335938
+                }
+              }
+            ]
+          },
+          {
+            "page": 2,
+            "matches": []
+          }
+        ],
+        "match_count": 1
+      }
+    }
+  ],
+  "_debug": {
+    "memory_usage": 1.2187178313633176,
+    "peak_memory": 43.97698984089396,
+    "operation_id": "batch_find_words_1744718497"
+  }
+}
 ```
-GET /help/engines
+
+#### POST /batch/redact
+
+Applies redactions to multiple documents and returns them as a ZIP file.
+
+**Parameters:**
+
+- `files`: List of documents to redact (multipart/form-data)
+- `redaction_mappings`: Redaction mappings as a string
+- `remove_images`: Flag to remove images (default: false)
+- `max_parallel_files`: Maximum number of concurrent file processes
+
+**Response:**
+
+- ZIP file containing redacted documents
+
+### Status and Metadata
+
+#### GET /status
+
+Returns a simple API status with current timestamp and version info.
+
+**Response:**
+
+```json
+{
+  "status": "success",
+  "timestamp": 1650123456.789,
+  "api_version": "1.0.0"
+}
 ```
 
-**Description**: Lists all available entity detection engines.
+#### GET /health
 
-**Response**:
+Performs a health check for the system with detailed metrics.
+
+**Response:**
+
+```json
+{
+  "status": "healthy",
+  "timestamp": 1744738132.0504751,
+  "services": {
+    "api": "online",
+    "document_processing": "online"
+  },
+  "process": {
+    "cpu_percent": 0.0,
+    "memory_percent": 0.5239663990860918,
+    "threads_count": 8,
+    "uptime": 1428.9885771274567
+  },
+  "memory": {
+    "peak_usage": 36.377941030219056,
+    "average_usage": 2.689894235046888,
+    "checks_count": 285,
+    "emergency_cleanups": 0,
+    "last_check_time": 1744738131.3771946,
+    "current_usage": 0.5148543927420526,
+    "available_memory_mb": 319.4921875,
+    "system_threshold_adjustments": 5,
+    "batch_operations": 0,
+    "batch_peak_memory": 0.0
+  },
+  "cache": {
+    "cache_size": 2,
+    "cached_endpoints": [
+      "api_status",
+      "d15a8ffc0be88dadeacbf9dbe856353966a3b69a9763aac3053c89e7707bbd09"
+    ]
+  },
+  "debug": {
+    "environment": "development",
+    "python_version": "unknown",
+    "host": "unknown"
+  }
+}
+```
+
+#### GET /metrics
+
+Retrieves system and process performance metrics.
+
+**Response:**
+
+```json
+{
+  "timestamp": 1744738168.546603,
+  "system": {
+    "cpu_percent": 2.0,
+    "memory_percent": 94.9,
+    "memory_available": 402874368,
+    "memory_total": 7866544128
+  },
+  "process": {
+    "cpu_percent": 0.0,
+    "memory_rss": 41918464,
+    "memory_percent": 0.53287013099941,
+    "threads_count": 7,
+    "open_files": 4,
+    "connections": 4
+  },
+  "memory_monitor": {
+    "peak_usage": 36.377941030219056,
+    "average_usage": 2.6380756230049944,
+    "checks_count": 292,
+    "emergency_cleanups": 0,
+    "last_check_time": 1744738166.4866128,
+    "current_usage": 0.5283922307389108,
+    "available_memory_mb": 394.7265625,
+    "system_threshold_adjustments": 5,
+    "batch_operations": 0,
+    "batch_peak_memory": 0.0
+  },
+  "cache": {
+    "cache_size": 4,
+    "cache_keys": 4
+  }
+}
+```
+
+#### GET /readiness
+
+Performs a readiness check to determine if the service is ready to accept requests.
+
+**Response:**
+
+```json
+{
+  "ready": true,
+  "services": {
+    "presidio_ready": true,
+    "gemini_ready": true,
+    "gliner_ready": true,
+    "hideme_ready": true
+  },
+  "memory": {
+    "usage_percent": 0.5704115971368514,
+    "status": "ok"
+  }
+}
+```
+
+#### GET help/engines
+
+Gets the list of available entity detection engines.
+
+**Response:**
 
 ```json
 {
@@ -1523,127 +1067,192 @@ GET /help/engines
     "PRESIDIO",
     "GEMINI",
     "GLINER",
+    "HIDEME",
     "HYBRID"
   ]
 }
 ```
 
-**Rate Limit**: 30 requests per minute
+#### GET help/entities
 
-#### Available Entity Types
+Gets the list of available entity types for detection.
 
-```
-GET /help/entities
-```
+**Response:**
 
-**Description**: Lists all available entity types that can be detected.
-
-**Response**:
-
-``` json
+```json
 {
-  "presidio_entities": ["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD", "ADDRESS", "DATE", "US_SSN", "LOCATION", "ORGANIZATION"],
-  "gemini_entities": {
-    "PERSON": "Names of individuals",
-    "EMAIL_ADDRESS": "Email addresses",
-    /* Additional entity types and descriptions */
-  },
-  "gliner_entities": ["PERSON", "EMAIL", "PHONE", "ADDRESS", "ID_NUMBER", "CREDIT_CARD", "MEDICAL_RECORD", "BANK_ACCOUNT"]
+  "presidio_entities": [
+    "NO_FODSELSNUMMER_P",
+    "NO_PHONE_NUMBER_P",
+    "EMAIL_ADDRESS_P",
+    "..."
+  ],
+  "gemini_entities": [
+    "PERSON-G",
+    "ORGANIZATION-G",
+    "LOCATION-G",
+    "..."
+  ],
+  "gliner_entities": [
+    "person",
+    "location",
+    "date",
+    "..."
+  ],
+  "hideme_entities": [
+    "AGE-H",
+    "DATE_TIME-H",
+    "EMAIL_ADDRESS-H",
+    "..."
+  ]
 }
 ```
 
-**Rate Limit**: 20 requests per minute
+#### GET help/entity-examples
 
-#### Entity Examples
+Get examples for different entity types with improved response time.
 
-```
-GET /help/entity-examples
-```
+**Response:**
 
-**Description**: Provides examples of each entity type.
-
-**Response**:
-
-``` json
+```json
 {
   "examples": {
-    "PERSON": ["John Doe", "Jane Smith", "Dr. Robert Johnson"],
-    "EMAIL_ADDRESS": ["john.doe@example.com", "contact@company.org"],
-    "PHONE_NUMBER": ["+1 (555) 123-4567", "555-987-6543"],
-    /* Examples for additional entity types */
+    "PERSON": [
+      "John Doe",
+      "Jane Smith",
+      "Dr. Robert Johnson"
+    ],
+    "EMAIL_ADDRESS": [
+      "john.doe@example.com",
+      "contact@company.org"
+    ],
+    "PHONE_NUMBER": [
+      "+1 (555) 123-4567",
+      "555-987-6543"
+    ],
+    "CREDIT_CARD": [
+      "4111 1111 1111 1111",
+      "5500 0000 0000 0004"
+    ],
+    "ADDRESS": [
+      "123 Main St, Anytown, CA 12345",
+      "456 Park Avenue, Suite 789"
+    ],
+    "DATE": [
+      "January 15, 2023",
+      "05/10/1985"
+    ],
+    "LOCATION": [
+      "New York City",
+      "Paris, France",
+      "Tokyo"
+    ],
+    "ORGANIZATION": [
+      "Acme Corporation",
+      "United Nations",
+      "Stanford University"
+    ]
   }
 }
 ```
 
-**Rate Limit**: 30 requests per minute
+#### GET help/detectors-status
 
-#### Detector Status
+Get status information for all cached entity detectors.
 
-```
-GET /help/detectors-status
-```
-
-**Description**: Provides the current status of all detector instances.
-
-**Response**:
+**Response:**
 
 ``` json
 {
   "presidio": {
     "initialized": true,
-    "uses": 250,
-    "last_used": 1709372841.123456,
-    "cache_size": 5
+    "initialization_time": 1744736720.0978835,
+    "initialization_time_readable": "2025-04-15 19:05:20",
+    "last_used": 1744737095.839356,
+    "last_used_readable": "2025-04-15 19:11:35",
+    "idle_time": 74.92768812179565,
+    "idle_time_readable": "74.93 seconds",
+    "total_calls": 1,
+    "total_entities_detected": 62,
+    "total_processing_time": 1.1633844375610352,
+    "average_processing_time": 1.1633844375610352
   },
   "gemini": {
-    "initialized": true,
-    "uses": 120,
-    "quota_remaining": 4800,
-    "last_used": 1709372801.456789
+    /* Initialization and usage details */
   },
   "gliner": {
-    "initialized": true,
-    "uses": 85,
-    "model_loaded": true,
-    "last_used": 1709372821.789012
+    /* GLiNER model info and initialization details */
+  },
+  "hideme": {
+    /* HIDEME model details with paths and processing stats */
   },
   "_meta": {
-    "last_updated": "2023-03-01T12:34:56.789",
+    "last_updated": "2025-04-15T19:12:50.761412",
     "cache_ttl": 60
   }
 }
 ```
 
-**Rate Limit**: 10 requests per minute
+#### GET help/routes
 
-#### API Routes
+Provide a comprehensive overview of all available API routes.
 
-```
-GET /help/routes
-```
+**Response:**
 
-**Description**: Provides a comprehensive overview of all available API routes.
-
-**Response**:
-
-``` json
+```json
 {
   "entity_detection": [
     {
-      "path": "/hybrid/detect",
+      "path": "/ml/detect",
       "method": "POST",
-      "description": "Hybrid entity detection across multiple engines",
-      "engines": ["Presidio", "Gemini", "GLiNER"]
+      "description": "Presidio entity detection",
+      "engine": "Presidio"
     },
-    /* Additional entity detection routes */
+    {
+      "path": "/ml/gl_detect",
+      "method": "POST",
+      "description": "GLiNER entity detection",
+      "engine": "GLiNER"
+    },
+    {
+      "path": "/ai/detect",
+      "method": "POST",
+      "description": "Gemini AI entity detection",
+      "engine": "Gemini"
+    },
+    {
+      "path": "/ml/hm_detect",
+      "method": "POST",
+      "description": "HIDEME entity detection",
+      "engine": "HIDEME"
+    }
   ],
   "batch_processing": [
     {
       "path": "/batch/detect",
       "method": "POST",
-      "description": "Batch entity detection"
+      "description": "Batch sensitive data detection using one detection engine"
     },
-    /* Additional batch processing routes */
+    {
+      "path": "/batch/hybrid_detect",
+      "method": "POST",
+      "description": "Hybrid batch detection across multiple engines"
+    },
+    {
+      "path": "/batch/search",
+      "method": "POST",
+      "description": "Batch text search in multiple files"
+    },
+    {
+      "path": "/batch/find_words",
+      "method": "POST",
+      "description": "Batch find words in PDF files based on bounding box"
+    },
+    {
+      "path": "/batch/redact",
+      "method": "POST",
+      "description": "Batch document redaction returning a ZIP file"
+    }
   ],
   "pdf_processing": [
     {
@@ -1651,7 +1260,11 @@ GET /help/routes
       "method": "POST",
       "description": "PDF document redaction"
     },
-    /* Additional PDF processing routes */
+    {
+      "path": "/pdf/extract",
+      "method": "POST",
+      "description": "PDF text extraction"
+    }
   ],
   "metadata": [
     {
@@ -1659,7 +1272,26 @@ GET /help/routes
       "method": "GET",
       "description": "List available detection engines"
     },
-    /* Additional metadata routes */
+    {
+      "path": "/help/entities",
+      "method": "GET",
+      "description": "List available entity types"
+    },
+    {
+      "path": "/help/entity-examples",
+      "method": "GET",
+      "description": "Get examples of different entity types"
+    },
+    {
+      "path": "/help/detectors-status",
+      "method": "GET",
+      "description": "Get status of detection engines"
+    },
+    {
+      "path": "/help/routes",
+      "method": "GET",
+      "description": "Comprehensive overview of API routes"
+    }
   ],
   "system": [
     {
@@ -1667,427 +1299,240 @@ GET /help/routes
       "method": "GET",
       "description": "Basic API status"
     },
-    /* Additional system routes */
+    {
+      "path": "/health",
+      "method": "GET",
+      "description": "Detailed health check"
+    },
+    {
+      "path": "/metrics",
+      "method": "GET",
+      "description": "Performance metrics"
+    },
+    {
+      "path": "/readiness",
+      "method": "GET",
+      "description": "Service readiness check"
+    }
   ]
 }
 ```
 
-**No Rate Limit**
+## Services
 
-## Performance Optimization
+### Entity Detection Engines
 
-### Memory Optimizations
+#### Base Detection Engine:
 
-1. **Buffer Pooling**: Reduces memory allocation/deallocation overhead
-    - `USE_BUFFER_POOL`: Enable/disable (default: true)
-    - `MAX_BUFFER_POOL_SIZE`: Maximum pool size (default: 50MB)
+- Abstract base class that defines the interface for all entity detection engines.
 
-2. **Streaming Processing**: Handles large files without loading entirely in memory
-    - `IN_MEMORY_THRESHOLD`: Size threshold for in-memory vs. file-based processing (default: 10MB)
+#### Presidio Engine:
 
-3. **Batch Processing**: Processes files in batches with resource-aware parallelism
-    - `MAX_PARALLELISM`: Maximum parallel tasks (default: 12)
-    - Automatically adjusts based on system resources
+- Uses Microsoft's Presidio Analyzer for entity detection with Norwegian language support.
 
-4. **Adaptive Memory Management**:
-    - `MEMORY_THRESHOLD`: Triggers cleanup when memory usage exceeds this percentage (default: 80%)
-    - `CRITICAL_MEMORY_THRESHOLD`: Triggers emergency cleanup (default: 90%)
+#### Gemini Engine:
+
+- Uses Google's Gemini AI for entity detection with specialized prompts for Norwegian text.
+
+#### GLiNER Engine:
+
+- Uses the GLiNER model for entity detection with support for multiple languages.
+
+#### HIDEME Engine:
+
+- Custom-trained model specifically for Norwegian sensitive data detection.
+
+#### Hybrid Engine:
+
+- Combines results from multiple detection engines to improve accuracy.
+
+### Document Processing
+#### Detection Result Updater:
+
+- Responsible for updating a detection result by processing sensitive entities extracted from PDF pages. 
+- It removes specified phrases from entity texts and, if necessary, splits entities into multiple entries.
+
+#### Document Extractor:
+
+- Extracts text with positional information from documents.
+
+#### Document Redactor:
+
+- Applies redactions to documents based on detection results.
+
+#### PDF Searcher:
+
+- Responsible for finding specific search terms within text extracted from PDFs
+
+### Services
+
+#### AI Detect Service:
+
+- Handles AI-based sensitive data detection for individual files.
+
+#### Batch Detect Service:
+
+- Manages batch processing of multiple files for entity detection.
+
+#### Batch Redact Service:
+
+- Applies redactions to multiple documents in parallel.
+
+#### Batch Search Service:
+
+- Searches for specific terms or bounding boxes in multiple documents.
+
+#### Document Extract Service:
+
+- Extracts text and positional information from documents.
+
+#### Document Redact Service:
+
+- Applies redactions to documents based on detection results.
+
+#### Initialization Service:
+
+- Manages initialization of detection engines and other services.
+
+#### Machine Learning Service:
+
+- Provides machine learning capabilities for entity detection.
+
+## Security Considerations
+
+### Rate Limiting
+
+The system implements rate limiting to prevent abuse:
+
+- Default: 60 requests per minute
+- Admin users: 120 requests per minute
+- Anonymous users: 30 requests per minute
+- Burst allowance: 30 additional requests
+
+Rate limiting can be configured via environment variables and supports both Redis-based distributed rate limiting and
+in-memory rate limiting.
 
 ### Caching
 
-1. **Model Caching**: GLiNER models are cached for reuse
-    - `MAX_DETECTOR_CACHE_SIZE`: Maximum cached detector instances (default: 1000)
+Response caching is implemented to improve performance:
 
-2. **Response Caching**: API responses can be cached (via `caching_middleware.py`)
-    - Default TTL: 300 seconds (5 minutes)
+- TTL-based cache expiration
+- ETag support for cache validation
+- Thread-safe with lock-free reads and exclusive writes
+- LRU (Least Recently Used) eviction policy
+- Periodic cleanup of expired cache entries
 
-## Important Relationships
+### Retention Management
 
-1. **Entity Detection Flow**:
-   ```
-   BaseEntityDetector
-    ↓
-    ├── PresidioEntityDetector
-    ├── GlinerEntityDetector 
-    ├── GeminiEntityDetector
-    └── HybridEntityDetector (combines the others)
-   ```
+GDPR-compliant document retention management:
 
-2. **Document Processing Flow**:
-   ```
-   DocumentProcessingService
-    ↓
-    ├── Extraction (PDFTextExtractor)
-    ├── Entity Detection (via InitializationService)
-    └── Redaction (PDFRedactionService)
-   ```
+- Temporary files: 1 hour retention
+- Redacted files: 24 hours retention
+- Secure deletion with multiple overwrite patterns
+- Background cleanup thread for expired files
+- Graceful shutdown with cleanup
 
-3. **Batch Processing Flow**:
-   ```
-   BatchProcessingService
-    ↓
-    ├── File Validation (validate_batch_files_optimized)
-    ├── Resource Allocation (get_optimal_batch_size)
-    ├── Parallel Processing (process_in_parallel)
-    └── Result Aggregation
-   ```
+### Error Handling
 
-## GDPR Compliance Features
+Security-aware error handling to prevent information leakage:
 
-1. **Data Minimization**: Only necessary data is processed and stored
-    - Controlled by `DATA_MINIMIZATION_RULES` in `gdpr_config.py`
+- Sanitization of error messages to remove sensitive information
+- Unique error IDs for traceability
+- Detailed logging for debugging
+- Safe error responses for clients
 
-2. **Processing Records**: Maintains GDPR-compliant audit trails
-    - Records stored in `app/logs/processing_records/`
-    - Retention period: 90 days (configurable)
+### Memory Management
 
-3. **Temporary File Management**: Ensures files are properly deleted
-    - `TEMP_FILE_RETENTION_SECONDS`: 3600 (1 hour)
-    - `REDACTED_FILE_RETENTION_SECONDS`: 86400 (24 hours)
+Memory optimization to handle large documents:
 
-4. **Secure Error Handling**: Prevents leakage of sensitive information
-    - Sanitizes error messages
-    - Records detailed errors securely
-
-## API Rate Limiting
-
-Rate limiting is controlled via environment variables:
-
-- `RATE_LIMIT_RPM`: 60 (standard users)
-- `ADMIN_RATE_LIMIT_RPM`: 120 (admin users)
-- `ANON_RATE_LIMIT_RPM`: 30 (anonymous users)
-- `RATE_LIMIT_BURST`: 10 (short burst allowance)
-
-Redis can be used for distributed rate limiting by setting `REDIS_URL`.
-
-
-### PDF Redaction
-
-#### Request:
-
-```bash
-# Redact sensitive information in a PDF
-curl -X POST http://localhost:8000/pdf/redact \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@document.pdf" \
-  -F 'redaction_mapping={"pages":[{"page":1,"sensitive":[{"entity_type":"PERSON","text":"John Doe","positions":[[100,108]],"confidence":0.92,"boxes":[[100,180,200,200]]}]}]}' \
-  --output redacted.pdf
-```
-
-#### Response:
-
-The redacted PDF file with the following headers:
-
-- `Content-Disposition`: "attachment; filename=redacted.pdf"
-- `X-Redaction-Time`: "0.453s"
-- `X-Total-Time`: "0.562s"
-- `X-Redactions-Applied`: "1"
-- `X-Memory-Usage`: "45.3%"
-- `X-Peak-Memory`: "67.8%"
-- `X-Operation-ID`: "pdf_redact_1709372851"
-
-### Batch Processing
-
-#### Request:
-
-```bash
-# Process multiple files in batch mode
-curl -X POST http://localhost:8000/batch/detect \
-  -H "Content-Type: multipart/form-data" \
-  -F "files=@document1.pdf" \
-  -F "files=@document2.pdf" \
-  -F "files=@document3.pdf" \
-  -F "requested_entities=PERSON,EMAIL_ADDRESS" \
-  -F "detection_engine=presidio" \
-  -F "max_parallel_files=3"
-```
-
-#### Response:
-
-``` json
-{
-  "batch_summary": {
-    "total_files": 3,
-    "successful": 3,
-    "failed": 0,
-    "total_time": 2.567,
-    "workers": 3,
-    "operation_id": "batch_detect_1709372851",
-    "lock_used": true
-  },
-  "file_results": [
-      "file": "Inspeksjonsrapport-2.pdf",
-            "status": "success",
-            "results": {
-                "redaction_mapping": {
-                    "pages": [
-                        {
-                            "page": 1,
-                            "sensitive": [
-                                {
-                                    "original_text": "Astrid Holm",
-                                    "entity_type": "PERSON",
-                                    "start": 15,
-                                    "end": 26,
-                                    "score": 0.9846669435501099,
-                                    "bbox": {
-                                        "x0": 147.44161987304688,
-                                        "y0": 72.75343322753906,
-                                        "x1": 203.49172973632812,
-                                        "y1": 82.2332763671875
-                                    }
-                                },
-                                {
-                                    "original_text": "Astrid Holm",
-                                    "entity_type": "PERSON",
-                                    "start": 314,
-                                    "end": 325,
-                                    "score": 0.9846669435501099,
-                                    "bbox": {
-                                        "x0": 147.32015991210938,
-                                        "y0": 146.8134307861328,
-                                        "x1": 203.3813018798828,
-                                        "y1": 156.29327392578125
-                                    }
-                                },
-                                {
-                                    "original_text": "Førsteinspektør Eva Hansen",
-                                    "entity_type": "PERSON",
-                                    "start": 268,
-                                    "end": 294,
-                                    "score": 0.8434117436408997,
-                                    "bbox": {
-                                        "x0": 360.4693603515625,
-                                        "y0": 132.2934112548828,
-                                        "x1": 493.5455627441406,
-                                        "y1": 141.77325439453125
-                                    }
-                                },
-        "entities_detected": {
-                    "total": 12,
-                    "by_type": {
-                        "PERSON": 12
-                    },
-                    "by_page": {
-                        "page_1": 4,
-                        "page_2": 11,
-                        "page_3": 1
-                    }
-                },
-                "performance": {
-                    "words_count": 745,
-                    "pages_count": 3,
-                    "entity_density": 16.107382550335572,
-                    "sanitize_time": 0.002001047134399414
-                },
-                "file_info": {
-                    "filename": "Inspeksjonsrapport-2.pdf",
-                    "content_type": "application/pdf",
-                    "size": "0.06 MB"
-                },
-                "model_info": {
-                    "engine": "GLINER"
-                }
-            }
-        },
-    {
-            "file": "Inspeksjonsrapport-3.pdf",
-            "status": "success",
-            "results": {
-                "redaction_mapping": {
-                    "pages": [
-                        {
-                            "page": 1,
-                            "sensitive": [ {/* Redaction mapping for document2.pdf */},
-                            .
-                            .
-                            .
-                        }
-                    ]
-                },
-              "entities_detected": {
-                    "total": 11,
-                    "by_type": {
-                        "PERSON": 11
-                    },
-                    "by_page": {
-                        "page_1": 7,
-                        "page_2": 5,
-                        "page_3": 1
-                    }
-                },
-                "performance": {
-                    "words_count": 475,
-                    "pages_count": 3,
-                    "entity_density": 23.157894736842106,
-                    "sanitize_time": 0.0010004043579101562
-                },
-                "file_info": {
-                    "filename": "Inspeksjonsrapport-3.pdf",
-                    "content_type": "application/pdf",
-                    "size": "0.07 MB"
-                },
-                "model_info": {
-                    "engine": "GLINER"
-                }
-              }
-              
-            }
-    }
- ]      
-}
-```
-
-### Getting Available Entity Types
-
-#### Request:
-
-```bash
-# Get all available entity types
-curl -X GET http://localhost:8000/help/entities
-```
-
-#### Response:
-
-```json
-{
-  "presidio_entities": [
-    "PERSON",
-    "EMAIL_ADDRESS",
-    "PHONE_NUMBER",
-    "CREDIT_CARD",
-    "ADDRESS",
-    "DATE",
-    "US_SSN",
-    "LOCATION",
-    "ORGANIZATION",
-    "NO_FODSELSNUMMER",
-    "NO_PHONE_NUMBER"
-  ],
-  "gemini_entities": {
-    "PERSON": "Names of individuals",
-    "EMAIL_ADDRESS": "Email addresses",
-    "PHONE_NUMBER": "Phone and fax numbers",
-    "CREDIT_CARD": "Credit card numbers",
-    "ADDRESS": "Physical addresses",
-    "DATE": "Dates in various formats",
-    "US_SSN": "US Social Security Numbers",
-    "LOCATION": "Geographic locations",
-    "ORGANIZATION": "Names of companies and organizations"
-  },
-  "gliner_entities": [
-    "PERSON",
-    "EMAIL",
-    "PHONE",
-    "ADDRESS",
-    "ID_NUMBER",
-    "CREDIT_CARD",
-    "MEDICAL_RECORD",
-    "BANK_ACCOUNT",
-    "AGE"
-  ]
-}
-```
-
-## Error Handling
-
-All API endpoints implement consistent error handling with security-aware responses to prevent information leakage:
-
-### Rate Limit Exceeded
-
-```json
-{
-  "detail": "Rate limit exceeded. Try again in 60 seconds.",
-  "retry_after": 60
-}
-```
-
-### File Size Exceeded
-
-```json
-{
-  "detail": "PDF file size exceeds maximum allowed (25MB)"
-}
-```
-
-### Invalid File Format
-
-```json
-{
-  "detail": "Unsupported file type. Please upload a PDF or text file."
-}
-```
-
-### Service Overload
-
-```json
-{
-  "detail": "Service unable to process batch due to system load.",
-  "retry_after": 60,
-  "operation_id": "batch_detect_1709372851"
-}
-```
-
-## Monitoring and Maintenance
-
-### Key Metrics to Monitor
-
-1. **Memory Usage**: `memory_monitor.get_memory_stats()`
-    - Watch for consistently high memory usage (>90%)
-    - Monitor peak memory usage patterns
-
-2. **Processing Times**:
-    - Entity detection time by engine type
-    - Redaction time by document size
-    - Total processing time per document
-
-3. **Error Rates**:
-    - Monitor `/app/logs/error_logs/detailed_errors.log`
-    - Track rate limiting rejections
-
-### Maintenance Tasks
-
-1. **Regular GDPR Cleanup**:
-    - Ensure `retention_manager` is properly running
-    - Verify processing records rotation (90 days default)
-
-2. **GLiNER Model Updates**:
-    - Check for newer model versions periodically
-    - Clear model cache when updating
-
-3. **Log Rotation**:
-    - Set up log rotation for error logs and processing records
-    - Recommended: Daily rotation with 30-day retention
+- Memory usage monitoring
+- Threshold-based optimization
+- Garbage collection triggering
+- Memory-optimized decorator for endpoints
 
 ## Extending the System
 
-### Adding New Document Types
+### Adding a New Detection Engine
 
-To add support for a new document format:
+1. Create a new class that inherits from `EntityDetector` in `backend/app/entity_detection/base.py`
+2. Implement the required methods:
+    - `detect_sensitive_data()`
+    - Any additional helper methods
+3. Add the new engine to the `EntityDetectionEngine` enum in `backend/app/entity_detection/engines.py`
+4. Create a configuration file for the new engine
+5. Update the initialization service to initialize the new engine
 
-1. Create a new extractor class implementing `DocumentExtractor` interface
-2. Create a new redactor class implementing `DocumentRedactor` interface
-3. Add format to `DocumentFormat` enum in `document_processing_factory.py`
-4. Update the factory methods to handle the new format
+### Adding a New API Endpoint
 
-### Adding New Detection Engines
+1. Create a new route function in the appropriate route file or create a new route file
+2. Apply decorators for rate limiting and memory optimization as needed
+3. Implement the endpoint logic using the appropriate services
+4. Add error handling using `SecurityAwareErrorHandler`
+5. Update the API documentation
 
-To integrate a new entity detection engine:
+### Adding Support for a New Document Type
 
-1. Create a new detector class extending `BaseEntityDetector`
-2. Implement `detect_sensitive_data_async()` and other required methods
-3. Add the engine to `EntityDetectionEngine` enum in `document_processing_factory.py`
-4. Update the `InitializationService` to handle the new engine
+1. Create a new extractor class that inherits from `DocumentExtractor`
+2. Implement the required methods:
+    - `extract_text()`
+    - `close()`
+3. Create a new redactor class that inherits from `DocumentRedactor`
+4. Implement the required methods:
+    - `apply_redactions()`
+    - `close()`
+5. Update the document processing services to support the new document type
 
-### Custom Entity Detection Rules
+## Dependencies
 
-For domain-specific entity detection:
+The project relies on the following key dependencies:
 
-1. Add custom regex patterns to `recognizers-config.yml`
-2. Create a custom Presidio analyzer configuration
-3. Integrate domain-specific keywords and patterns
+- **FastAPI**: Web framework for building APIs
+- **Uvicorn**: ASGI server for running FastAPI
+- **PyMuPDF**: PDF processing library
+- **Presidio**: Microsoft's PII detection library
+- **spaCy**: NLP library for entity recognition
+- **Transformers**: Hugging Face's transformer models
+- **Google Generative AI**: Google's Gemini API
+- **GLiNER**: Entity recognition model
+- **Redis**: Optional for distributed caching and rate limiting
+- **SlowAPI**: Rate limiting for FastAPI
+- **Pandas/NumPy**: Data processing
 
-## Copyright and License
+For a complete list of dependencies and versions, see `requirements.txt`.
+
+## Additional Notes
+
+### Performance Optimization
+
+- Use batch processing for multiple files
+- Enable caching for repeated operations
+- Adjust `max_parallel_files` based on available resources
+- Consider using Redis for distributed deployments
+
+### Troubleshooting
+
+- Check the logs for detailed error information
+- Use the `/health` and `/metrics` endpoints to monitor system status
+- Error IDs in responses can be used to trace issues in logs
+- For memory issues, adjust the memory thresholds in configuration
+
+### Production Deployment
+
+- Use Docker Compose for easy deployment
+- Configure Redis for distributed caching and rate limiting
+- Set up proper monitoring and logging
+- Use a reverse proxy like Nginx for SSL termination
+- Consider using Kubernetes for scaling
+
+### Security Best Practices
+
+- Keep the API behind a secure network
+- Use HTTPS for all communications
+- Regularly update dependencies
+- Monitor the `/metrics` endpoint for unusual activity
+- Implement proper authentication for production use
+
+### Copyright and License
 
 © 2025 HideMeAI. All Rights Reserved.
 
@@ -2099,4 +1544,3 @@ This software contains trade secrets and confidential information of HideMeAI. D
 software is prohibited unless explicitly authorized by HideMeAI.
 
 For licensing inquiries, please contact: licensing@hidemeai.com
-   

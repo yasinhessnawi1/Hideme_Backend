@@ -164,7 +164,7 @@ class MashinLearningService(BaseDetectionService):
             )
 
             # STEP 10: Update the redaction mapping with engine-specific markers.
-            #redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name=self.detector_type)
+            redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name=self.detector_type)
 
             # STEP 11-13: Use the centralized helper method to apply threshold filtering,
             # sanitize the detection output, and append file and engine metadata.

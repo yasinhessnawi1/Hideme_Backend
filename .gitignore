@@ -216,13 +216,13 @@ log_yasin.txt
 backend/app/models/
 
 server_setup.sh
-data_generation/fisk_data/ready_data/
-data_generation/fisk_data/
-data_generation/processed_data/
-data_generation/bekymringsmelding/
-data_generation/training_data/
-data_generation/inspeksjonsrapport/
-data_generation/**.jsonl
+flow/fisk_data/ready_data/
+flow/fisk_data/
+flow/processed_data/
+flow/bekymringsmelding/
+flow/training_data/
+flow/inspeksjonsrapport/
+flow/**.jsonl
 
 backend/app/logs/
 

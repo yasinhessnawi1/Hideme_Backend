@@ -12,11 +12,12 @@ from fastapi import UploadFile
 
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.document_processing.pdf_searcher import PDFSearcher
+from backend.app.utils.constant.constant import MAX_FILES_COUNT
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_batch_operation
 from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.security.processing_records import record_keeper
-from backend.app.utils.validation.file_validation import read_and_validate_file, MAX_FILES_COUNT
+from backend.app.utils.validation.file_validation import read_and_validate_file
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 
 
@@ -387,127 +388,175 @@ class BatchSearchService:
             operation_id: str
     ) -> Dict[str, Any]:
         """
-        Process a batch of PDF files to find all occurrences of the word(s) that appear within a specified bounding box.
+        Combines all extracted PDF pages into one logical document and finds the phrase
+        defined by `bounding_box` across all PDFs.
 
-        For each file, the method:
-          1. Reads and validates the PDF file.
-          2. Extracts the text content.
-          3. Instantiates PDFSearcher with the extracted data.
-          4. Calls PDFSearcher (e.g. `find_target_phrase_occurrences`) to get a result dictionary containing
-             the pages with matches and the overall match count.
-          5. Aggregates the results for each file.
+        Steps:
+          1. Read & validate uploaded files.
+          2. Extract text/pages from valid PDFs in parallel.
+          3. Tag each page with its source file and merge into a single list.
+          4. Use PDFSearcher.find_target_phrase_occurrences() to detect the phrase,
+             merging multi-word bounding boxes correctly across pages.
+          5. Group the found matches back by original file.
+          6. Audit the batch operation via record_keeper.
 
         Returns:
-            A dictionary containing:
-              - "batch_summary": Summary information for the batch operation.
-              - "file_results": List of dictionaries for each file.
-              - "_debug": Debug information including memory statistics and the operation ID.
+            A dict containing:
+              - batch_summary: metrics and the target_bbox used (as a string)
+              - file_results: list of per-file results (pages + match_count)
+              - _debug: memory usage and operation_id for diagnostics
         """
-        # Record the start time of the batch operation.
+        # Record when the search began, for timing
         start_time = time.time()
-        # Initialize an empty list to hold file-specific results.
-        file_results: List[Dict[str, Any]] = []
-        # Initialize counters for successful and failed file operations.
-        successful = 0
-        failed = 0
-        # Initialize the counter for total matches found across files.
-        total_matches = 0
+        # Counters for how many files succeeded/failed and total matches found
+        successful, failed, total_matches = 0, 0, 0
+        # This will accumulate every PDF page (with its words & metadata)
+        combined_pages: List[Dict[str, Any]] = []
 
+        # Read and validate all UploadFile PDFs
         try:
-            # Read and validate all PDF files and gather their metadata.
-            pdf_files, file_metadata = await BatchSearchService._read_files_for_extraction(files, operation_id)
+            pdf_files, file_metadata = await BatchSearchService._read_files_for_extraction(
+                files, operation_id
+            )
         except Exception as e:
-            # Log any error encountered during file reading with security context.
-            log_error(f"[SECURITY] Error reading files in find_words_by_bbox: {str(e)} [operation_id={operation_id}]")
-            # Return an error response immediately.
+            log_error(
+                f"[SECURITY] Error reading files in find_words_by_bbox: {e} "
+                f"[operation_id={operation_id}]"
+            )
+            # Return an error payload if reading fails
             return {"detail": "Error reading files", "operation_id": operation_id}
 
-        # Process each file along with its corresponding metadata.
-        for idx, meta in enumerate(file_metadata):
-            try:
-                # Retrieve the original filename from the metadata.
-                filename = meta.get("original_name")
-                # Check if the file failed validation.
-                if pdf_files[idx] is None:
-                    # Append an error result if the file is not valid.
-                    file_results.append({
-                        "file": filename,
-                        "status": "error",
-                        "error": "File validation failed."
-                    })
-                    # Increment the failure counter.
-                    failed += 1
-                    # Skip processing this file.
-                    continue
+        # Filter out any that failed validation (None content)
+        valid_pdf_files = [content for content in pdf_files if content is not None]
+        if not valid_pdf_files:
+            # Early return if no valid PDFs remain
+            return BatchSearchService._build_empty_bbox_response(
+                files, operation_id, start_time
+            )
 
-                # Instantiate PDFTextExtractor to extract text from the PDF.
-                extractor = PDFTextExtractor(pdf_files[idx])
-                # Extract the text content from the PDF.
-                extracted_data = extractor.extract_text()
-                # Close the extractor to free resources.
-                extractor.close()
+        # Extract pages/text from valid PDFs in parallel
+        extraction_results = await PDFTextExtractor.extract_batch_text(valid_pdf_files)
+        # Map each combined-page index back to its source file name
+        page_to_file_map: Dict[int, str] = {}
+        page_index = 0
 
-                # Instantiate PDFSearcher with the extracted data.
-                searcher = PDFSearcher(extracted_data)
-                # Find all target phrase occurrences within the given bounding box.
-                result_data, match_count = searcher.find_target_phrase_occurrences(bounding_box)
-                # Append a successful result entry for this file.
-                file_results.append({
-                    "file": filename,
-                    "status": "success",
-                    "results": {
-                        "pages": result_data.get("pages", []),
-                        "match_count": match_count,
-                    }
-                })
-                # Increment the successful counter.
+        for i, (_, result) in enumerate(extraction_results):
+            if result and "pages" in result:
+                source_name = file_metadata[i]["original_name"]
+                for page in result["pages"]:
+                    # Tag the raw page dict with its originating filename
+                    page["source_file"] = source_name
+                    # Remember which file this combined page index comes from
+                    page_to_file_map[page_index] = source_name
+                    combined_pages.append(page)
+                    page_index += 1
                 successful += 1
-                # Update the total match count with matches from this file.
-                total_matches += match_count
-            except Exception as e:
-                # Log any exception that occurs during processing with security context.
-                log_error(
-                    f"[SECURITY] Error processing file {meta.get('original_name')}: {str(e)} [operation_id={operation_id}]")
-                # Append an error result entry for this file.
-                file_results.append({
-                    "file": meta.get("original_name", "unknown"),
-                    "status": "error",
-                    "error": str(e)
-                })
-                # Increment the failure counter.
+            else:
+                # Log that this file's extraction failed or returned no pages
                 failed += 1
 
-        # Calculate the total elapsed time for the batch operation.
-        total_time = time.time() - start_time
-        # Build the batch summary with counts and timing.
-        batch_summary = {
-            "batch_id": operation_id,
-            "total_files": len(files),
-            "successful": successful,
-            "failed": failed,
-            "total_matches": total_matches,
-            "search_term": f"Bounding Box: {bounding_box}",
-            "query_time": round(total_time, 2)
-        }
-        # Gather memory usage and debug statistics.
-        debug_info = {
-            "memory_usage": memory_monitor.get_memory_stats().get("current_usage"),
-            "peak_memory": memory_monitor.get_memory_stats().get("peak_usage"),
-            "operation_id": operation_id
-        }
-        # Record processing details for auditing purposes.
+        # Run the bounding-box-based phrase detection on the combined pages
+        combined_data = {"pages": combined_pages}
+        try:
+            searcher = PDFSearcher(combined_data)
+            phrase_result, match_count = searcher.find_target_phrase_occurrences(
+                bounding_box
+            )
+            total_matches = match_count
+        except Exception as e:
+            log_error(
+                f"[SECURITY] Error running phrase detection: {e} "
+                f"[operation_id={operation_id}]"
+            )
+            # Return an error payload if phrase detection fails
+            return {"detail": "Error during phrase detection", "operation_id": operation_id}
+
+        # Step 4: Group each matched page result by its original file
+        file_results_map: Dict[str, Dict[str, Any]] = {}
+        for idx, page_result in enumerate(phrase_result.get("pages", [])):
+            source_file = page_to_file_map.get(idx, "unknown")
+            if source_file not in file_results_map:
+                # Initialize a new entry for this file
+                file_results_map[source_file] = {
+                    "file": source_file,
+                    "status": "success",
+                    "results": {"pages": [], "match_count": 0}
+                }
+            # Add this page's matches to the file's results
+            file_results_map[source_file]["results"]["pages"].append(page_result)
+            file_results_map[source_file]["results"]["match_count"] += len(
+                page_result.get("matches", [])
+            )
+
+        # Convert the map of file->results into a list for the response
+        file_results = list(file_results_map.values())
+
+        # Audit the operation
+        query_time = round(time.time() - start_time, 2)
         record_keeper.record_processing(
-            operation_type="batch_find_words",
-            document_type="PDF_files",
-            entity_types_processed=[f"Bounding Box: {bounding_box}"],
-            processing_time=total_time,
+            operation_type="batch_text_search",
+            document_type="multiple_files",
+            entity_types_processed=[str(bounding_box)],
+            processing_time=query_time,
             file_count=len(files),
             entity_count=total_matches,
             success=(successful > 0)
         )
-        # Return the complete batch result including the summary, file results, and debug info.
+
+        # Construct and return the final payload
         return {
-            "batch_summary": batch_summary,
+            "batch_summary": {
+                "batch_id": operation_id,
+                "total_files": len(files),
+                "successful": successful,
+                "failed": failed,
+                "total_matches": total_matches,
+                "target_bbox": str(bounding_box),
+                "query_time": query_time
+            },
             "file_results": file_results,
-            "_debug": debug_info,
+            "_debug": {
+                "memory_usage": memory_monitor.get_memory_stats().get("current_usage"),
+                "peak_memory": memory_monitor.get_memory_stats().get("peak_usage"),
+                "operation_id": operation_id
+            }
+        }
+
+    @staticmethod
+    def _build_empty_bbox_response(
+            files: List[UploadFile],
+            operation_id: str,
+            start_time: float
+    ) -> Dict[str, Any]:
+        """
+        Helper method to build a standardized, empty response when no valid PDFs are available.
+
+        Args:
+            files: Original list of uploaded PDF files.
+            operation_id: Unique ID for this batch.
+            start_time: Timestamp when processing began.
+
+        Returns:
+            A response dict mirroring the normal structure but with zeroed-out metrics
+            and an empty `target_bbox`.
+        """
+        # Calculate how long we tried before giving up
+        elapsed = round(time.time() - start_time, 2)
+
+        return {
+            "batch_summary": {
+                "batch_id": operation_id,
+                "total_files": len(files),
+                "successful": 0,
+                "failed": len(files),
+                "total_matches": 0,
+                "target_bbox": "",
+                "query_time": elapsed
+            },
+            "file_results": [],
+            "_debug": {
+                "memory_usage": memory_monitor.get_memory_stats().get("current_usage"),
+                "peak_memory": memory_monitor.get_memory_stats().get("peak_usage"),
+                "operation_id": operation_id
+            }
         }

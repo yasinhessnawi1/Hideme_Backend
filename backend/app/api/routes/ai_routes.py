@@ -11,6 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, File, UploadFile, Form, Request, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from starlette.responses import JSONResponse
 
 from backend.app.services.ai_detect_service import AIDetectService
 from backend.app.utils.constant.constant import JSON_MEDIA_TYPE
@@ -33,7 +34,7 @@ async def ai_detect_sensitive(
         requested_entities: Optional[str] = Form(None),
         remove_words: Optional[str] = Form(None),
         threshold: Optional[float] = Form(None)
-) -> Response:
+) -> JSONResponse:
     """
     Endpoint to detect sensitive information in an uploaded file using the AI detection service.
 
@@ -51,7 +52,7 @@ async def ai_detect_sensitive(
         threshold (Optional[float]): A numeric threshold (0.00 to 1.00) for filtering the detection results.
 
     Returns:
-        Response: The detection results as returned by AIDetectService, or a sanitized error response if an exception occurs.
+        JSONResponse: The detection results as returned by AIDetectService, or a sanitized error response if an exception occurs.
     """
     try:
         # Validate the threshold score; will raise HTTPException if threshold is invalid.
@@ -63,8 +64,8 @@ async def ai_detect_sensitive(
         )
         # Retrieve the status code from the error info, defaulting to 500 if not present.
         status = error_info.get("status_code", 500)
-        # Return a Response with the safe error information.
-        return Response(
+        # Return a JSONResponse with the safe error information.
+        return JSONResponse(
             content=error_info,
             status_code=status,
             media_type=JSON_MEDIA_TYPE
@@ -83,8 +84,8 @@ async def ai_detect_sensitive(
         )
         # Determine the status code from the error information.
         status = error_info.get("status_code", 500)
-        # Return a Response containing the sanitized error message.
-        return Response(
+        # Return a JSONResponse containing the sanitized error message.
+        return JSONResponse(
             content=error_info,
             status_code=status,
             media_type=JSON_MEDIA_TYPE
