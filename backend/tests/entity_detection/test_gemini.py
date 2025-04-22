@@ -1,7 +1,5 @@
 import time
-
 import unittest
-
 from unittest.mock import patch, AsyncMock, MagicMock
 
 from backend.app.entity_detection.gemini import GeminiEntityDetector

@@ -1,21 +1,12 @@
 import os
-
 import unittest
-
 from unittest import IsolatedAsyncioTestCase
-
 from unittest.mock import patch, MagicMock
-
 from wsgiref.headers import Headers
-
 import redis
-
 from fastapi import HTTPException
-
 from fastapi import Request
-
 from starlette.datastructures import Headers
-
 from starlette.responses import Response
 
 from backend.app.utils.security.rate_limiting import (

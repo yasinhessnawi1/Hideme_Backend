@@ -1,7 +1,5 @@
 import unittest
-
 from unittest.mock import AsyncMock, MagicMock, patch
-
 from fastapi.responses import JSONResponse
 
 from backend.app.services.document_extract_service import DocumentExtractService

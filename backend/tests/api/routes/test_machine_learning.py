@@ -1,11 +1,7 @@
 import pytest
-
 from fastapi.testclient import TestClient
-
 from unittest.mock import patch
-
 from fastapi import HTTPException
-
 from backend.app.api.main import create_app
 
 client = TestClient(create_app())

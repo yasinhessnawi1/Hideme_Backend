@@ -1,7 +1,5 @@
 import unittest
-
 from unittest.mock import patch, MagicMock
-
 from backend.app.document_processing.detection_updater import DetectionResultUpdater
 
 

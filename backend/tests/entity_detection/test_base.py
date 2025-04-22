@@ -1,15 +1,10 @@
 import asyncio
-
 import unittest
-
 from unittest import mock
-
 from unittest.mock import patch, MagicMock
 
 from backend.app.entity_detection.base import BaseEntityDetector
-
 from backend.app.utils.security.processing_records import record_keeper
-
 from backend.app.utils.system_utils.synchronization_utils import TimeoutLock
 
 

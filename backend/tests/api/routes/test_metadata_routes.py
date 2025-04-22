@@ -1,11 +1,7 @@
 import pytest
-
 from fastapi.testclient import TestClient
-
 from unittest.mock import patch, MagicMock
-
 from backend.app.api.main import create_app
-
 from backend.app.utils.security.caching_middleware import response_cache
 
 client = TestClient(create_app())

@@ -1,5 +1,4 @@
 from unittest.mock import patch
-
 import pytest
 
 from backend.app.document_processing.pdf_searcher import PDFSearcher

@@ -1,7 +1,5 @@
 import hashlib
-
 import unittest
-
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from backend.app.utils.helpers.gemini_helper import GeminiHelper

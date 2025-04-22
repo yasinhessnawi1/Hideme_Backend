@@ -1,7 +1,5 @@
 import json
-
 import unittest
-
 from unittest.mock import patch
 
 from backend.app.utils.logging.secure_logging import (

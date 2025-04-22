@@ -1,15 +1,10 @@
 import os
-
 import unittest
-
 from datetime import timedelta, datetime
-
 from unittest.mock import patch, MagicMock, mock_open
 
 from backend.app.configs.gdpr_config import GDPR_DOCUMENTATION
-
 from backend.app.utils.constant.constant import JSON_CONSTANT
-
 from backend.app.utils.security.processing_records import ProcessingRecordKeeper
 
 

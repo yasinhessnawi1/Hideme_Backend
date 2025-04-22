@@ -1,11 +1,8 @@
 import os
-
 import unittest
-
 from unittest.mock import patch, MagicMock, mock_open
 
 from backend.app.configs.gdpr_config import TEMP_FILE_RETENTION_SECONDS
-
 from backend.app.utils.security.retention_management import DocumentRetentionManager
 
 

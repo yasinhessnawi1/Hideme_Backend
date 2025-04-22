@@ -1,15 +1,9 @@
 import warnings
-
 import asyncio
-
 import json
-
 import time
-
 import unittest
-
 from unittest.mock import patch, AsyncMock
-
 from fastapi.responses import JSONResponse
 
 from backend.app.services.base_detect_service import BaseDetectionService

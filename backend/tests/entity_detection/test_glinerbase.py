@@ -1,7 +1,5 @@
 import time
-
 import unittest
-
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from backend.app.entity_detection.glinerbase import GenericEntityDetector

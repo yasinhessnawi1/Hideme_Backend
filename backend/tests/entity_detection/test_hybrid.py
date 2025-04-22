@@ -1,13 +1,9 @@
 import asyncio
-
 import unittest
-
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from backend.app.domain import EntityDetector
-
 from backend.app.entity_detection.hybrid import HybridEntityDetector
-
 from backend.app.utils.system_utils.synchronization_utils import AsyncTimeoutLock, LockPriority
 
 import time

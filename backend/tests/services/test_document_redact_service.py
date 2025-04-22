@@ -1,7 +1,5 @@
 import unittest
-
 from unittest.mock import patch, MagicMock
-
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.app.services.document_redact_service import DocumentRedactionService

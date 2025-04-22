@@ -139,6 +139,8 @@ class PDFSearcher:
         page_text_parts = []
         # Set current index to start at zero.
         current_index = 0
+        # default padding exactly as in TextUtils.map_offsets_to_bboxes
+        padding = {"top": 2, "right": 0, "bottom": 2, "left": 0}
         # Iterate over each word in the provided list.
         for word in words:
             # Get the text value of the word; default to an empty string.
@@ -154,11 +156,18 @@ class PDFSearcher:
                 "x1": word.get("x1"),
                 "y1": word.get("y1")
             }
+            # apply padding exactly as base class does:
+            padded = {
+                "x0": bbox["x0"] - padding["left"],
+                "y0": bbox["y0"] + padding["top"],
+                "x1": bbox["x1"] + padding["right"],
+                "y1": bbox["y1"] - padding["bottom"],
+            }
             # Append the mapping information as a dictionary.
             mapping.append({
                 "start": start_idx,
                 "end": end_idx,
-                "bbox": bbox,
+                "bbox": padded,
                 "text": text
             })
             # Append the text to the list of page text parts.
@@ -286,8 +295,9 @@ class PDFSearcher:
             page_number = page.get("page")
             # Initialize an empty list for matches.
             page_matches = []
+            mapping, _ = self.build_page_text_and_mapping(page.get("words", []))
             # Iterate through each word in the page data.
-            for word in page.get("words", []):
+            for word in mapping:
                 # Retrieve the text of the word and strip extra spaces.
                 word_text = (word.get("text") or "").strip()
                 # Check whether the cleaned word matches any term in the search set.

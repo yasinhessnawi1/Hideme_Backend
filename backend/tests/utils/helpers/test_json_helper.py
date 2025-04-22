@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import patch
-
 from fastapi import HTTPException
 
 from backend.app.utils.helpers.json_helper import (

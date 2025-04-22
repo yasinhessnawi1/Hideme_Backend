@@ -1,13 +1,9 @@
 import os
-
 from unittest.mock import patch
-
 import pymupdf
-
 import pytest
 
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
-
 from backend.app.document_processing.pdf_redactor import PDFRedactionService
 
 

@@ -1,13 +1,9 @@
 import unittest
-
 from unittest.mock import patch, MagicMock, AsyncMock
-
 import pytest
 
 from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_AVAILABLE_ENTITIES
-
 from backend.app.entity_detection import EntityDetectionEngine
-
 from backend.app.services.initialization_service import InitializationService
 
 

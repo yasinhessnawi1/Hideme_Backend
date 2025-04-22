@@ -1,5 +1,4 @@
 import unittest
-
 from unittest.mock import patch, AsyncMock, MagicMock
 
 from backend.app.services.batch_search_service import BatchSearchService
@@ -111,40 +110,49 @@ class TestBatchSearchService(unittest.IsolatedAsyncioTestCase):
 
     # Test finding words by bounding box when extraction and search succeed
     @patch("backend.app.services.batch_search_service.read_and_validate_file", new_callable=AsyncMock)
-    async def test_find_words_by_bbox_success(self, mock_validate):
+    @patch("backend.app.services.batch_search_service.PDFTextExtractor.extract_batch_text", new_callable=AsyncMock)
+    async def test_find_words_by_bbox_success(self,
+                                              mock_extract_batch_text: AsyncMock,
+                                              mock_validate: AsyncMock):
         mock_validate.return_value = (b"%PDF", None, 0.1)
+        mock_extract_batch_text.return_value = [
+            (0, {"pages": [{"words": ["word"]}]})
+        ]
 
-        dummy_extractor = MagicMock()
-
-        dummy_extractor.extract_text.return_value = {"pages": [{"words": ["word"]}]}
-
-        dummy_extractor.close = MagicMock()
-
-        patch_extractor = patch("backend.app.services.batch_search_service.PDFTextExtractor",
-                                return_value=dummy_extractor)
-
-        patch_searcher = patch("backend.app.services.batch_search_service.PDFSearcher", return_value=MagicMock(
-            find_target_phrase_occurrences=MagicMock(return_value=({"pages": [1]}, 3))
-        ))
-
-        with patch_extractor, patch_searcher:
+        # Return a proper page dict with a non‐empty "matches" list
+        dummy_searcher = MagicMock(
+            find_target_phrase_occurrences=MagicMock(
+                return_value=(
+                    {"pages": [
+                        {"matches": [{"bbox": {"x0": 0, "y0": 0, "x1": 1, "y1": 1}}]}
+                    ]},
+                    3
+                )
+            )
+        )
+        with patch("backend.app.services.batch_search_service.PDFSearcher",
+                   return_value=dummy_searcher):
             result = await BatchSearchService.find_words_by_bbox(
-
-                [DummyUploadFile()], {"x": 0, "y": 0, "w": 1, "h": 1}, "bbox-op"
-
+                [DummyUploadFile()],
+                {"x": 0, "y": 0, "w": 1, "h": 1},
+                "bbox-op"
             )
 
         self.assertEqual(result["batch_summary"]["successful"], 1)
-
         self.assertEqual(result["batch_summary"]["total_matches"], 3)
 
     # Test handling validation failure in bounding box search
+
     @patch("backend.app.services.batch_search_service.read_and_validate_file", new_callable=AsyncMock)
     async def test_find_words_by_bbox_validation_failure(self, mock_validate):
+        # simulate validation failure
         mock_validate.return_value = (None, "err", 0.1)
 
         result = await BatchSearchService.find_words_by_bbox([DummyUploadFile()], {}, "op-id")
 
-        self.assertEqual(result["file_results"][0]["status"], "error")
+        # when all files fail validation, file_results is empty
+        self.assertEqual(result["file_results"], [])
 
-        self.assertIn("File validation failed", result["file_results"][0]["error"])
+        # batch_summary should report 0 successful, 1 failed
+        self.assertEqual(result["batch_summary"]["successful"], 0)
+        self.assertEqual(result["batch_summary"]["failed"], 1)

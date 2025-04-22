@@ -1,19 +1,12 @@
 import unittest
-
 from unittest import mock
-
 from unittest.mock import patch, MagicMock, AsyncMock
-
 import asyncio
 
 from backend.app.entity_detection.presidio import PresidioEntityDetector
-
 from backend.app.domain import EntityDetector
-
 from presidio_analyzer import AnalyzerEngine
-
 from presidio_anonymizer import AnonymizerEngine
-
 from backend.app.utils.system_utils.synchronization_utils import TimeoutLock
 
 

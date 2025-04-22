@@ -1,15 +1,9 @@
 import hashlib
-
 import json
-
 import time
-
 import unittest
-
 from unittest.mock import patch, MagicMock, AsyncMock
-
 from fastapi import Request, Response
-
 from starlette.datastructures import Headers, QueryParams, URL
 
 from backend.app.utils.security.caching_middleware import (
@@ -22,7 +16,6 @@ from backend.app.utils.security.caching_middleware import (
     clear_cached_response,
     invalidate_cache
 )
-
 from backend.app.utils.system_utils.synchronization_utils import LockPriority
 
 

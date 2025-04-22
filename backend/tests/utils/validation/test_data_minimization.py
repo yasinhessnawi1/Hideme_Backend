@@ -1,9 +1,6 @@
 import hashlib
-
 import unittest
-
 from unittest import mock
-
 from unittest.mock import patch
 
 from backend.app.utils.validation.data_minimization import (

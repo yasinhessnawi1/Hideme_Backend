@@ -4,7 +4,6 @@ import time
 import unittest
 import uuid
 from unittest.mock import patch, mock_open
-
 from fastapi import HTTPException
 
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler

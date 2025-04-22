@@ -1,9 +1,6 @@
 import json
-
 import unittest
-
 from unittest.mock import patch, AsyncMock
-
 from fastapi.responses import JSONResponse
 
 from backend.app.services.machine_learning_service import MashinLearningService

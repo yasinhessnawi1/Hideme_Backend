@@ -1,9 +1,6 @@
 from unittest.mock import patch
-
 import pytest
-
 from fastapi.testclient import TestClient
-
 from backend.app.api.main import create_app
 
 

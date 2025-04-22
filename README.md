@@ -1347,18 +1347,22 @@ Provide a comprehensive overview of all available API routes.
 - Combines results from multiple detection engines to improve accuracy.
 
 ### Document Processing
+#### Detection Result Updater:
+
+- Responsible for updating a detection result by processing sensitive entities extracted from PDF pages. 
+- It removes specified phrases from entity texts and, if necessary, splits entities into multiple entries.
 
 #### Document Extractor:
 
 - Extracts text with positional information from documents.
 
-#### Entity Detector:
-
-- Detects sensitive entities in extracted text.
-
 #### Document Redactor:
 
 - Applies redactions to documents based on detection results.
+
+#### PDF Searcher:
+
+- Responsible for finding specific search terms within text extracted from PDFs
 
 ### Services
 

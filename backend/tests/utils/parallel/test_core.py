@@ -1,17 +1,13 @@
 import asyncio
-
 import unittest
-
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from backend.app.utils.constant.constant import DEFAULT_BATCH_TIMEOUT, DEFAULT_ITEM_TIMEOUT
-
 from backend.app.utils.parallel.core import (
     get_resource_lock,
     _loop_locks,
     ParallelProcessingCore
 )
-
 from backend.app.utils.system_utils.synchronization_utils import LockPriority
 
 

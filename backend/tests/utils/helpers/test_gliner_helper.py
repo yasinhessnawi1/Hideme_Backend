@@ -1,5 +1,4 @@
 import hashlib
-
 import unittest
 
 from backend.app.utils.helpers.gliner_helper import GLiNERHelper

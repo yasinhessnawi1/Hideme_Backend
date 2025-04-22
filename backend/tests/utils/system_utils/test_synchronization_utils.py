@@ -1,9 +1,6 @@
 import asyncio
-
 import threading
-
 import unittest
-
 from unittest.mock import patch
 
 from backend.app.utils.system_utils.synchronization_utils import (

@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import patch, MagicMock
-
 from transformers import Pipeline
 
 from backend.app.utils.helpers.ml_models_helper import (

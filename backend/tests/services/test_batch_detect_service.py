@@ -1,9 +1,7 @@
 import unittest
-
 from unittest.mock import patch, AsyncMock
 
 from backend.app.entity_detection import EntityDetectionEngine
-
 from backend.app.services.batch_detect_service import BatchDetectService
 
 
