@@ -26,19 +26,19 @@ func TestDetectionMethodConstants(t *testing.T) {
 	assert.Equal(t, "Search", models.DetectionMethodSearch)
 	assert.Equal(t, "AiSearch", models.DetectionMethodAiSearch)
 	assert.Equal(t, "CaseSensitive", models.DetectionMethodCaseSensitive)
-	assert.Equal(t, "MLModel1", models.DetectionMethodMLModel1)
-	assert.Equal(t, "MLModel2", models.DetectionMethodMLModel2)
-	assert.Equal(t, "AIModel", models.DetectionMethodAIModel)
+	assert.Equal(t, "Presidio", models.DetectionMethodMLModel1)
+	assert.Equal(t, "Gliner", models.DetectionMethodMLModel2)
+	assert.Equal(t, "Gemini", models.DetectionMethodAIModel)
 }
 
 func TestDefaultDetectionMethods(t *testing.T) {
 	// Get the default detection methods
 	methods := models.DefaultDetectionMethods()
 
-	// Verify the number of default methods
-	assert.Len(t, methods, 7, "There should be 7 default detection methods")
+	// Verify the number of default methods - this should be 8 to match the implementation
+	assert.Len(t, methods, 8, "There should be 8 default detection methods")
 
-	// Verify each method
+	// Verify each method - adding the missing HideMeModel and adjusting indices
 	testCases := []struct {
 		index         int
 		expectedName  string
@@ -47,10 +47,11 @@ func TestDefaultDetectionMethods(t *testing.T) {
 		{0, models.DetectionMethodMLModel1, "#33FF57"},
 		{1, models.DetectionMethodMLModel2, "#F033FF"},
 		{2, models.DetectionMethodAIModel, "#FFFF33"},
-		{3, models.DetectionMethodAiSearch, "#33A8FF"},
-		{4, models.DetectionMethodCaseSensitive, "#33A8FF"},
-		{5, models.DetectionMethodSearch, "#33A8FF"},
-		{6, models.DetectionMethodManual, "#FF5733"},
+		{3, models.DetectionMethodHideMeModel, "#33FF57"}, // Add the missing model
+		{4, models.DetectionMethodAiSearch, "#33A8FF"},
+		{5, models.DetectionMethodCaseSensitive, "#33A8FF"},
+		{6, models.DetectionMethodSearch, "#33A8FF"},
+		{7, models.DetectionMethodManual, "#FF5733"},
 	}
 
 	for _, tc := range testCases {

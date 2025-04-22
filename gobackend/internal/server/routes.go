@@ -129,6 +129,10 @@ func (s *Server) SetupRoutes() {
 			r.Get("/", s.Handlers.SettingsHandler.GetSettings)
 			r.Put("/", s.Handlers.SettingsHandler.UpdateSettings)
 
+			// Settings export/import routes
+			r.Get("/export", s.Handlers.SettingsHandler.ExportSettings)
+			r.Post("/import", s.Handlers.SettingsHandler.ImportSettings)
+
 			// Ban list routes
 			r.Route("/ban-list", func(r chi.Router) {
 				r.Get("/", s.Handlers.SettingsHandler.GetBanList)

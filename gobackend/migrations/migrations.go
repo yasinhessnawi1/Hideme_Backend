@@ -30,7 +30,6 @@ func NewMigrator(db *database.Pool) *Migrator {
 	}
 }
 
-// RunMigrations runs all migrations
 func (m *Migrator) RunMigrations(ctx context.Context) error {
 	log.Info().Msg("Running database migrations")
 	startTime := time.Now()
@@ -38,6 +37,11 @@ func (m *Migrator) RunMigrations(ctx context.Context) error {
 	// Create migrations table if it doesn't exist
 	if err := m.createMigrationsTable(ctx); err != nil {
 		return fmt.Errorf("failed to create migrations table: %w", err)
+	}
+
+	// Verify all tables exist and run missing table migrations
+	if err := m.verifyAllTablesExist(ctx); err != nil {
+		return fmt.Errorf("failed to verify tables: %w", err)
 	}
 
 	// Get executed migrations
@@ -79,10 +83,6 @@ func (m *Migrator) RunMigrations(ctx context.Context) error {
 				}
 				migrationsRun++
 			}
-		} else {
-			log.Debug().
-				Str("migrations", migration.Name).
-				Msg("Migration already executed")
 		}
 	}
 
@@ -101,11 +101,43 @@ func (m *Migrator) RunMigrations(ctx context.Context) error {
 	return nil
 }
 
+// verifyAllTablesExist checks that all required tables exist, and runs migrations for missing tables
+func (m *Migrator) verifyAllTablesExist(ctx context.Context) error {
+	migrations := GetMigrations()
+
+	for _, migration := range migrations {
+		if migration.TableName == "" {
+			continue // Skip migrations without a table name
+		}
+
+		// Check if the table exists
+		exists, err := m.tableExists(ctx, migration.TableName)
+		if err != nil {
+			return fmt.Errorf("failed to check if table %s exists: %w", migration.TableName, err)
+		}
+
+		if !exists {
+			log.Warn().
+				Str("migration", migration.Name).
+				Str("table", migration.TableName).
+				Msg("Table doesn't exist but should. Running migration to create it.")
+
+			// Run the migration to create the table
+			if err := m.runMigration(ctx, migration); err != nil {
+				return fmt.Errorf("failed to create missing table %s: %w", migration.TableName, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 // createMigrationsTable creates the migrations table if it doesn't exist
 func (m *Migrator) createMigrationsTable(ctx context.Context) error {
 	query := `
-		CREATE TABLE IF NOT EXISTS migrations (
-			name VARCHAR(255) PRIMARY KEY,
+		DROP TABLE IF EXISTS migrations;
+		CREATE TABLE migrations (
+			name VARCHAR(255) PRIMARY KEY UNIQUE,
 			description TEXT,
 			executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)

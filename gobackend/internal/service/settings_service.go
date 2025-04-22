@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/rs/zerolog/log"
 
@@ -375,6 +376,7 @@ func (s *SettingsService) DeleteModelEntity(ctx context.Context, userID int64, e
 	return nil
 }
 
+// DeleteModelEntityByMethodID removes model entities for a specific method
 func (s *SettingsService) DeleteModelEntityByMethodID(ctx context.Context, userID int64, methodID int64) error {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -393,5 +395,160 @@ func (s *SettingsService) DeleteModelEntityByMethodID(ctx context.Context, userI
 		Msg("Model entities deleted by method ID")
 
 	return nil
+}
 
+// ExportSettings exports all settings for a user
+func (s *SettingsService) ExportSettings(ctx context.Context, userID int64) (*models.SettingsExport, error) {
+	// Get user settings
+	settings, err := s.GetUserSettings(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get ban list
+	banList, err := s.GetBanList(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get search patterns
+	patterns, err := s.GetSearchPatterns(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all model entities grouped by method
+	var allEntities []*models.ModelEntityWithMethod
+
+	// First, get unique method IDs from settings
+	methodIDs := make(map[int64]bool)
+	settingID := settings.ID
+
+	// Get entities for the user's settings
+	entities, err := s.modelEntityRepo.GetBySettingID(ctx, settingID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get model entities: %w", err)
+	}
+
+	// Get unique method IDs
+	for _, entity := range entities {
+		methodIDs[entity.MethodID] = true
+	}
+
+	// Fetch detailed entities with method info for each method
+	for methodID := range methodIDs {
+		entitiesWithMethod, err := s.modelEntityRepo.GetBySettingIDAndMethodID(ctx, settingID, methodID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get entities for method %d: %w", methodID, err)
+		}
+		allEntities = append(allEntities, entitiesWithMethod...)
+	}
+
+	// Build export object
+	export := &models.SettingsExport{
+		UserID:          userID,
+		ExportDate:      time.Now(),
+		GeneralSettings: settings,
+		BanList:         banList,
+		SearchPatterns:  patterns,
+		ModelEntities:   allEntities,
+	}
+
+	return export, nil
+}
+
+// ImportSettings imports settings for a user
+func (s *SettingsService) ImportSettings(ctx context.Context, userID int64, importData *models.SettingsExport) error {
+	// 1. Update general settings
+	// Create an update object based on the imported settings
+	update := &models.UserSettingsUpdate{
+		RemoveImages:           &importData.GeneralSettings.RemoveImages,
+		Theme:                  &importData.GeneralSettings.Theme,
+		AutoProcessing:         &importData.GeneralSettings.AutoProcessing,
+		DetectionThreshold:     &importData.GeneralSettings.DetectionThreshold,
+		UseBanlistForDetection: &importData.GeneralSettings.UseBanlistForDetection,
+	}
+
+	// Use _ to discard the first return value since we only need the error
+	_, err := s.UpdateUserSettings(ctx, userID, update)
+	if err != nil {
+		return fmt.Errorf("failed to update general settings: %w", err)
+	}
+
+	// 2. Handle ban list words - first get current words to remove them
+	currentBanList, err := s.GetBanList(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get current ban list: %w", err)
+	}
+
+	// Remove existing words
+	if len(currentBanList.Words) > 0 {
+		if err := s.RemoveBanListWords(ctx, userID, currentBanList.Words); err != nil {
+			return fmt.Errorf("failed to clear ban list: %w", err)
+		}
+	}
+
+	// Add new words
+	if len(importData.BanList.Words) > 0 {
+		if err := s.AddBanListWords(ctx, userID, importData.BanList.Words); err != nil {
+			return fmt.Errorf("failed to import ban list words: %w", err)
+		}
+	}
+
+	// 3. Handle search patterns
+	// Delete existing patterns
+	existingPatterns, err := s.GetSearchPatterns(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get existing search patterns: %w", err)
+	}
+
+	for _, pattern := range existingPatterns {
+		if err := s.DeleteSearchPattern(ctx, userID, pattern.ID); err != nil {
+			return fmt.Errorf("failed to delete existing pattern: %w", err)
+		}
+	}
+
+	// Create new patterns
+	for _, pattern := range importData.SearchPatterns {
+		// Create a pattern create object from the pattern
+		createPattern := &models.SearchPatternCreate{
+			PatternType: string(pattern.PatternType),
+			PatternText: pattern.PatternText,
+		}
+
+		_, err := s.CreateSearchPattern(ctx, userID, createPattern)
+		if err != nil {
+			return fmt.Errorf("failed to create search pattern: %w", err)
+		}
+	}
+
+	// 4. Handle model entities
+	// Group entities by method ID
+	methodEntities := make(map[int64][]string)
+	for _, entity := range importData.ModelEntities {
+		methodEntities[entity.MethodID] = append(methodEntities[entity.MethodID], entity.EntityText)
+	}
+
+	// For each method, delete existing entities and create new ones
+	for methodID, entities := range methodEntities {
+		// Delete existing entities for this method
+		if err := s.DeleteModelEntityByMethodID(ctx, userID, methodID); err != nil {
+			return fmt.Errorf("failed to delete existing entities for method %d: %w", methodID, err)
+		}
+
+		// Create new entities if there are any
+		if len(entities) > 0 {
+			batch := &models.ModelEntityBatch{
+				MethodID:    methodID,
+				EntityTexts: entities,
+			}
+
+			_, err := s.AddModelEntities(ctx, userID, batch)
+			if err != nil {
+				return fmt.Errorf("failed to add model entities for method %d: %w", methodID, err)
+			}
+		}
+	}
+
+	return nil
 }

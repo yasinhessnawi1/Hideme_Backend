@@ -62,8 +62,8 @@ func TestCreateSeedsTable(t *testing.T) {
 	db, mock, cleanup := createMockDB(t)
 	defer cleanup()
 
-	// Expect the CREATE TABLE query
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS seeds").
+	// drop the table to ensure creating new table in the sql query
+	mock.ExpectExec("DROP TABLE IF EXISTS seeds").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	pool := &database.Pool{DB: db}
@@ -189,8 +189,8 @@ func TestSeedDatabaseWithExistingSeeds(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Mock createSeedsTable
-	mock.ExpectExec("CREATE TABLE IF NOT EXISTS seeds").
+	// drop the table to ensure creating new table in the sql query
+	mock.ExpectExec("DROP TABLE IF EXISTS seeds").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	// Mock getExecutedSeeds - all seeds already exist

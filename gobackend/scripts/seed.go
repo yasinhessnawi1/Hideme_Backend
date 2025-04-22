@@ -69,7 +69,8 @@ func (s *Seeder) SeedDatabase(ctx context.Context) error {
 // createSeedsTable creates the seeds table if it doesn't exist
 func (s *Seeder) createSeedsTable(ctx context.Context) error {
 	query := `
-		CREATE TABLE IF NOT EXISTS seeds (
+		DROP TABLE IF EXISTS seeds;
+		CREATE TABLE  seeds (
 			name VARCHAR(255) PRIMARY KEY,
 			executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)

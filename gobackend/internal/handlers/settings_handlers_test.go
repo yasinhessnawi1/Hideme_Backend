@@ -114,6 +114,21 @@ func (m *MockSettingsService) DeleteModelEntityByMethodID(ctx context.Context, u
 	return args.Error(0)
 }
 
+// Add to your MockSettingsService struct
+func (m *MockSettingsService) ExportSettings(ctx context.Context, userID int64) (*models.SettingsExport, error) {
+	// For tests, you can return a simple implementation or nil
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.SettingsExport), args.Error(1)
+}
+
+func (m *MockSettingsService) ImportSettings(ctx context.Context, userID int64, importData *models.SettingsExport) error {
+	args := m.Called(ctx, userID, importData)
+	return args.Error(0)
+}
+
 // Helper functions for testing
 func setupSettingsTest(t *testing.T) (*handlers.SettingsHandler, *MockSettingsService) {
 	mockService := new(MockSettingsService)
