@@ -73,76 +73,168 @@ func TestGetMigrations(t *testing.T) {
 	assert.True(t, foundAPIKeys, "Should include API keys table migration")
 }
 
-// TestRunMigrations tests the main RunMigrations function
+// TestRunMigrations tests the main RunMigrations function with various scenarios
 func TestRunMigrations(t *testing.T) {
 	tests := []struct {
-		name    string
-		setup   func(sqlmock.Sqlmock)
-		wantErr bool
+		name           string
+		setup          func(sqlmock.Sqlmock)
+		wantErr        bool
+		expectedErrMsg string // Optional: check specific error message
 	}{
-
 		{
 			name: "Error - Create migrations table fails",
 			setup: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("CREATE TABLE IF NOT EXISTS migrations").
-					WillReturnError(errors.New("failed to create migrations table"))
+				// Expect DROP TABLE and CREATE TABLE, but return an error
+				mock.ExpectExec("DROP TABLE IF EXISTS migrations").
+					WillReturnError(errors.New("failed to drop migrations table"))
 			},
-			wantErr: true,
+			wantErr:        true,
+			expectedErrMsg: "failed to create migrations table",
+		},
+		{
+			name: "Error - Table exists check fails during verify step",
+			setup: func(mock sqlmock.Sqlmock) {
+				// Create migrations table succeeds
+				mock.ExpectExec("DROP TABLE IF EXISTS migrations").
+					WillReturnResult(sqlmock.NewResult(0, 0))
+
+				// First tableExists check fails
+				mock.ExpectQuery("SELECT COUNT.*FROM information_schema.tables").
+					WithArgs("users").
+					WillReturnError(errors.New("failed to check table existence"))
+			},
+			wantErr:        true,
+			expectedErrMsg: "failed to verify tables",
 		},
 		{
 			name: "Error - Get executed migrations fails",
 			setup: func(mock sqlmock.Sqlmock) {
-				// Create migrations table
-				mock.ExpectExec("CREATE TABLE IF NOT EXISTS migrations").
+				// Create migrations table succeeds
+				mock.ExpectExec("DROP TABLE IF EXISTS migrations").
 					WillReturnResult(sqlmock.NewResult(0, 0))
+
+				// Set up expectations for verifyAllTablesExist
+				// Each migration's table already exists
+				migrations := migrations.GetMigrations()
+				for _, migration := range migrations {
+					if migration.TableName != "" {
+						mock.ExpectQuery("SELECT COUNT.*FROM information_schema.tables").
+							WithArgs(migration.TableName).
+							WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+					}
+				}
 
 				// Get executed migrations fails
 				mock.ExpectQuery("SELECT name FROM migrations").
 					WillReturnError(errors.New("failed to get executed migrations"))
 			},
-			wantErr: true,
+			wantErr:        true,
+			expectedErrMsg: "failed to get executed migrations",
 		},
 		{
-			name: "Error - Table exists check fails",
+			name: "Error - Migration execution fails",
 			setup: func(mock sqlmock.Sqlmock) {
-				// Create migrations table
-				mock.ExpectExec("CREATE TABLE IF NOT EXISTS migrations").
+				// Create migrations table succeeds
+				mock.ExpectExec("DROP TABLE IF EXISTS migrations").
 					WillReturnResult(sqlmock.NewResult(0, 0))
 
-				// Get executed migrations (empty)
-				rows := sqlmock.NewRows([]string{"name"})
-				mock.ExpectQuery("SELECT name FROM migrations").
-					WillReturnRows(rows)
-
-				// Table exists check fails
+				// Set up failed table existence check for first table to trigger migration
 				mock.ExpectQuery("SELECT COUNT.*FROM information_schema.tables").
-					WillReturnError(errors.New("failed to check table existence"))
+					WithArgs("users").
+					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+				// Begin transaction
+				mock.ExpectBegin()
+
+				// Migration execution fails
+				mock.ExpectExec("CREATE TABLE").
+					WillReturnError(errors.New("migration execution failed"))
+
+				// Transaction rollback
+				mock.ExpectRollback()
 			},
-			wantErr: true,
+			wantErr:        true,
+			expectedErrMsg: "migration execution failed",
 		},
 		{
-			name: "Success - Tables already exist",
+			name: "Success - All migrations already executed",
 			setup: func(mock sqlmock.Sqlmock) {
 				// Create migrations table
-				mock.ExpectExec("CREATE TABLE IF NOT EXISTS migrations").
+				mock.ExpectExec("DROP TABLE IF EXISTS migrations").
 					WillReturnResult(sqlmock.NewResult(0, 0))
 
-				// Get executed migrations (empty)
-				rows := sqlmock.NewRows([]string{"name"})
-				mock.ExpectQuery("SELECT name FROM migrations").
-					WillReturnRows(rows)
-
-				// For each migration, table already exists
-				for i := 0; i < len(migrations.GetMigrations()); i++ {
-					// Table exists
-					tableCountRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
-					mock.ExpectQuery("SELECT COUNT.*FROM information_schema.tables").
-						WillReturnRows(tableCountRows)
-
-					// Just record migration
-					mock.ExpectExec("INSERT INTO migrations").
-						WillReturnResult(sqlmock.NewResult(1, 1))
+				// All tables already exist
+				migrations := migrations.GetMigrations()
+				for _, migration := range migrations {
+					if migration.TableName != "" {
+						mock.ExpectQuery("SELECT COUNT.*FROM information_schema.tables").
+							WithArgs(migration.TableName).
+							WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+					}
 				}
+
+				// Get all migration names for the executed migrations
+				migrationRows := sqlmock.NewRows([]string{"name"})
+				for _, m := range migrations {
+					migrationRows.AddRow(m.Name)
+				}
+
+				// Return that all migrations have been executed
+				mock.ExpectQuery("SELECT name FROM migrations").
+					WillReturnRows(migrationRows)
+
+				// Check detection_threshold column exists
+				mock.ExpectQuery("SELECT EXISTS").
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+
+				// Check use_banlist_for_detection column exists
+				mock.ExpectQuery("SELECT EXISTS").
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+			},
+			wantErr: false,
+		},
+		{
+			name: "Success - Add missing columns to user_settings",
+			setup: func(mock sqlmock.Sqlmock) {
+				// Create migrations table
+				mock.ExpectExec("DROP TABLE IF EXISTS migrations").
+					WillReturnResult(sqlmock.NewResult(0, 0))
+
+				// All tables already exist
+				migrations := migrations.GetMigrations()
+				for _, migration := range migrations {
+					if migration.TableName != "" {
+						mock.ExpectQuery("SELECT COUNT.*FROM information_schema.tables").
+							WithArgs(migration.TableName).
+							WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+					}
+				}
+
+				// Get all migration names for the executed migrations
+				migrationRows := sqlmock.NewRows([]string{"name"})
+				for _, m := range migrations {
+					migrationRows.AddRow(m.Name)
+				}
+
+				// Return that all migrations have been executed
+				mock.ExpectQuery("SELECT name FROM migrations").
+					WillReturnRows(migrationRows)
+
+				// Check detection_threshold column doesn't exist
+				mock.ExpectQuery("SELECT EXISTS").
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+				// Add the missing column
+				mock.ExpectExec("ALTER TABLE user_settings ADD COLUMN detection_threshold").
+					WillReturnResult(sqlmock.NewResult(0, 0))
+
+				// Check use_banlist_for_detection column doesn't exist
+				mock.ExpectQuery("SELECT EXISTS").
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+				// Add the missing column
+				mock.ExpectExec("ALTER TABLE user_settings ADD COLUMN use_banlist_for_detection").
+					WillReturnResult(sqlmock.NewResult(0, 0))
 			},
 			wantErr: false,
 		},
@@ -163,10 +255,16 @@ func TestRunMigrations(t *testing.T) {
 
 			if tt.wantErr {
 				assert.Error(t, err)
+				if tt.expectedErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.expectedErrMsg)
+				}
 			} else {
 				assert.NoError(t, err)
 			}
-			assert.NoError(t, mock.ExpectationsWereMet())
+
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("There were unfulfilled expectations: %s", err)
+			}
 		})
 	}
 }

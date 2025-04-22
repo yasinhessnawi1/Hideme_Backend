@@ -19,9 +19,10 @@ const (
 	DetectionMethodSearch        = "Search"
 	DetectionMethodAiSearch      = "AiSearch"
 	DetectionMethodCaseSensitive = "CaseSensitive"
-	DetectionMethodMLModel1      = "MLModel1"
-	DetectionMethodMLModel2      = "MLModel2"
-	DetectionMethodAIModel       = "AIModel"
+	DetectionMethodMLModel1      = "Presidio" // presidio
+	DetectionMethodMLModel2      = "Gliner"   // Gliner
+	DetectionMethodAIModel       = "Gemini"   // Gemini
+	DetectionMethodHideMeModel   = "HideMeModel"
 )
 
 // DefaultDetectionMethods returns the default detection methods used by the application.
@@ -40,6 +41,10 @@ func DefaultDetectionMethods() []DetectionMethod {
 		{
 			MethodName:     DetectionMethodAIModel,
 			HighlightColor: "#FFFF33", // Yellow
+		},
+		{
+			MethodName:     DetectionMethodHideMeModel,
+			HighlightColor: "#33FF57", //green
 		},
 		{
 			MethodName:     DetectionMethodAiSearch,

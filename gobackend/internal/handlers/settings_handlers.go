@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
@@ -369,4 +372,109 @@ func (h *SettingsHandler) DeleteModelEntityByMethodID(w http.ResponseWriter, r *
 
 	// Return success
 	utils.NoContent(w)
+}
+
+// ExportSettings exports all user settings as a JSON file
+func (h *SettingsHandler) ExportSettings(w http.ResponseWriter, r *http.Request) {
+	// Get the user ID from the context
+	userID, ok := auth.GetUserID(r)
+	if !ok {
+		utils.Unauthorized(w, "Authentication required")
+		return
+	}
+
+	// Get the complete settings export from the service
+	settingsExport, err := h.settingsService.ExportSettings(r.Context(), userID)
+	if err != nil {
+		utils.ErrorFromAppError(w, utils.ParseError(err))
+		return
+	}
+
+	// Get the username for the filename
+	username, usernameOk := auth.GetUsername(r)
+
+	// Generate meaningful filename with username
+	var filename string
+	if usernameOk && username != "" {
+		// Remove any spaces or special characters from username
+		safeUsername := strings.Map(func(r rune) rune {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+				return r
+			}
+			return '_'
+		}, username)
+
+		filename = fmt.Sprintf("%s_settings.json", safeUsername)
+	} else {
+		filename = fmt.Sprintf("user_%d_settings.json", userID)
+	}
+
+	// Use the JsonFile method to send as downloadable file
+	utils.JsonFile(w, settingsExport, filename)
+}
+
+// ImportSettings imports user settings from a JSON file
+func (h *SettingsHandler) ImportSettings(w http.ResponseWriter, r *http.Request) {
+	// Get the user ID from the context
+	userID, ok := auth.GetUserID(r)
+	if !ok {
+		utils.Unauthorized(w, "Authentication required")
+		return
+	}
+
+	// Limit the size of the upload
+	maxSize := int64(1024 * 1024) // 1MB should be more than enough for settings
+	r.Body = http.MaxBytesReader(w, r.Body, maxSize)
+
+	// Parse the multipart form file
+	if err := r.ParseMultipartForm(maxSize); err != nil {
+		utils.BadRequest(w, "Invalid file upload: "+err.Error(), nil)
+		return
+	}
+
+	// Get the file from the form
+	file, header, err := r.FormFile("settings")
+	if err != nil {
+		utils.BadRequest(w, "Settings file is required", nil)
+		return
+	}
+	defer file.Close()
+
+	// Validate file type
+	if !strings.HasSuffix(strings.ToLower(header.Filename), ".json") {
+		utils.BadRequest(w, "Only JSON files are allowed", nil)
+		return
+	}
+
+	// Read and parse the settings JSON
+	var settingsExport models.SettingsExport
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&settingsExport); err != nil {
+		utils.BadRequest(w, "Invalid JSON format: "+err.Error(), nil)
+		return
+	}
+
+	// Validate the import data
+	if settingsExport.GeneralSettings == nil {
+		utils.BadRequest(w, "Missing general settings in import file", nil)
+		return
+	}
+
+	// Validate theme value if present
+	if theme := settingsExport.GeneralSettings.Theme; theme != "" &&
+		theme != "system" && theme != "light" && theme != "dark" {
+		utils.BadRequest(w, "Invalid theme value", nil)
+		return
+	}
+
+	// Import settings
+	if err := h.settingsService.ImportSettings(r.Context(), userID, &settingsExport); err != nil {
+		utils.ErrorFromAppError(w, utils.ParseError(err))
+		return
+	}
+
+	// Return success
+	utils.JSON(w, http.StatusOK, map[string]interface{}{
+		"message": "Settings imported successfully",
+	})
 }

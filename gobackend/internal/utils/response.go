@@ -2,7 +2,10 @@ package utils
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 )
@@ -45,6 +48,46 @@ func JSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	}
 
 	SendJSON(w, statusCode, response)
+}
+
+func JsonFile(w http.ResponseWriter, data interface{}, filename string) {
+	// Ensure filename ends with .json
+	if !strings.HasSuffix(strings.ToLower(filename), ".json") {
+		filename += ".json"
+	}
+
+	// Marshal the data to JSON with pretty-printing
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to marshal JSON file response")
+		w.WriteHeader(http.StatusInternalServerError)
+		if _, err := w.Write([]byte(`{"error":"Failed to generate file"}`)); err != nil {
+			log.Error().Err(err).Msg("Failed to write error response")
+		}
+		return
+	}
+
+	// Set headers for file download
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonData)))
+
+	// This is the critical line - format it EXACTLY as shown:
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s",
+			filename,
+			url.PathEscape(filename)))
+
+	// Add cache control headers to prevent caching
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+
+	w.WriteHeader(http.StatusOK)
+
+	// Write the JSON data
+	if _, err := w.Write(jsonData); err != nil {
+		log.Error().Err(err).Msg("Failed to write JSON file response")
+	}
 }
 
 // Error sends an error response with the given status code and error information
