@@ -2,6 +2,7 @@ from unittest.mock import patch
 import pytest
 
 from backend.app.document_processing.pdf_searcher import PDFSearcher
+from backend.app.utils.helpers import TextUtils
 
 
 @pytest.fixture
@@ -20,6 +21,18 @@ def extracted_pdf_data():
 
         ]
 
+    }
+
+
+@pytest.fixture
+def simple_page():
+    # a page with two words and their boxes
+    return {
+        "page": 1,
+        "words": [
+            {"text": "foo", "bbox": {"x0": 0, "y0": 0, "x1": 10, "y1": 5}},
+            {"text": "bar", "bbox": {"x0": 20, "y0": 0, "x1": 30, "y1": 5}},
+        ]
     }
 
 
@@ -93,7 +106,7 @@ class TestPDFSearcher:
 
     @patch("backend.app.document_processing.pdf_searcher.log_debug")
     def test_find_target_phrase_occurrences(self, mock_log_debug, extracted_pdf_data):
-        target_bbox = {"x0": 0, "y0": 0, "x1": 50, "y1": 10}
+        target_bbox = {"x0": 0, "y0": 2, "x1": 50, "y1": 8}
 
         pdf_searcher = PDFSearcher(extracted_data=extracted_pdf_data)
 
@@ -383,3 +396,53 @@ class TestPDFSearcher:
         ], (6, 11))
 
         mock_log_debug.assert_called()
+
+    def test_single_word_returns_its_bbox(self, simple_page):
+        mapping, _ = PDFSearcher(extracted_data={}).build_page_text_and_mapping(simple_page["words"])
+
+        bbox = PDFSearcher._get_phrase_bbox(simple_page, mapping, [1], "bar")
+
+        # Here we should also include the padding y0=+2 and y1=-2 (y0 = 0 + 2 = 2) (y1 = 5 - 2 = 3)
+        assert bbox == {"x0": 20, "y0": 2, "x1": 30, "y1": 3}
+
+    @patch.object(TextUtils, "reconstruct_text_and_mapping")
+    @patch.object(TextUtils, "recompute_offsets")
+    @patch.object(TextUtils, "map_offsets_to_bboxes")
+    @patch.object(TextUtils, "merge_bounding_boxes")
+    def test_multiword_merges_correctly(
+            self,
+            mock_merge,
+            mock_map,
+            mock_recompute,
+            mock_reconstruct,
+            simple_page
+    ):
+        mock_reconstruct.return_value = (
+            "foo bar",
+            simple_page["words"]
+        )
+
+        mock_recompute.return_value = [(0, 6)]
+
+        mock_map.return_value = [
+            {"x0": 0, "y0": 2, "x1": 10, "y1": 3},
+            {"x0": 20, "y0": 2, "x1": 30, "y1": 3},
+        ]
+
+        mock_merge.return_value = {"composite": {"x0": 0, "y0": 2, "x1": 30, "y1": 3}}
+
+        mapping, _ = PDFSearcher(extracted_data={}).build_page_text_and_mapping(simple_page["words"])
+
+        bbox = PDFSearcher._get_phrase_bbox(simple_page, mapping, [0, 1], "foo bar")
+
+        mock_reconstruct.assert_called_once_with(simple_page["words"])
+
+        mock_recompute.assert_called_once_with("foo bar", "foo bar")
+
+        mock_map.assert_called_once_with(
+            "foo bar", simple_page["words"], (0, 6)
+        )
+
+        mock_merge.assert_called_once_with(mock_map.return_value)
+
+        assert bbox == {"x0": 0, "y0": 2, "x1": 30, "y1": 3}

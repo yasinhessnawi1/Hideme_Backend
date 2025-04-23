@@ -34,7 +34,7 @@ supporting both conventional keyword searches and AI-enhanced searches for impro
 
 import asyncio
 import string
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 
 from backend.app.configs.gemini_config import (
     AI_SEARCH_PROMPT_HEADER,
@@ -580,81 +580,197 @@ class PDFSearcher:
         # Return the page result along with the count of matches.
         return {"page": page_number, "matches": page_matches}, len(page_matches)
 
-    def find_target_phrase_occurrences(self, target_bbox: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
+    @staticmethod
+    def _bbox_equal(b1: Dict[str, float], b2: Dict[str, float], tol: float = 1e-2) -> bool:
         """
-        Find all occurrences of a candidate phrase across pages based on a target bounding box.
-        The process consists of three steps:
-          1. For each page, collect candidate phrases by checking which words have centers within target_bbox
-             and grouping adjacent words into phrases.
-          2. Select the longest candidate phrase from all pages as the target phrase.
-          3. For each page, process occurrences:
-             - If the candidate is a single word, use direct mapping (_process_single_word_occurrences).
-             - If the candidate comprises multiple words, use the multi-word processing (_process_multiword_occurrences).
-             Even pages with no matches are included in the results.
+        Check if two bounding boxes are equal within a small tolerance.
+
+        Args:
+            b1: First bounding box with keys x0, y0, x1, y1.
+            b2: Second bounding box with same keys.
+            tol: Allowed absolute difference per coordinate.
 
         Returns:
-            Tuple[Dict[str, Any], int]: A tuple with a dictionary of per-page results and the total occurrence count.
+            True if all coordinates differ by less than tol.
         """
-        # Initialize an empty list to collect candidate phrases from all pages.
-        candidate_phrases = []
-        # Log the beginning of the process with the target bounding box.
+        # Compare x0 coordinates within tolerance
+        return (
+                abs(b1["x0"] - b2["x0"]) < tol and
+                # Compare y0 coordinates within tolerance
+                abs(b1["y0"] - b2["y0"]) < tol and
+                # Compare x1 coordinates within tolerance
+                abs(b1["x1"] - b2["x1"]) < tol and
+                # Compare y1 coordinates within tolerance
+                abs(b1["y1"] - b2["y1"]) < tol
+        )
+
+    def find_target_phrase_occurrences(self, target_bbox: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
+        """
+        Find all occurrences of a candidate phrase across pages matching the given bbox exactly.
+
+        This method delegates:
+          - _find_exact_phrase_by_bbox to locate the phrase whose bbox matches target_bbox.
+          - _search_all_pages to collect results for that phrase across all pages.
+
+        Args:
+            target_bbox: The bounding box for which to find the exact phrase.
+
+        Returns:
+            A tuple of:
+              - A dict with pages results, target_phrase, and word_count.
+              - Total number of occurrences across all pages.
+        """
+        # Log the start of the search with the provided bounding box
         log_debug(f"Starting find_target_phrase_occurrences with target_bbox: {target_bbox}")
-        # Step 1: Iterate over each page to identify candidate phrases.
+
+        # Locate the exact phrase and its word count
+        best_candidate, best_word_count = self._find_exact_phrase_by_bbox(target_bbox)
+
+        # If no matching phrase was found, return empty result
+        if not best_candidate:
+            log_debug(" No exact candidate phrase found for given bbox.")
+            return {"pages": [], "target_phrase": None, "word_count": 0}, 0
+
+        # Search for that confirmed phrase across all pages
+        total_occurrences, pages_results = self._search_all_pages(best_candidate, best_word_count)
+
+        # Log the final tally of occurrences
+        log_debug(f" find_target_phrase_occurrences: Final occurrences: {total_occurrences}")
+
+        # Return the detailed results and total count
+        return {
+            "pages": pages_results,
+            "target_phrase": best_candidate,
+            "word_count": best_word_count,
+        }, total_occurrences
+
+    def _find_exact_phrase_by_bbox(self, target_bbox: Dict[str, Any]) -> Tuple[Optional[str], int]:
+        """
+        Internal: Search each page for a phrase whose bbox exactly matches target_bbox.
+
+        Iterates pages, builds word mappings, groups adjacent candidates, computes each
+        phrase’s bbox, and compares.
+
+        Args:
+            target_bbox: The bounding box to match.
+
+        Returns:
+            A tuple of:
+              - The matching phrase (or None if not found).
+              - The word count of that phrase.
+        """
+        # Loop through every page’s extracted data
         for page in self.extracted_data.get("pages", []):
-            # Build the mapping of words for the current page.
+            # Get the page number for logging
+            page_number = page.get("page", "unknown")
+            # Build mapping of words to their text and bbox
             mapping, _ = self.build_page_text_and_mapping(page.get("words", []))
-            # Identify the indices of words whose centers lie within the target bounding box.
+
+            # Collect indices whose word‐bbox center is inside target_bbox
             candidate_indices = [
                 idx for idx, m in enumerate(mapping)
                 if self._word_center_in_bbox(m["bbox"], target_bbox)
             ]
-            # Log the indices found for the page.
-            log_debug(f"Page {page.get('page', 'unknown')}: candidate_indices: {candidate_indices}")
-            # If no candidate indices are found, log and skip this page.
+            log_debug(f"Page {page_number}: candidate_indices: {candidate_indices}")
+
+            # Skip pages with no candidate words
             if not candidate_indices:
-                log_debug(f"Page {page.get('page', 'unknown')}: No words found in target_bbox.")
                 continue
-            # Group the consecutive candidate indices.
+
+            # Group consecutive indices into phrase candidates
             groups = self._group_consecutive_indices(candidate_indices)
-            # Log the grouped indices.
-            log_debug(f"Page {page.get('page', 'unknown')}: grouped candidate indices: {groups}")
-            # For each group, join the corresponding words to form a candidate phrase.
+            log_debug(f"Page {page_number}: grouped candidate indices: {groups}")
+
+            # Evaluate each group for exact bbox match
             for group in groups:
+                # Reconstruct the phrase text from the mapping
                 phrase = " ".join(mapping[i]["text"] for i in group)
-                # Append the candidate phrase to the collection.
-                candidate_phrases.append(phrase)
-                # Log the candidate phrase found.
-                log_debug(f"Page {page.get('page', 'unknown')}: found candidate phrase: '{phrase}'")
-        # Check if any candidate phrases were found.
-        if not candidate_phrases:
-            # Log that no candidate phrases were found.
-            log_debug("No candidate phrases found in any page.")
-            # Return empty results.
-            return {"pages": [], "target_phrase": None, "word_count": 0}, 0
-        # Step 2: Select the candidate phrase with the greatest length.
-        candidate_phrase = max(candidate_phrases, key=len)
-        # Count the number of words in the selected candidate phrase.
-        word_count = len(candidate_phrase.split())
-        # Log the chosen candidate phrase and its word count.
-        log_debug(
-            f"Chosen candidate phrase: '{candidate_phrase}' with {word_count} words from candidate phrases: {candidate_phrases}")
-        # Initialize a counter for total occurrences.
+                # Compute the phrase’s bbox (single or merged)
+                bbox = self._get_phrase_bbox(page, mapping, group, phrase)
+
+                # Compare computed bbox to target
+                if bbox and self._bbox_equal(bbox, target_bbox):
+                    log_debug(f" Matched exact bbox with phrase: '{phrase}'")
+                    # Return phrase and its word count immediately
+                    return phrase, len(phrase.split())
+
+        # No exact match found after all pages
+        return None, 0
+
+    @staticmethod
+    def _get_phrase_bbox(
+            page: Dict[str, Any],
+            mapping: List[Dict[str, Any]],
+            group: List[int],
+            phrase: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Internal: Compute the bounding box for a phrase.
+
+        For single‐word phrases, returns that word’s bbox.
+        For multi‐word, reconstructs text, finds offsets, maps those offsets
+        back to word boxes, and merges them.
+
+        Args:
+            page: The page data containing words.
+            mapping: List of word‐to‐bbox mappings.
+            group: Consecutive indices for the phrase.
+            phrase: The text of the phrase.
+
+        Returns:
+            The composite bbox, or None on error or if no boxes found.
+        """
+        # Single‐word: return directly
+        if len(group) == 1:
+            return mapping[group[0]]["bbox"]
+
+        try:
+            # Rebuild full page text and mapping
+            full_text, text_mapping = TextUtils.reconstruct_text_and_mapping(page.get("words", []))
+            # Locate phrase offsets in the text
+            offsets = TextUtils.recompute_offsets(full_text, phrase)
+            if not offsets:
+                return None
+            # Use the first occurrence
+            s, e = offsets[0]
+            # Map character offsets back to individual word bboxes
+            bboxes = TextUtils.map_offsets_to_bboxes(full_text, text_mapping, (s, e))
+            if not bboxes:
+                return None
+            # Merge all line bboxes into one composite
+            merged = TextUtils.merge_bounding_boxes(bboxes)
+            return merged["composite"]
+        except Exception as exc:
+            # Log any error encountered during merging
+            log_debug(f"Error computing merged bbox for phrase '{phrase}': {exc}")
+            return None
+
+    def _search_all_pages(self, phrase: str, word_count: int) -> Tuple[int, List[Dict[str, Any]]]:
+        """
+        Internal: For a confirmed phrase, run the appropriate per‐page search across all pages.
+
+        Chooses single‐word or multi‐word search method based on word_count.
+
+        Args:
+            phrase: The confirmed target phrase.
+            word_count: Number of words in that phrase.
+
+        Returns:
+            A tuple of:
+              - Total match count across pages.
+              - List of each page’s result dict.
+        """
         total_occurrences = 0
-        # Initialize a list to hold per-page results.
-        pages_results = []
-        # Step 3: Process each page for occurrences of the candidate phrase.
+        pages_results: List[Dict[str, Any]] = []
+
+        # Iterate through pages to collect matches
         for page in self.extracted_data.get("pages", []):
-            # If the candidate phrase is a single word, process it accordingly.
             if word_count == 1:
-                result, count = self._process_single_word_occurrences(page, candidate_phrase)
+                result, count = self._process_single_word_occurrences(page, phrase)
             else:
-                # For multiple words, use the multi-word processing function.
-                result, count = self._process_multiword_occurrences(page, candidate_phrase)
-            # Append the result for the page.
+                result, count = self._process_multiword_occurrences(page, phrase)
+
             pages_results.append(result)
-            # Increment the total occurrences by the count for this page.
             total_occurrences += count
-        # Log the final count of occurrences.
-        log_debug(f"find_target_phrase_occurrences: Final occurrences: {total_occurrences}")
-        # Return the final results along with the total occurrence count.
-        return {"pages": pages_results, "target_phrase": candidate_phrase, "word_count": word_count}, total_occurrences
+
+        return total_occurrences, pages_results
