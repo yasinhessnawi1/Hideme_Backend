@@ -8,7 +8,7 @@ using SecurityAwareErrorHandler to prevent leaking sensitive information.
 from http.client import HTTPException
 from typing import Optional
 
-from fastapi import APIRouter, File, UploadFile, Form, Request, Response
+from fastapi import APIRouter, File, UploadFile, Form, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse

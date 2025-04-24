@@ -16,17 +16,11 @@ specific search terms within text extracted from PDFs. It supports two search mo
      - It iterates through each word on a page and checks for a match against the provided search terms.
      - When a match is found, the word’s bounding box is recorded.
 
+  3. It also supports to Find all occurrences of a candidate phrase across pages matching the given bbox exactly or with
+    small tolerance like 2 or 3 per coordinate.
+
 The PDFSearcher service includes robust error handling to ensure that exceptions during the search process
 are securely logged and do not crash the overall search operation.
-
-Additional helper methods:
-  - _build_search_set processes input search terms.
-  - build_page_text_and_mapping reconstructs page text and creates a mapping of words to their text indices and bounding boxes.
-  - _build_ai_prompt constructs the custom prompt for AI search.
-  - _process_ai_page and _process_fallback_page handle per-page processing for the respective search modes.
-  - _split_and_remap_entity splits and remaps an entity’s tokens back to their locations.
-  - _group_consecutive_indices groups word indices for candidate phrase formation.
-  - _process_single_word_occurrences and _process_multiword_occurrences handle occurrences of candidate phrases based on word count.
 
 This service forms a core part of the system’s capability to perform intelligent text extraction and entity detection within PDF documents,
 supporting both conventional keyword searches and AI-enhanced searches for improved contextual accuracy.
@@ -550,8 +544,6 @@ class PDFSearcher:
         page_matches = []
         # Reconstruct the full text and mapping using TextUtils helper.
         full_text, text_mapping = TextUtils.reconstruct_text_and_mapping(page.get("words", []))
-        # Log the full text for debugging.
-        log_debug(f"Page {page_number}: full_text: '{full_text}'")
         # Compute the offsets where the candidate phrase occurs.
         matches = TextUtils.recompute_offsets(full_text, candidate_phrase)
         # Log the offsets found.
@@ -581,7 +573,7 @@ class PDFSearcher:
         return {"page": page_number, "matches": page_matches}, len(page_matches)
 
     @staticmethod
-    def _bbox_equal(b1: Dict[str, float], b2: Dict[str, float], tol: float = 1e-2) -> bool:
+    def _bbox_equal(b1: Dict[str, float], b2: Dict[str, float], tol: float = 2.5) -> bool:
         """
         Check if two bounding boxes are equal within a small tolerance.
 
@@ -646,55 +638,59 @@ class PDFSearcher:
 
     def _find_exact_phrase_by_bbox(self, target_bbox: Dict[str, Any]) -> Tuple[Optional[str], int]:
         """
-        Internal: Search each page for a phrase whose bbox exactly matches target_bbox.
+        Search through all pages and find a phrase whose bounding box exactly matches the given target_bbox.
 
-        Iterates pages, builds word mappings, groups adjacent candidates, computes each
-        phrase’s bbox, and compares.
+        The function iterates over each page, builds a mapping of words and their bounding boxes,
+        identifies word groups whose centers fall within the target_bbox, reconstructs the phrase,
+        and computes its actual bounding box to compare with the target.
 
         Args:
-            target_bbox: The bounding box to match.
+            target_bbox (Dict[str, Any]): The bounding box to match a phrase against.
 
         Returns:
-            A tuple of:
-              - The matching phrase (or None if not found).
-              - The word count of that phrase.
+            Tuple[Optional[str], int]: A tuple of the matched phrase (or None) and the number of words in it.
         """
-        # Loop through every page’s extracted data
         for page in self.extracted_data.get("pages", []):
-            # Get the page number for logging
+            # Extract the page number for logging/debugging
             page_number = page.get("page", "unknown")
-            # Build mapping of words to their text and bbox
+
+            # Build mapping of words to text and bbox
             mapping, _ = self.build_page_text_and_mapping(page.get("words", []))
 
-            # Collect indices whose word‐bbox center is inside target_bbox
+            # Identify indices of words whose center falls inside the target_bbox
             candidate_indices = [
                 idx for idx, m in enumerate(mapping)
                 if self._word_center_in_bbox(m["bbox"], target_bbox)
             ]
+
             log_debug(f"Page {page_number}: candidate_indices: {candidate_indices}")
 
-            # Skip pages with no candidate words
             if not candidate_indices:
+                # Skip this page if no candidates were found
                 continue
 
-            # Group consecutive indices into phrase candidates
+                # Group the candidate indices into consecutive word groups (phrases)
             groups = self._group_consecutive_indices(candidate_indices)
             log_debug(f"Page {page_number}: grouped candidate indices: {groups}")
 
-            # Evaluate each group for exact bbox match
+            # Evaluate each group to check for exact bbox match
             for group in groups:
-                # Reconstruct the phrase text from the mapping
+                # Construct the phrase from the word group
                 phrase = " ".join(mapping[i]["text"] for i in group)
-                # Compute the phrase’s bbox (single or merged)
-                bbox = self._get_phrase_bbox(page, mapping, group, phrase)
 
-                # Compare computed bbox to target
+                # Compute the bbox for the phrase
+                bbox = self._get_phrase_bbox(page, mapping, group, phrase, target_bbox=target_bbox)
+
+                log_debug(f"Page {page_number}: Phrase = '{phrase}'")
+                log_debug(f"Page {page_number}: Computed bbox = {bbox}")
+
+                # Compare to the target bbox
                 if bbox and self._bbox_equal(bbox, target_bbox):
-                    log_debug(f" Matched exact bbox with phrase: '{phrase}'")
-                    # Return phrase and its word count immediately
-                    return phrase, len(phrase.split())
+                    log_debug(f"[MATCH] Page {page_number}: Matched exact bbox with phrase: '{phrase}'")
+                    return phrase, len(phrase.split())  # Return phrase and word count
 
-        # No exact match found after all pages
+        # If no match found across all pages
+        log_debug("[DEBUG] No exact candidate phrase found for given bbox.")
         return None, 0
 
     @staticmethod
@@ -702,48 +698,77 @@ class PDFSearcher:
             page: Dict[str, Any],
             mapping: List[Dict[str, Any]],
             group: List[int],
-            phrase: str
+            phrase: str,
+            target_bbox: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Internal: Compute the bounding box for a phrase.
+        Compute the bounding box for a phrase using extracted word mapping and optional bbox target.
 
-        For single‐word phrases, returns that word’s bbox.
-        For multi‐word, reconstructs text, finds offsets, maps those offsets
-        back to word boxes, and merges them.
+        If it's a single word, this method directly compares bboxes. For multi-word phrases, it finds
+        all occurrences in the full page text, maps their positions to bounding boxes, and returns
+        the one matching the target_bbox (if provided).
 
         Args:
-            page: The page data containing words.
-            mapping: List of word‐to‐bbox mappings.
-            group: Consecutive indices for the phrase.
-            phrase: The text of the phrase.
+            page (Dict[str, Any]): Page data containing OCR words.
+            mapping (List[Dict[str, Any]]): List of words with 'text' and 'bbox' fields.
+            group (List[int]): Indices of words forming the target phrase.
+            phrase (str): Full phrase to locate.
+            target_bbox (Optional[Dict[str, Any]]): Bbox to compare against.
 
         Returns:
-            The composite bbox, or None on error or if no boxes found.
+            Optional[Dict[str, Any]]: A matching bbox or None if no match.
         """
-        # Single‐word: return directly
-        if len(group) == 1:
-            return mapping[group[0]]["bbox"]
 
+        # Handle single-word phrase case
+        if len(group) == 1:
+            # Normalize the single word text for comparison
+            word_text = phrase.strip()
+            # Iterate over all mapped words and return the bbox that matches the text (and optionally the bbox)
+            return next(
+                (
+                    w["bbox"] for w in mapping
+                    if w["text"] == word_text and
+                       (not target_bbox or PDFSearcher._bbox_equal(w["bbox"], target_bbox))
+                ),
+                None  # If no match is found, return None
+            )
+
+        # Handle multi-word phrase case
         try:
-            # Rebuild full page text and mapping
+            # Reconstruct full page text and character-to-word mapping
             full_text, text_mapping = TextUtils.reconstruct_text_and_mapping(page.get("words", []))
-            # Locate phrase offsets in the text
+
+            # Find all character offset positions for this phrase in the reconstructed text
             offsets = TextUtils.recompute_offsets(full_text, phrase)
             if not offsets:
+                # If phrase doesn't appear in the page text, return None
                 return None
-            # Use the first occurrence
-            s, e = offsets[0]
-            # Map character offsets back to individual word bboxes
-            bboxes = TextUtils.map_offsets_to_bboxes(full_text, text_mapping, (s, e))
-            if not bboxes:
-                return None
-            # Merge all line bboxes into one composite
-            merged = TextUtils.merge_bounding_boxes(bboxes)
-            return merged["composite"]
+
+            # Loop over every occurrence of the phrase in the text
+            for start, end in offsets:
+                # Map the character offsets back to bounding boxes of individual words
+                bboxes = TextUtils.map_offsets_to_bboxes(full_text, text_mapping, (start, end))
+                if not bboxes:
+                    # Skip if no word bounding boxes could be found
+                    continue
+
+                # Merge all word-level bounding boxes into one phrase-level bounding box
+                merged_bbox = TextUtils.merge_bounding_boxes(bboxes)["composite"]
+
+                # If there's no target bbox, return the first computed bbox
+                if not target_bbox:
+                    return merged_bbox
+
+                # If the merged bbox matches the target bbox, return it
+                if PDFSearcher._bbox_equal(merged_bbox, target_bbox):
+                    return merged_bbox
+
         except Exception as exc:
-            # Log any error encountered during merging
-            log_debug(f"Error computing merged bbox for phrase '{phrase}': {exc}")
-            return None
+            # Log error for debugging and continue gracefully
+            log_debug(f"[ERROR] Failed to compute bbox for phrase '{phrase}': {exc}")
+
+        # If no matching phrase bbox found, return None
+        return None
 
     def _search_all_pages(self, phrase: str, word_count: int) -> Tuple[int, List[Dict[str, Any]]]:
         """

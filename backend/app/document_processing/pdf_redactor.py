@@ -53,7 +53,7 @@ class PDFRedactionService(DocumentRedactor):
         """
         # Begin initialization process.
         try:
-            # Initialize file_path attribute.
+            # Initialize file_labeling_path attribute.
             self.file_path = None
             # Store the page batch size.
             self.page_batch_size = page_batch_size

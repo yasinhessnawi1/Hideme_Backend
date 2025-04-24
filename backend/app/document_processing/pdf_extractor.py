@@ -57,7 +57,7 @@ class PDFTextExtractor(DocumentExtractor):
                 - A file-like object with PDF content
             page_batch_size: Number of pages to process in one batch for large documents
         """
-        # Initialize file_path attribute to None.
+        # Initialize file_labeling_path attribute to None.
         self.file_path = None
         # Set the batch size for page processing.
         self.page_batch_size = page_batch_size
@@ -76,13 +76,13 @@ class PDFTextExtractor(DocumentExtractor):
             if isinstance(pdf_input, str):
                 # Open the PDF document using PyMuPDF with the file path.
                 self.pdf_document = pymupdf.open(pdf_input)
-                # Set file_path attribute with the file path.
+                # Set file_labeling_path attribute with the file path.
                 self.file_path = pdf_input
             # Check if the pdf_input is already a PyMuPDF Document instance.
             elif isinstance(pdf_input, pymupdf.Document):
                 # Use the provided PyMuPDF document.
                 self.pdf_document = pdf_input
-                # Mark the file_path as a memory document.
+                # Mark the file_labeling_path as a memory document.
                 self.file_path = "memory_document"
             # Check if the pdf_input is of bytes type.
             elif isinstance(pdf_input, bytes):
@@ -90,7 +90,7 @@ class PDFTextExtractor(DocumentExtractor):
                 buffer = io.BytesIO(pdf_input)
                 # Open the PDF document using the stream.
                 self.pdf_document = pymupdf.open(stream=buffer, filetype="pdf")
-                # Set the file_path as memory_buffer.
+                # Set the file_labeling_path as memory_buffer.
                 self.file_path = "memory_buffer"
             # Check if the pdf_input is a file-like object.
             elif hasattr(pdf_input, 'read') and callable(pdf_input.read):
@@ -132,7 +132,7 @@ class PDFTextExtractor(DocumentExtractor):
         empty_pages = []
         # Get the total number of pages from the PDF document.
         total_pages = len(self.pdf_document)
-        # Determine the operation identifier based on file_path or default memory_document.
+        # Determine the operation identifier based on file_labeling_path or default memory_document.
         operation_id = os.path.basename(self.file_path) if isinstance(self.file_path, str) else "memory_document"
         # Start the timer for performance tracking.
         start_time = time.time()

@@ -21,7 +21,7 @@ from presidio_anonymizer import AnonymizerEngine
 from backend.app.configs.presidio_config import (DEFAULT_LANGUAGE, PRESIDIO_AVAILABLE_ENTITIES)
 from backend.app.entity_detection.base import BaseEntityDetector
 from backend.app.utils.helpers.json_helper import validate_presidio_requested_entities
-from backend.app.utils.helpers.text_utils import TextUtils, EntityUtils
+from backend.app.utils.helpers.text_utils import TextUtils
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.parallel.core import ParallelProcessingCore
@@ -318,13 +318,12 @@ class PresidioEntityDetector(BaseEntityDetector):
                     log_warning(f"[WARNING] Timeout analyzing text on page {local_page_number}")
                     return {"page": local_page_number, "sensitive": []}, []
 
-                # Merge overlapping entities using text utilities.
-                filtered_results = EntityUtils.merge_overlapping_entities(page_results)
-                if not filtered_results:
+                if not page_results:
                     return {"page": local_page_number, "sensitive": []}, []
 
                 # Convert raw entities into standardized dictionaries.
-                entity_dicts = [self._convert_to_entity_dict(ent) for ent in filtered_results]
+                entity_dicts = [self._convert_to_entity_dict(ent) for ent in page_results]
+
                 log_info(f"[OK] Found {len(entity_dicts)} entities on page {local_page_number}")
 
                 # Process entities to compute redaction information.

@@ -59,7 +59,7 @@ class SecureTempFileManager:
                     log_warning(
                         f"[SECURITY] Timeout registering temp file {os.path.basename(file_path)}, continuing without registry tracking")
                 else:
-                    # Add file_path to the temporary file's registry.
+                    # Add file_labeling_path to the temporary file's registry.
                     SecureTempFileManager._temp_files_registry.add(file_path)
         except Exception as e:
             # Log any exception that occurs during registration.
@@ -177,7 +177,7 @@ class SecureTempFileManager:
         This method verifies the file's existence, optionally overwrites its contents with random data for security,
         then deletes it. It also unregisters the file from internal tracking and the retention manager.
         """
-        # Check if the file_path is valid and corresponds to an existing file.
+        # Check if the file_labeling_path is valid and corresponds to an existing file.
         if not file_path or not os.path.exists(file_path) or not os.path.isfile(file_path):
             # Return False immediately if file does not exist or is not a regular file.
             return False

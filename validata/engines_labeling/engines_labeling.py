@@ -160,7 +160,7 @@ def process_pdf_files(pdf_files, endpoint, output_file, api_key=None):
         retries = 0  # Number of retry attempts
         success = False  # Flag to track success per file
 
-        # Attempt to process the file up to 3 times if rate-limited
+        # Attempt to process the file up to 6 times if rate-limited
         while retries < 6 and not success:
             try:
                 with open(pdf_path, "rb") as fd:
@@ -172,7 +172,7 @@ def process_pdf_files(pdf_files, endpoint, output_file, api_key=None):
                         files={"file": (filename, fd, "application/pdf")}
                     )
 
-                # ✅ Successful request
+                # Successful request
                 if response.status_code == 200:
                     results.append({
                         "filename": filename,
@@ -181,21 +181,21 @@ def process_pdf_files(pdf_files, endpoint, output_file, api_key=None):
                     save_results_to_json(results, output_file)
                     success = True
 
-                # ⚠️ Rate limited - wait and retry
+                # Rate limited - wait and retry
                 elif response.status_code == 429:
                     wait_time = 60
                     print(
-                        f"    ⚠️ HTTP 429 Too Many Requests. Retrying in {wait_time} seconds... (Attempt {retries + 1}/3)")
+                        f"    HTTP 429 Too Many Requests. Retrying in {wait_time} seconds... (Attempt {retries + 1}/6)")
                     retries += 1
                     time.sleep(wait_time)
 
                 # ❌ Other non-retrievable error - skip file
                 else:
-                    print(f"    ⚠️ HTTP {response.status_code}: {response.text}")
+                    print(f"    HTTP {response.status_code}: {response.text}")
                     break
 
             except Exception as exc:
-                print(f"    ⚠️ Exception processing {filename}: {exc}")
+                print(f"    Exception processing {filename}: {exc}")
                 break  # Do not retry on local file or request errors
 
         # Optional delay between files to avoid hitting limits again
@@ -203,6 +203,36 @@ def process_pdf_files(pdf_files, endpoint, output_file, api_key=None):
             time.sleep(REQUEST_DELAY)
 
     return results
+
+
+def flatten_results(results):
+    """
+    Turn your nested results into a flat list of:
+      {
+        "filename": ...,
+        "Page": ...,
+        "sensitive": ...,
+        "entity": ...
+      }
+    pulling the redaction_mapping out of entry["response"].
+    """
+    flat = []
+    for entry in results:
+        fn = entry["filename"]
+        # dig into the JSON body returned by endpoint:
+        redaction = entry.get("response", {}) \
+            .get("redaction_mapping", {})
+        pages = redaction.get("pages", [])
+        for page in pages:
+            pg = page.get("page")
+            for hit in page.get("sensitive", []):
+                flat.append({
+                    "filename": fn,
+                    "Page": str(pg),
+                    "sensitive": hit["original_text"],
+                    "entity": hit["entity_type"]
+                })
+    return flat
 
 
 def main():
@@ -215,16 +245,25 @@ def main():
     all_pdfs = (pdfs1 + pdfs2)[:MAX_FILES]
     print(f"Total PDFs loaded: {len(all_pdfs)} (dir1={len(pdfs1)}, dir2={len(pdfs2)})")
 
-    # Process each service in turn
     for service_name, endpoint in API_ENDPOINTS.items():
-        output_file = OUTPUT_FILES.get(service_name)
+        output_file = OUTPUT_FILES[service_name]
         print(f"\n=== Service: {service_name.upper()} ===")
-        process_pdf_files(
+
+        # 1) process this service’s PDFs
+        service_results = process_pdf_files(
             pdf_files=all_pdfs,
             endpoint=endpoint,
             output_file=output_file,
             api_key=GEMINI_API_KEY if service_name == "gemini" else None
         )
+
+        # immediately flatten _just_ this service’s results
+        flattened = flatten_results(service_results)
+
+        # overwrite the configured OUTPUT_FILE_* with the flattened records
+        with open(output_file, "w", encoding="utf-8") as fileout:
+            json.dump(flattened, fileout, indent=2, ensure_ascii=False)
+        print(f"Saved {len(flattened)} records to {output_file}")
 
     print("\nAll services completed.")
 
