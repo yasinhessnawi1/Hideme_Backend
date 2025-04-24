@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +13,11 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils/gdprlog"
 )
+
+// Global GDPR logger instance
+var gdprLogger *gdprlog.GDPRLogger
 
 // InitLogger initializes the application logger with the given configuration
 func InitLogger(cfg *config.AppConfig) {
@@ -23,6 +29,39 @@ func InitLogger(cfg *config.AppConfig) {
 	}
 	zerolog.SetGlobalLevel(level)
 
+	// Initialize GDPR Logger first
+	var gdprLogErr error
+	gdprLogger, gdprLogErr = gdprlog.NewGDPRLogger(&cfg.GDPRLogging)
+	if gdprLogErr != nil {
+		// Fall back to standard logging if GDPR logger fails
+		fmt.Fprintf(os.Stderr, "Failed to initialize GDPR logger: %v\n", gdprLogErr)
+		setupStandardLogger(cfg)
+	} else {
+		// Set up log rotation for GDPR logs
+		err = gdprLogger.SetupLogRotation()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to set up GDPR log rotation: %v\n", err)
+		}
+
+		// Override the global logger to maintain compatibility
+		log.Logger = createGDPRCompatibleLogger(cfg)
+	}
+
+	log.Info().Msg("Logger initialized")
+}
+
+// GetGDPRLogger returns the global GDPR logger instance
+func GetGDPRLogger() *gdprlog.GDPRLogger {
+	return gdprLogger
+}
+
+// SetGDPRLogger sets the global GDPR logger instance
+func SetGDPRLogger(logger *gdprlog.GDPRLogger) {
+	gdprLogger = logger
+}
+
+// setupStandardLogger configures the standard zerolog logger (fallback)
+func setupStandardLogger(cfg *config.AppConfig) {
 	// Configure logger output format
 	var output io.Writer = os.Stdout
 	if strings.ToLower(cfg.Logging.Format) == "console" && !cfg.App.IsProduction() {
@@ -41,8 +80,66 @@ func InitLogger(cfg *config.AppConfig) {
 		Str("version", cfg.App.Version).
 		Str("env", cfg.App.Environment).
 		Logger()
+}
 
-	log.Info().Msg("Logger initialized")
+// createGDPRCompatibleLogger creates a zerolog.Logger that forwards to GDPR logger
+func createGDPRCompatibleLogger(cfg *config.AppConfig) zerolog.Logger {
+	return zerolog.New(gdprLogHook{}).
+		With().
+		Timestamp().
+		Str("app", cfg.App.Name).
+		Str("version", cfg.App.Version).
+		Str("env", cfg.App.Environment).
+		Logger()
+}
+
+// gdprLogHook is a writer that forwards logs to GDPR logger
+type gdprLogHook struct{}
+
+// Write implements io.Writer to handle log entries
+func (h gdprLogHook) Write(p []byte) (n int, err error) {
+	// Parse the JSON log entry
+	var logEntry map[string]interface{}
+	err = json.Unmarshal(p, &logEntry)
+	if err != nil {
+		// If we can't parse the JSON, just log the error and let logging continue
+		if gdprLogger != nil {
+			gdprLogger.Error("Failed to parse log entry", err, nil)
+		}
+		return len(p), nil // Don't return error to prevent breaking the logger
+	}
+
+	// Extract level and message
+	level, _ := logEntry["level"].(string)
+	message, _ := logEntry["message"].(string)
+	delete(logEntry, "level")
+	delete(logEntry, "message")
+
+	// Extract time if present
+	if _, ok := logEntry["time"].(string); ok {
+		delete(logEntry, "time")
+	}
+
+	// Forward to appropriate GDPR logger method based on level
+	switch level {
+	case "debug":
+		gdprLogger.Debug(message, logEntry)
+	case "info":
+		gdprLogger.Info(message, logEntry)
+	case "warn":
+		gdprLogger.Warn(message, logEntry)
+	case "error":
+		var logErr error
+		if errMsg, ok := logEntry["error"].(string); ok {
+			logErr = errors.New(errMsg)
+			delete(logEntry, "error")
+		}
+		gdprLogger.Error(message, logErr, logEntry)
+	case "fatal":
+		gdprLogger.Fatal(message, logEntry)
+	}
+
+	return len(p), nil
 }
 
 // RequestLogger creates a logger with request-specific context
@@ -59,108 +156,118 @@ func RequestLogger(requestID, userID, method, path string) zerolog.Logger {
 	return logger.Logger()
 }
 
-/*
-// ContextLogger creates a logger with the given context values
-func ContextLogger(context map[string]interface{}) zerolog.Logger {
-	contextEvent := log.With()
-	for key, value := range context {
-		switch v := value.(type) {
-		case string:
-			contextEvent = contextEvent.Str(key, v)
-		case int:
-			contextEvent = contextEvent.Int(key, v)
-		case int64:
-			contextEvent = contextEvent.Int64(key, v)
-		case float64:
-			contextEvent = contextEvent.Float64(key, v)
-		case bool:
-			contextEvent = contextEvent.Bool(key, v)
-		case error:
-			contextEvent = contextEvent.Err(v)
-		default:
-			contextEvent = contextEvent.Interface(key, v)
-		}
-	}
-	return contextEvent.Logger()
-}
-
-*/
-
 // LogHTTPRequest logs an HTTP request with request details
 func LogHTTPRequest(requestID, method, path, remoteAddr, userAgent string, statusCode int, latency time.Duration) {
-	// Only log some paths at debug level to reduce noise
-	event := log.Debug()
+	// Create fields for GDPR logger
+	fields := map[string]interface{}{
+		"request_id":  requestID,
+		"method":      method,
+		"path":        path,
+		"remote_addr": remoteAddr,
+		"user_agent":  userAgent,
+		"status":      statusCode,
+		"latency":     latency,
+	}
 
-	// Health check and other high-volume endpoints can be demoted to debug level
+	// Only log some paths at debug level to reduce noise
 	if path == "/health" || path == "/metrics" {
 		if zerolog.GlobalLevel() != zerolog.DebugLevel {
 			return // Skip logging entirely for high-volume endpoints in non-debug mode
 		}
+		if gdprLogger != nil {
+			gdprLogger.Debug("HTTP Request", fields)
+			return
+		}
 	}
 
-	// Elevate error responses to warning/error level
-	if statusCode >= 400 && statusCode < 500 {
-		event = log.Warn()
-	} else if statusCode >= 500 {
-		event = log.Error()
-	} else if strings.HasPrefix(path, "/api") {
-		// Log API requests at info level
-		event = log.Info()
-	}
+	// Determine log level and log either with GDPR logger or zerolog
+	if gdprLogger != nil {
+		// Elevate error responses to warning/error level
+		if statusCode >= 400 && statusCode < 500 {
+			gdprLogger.Warn("HTTP Request", fields)
+		} else if statusCode >= 500 {
+			gdprLogger.Error("HTTP Request", nil, fields)
+		} else if strings.HasPrefix(path, "/api") {
+			// Log API requests at info level
+			gdprLogger.Info("HTTP Request", fields)
+		} else {
+			gdprLogger.Debug("HTTP Request", fields)
+		}
+	} else {
+		// Original zerolog implementation
+		event := log.Debug()
 
-	// Include request details
-	event.
-		Str("request_id", requestID).
-		Str("method", method).
-		Str("path", path).
-		Str("remote_addr", remoteAddr).
-		Str("user_agent", userAgent).
-		Int("status", statusCode).
-		Dur("latency", latency).
-		Msg("HTTP Request")
+		// Elevate error responses to warning/error level
+		if statusCode >= 400 && statusCode < 500 {
+			event = log.Warn()
+		} else if statusCode >= 500 {
+			event = log.Error()
+		} else if strings.HasPrefix(path, "/api") {
+			// Log API requests at info level
+			event = log.Info()
+		}
+
+		// Include request details
+		event.
+			Str("request_id", requestID).
+			Str("method", method).
+			Str("path", path).
+			Str("remote_addr", remoteAddr).
+			Str("user_agent", userAgent).
+			Int("status", statusCode).
+			Dur("latency", latency).
+			Msg("HTTP Request")
+	}
 }
 
 // LogError logs an error with context information
 func LogError(err error, context map[string]interface{}) {
-	event := log.Error().Err(err)
+	if gdprLogger != nil {
+		gdprLogger.Error("Error occurred", err, context)
+	} else {
+		// Fallback to zerolog
+		event := log.Error().Err(err)
 
-	// Add context information
-	for key, value := range context {
-		switch v := value.(type) {
-		case string:
-			event = event.Str(key, v)
-		case int:
-			event = event.Int(key, v)
-		case int64:
-			event = event.Int64(key, v)
-		case float64:
-			event = event.Float64(key, v)
-		case bool:
-			event = event.Bool(key, v)
-		default:
-			event = event.Interface(key, v)
+		// Add context information
+		for key, value := range context {
+			switch v := value.(type) {
+			case string:
+				event = event.Str(key, v)
+			case int:
+				event = event.Int(key, v)
+			case int64:
+				event = event.Int64(key, v)
+			case float64:
+				event = event.Float64(key, v)
+			case bool:
+				event = event.Bool(key, v)
+			default:
+				event = event.Interface(key, v)
+			}
 		}
-	}
 
-	event.Msg("Error occurred")
+		event.Msg("Error occurred")
+	}
 }
 
 // LogPanic logs a recovered panic value
 func LogPanic(recovered interface{}, stack []byte) {
-	log.Error().
-		Interface("panic", recovered).
-		Str("stack", string(stack)).
-		Msg("Panic recovered")
+	if gdprLogger != nil {
+		fields := map[string]interface{}{
+			"panic": recovered,
+			"stack": string(stack),
+		}
+		gdprLogger.Error("Panic recovered", nil, fields)
+	} else {
+		log.Error().
+			Interface("panic", recovered).
+			Str("stack", string(stack)).
+			Msg("Panic recovered")
+	}
 }
 
 // LogDBQuery logs a database query for debugging
 func LogDBQuery(query string, args []interface{}, duration time.Duration, err error) {
-	event := log.Debug()
-
-	if err != nil {
-		event = log.Error().Err(err)
-	}
-
 	// Mask sensitive data in the arguments (e.g., password)
 	safeArgs := make([]interface{}, len(args))
 	for i, arg := range args {
@@ -178,40 +285,90 @@ func LogDBQuery(query string, args []interface{}, duration time.Duration, err er
 		}
 	}
 
-	event.
-		Str("query", query).
-		Interface("args", safeArgs).
-		Dur("duration", duration).
-		Msg("Database query executed")
+	// Create fields for GDPR logger
+	fields := map[string]interface{}{
+		"query":    query,
+		"args":     safeArgs,
+		"duration": duration,
+	}
+
+	if gdprLogger != nil {
+		if err != nil {
+			gdprLogger.Error("Database query executed", err, fields)
+		} else {
+			gdprLogger.Debug("Database query executed", fields)
+		}
+	} else {
+		event := log.Debug()
+
+		if err != nil {
+			event = log.Error().Err(err)
+		}
+
+		event.
+			Str("query", query).
+			Interface("args", safeArgs).
+			Dur("duration", duration).
+			Msg("Database query executed")
+	}
 }
 
 // LogAuth logs authentication events
 func LogAuth(event string, userID, username string, success bool, reason string) {
-	logEvent := log.Info()
-	if !success {
-		logEvent = log.Warn()
+	fields := map[string]interface{}{
+		"event":    event,
+		"user_id":  userID,
+		"username": username,
+		"success":  success,
 	}
-
-	logEvent.
-		Str("event", event).
-		Str("user_id", userID).
-		Str("username", username).
-		Bool("success", success)
 
 	if reason != "" {
-		logEvent = logEvent.Str("reason", reason)
+		fields["reason"] = reason
 	}
 
-	logEvent.Msg("Authentication event")
+	if gdprLogger != nil {
+		if success {
+			gdprLogger.Info("Authentication event", fields)
+		} else {
+			gdprLogger.Warn("Authentication event", fields)
+		}
+	} else {
+		logEvent := log.Info()
+		if !success {
+			logEvent = log.Warn()
+		}
+
+		logEvent.
+			Str("event", event).
+			Str("user_id", userID).
+			Str("username", username).
+			Bool("success", success)
+
+		if reason != "" {
+			logEvent = logEvent.Str("reason", reason)
+		}
+
+		logEvent.Msg("Authentication event")
+	}
 }
 
 // LogAPIKey logs API key events
 func LogAPIKey(event, keyID, userID string) {
-	log.Info().
-		Str("event", event).
-		Str("key_id", keyID).
-		Str("user_id", userID).
-		Msg("API key event")
+	fields := map[string]interface{}{
+		"event":   event,
+		"key_id":  keyID,
+		"user_id": userID,
+	}
+
+	if gdprLogger != nil {
+		gdprLogger.Info("API key event", fields)
+	} else {
+		log.Info().
+			Str("event", event).
+			Str("key_id", keyID).
+			Str("user_id", userID).
+			Msg("API key event")
+	}
 }
 
 // GetLogLevel returns the current global log level as a string

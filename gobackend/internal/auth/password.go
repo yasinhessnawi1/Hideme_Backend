@@ -9,6 +9,8 @@ import (
 	"golang.org/x/crypto/argon2"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils/gdprlog"
 )
 
 // PasswordConfig holds the parameters for the Argon2id password hashing algorithm
@@ -48,6 +50,11 @@ func HashPassword(password string, cfg *PasswordConfig) (string, string, error) 
 	// Generate a random salt
 	salt := make([]byte, cfg.SaltLength)
 	if _, err := rand.Read(salt); err != nil {
+		// Log error without sensitive data
+		utils.LogError(err, map[string]interface{}{
+			"operation": "generate_salt",
+			"category":  gdprlog.SensitiveLog,
+		})
 		return "", "", fmt.Errorf("failed to generate salt: %w", err)
 	}
 
@@ -65,6 +72,15 @@ func HashPassword(password string, cfg *PasswordConfig) (string, string, error) 
 	encodedHash := base64.StdEncoding.EncodeToString(hash)
 	encodedSalt := base64.StdEncoding.EncodeToString(salt)
 
+	// Log successful password hashing without sensitive data
+	if gdprLogger := utils.GetGDPRLogger(); gdprLogger != nil {
+		gdprLogger.Info("Password hashed successfully", map[string]interface{}{
+			"operation": "hash_password",
+			"success":   true,
+			// No sensitive data is logged
+		})
+	}
+
 	return encodedHash, encodedSalt, nil
 }
 
@@ -73,11 +89,21 @@ func VerifyPassword(password, encodedHash, encodedSalt string, cfg *PasswordConf
 	// Decode the hash and salt from base64
 	hash, err := base64.StdEncoding.DecodeString(encodedHash)
 	if err != nil {
+		// Log error without sensitive data
+		utils.LogError(err, map[string]interface{}{
+			"operation": "decode_hash",
+			"category":  gdprlog.SensitiveLog,
+		})
 		return false, fmt.Errorf("failed to decode hash: %w", err)
 	}
 
 	salt, err := base64.StdEncoding.DecodeString(encodedSalt)
 	if err != nil {
+		// Log error without sensitive data
+		utils.LogError(err, map[string]interface{}{
+			"operation": "decode_salt",
+			"category":  gdprlog.SensitiveLog,
+		})
 		return false, fmt.Errorf("failed to decode salt: %w", err)
 	}
 
@@ -93,6 +119,16 @@ func VerifyPassword(password, encodedHash, encodedSalt string, cfg *PasswordConf
 
 	// Use constant-time comparison to avoid timing attacks
 	match := subtle.ConstantTimeCompare(hash, comparisonHash) == 1
+
+	// Log verification attempt without sensitive data
+	if gdprLogger := utils.GetGDPRLogger(); gdprLogger != nil {
+		gdprLogger.Info("Password verification performed", map[string]interface{}{
+			"operation": "verify_password",
+			"success":   match,
+			// No sensitive data is logged
+		})
+	}
+
 	return match, nil
 }
 
@@ -101,6 +137,11 @@ func GenerateRandomBytes(length uint32) ([]byte, error) {
 	b := make([]byte, length)
 	_, err := rand.Read(b)
 	if err != nil {
+		// Log error without sensitive data
+		utils.LogError(err, map[string]interface{}{
+			"operation": "generate_random_bytes",
+			"length":    length,
+		})
 		return nil, fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 	return b, nil

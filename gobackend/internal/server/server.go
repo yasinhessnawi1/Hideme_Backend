@@ -20,6 +20,8 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/handlers"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils/gdprlog"
 )
 
 // Handlers contains all HTTP handlers for the application
@@ -44,6 +46,7 @@ type Server struct {
 	Handlers      *Handlers
 	authProviders *AuthProviders
 	httpServer    *http.Server
+	gdprLogger    *gdprlog.GDPRLogger
 }
 
 // NewServer creates a new server instance
@@ -74,6 +77,11 @@ func NewServer(cfg *config.AppConfig) (*Server, error) {
 		return nil, fmt.Errorf("failed to set up handlers: %w", err)
 	}
 
+	// Initialize GDPR logger if not already initialized by utils.InitLogger
+	if err := s.setupGDPRLogging(); err != nil {
+		log.Warn().Err(err).Msg("Failed to set up GDPR logging, falling back to standard logging")
+	}
+
 	// Set up routes
 	s.SetupRoutes()
 
@@ -87,6 +95,34 @@ func NewServer(cfg *config.AppConfig) (*Server, error) {
 	}
 
 	return s, nil
+}
+
+// setupGDPRLogging initializes GDPR-compliant logging if not already done
+func (s *Server) setupGDPRLogging() error {
+	// Check if we already have a GDPR logger from utils.InitLogger
+	if utils.GetGDPRLogger() != nil {
+		// Use the existing logger
+		s.gdprLogger = utils.GetGDPRLogger()
+		return nil
+	}
+
+	// Create a new GDPR logger if one doesn't exist
+	gdprLogger, err := gdprlog.NewGDPRLogger(&s.Config.GDPRLogging)
+	if err != nil {
+		return fmt.Errorf("failed to create GDPR logger: %w", err)
+	}
+
+	// Set up log rotation
+	if err := gdprLogger.SetupLogRotation(); err != nil {
+		return fmt.Errorf("failed to set up GDPR log rotation: %w", err)
+	}
+
+	// Store the logger
+	s.gdprLogger = gdprLogger
+	utils.SetGDPRLogger(gdprLogger) // Make it available to utils package
+
+	log.Info().Msg("GDPR logging configured successfully")
+	return nil
 }
 
 // setupDatabase initializes the database connection
@@ -239,6 +275,9 @@ func (s *Server) Start() error {
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
 
+	// Set up maintenance tasks
+	s.SetupMaintenanceTasks()
+
 	// Block until an OS signal or an error is received
 	select {
 	case err := <-serverErrors:
@@ -278,6 +317,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.Db.Close()
 	log.Info().Msg("Database connection closed")
 
+	// Clean up any GDPR logging resources if needed
+	if s.gdprLogger != nil {
+		if err := s.gdprLogger.CleanupLogs(); err != nil {
+			log.Warn().Err(err).Msg("Failed to clean up GDPR logs during shutdown")
+		}
+	}
+
 	return nil
 }
 
@@ -302,6 +348,13 @@ func (s *Server) SetupMaintenanceTasks() {
 				log.Error().Err(err).Msg("Failed to cleanup expired API keys")
 			} else if count > 0 {
 				log.Info().Int64("count", count).Msg("Cleaned up expired API keys")
+			}
+
+			// GDPR log rotation and cleanup
+			if s.gdprLogger != nil {
+				if err := s.gdprLogger.CleanupLogs(); err != nil {
+					log.Error().Err(err).Msg("Failed to clean up expired GDPR logs")
+				}
 			}
 
 			// Call cancel at the end of each iteration to avoid resource leak

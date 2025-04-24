@@ -123,35 +123,60 @@ func (s *Seeder) runSeed(ctx context.Context, name string, seedFunc func(ctx con
 	})
 }
 
-// seedDetectionMethods seeds the detection methods
 func (s *Seeder) seedDetectionMethods(ctx context.Context, tx *sql.Tx) error {
-	// Check if the table is empty
-	var count int
+	methods := models.DefaultDetectionMethods()
+
+	// First, verify if detection methods already exist
+	var methodCount int
 	countQuery := `SELECT COUNT(*) FROM detection_methods`
-	err := tx.QueryRowContext(ctx, countQuery).Scan(&count)
+	err := tx.QueryRowContext(ctx, countQuery).Scan(&methodCount)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to count detection methods: %w", err)
 	}
 
-	// Only seed if the table is empty
-	if count == 0 {
-		methods := models.DefaultDetectionMethods()
+	// Get existing method names to avoid duplicates
+	existingMethods := make(map[string]bool)
+	if methodCount > 0 {
+		query := `SELECT method_name FROM detection_methods`
+		rows, err := tx.QueryContext(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to query existing methods: %w", err)
+		}
+		defer rows.Close()
 
-		for _, method := range methods {
+		for rows.Next() {
+			var methodName string
+			if err := rows.Scan(&methodName); err != nil {
+				return err
+			}
+			existingMethods[methodName] = true
+		}
+
+		if err := rows.Err(); err != nil {
+			return err
+		}
+	}
+
+	// Insert missing methods
+	insertedCount := 0
+	for _, method := range methods {
+		if !existingMethods[method.MethodName] {
 			query := `
                 INSERT INTO detection_methods (method_name, highlight_color)
                 VALUES ($1, $2)
             `
 			_, err := tx.ExecContext(ctx, query, method.MethodName, method.HighlightColor)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to insert detection method %s: %w", method.MethodName, err)
 			}
+			insertedCount++
 		}
-
-		log.Info().Int("count", len(methods)).Msg("Seeded detection methods")
-	} else {
-		log.Debug().Msg("Detection methods already exist, skipping seed")
 	}
+
+	log.Info().
+		Int("existing_methods", methodCount).
+		Int("inserted_methods", insertedCount).
+		Msg("Detection methods seeding completed")
 
 	return nil
 }

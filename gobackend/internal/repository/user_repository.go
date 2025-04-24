@@ -14,6 +14,7 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils/gdprlog"
 )
 
 // UserRepository defines methods for interacting with user data
@@ -70,7 +71,7 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *models.User) 
 		user.UpdatedAt,
 	).Scan(&user.ID)
 
-	// Log the query execution
+	// Log the query execution with sensitive data redacted
 	utils.LogDBQuery(
 		query,
 		[]interface{}{user.Username, user.Email, "[REDACTED]", "[REDACTED]", user.CreatedAt, user.UpdatedAt},
@@ -95,11 +96,23 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *models.User) 
 		return fmt.Errorf("failed to create user: %w", err)
 	}
 
-	log.Info().
-		Int64("user_id", user.ID).
-		Str("username", user.Username).
-		Str("email", user.Email).
-		Msg("User created")
+	// Log successful user creation with GDPR compliance
+	if gdprLogger := utils.GetGDPRLogger(); gdprLogger != nil {
+		gdprLogger.Info("User created", map[string]interface{}{
+			"user_id":  user.ID,
+			"username": user.Username,
+			// Email is personal data, should be in personal logs with masking
+			"email":    gdprlog.MaskEmail(user.Email),
+			"category": gdprlog.PersonalLog,
+		})
+	} else {
+		// Fallback to standard logging
+		log.Info().
+			Int64("user_id", user.ID).
+			Str("username", user.Username).
+			Str("email", user.Email).
+			Msg("User created")
+	}
 
 	return nil
 }
@@ -212,17 +225,17 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 		&user.UpdatedAt,
 	)
 
-	// Log the query execution
+	// Log the query execution with email redacted for GDPR compliance
 	utils.LogDBQuery(
 		query,
-		[]interface{}{email},
+		[]interface{}{"[EMAIL-REDACTED]"}, // Don't log actual email in query parameters
 		time.Since(startTime),
 		err,
 	)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, utils.NewNotFoundError("User", fmt.Sprintf("email=%s", email))
+			return nil, utils.NewNotFoundError("User", "email=[REDACTED]") // Don't include actual email in error
 		}
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
@@ -255,10 +268,10 @@ func (r *PostgresUserRepository) Update(ctx context.Context, user *models.User) 
 		user.ID,
 	)
 
-	// Log the query execution
+	// Log the query execution with GDPR considerations
 	utils.LogDBQuery(
 		query,
-		[]interface{}{user.Username, user.Email, user.UpdatedAt, user.ID},
+		[]interface{}{user.Username, "[EMAIL-REDACTED]", user.UpdatedAt, user.ID},
 		time.Since(startTime),
 		err,
 	)
@@ -272,7 +285,7 @@ func (r *PostgresUserRepository) Update(ctx context.Context, user *models.User) 
 					return utils.NewDuplicateError("User", "username", user.Username)
 				}
 				if strings.Contains(pqErr.Constraint, "email") {
-					return utils.NewDuplicateError("User", "email", user.Email)
+					return utils.NewDuplicateError("User", "email", "[REDACTED]") // Don't include actual email in error
 				}
 			}
 		}
@@ -289,11 +302,22 @@ func (r *PostgresUserRepository) Update(ctx context.Context, user *models.User) 
 		return utils.NewNotFoundError("User", user.ID)
 	}
 
-	log.Info().
-		Int64("user_id", user.ID).
-		Str("username", user.Username).
-		Str("email", user.Email).
-		Msg("User updated")
+	// Log successful update with GDPR compliance
+	if gdprLogger := utils.GetGDPRLogger(); gdprLogger != nil {
+		gdprLogger.Info("User updated", map[string]interface{}{
+			"user_id":  user.ID,
+			"username": user.Username,
+			"email":    gdprlog.MaskEmail(user.Email),
+			"category": gdprlog.PersonalLog,
+		})
+	} else {
+		// Fallback to standard logging
+		log.Info().
+			Int64("user_id", user.ID).
+			Str("username", user.Username).
+			Str("email", user.Email).
+			Msg("User updated")
+	}
 
 	return nil
 }
@@ -333,9 +357,18 @@ func (r *PostgresUserRepository) Delete(ctx context.Context, id int64) error {
 			return utils.NewNotFoundError("User", id)
 		}
 
-		log.Info().
-			Int64("user_id", id).
-			Msg("User deleted")
+		// Log successful deletion with GDPR compliance
+		if gdprLogger := utils.GetGDPRLogger(); gdprLogger != nil {
+			gdprLogger.Info("User deleted", map[string]interface{}{
+				"user_id":  id,
+				"category": gdprlog.PersonalLog,
+			})
+		} else {
+			// Fallback to standard logging
+			log.Info().
+				Int64("user_id", id).
+				Msg("User deleted")
+		}
 
 		return nil
 	})
@@ -386,9 +419,18 @@ func (r *PostgresUserRepository) ChangePassword(ctx context.Context, id int64, p
 		return utils.NewNotFoundError("User", id)
 	}
 
-	log.Info().
-		Int64("user_id", id).
-		Msg("User password changed")
+	// Log password change with GDPR compliance - this is sensitive
+	if gdprLogger := utils.GetGDPRLogger(); gdprLogger != nil {
+		gdprLogger.Info("User password changed", map[string]interface{}{
+			"user_id":  id,
+			"category": gdprlog.SensitiveLog, // Password changes are highly sensitive
+		})
+	} else {
+		// Fallback to standard logging
+		log.Info().
+			Int64("user_id", id).
+			Msg("User password changed")
+	}
 
 	return nil
 }
@@ -432,10 +474,10 @@ func (r *PostgresUserRepository) ExistsByEmail(ctx context.Context, email string
 	var exists bool
 	err := r.db.QueryRowContext(ctx, query, email).Scan(&exists)
 
-	// Log the query execution
+	// Log the query execution with email redacted for GDPR compliance
 	utils.LogDBQuery(
 		query,
-		[]interface{}{email},
+		[]interface{}{"[EMAIL-REDACTED]"}, // Don't log actual email in query parameters
 		time.Since(startTime),
 		err,
 	)
