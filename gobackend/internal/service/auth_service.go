@@ -84,11 +84,8 @@ func (s *AuthService) RegisterUser(ctx context.Context, reg *models.UserRegistra
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	log.Info().
-		Int64("user_id", user.ID).
-		Str("username", user.Username).
-		Str("email", user.Email).
-		Msg("User registered successfully")
+	// Log successful registration (using existing utility function that now integrates with GDPR)
+	utils.LogAuth("register_success", fmt.Sprintf("%d", user.ID), user.Username, true, "")
 
 	return user.Sanitize(), nil
 }

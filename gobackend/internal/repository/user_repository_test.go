@@ -41,22 +41,21 @@ func TestUserRepository_Create(t *testing.T) {
 	defer cleanup()
 
 	// Set up test data
-	now := time.Now()
 	user := &models.User{
 		Username:     "testuser",
 		Email:        "test@example.com",
 		PasswordHash: "hashed_password",
 		Salt:         "salt_value",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		// Not setting CreatedAt and UpdatedAt as they will be set in the repository
 	}
 
 	// Setup for PostgreSQL RETURNING clause
 	rows := sqlmock.NewRows([]string{"user_id"}).AddRow(1)
 
 	// Expected query with placeholders for the arguments
+	// Use sqlmock.AnyArg() for timestamp fields since they're set inside the method
 	mock.ExpectQuery("INSERT INTO users").
-		WithArgs(user.Username, user.Email, user.PasswordHash, user.Salt, user.CreatedAt, user.UpdatedAt).
+		WithArgs(user.Username, user.Email, user.PasswordHash, user.Salt, sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(rows)
 
 	// Execute the method being tested

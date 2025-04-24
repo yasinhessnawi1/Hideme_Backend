@@ -201,6 +201,14 @@ func ParseError(err error) *AppError {
 	// Check for PostgreSQL-specific errors
 	var pqErr *pq.Error
 	if errors.As(err, &pqErr) {
+		// Log the database error with GDPR considerations
+		logContext := map[string]interface{}{
+			"error_code": pqErr.Code,
+			"error_type": "database_error",
+		}
+
+		LogError(err, logContext)
+
 		switch pqErr.Code {
 		case "23505": // unique_violation
 			// Try to extract the constraint name for more specific error messages
@@ -240,6 +248,12 @@ func ParseError(err error) *AppError {
 
 	// Check for general database-specific error patterns
 	errMsg := strings.ToLower(err.Error())
+
+	// Log general errors with minimal context to avoid logging PII
+	LogError(err, map[string]interface{}{
+		"error_type": "general_error",
+	})
+
 	switch {
 	case strings.Contains(errMsg, "duplicate key") || strings.Contains(errMsg, "unique constraint"):
 		return &AppError{

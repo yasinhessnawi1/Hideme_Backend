@@ -20,14 +20,27 @@ const (
 
 // AppConfig represents the entire application configuration
 type AppConfig struct {
-	App          AppSettings      `yaml:"app"`
-	Database     DatabaseSettings `yaml:"database"`
-	Server       ServerSettings   `yaml:"server"`
-	JWT          JWTSettings      `yaml:"jwt"`
-	APIKey       APIKeySettings   `yaml:"api_key"`
-	Logging      LoggingSettings  `yaml:"logging"`
-	CORS         CORSSettings     `yaml:"cors"`
-	PasswordHash HashSettings     `yaml:"password_hash"`
+	App          AppSettings         `yaml:"app"`
+	Database     DatabaseSettings    `yaml:"database"`
+	Server       ServerSettings      `yaml:"server"`
+	JWT          JWTSettings         `yaml:"jwt"`
+	APIKey       APIKeySettings      `yaml:"api_key"`
+	Logging      LoggingSettings     `yaml:"logging"`
+	CORS         CORSSettings        `yaml:"cors"`
+	PasswordHash HashSettings        `yaml:"password_hash"`
+	GDPRLogging  GDPRLoggingSettings `yaml:"gdpr_logging"`
+}
+
+// GDPRLoggingSettings contains GDPR-compliant logging configuration
+type GDPRLoggingSettings struct {
+	PersonalDataRetentionDays  int    `yaml:"personal_data_retention_days" env:"GDPR_PERSONAL_RETENTION_DAYS"`
+	SensitiveDataRetentionDays int    `yaml:"sensitive_data_retention_days" env:"GDPR_SENSITIVE_RETENTION_DAYS"`
+	StandardLogRetentionDays   int    `yaml:"standard_log_retention_days" env:"GDPR_STANDARD_RETENTION_DAYS"`
+	PersonalLogPath            string `yaml:"personal_log_path" env:"GDPR_PERSONAL_LOG_PATH"`
+	SensitiveLogPath           string `yaml:"sensitive_log_path" env:"GDPR_SENSITIVE_LOG_PATH"`
+	StandardLogPath            string `yaml:"standard_log_path" env:"GDPR_STANDARD_LOG_PATH"`
+	LogSanitizationLevel       string `yaml:"log_sanitization_level" env:"GDPR_SANITIZATION_LEVEL"`
+	EnableDataSubjectAPI       bool   `yaml:"enable_data_subject_api" env:"GDPR_ENABLE_SUBJECT_API"`
 }
 
 // AppSettings contains general application settings
@@ -262,6 +275,29 @@ func setDefaults(config *AppConfig) {
 	}
 	if config.PasswordHash.KeyLength == 0 {
 		config.PasswordHash.KeyLength = 32
+	}
+
+	// GDPR logging defaults
+	if config.GDPRLogging.StandardLogRetentionDays == 0 {
+		config.GDPRLogging.StandardLogRetentionDays = 90 // 90 days for standard logs
+	}
+	if config.GDPRLogging.PersonalDataRetentionDays == 0 {
+		config.GDPRLogging.PersonalDataRetentionDays = 30 // 30 days for personal data
+	}
+	if config.GDPRLogging.SensitiveDataRetentionDays == 0 {
+		config.GDPRLogging.SensitiveDataRetentionDays = 15 // 15 days for sensitive data
+	}
+	if config.GDPRLogging.StandardLogPath == "" {
+		config.GDPRLogging.StandardLogPath = "./logs/standard"
+	}
+	if config.GDPRLogging.PersonalLogPath == "" {
+		config.GDPRLogging.PersonalLogPath = "./logs/personal"
+	}
+	if config.GDPRLogging.SensitiveLogPath == "" {
+		config.GDPRLogging.SensitiveLogPath = "./logs/sensitive"
+	}
+	if config.GDPRLogging.LogSanitizationLevel == "" {
+		config.GDPRLogging.LogSanitizationLevel = "medium"
 	}
 }
 

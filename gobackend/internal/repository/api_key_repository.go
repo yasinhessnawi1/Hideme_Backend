@@ -61,7 +61,7 @@ func (r *PostgresAPIKeyRepository) Create(ctx context.Context, apiKey *models.AP
 		apiKey.CreatedAt,
 	)
 
-	// Log the query execution
+	// Log the query execution with sensitive data redacted
 	utils.LogDBQuery(
 		query,
 		[]interface{}{apiKey.ID, apiKey.UserID, "[REDACTED]", apiKey.Name, apiKey.ExpiresAt, apiKey.CreatedAt},
@@ -80,6 +80,7 @@ func (r *PostgresAPIKeyRepository) Create(ctx context.Context, apiKey *models.AP
 		return fmt.Errorf("failed to create API key: %w", err)
 	}
 
+	// Use the regular log function which now routes through GDPR logger
 	log.Info().
 		Str("key_id", apiKey.ID).
 		Int64("user_id", apiKey.UserID).
