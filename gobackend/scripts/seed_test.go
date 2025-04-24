@@ -165,11 +165,21 @@ func TestSeedDetectionMethodsWithExistingData(t *testing.T) {
 
 	ctx := context.Background()
 
+	// Get the default detection methods that the function will use
+	defaultMethods := models.DefaultDetectionMethods()
+
 	// Mock the count query to return a value > 0 (table has data)
 	mock.ExpectQuery("SELECT COUNT.*FROM detection_methods").
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(5))
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(len(defaultMethods)))
 
-	// No insertions should be attempted
+	// Create rows with all the method names from DefaultDetectionMethods
+	rows := sqlmock.NewRows([]string{"method_name"})
+	for _, method := range defaultMethods {
+		rows.AddRow(method.MethodName)
+	}
+
+	// Mock the query to get existing method names (all methods are already in DB)
+	mock.ExpectQuery("SELECT method_name FROM detection_methods").WillReturnRows(rows)
 
 	// Create a new seeder
 	db, _, _ := createMockDB(t)
