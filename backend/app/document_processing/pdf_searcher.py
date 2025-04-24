@@ -17,7 +17,7 @@ specific search terms within text extracted from PDFs. It supports two search mo
      - When a match is found, the word’s bounding box is recorded.
 
   3. It also supports to Find all occurrences of a candidate phrase across pages matching the given bbox exactly or with
-    small tolerance like 2 or 3 per coordinate.
+    max tolerance like 10 per coordinate.
 
 The PDFSearcher service includes robust error handling to ensure that exceptions during the search process
 are securely logged and do not crash the overall search operation.
@@ -573,7 +573,7 @@ class PDFSearcher:
         return {"page": page_number, "matches": page_matches}, len(page_matches)
 
     @staticmethod
-    def _bbox_equal(b1: Dict[str, float], b2: Dict[str, float], tol: float = 2.5) -> bool:
+    def _bbox_equal(b1: Dict[str, float], b2: Dict[str, float], tol: float = 10) -> bool:
         """
         Check if two bounding boxes are equal within a small tolerance.
 
