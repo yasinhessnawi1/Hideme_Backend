@@ -1,3 +1,10 @@
+// Package repository provides data access interfaces and implementations for the HideMe application.
+// It follows the repository pattern to abstract database operations and provide a clean API
+// for data persistence operations.
+//
+// This file implements the pattern repository, which manages custom search patterns used to
+// identify sensitive information in documents. Search patterns allow users to define their own
+// criteria for detecting sensitive information beyond standard detection methods.
 package repository
 
 import (
@@ -15,29 +22,112 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// PatternRepository defines methods for interacting with search patterns
+// PatternRepository defines methods for interacting with search patterns in the database.
+// It provides operations for managing custom patterns used to detect sensitive information
+// in documents based on user-defined criteria.
 type PatternRepository interface {
+	// Create adds a new search pattern to the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - pattern: The search pattern to store, with required fields populated
+	//
+	// Returns:
+	//   - An error if creation fails
+	//   - nil on successful creation
+	//
+	// The pattern ID will be populated after successful creation.
 	Create(ctx context.Context, pattern *models.SearchPattern) error
+
+	// GetByID retrieves a search pattern by its unique identifier.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the search pattern
+	//
+	// Returns:
+	//   - The search pattern if found
+	//   - NotFoundError if the pattern doesn't exist
+	//   - Other errors for database issues
 	GetByID(ctx context.Context, id int64) (*models.SearchPattern, error)
+
+	// GetBySettingID retrieves all search patterns for a specific user settings.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - settingID: The unique identifier of the user settings
+	//
+	// Returns:
+	//   - A slice of search patterns associated with the user settings
+	//   - An empty slice if no patterns exist
+	//   - An error if retrieval fails
 	GetBySettingID(ctx context.Context, settingID int64) ([]*models.SearchPattern, error)
+
+	// Update updates a search pattern in the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - pattern: The search pattern to update
+	//
+	// Returns:
+	//   - NotFoundError if the pattern doesn't exist
+	//   - Other errors for database issues
 	Update(ctx context.Context, pattern *models.SearchPattern) error
+
+	// Delete removes a search pattern from the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the search pattern to delete
+	//
+	// Returns:
+	//   - NotFoundError if the pattern doesn't exist
+	//   - Other errors for database issues
 	Delete(ctx context.Context, id int64) error
+
+	// DeleteBySettingID removes all search patterns for a specific user settings.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - settingID: The unique identifier of the user settings
+	//
+	// Returns:
+	//   - An error if deletion fails
+	//   - nil if deletion succeeds
 	DeleteBySettingID(ctx context.Context, settingID int64) error
 }
 
-// PostgresPatternRepository is a PostgreSQL implementation of PatternRepository
+// PostgresPatternRepository is a PostgreSQL implementation of PatternRepository.
+// It implements all required methods using PostgreSQL-specific features
+// and error handling.
 type PostgresPatternRepository struct {
 	db *database.Pool
 }
 
-// NewPatternRepository creates a new PatternRepository
+// NewPatternRepository creates a new PatternRepository implementation for PostgreSQL.
+//
+// Parameters:
+//   - db: A connection pool for PostgreSQL database access
+//
+// Returns:
+//   - An implementation of the PatternRepository interface
 func NewPatternRepository(db *database.Pool) PatternRepository {
 	return &PostgresPatternRepository{
 		db: db,
 	}
 }
 
-// Create adds a new search pattern to the database
+// Create adds a new search pattern to the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - pattern: The search pattern to store
+//
+// Returns:
+//   - An error if creation fails
+//   - nil on successful creation
+//
+// The pattern ID will be populated after successful creation.
 func (r *PostgresPatternRepository) Create(ctx context.Context, pattern *models.SearchPattern) error {
 	// Start query timer
 	startTime := time.Now()
@@ -79,7 +169,16 @@ func (r *PostgresPatternRepository) Create(ctx context.Context, pattern *models.
 	return nil
 }
 
-// GetByID retrieves a search pattern by ID
+// GetByID retrieves a search pattern by ID.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the search pattern
+//
+// Returns:
+//   - The search pattern if found
+//   - NotFoundError if the pattern doesn't exist
+//   - Other errors for database issues
 func (r *PostgresPatternRepository) GetByID(ctx context.Context, id int64) (*models.SearchPattern, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -122,7 +221,16 @@ func (r *PostgresPatternRepository) GetByID(ctx context.Context, id int64) (*mod
 	return pattern, nil
 }
 
-// GetBySettingID retrieves all search patterns for a setting
+// GetBySettingID retrieves all search patterns for a setting.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - settingID: The unique identifier of the user settings
+//
+// Returns:
+//   - A slice of search patterns associated with the user settings
+//   - An empty slice if no patterns exist
+//   - An error if retrieval fails
 func (r *PostgresPatternRepository) GetBySettingID(ctx context.Context, settingID int64) ([]*models.SearchPattern, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -179,7 +287,15 @@ func (r *PostgresPatternRepository) GetBySettingID(ctx context.Context, settingI
 	return patterns, nil
 }
 
-// Update updates a search pattern in the database
+// Update updates a search pattern in the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - pattern: The search pattern to update
+//
+// Returns:
+//   - NotFoundError if the pattern doesn't exist
+//   - Other errors for database issues
 func (r *PostgresPatternRepository) Update(ctx context.Context, pattern *models.SearchPattern) error {
 	// Start query timer
 	startTime := time.Now()
@@ -230,7 +346,15 @@ func (r *PostgresPatternRepository) Update(ctx context.Context, pattern *models.
 	return nil
 }
 
-// Delete removes a search pattern from the database
+// Delete removes a search pattern from the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the search pattern to delete
+//
+// Returns:
+//   - NotFoundError if the pattern doesn't exist
+//   - Other errors for database issues
 func (r *PostgresPatternRepository) Delete(ctx context.Context, id int64) error {
 	// Start query timer
 	startTime := time.Now()
@@ -270,7 +394,15 @@ func (r *PostgresPatternRepository) Delete(ctx context.Context, id int64) error 
 	return nil
 }
 
-// DeleteBySettingID removes all search patterns for a setting
+// DeleteBySettingID removes all search patterns for a setting.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - settingID: The unique identifier of the user settings
+//
+// Returns:
+//   - An error if deletion fails
+//   - nil if deletion succeeds
 func (r *PostgresPatternRepository) DeleteBySettingID(ctx context.Context, settingID int64) error {
 	// Start query timer
 	startTime := time.Now()

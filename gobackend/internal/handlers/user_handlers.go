@@ -1,3 +1,4 @@
+// Package handlers provides HTTP request handlers for the HideMe API.
 package handlers
 
 import (
@@ -9,19 +10,42 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// UserHandler handles user-related routes
+// UserHandler handles HTTP requests related to user management.
+// It provides endpoints for viewing and updating user profiles,
+// changing passwords, and managing sessions.
 type UserHandler struct {
-	userService UserServiceInterface // Changed from *service.UserService
+	userService UserServiceInterface
 }
 
-// NewUserHandler creates a new UserHandler
-func NewUserHandler(userService UserServiceInterface) *UserHandler { // Changed parameter type
+// NewUserHandler creates a new UserHandler with the provided user service.
+//
+// Parameters:
+//   - userService: Service handling user operations
+//
+// Returns:
+//   - A properly initialized UserHandler
+func NewUserHandler(userService UserServiceInterface) *UserHandler {
 	return &UserHandler{
 		userService: userService,
 	}
 }
 
-// GetCurrentUser returns the current user's profile
+// GetCurrentUser returns the current user's profile.
+//
+// HTTP Method:
+//   - GET
+//
+// URL Path:
+//   - /api/users/me
+//
+// Requires:
+//   - Authentication: User must be logged in
+//
+// Responses:
+//   - 200 OK: User profile retrieved successfully
+//   - 401 Unauthorized: User not authenticated
+//   - 404 Not Found: User account no longer exists
+//   - 500 Internal Server Error: Server-side error
 func (h *UserHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -41,7 +65,26 @@ func (h *UserHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	utils.JSON(w, constants.StatusOK, user)
 }
 
-// UpdateUser handles updating the current user's profile
+// UpdateUser handles updating the current user's profile.
+//
+// HTTP Method:
+//   - PUT
+//
+// URL Path:
+//   - /api/users/me
+//
+// Requires:
+//   - Authentication: User must be logged in
+//
+// Request Body:
+//   - JSON object conforming to models.UserUpdate
+//
+// Responses:
+//   - 200 OK: User profile updated successfully
+//   - 400 Bad Request: Invalid request body
+//   - 401 Unauthorized: User not authenticated
+//   - 409 Conflict: Username or email already in use
+//   - 500 Internal Server Error: Server-side error
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -68,7 +111,30 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	utils.JSON(w, constants.StatusOK, user)
 }
 
-// ChangePassword handles changing the current user's password
+// ChangePassword handles changing the current user's password.
+//
+// HTTP Method:
+//   - POST
+//
+// URL Path:
+//   - /api/users/me/password
+//
+// Requires:
+//   - Authentication: User must be logged in
+//
+// Request Body:
+//   - JSON object with "current_password", "new_password", and "confirm_password" fields
+//
+// Responses:
+//   - 200 OK: Password changed successfully
+//   - 400 Bad Request: Invalid request body or passwords don't match
+//   - 401 Unauthorized: User not authenticated or current password incorrect
+//   - 500 Internal Server Error: Server-side error
+//
+// Security:
+//   - Requires the current password to verify user identity
+//   - Validates password strength
+//   - Confirms the new password with a confirmation field
 func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -104,7 +170,30 @@ func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DeleteAccount handles deleting the current user's account
+// DeleteAccount handles deleting the current user's account.
+//
+// HTTP Method:
+//   - DELETE
+//
+// URL Path:
+//   - /api/users/me
+//
+// Requires:
+//   - Authentication: User must be logged in
+//
+// Request Body:
+//   - JSON object with "password" field to verify identity
+//   - JSON object with "confirm" field set to "DELETE" to confirm deletion
+//
+// Responses:
+//   - 200 OK: Account deleted successfully
+//   - 400 Bad Request: Invalid request body or confirmation
+//   - 401 Unauthorized: User not authenticated or password incorrect
+//   - 500 Internal Server Error: Server-side error
+//
+// Security:
+//   - Requires the current password to verify user identity
+//   - Requires explicit confirmation text to prevent accidental deletion
 func (h *UserHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -139,7 +228,21 @@ func (h *UserHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CheckUsername checks if a username is available
+// CheckUsername checks if a username is available.
+//
+// HTTP Method:
+//   - GET
+//
+// URL Path:
+//   - /api/users/check-username
+//
+// Query Parameters:
+//   - username: The username to check
+//
+// Responses:
+//   - 200 OK: Check completed with availability information
+//   - 400 Bad Request: Missing username parameter
+//   - 500 Internal Server Error: Server-side error
 func (h *UserHandler) CheckUsername(w http.ResponseWriter, r *http.Request) {
 	// Get the username from the query
 	username := r.URL.Query().Get(constants.QueryParamUsername)
@@ -162,7 +265,21 @@ func (h *UserHandler) CheckUsername(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CheckEmail checks if an email is available
+// CheckEmail checks if an email is available.
+//
+// HTTP Method:
+//   - GET
+//
+// URL Path:
+//   - /api/users/check-email
+//
+// Query Parameters:
+//   - email: The email to check
+//
+// Responses:
+//   - 200 OK: Check completed with availability information
+//   - 400 Bad Request: Missing email parameter
+//   - 500 Internal Server Error: Server-side error
 func (h *UserHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
 	// Get the email from the query
 	email := r.URL.Query().Get(constants.QueryParamEmail)
@@ -185,7 +302,21 @@ func (h *UserHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetActiveSessions returns the current user's active sessions
+// GetActiveSessions returns the current user's active sessions.
+//
+// HTTP Method:
+//   - GET
+//
+// URL Path:
+//   - /api/users/me/sessions
+//
+// Requires:
+//   - Authentication: User must be logged in
+//
+// Responses:
+//   - 200 OK: Sessions retrieved successfully
+//   - 401 Unauthorized: User not authenticated
+//   - 500 Internal Server Error: Server-side error
 func (h *UserHandler) GetActiveSessions(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -205,7 +336,26 @@ func (h *UserHandler) GetActiveSessions(w http.ResponseWriter, r *http.Request) 
 	utils.JSON(w, constants.StatusOK, sessions)
 }
 
-// InvalidateSession invalidates a specific session
+// InvalidateSession invalidates a specific session.
+//
+// HTTP Method:
+//   - POST
+//
+// URL Path:
+//   - /api/users/me/sessions/invalidate
+//
+// Requires:
+//   - Authentication: User must be logged in
+//
+// Request Body:
+//   - JSON object with "session_id" field
+//
+// Responses:
+//   - 200 OK: Session invalidated successfully
+//   - 400 Bad Request: Invalid request body
+//   - 401 Unauthorized: User not authenticated
+//   - 404 Not Found: Session not found
+//   - 500 Internal Server Error: Server-side error
 func (h *UserHandler) InvalidateSession(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)

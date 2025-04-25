@@ -1,3 +1,10 @@
+// Package service provides business logic implementations for the HideMe application.
+// It contains services that orchestrate operations across repositories and implement
+// the core application functionality.
+//
+// This file implements the authentication service, which handles user registration,
+// authentication, token management, and API key operations. The service follows
+// security best practices for password handling, token validation, and session management.
 package service
 
 import (
@@ -15,7 +22,10 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// AuthService handles authentication operations
+// AuthService handles authentication operations for the application.
+// It provides methods for user registration, login, token management,
+// session tracking, and API key operations, with a focus on security
+// and proper credential handling.
 type AuthService struct {
 	userRepo    repository.UserRepository
 	sessionRepo repository.SessionRepository
@@ -25,7 +35,21 @@ type AuthService struct {
 	apiKeyCfg   *config.APIKeySettings
 }
 
-// NewAuthService creates a new AuthService
+// NewAuthService creates a new AuthService with the specified dependencies.
+//
+// Parameters:
+//   - userRepo: Repository for user data operations
+//   - sessionRepo: Repository for session management
+//   - apiKeyRepo: Repository for API key operations
+//   - jwtService: Service for JWT token generation and validation
+//   - passwordCfg: Configuration for password hashing and validation
+//   - apiKeyCfg: Configuration for API key generation and validation
+//
+// Returns:
+//   - A new AuthService instance with all dependencies initialized
+//
+// The auth service requires all these dependencies to properly manage
+// user authentication, session tracking, and API key operations.
 func NewAuthService(
 	userRepo repository.UserRepository,
 	sessionRepo repository.SessionRepository,
@@ -44,7 +68,23 @@ func NewAuthService(
 	}
 }
 
-// RegisterUser creates a new user account
+// RegisterUser creates a new user account with provided registration information.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - reg: Registration data including username, email, password, and confirmation
+//
+// Returns:
+//   - The created user (sanitized) if registration succeeds
+//   - ValidationError if passwords don't match or validation fails
+//   - DuplicateError if username or email is already taken
+//   - Other errors for database or hashing issues
+//
+// The method performs several validation steps:
+// 1. Verifies password and confirmation match
+// 2. Checks for existing users with the same username or email
+// 3. Securely hashes the password with a unique salt
+// 4. Creates and stores the new user record
 func (s *AuthService) RegisterUser(ctx context.Context, reg *models.UserRegistration) (*models.User, error) {
 	// Validate password match
 	if reg.Password != reg.ConfirmPassword {
@@ -91,7 +131,26 @@ func (s *AuthService) RegisterUser(ctx context.Context, reg *models.UserRegistra
 	return user.Sanitize(), nil
 }
 
-// AuthenticateUser verifies user credentials and returns authentication tokens
+// AuthenticateUser verifies user credentials and returns authentication tokens.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - creds: User credentials containing username/email and password
+//
+// Returns:
+//   - The authenticated user (sanitized)
+//   - Access token for API authorization
+//   - Refresh token for obtaining new access tokens
+//   - InvalidCredentialsError if authentication fails
+//   - ValidationError if neither username nor email is provided
+//   - Other errors for database or token generation issues
+//
+// The method performs the following operations:
+// 1. Locates the user by username or email
+// 2. Verifies the provided password against the stored hash
+// 3. Generates access and refresh tokens
+// 4. Creates a session record for the refresh token
+// 5. Logs the successful authentication
 func (s *AuthService) AuthenticateUser(ctx context.Context, creds *models.UserCredentials) (*models.User, string, string, error) {
 	var user *models.User
 	var err error
@@ -146,7 +205,26 @@ func (s *AuthService) AuthenticateUser(ctx context.Context, creds *models.UserCr
 	return user.Sanitize(), accessToken, refreshToken, nil
 }
 
-// RefreshTokens validates a refresh token and generates new tokens
+// RefreshTokens validates a refresh token and generates new tokens.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - refreshToken: The refresh token to validate
+//
+// Returns:
+//   - A new access token
+//   - A new refresh token
+//   - InvalidTokenError if the token is invalid or expired
+//   - Other errors for database or token generation issues
+//
+// The method performs the following operations:
+// 1. Extracts the JWT ID from the refresh token
+// 2. Verifies the token exists in the active sessions
+// 3. Validates the token's signature and claims
+// 4. Retrieves the associated user
+// 5. Deletes the old session
+// 6. Generates new access and refresh tokens
+// 7. Creates a new session for the new refresh token
 func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (string, string, error) {
 	// Parse the refresh token without validating to get the JWT ID
 	jwtID, err := s.jwtService.ParseTokenWithoutValidation(refreshToken)
@@ -211,7 +289,21 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (s
 	return accessToken, newRefreshToken, nil
 }
 
-// Logout invalidates a user's session
+// Logout invalidates a user's session by removing the refresh token session.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - refreshToken: The refresh token to invalidate
+//
+// Returns:
+//   - InvalidTokenError if the token cannot be parsed
+//   - Other errors for database issues
+//   - nil on successful logout or if the session was already invalidated
+//
+// The method performs the following operations:
+// 1. Extracts the JWT ID from the refresh token
+// 2. Deletes the session associated with the JWT ID
+// 3. Returns success even if the session was already deleted (idempotent)
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	// Parse the refresh token without validating to get the JWT ID
 	jwtID, err := s.jwtService.ParseTokenWithoutValidation(refreshToken)
@@ -231,7 +323,17 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	return nil
 }
 
-// LogoutAll invalidates all of a user's sessions
+// LogoutAll invalidates all of a user's sessions.
+// This is a security feature that allows users to terminate all active sessions
+// across all devices, useful in case of a suspected security breach.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose sessions should be invalidated
+//
+// Returns:
+//   - An error if session deletion fails
+//   - nil on successful invalidation of all sessions
 func (s *AuthService) LogoutAll(ctx context.Context, userID int64) error {
 	// Delete all sessions for the user
 	if err := s.sessionRepo.DeleteByUserID(ctx, userID); err != nil {
@@ -241,7 +343,24 @@ func (s *AuthService) LogoutAll(ctx context.Context, userID int64) error {
 	return nil
 }
 
-// CreateAPIKey generates a new API key for a user
+// CreateAPIKey generates a new API key for a user.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user who will own the API key
+//   - name: A human-readable name/description for the API key
+//   - duration: How long the API key should remain valid
+//
+// Returns:
+//   - The raw API key (only returned once at creation time)
+//   - The API key metadata (without sensitive information)
+//   - An error if key generation or storage fails
+//
+// The method performs the following operations:
+// 1. Generates a new API key using secure random data
+// 2. Creates a database record with the key's hash (not the key itself)
+// 3. Logs the key creation event
+// 4. Returns the raw key and metadata to the caller
 func (s *AuthService) CreateAPIKey(ctx context.Context, userID int64, name string, duration time.Duration) (string, *models.APIKey, error) {
 	// Generate a new API key
 	apiKeyService := auth.NewAPIKeyService(s.apiKeyCfg)
@@ -269,7 +388,17 @@ func (s *AuthService) CreateAPIKey(ctx context.Context, userID int64, name strin
 	return rawKey, response, nil
 }
 
-// ListAPIKeys retrieves all API keys for a user
+// ListAPIKeys retrieves all API keys for a user.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose API keys should be returned
+//
+// Returns:
+//   - A slice of API keys (without sensitive hash information)
+//   - An error if retrieval fails
+//
+// The method sanitizes each API key to remove the hash before returning.
 func (s *AuthService) ListAPIKeys(ctx context.Context, userID int64) ([]*models.APIKey, error) {
 	// Get all API keys for the user
 	apiKeys, err := s.apiKeyRepo.GetByUserID(ctx, userID)
@@ -288,7 +417,21 @@ func (s *AuthService) ListAPIKeys(ctx context.Context, userID int64) ([]*models.
 	return result, nil
 }
 
-// DeleteAPIKey revokes an API key
+// DeleteAPIKey revokes an API key.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user who owns the API key
+//   - keyID: The ID of the API key to delete
+//
+// Returns:
+//   - ForbiddenError if the API key doesn't belong to the user
+//   - NotFoundError if the API key doesn't exist
+//   - Other errors for database issues
+//   - nil on successful deletion
+//
+// The method verifies ownership of the API key before deletion to prevent
+// unauthorized deletion of keys belonging to other users.
 func (s *AuthService) DeleteAPIKey(ctx context.Context, userID int64, keyID string) error {
 	// Get the API key to verify ownership
 	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
@@ -311,7 +454,25 @@ func (s *AuthService) DeleteAPIKey(ctx context.Context, userID int64, keyID stri
 	return nil
 }
 
-// VerifyAPIKey verifies an API key and returns the associated user
+// VerifyAPIKey verifies an API key and returns the associated user.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - apiKeyString: The API key to verify
+//
+// Returns:
+//   - The user associated with the API key (sanitized)
+//   - InvalidTokenError if the key format is invalid
+//   - ExpiredTokenError if the key has expired
+//   - NotFoundError if the key doesn't exist
+//   - Other errors for database issues
+//
+// The method performs the following operations:
+// 1. Parses the API key to extract the ID and secret
+// 2. Hashes the key for secure comparison
+// 3. Verifies the key against the database
+// 4. Retrieves the associated user
+// 5. Logs the verification event
 func (s *AuthService) VerifyAPIKey(ctx context.Context, apiKeyString string) (*models.User, error) {
 	// Parse the API key
 	keyID, _, err := auth.ParseAPIKey(apiKeyString)
@@ -339,12 +500,28 @@ func (s *AuthService) VerifyAPIKey(ctx context.Context, apiKeyString string) (*m
 	return user.Sanitize(), nil
 }
 
-// CleanupExpiredSessions removes expired sessions from the database
+// CleanupExpiredSessions removes expired sessions from the database.
+// This is typically called periodically as a maintenance task.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//
+// Returns:
+//   - The number of expired sessions deleted
+//   - An error if deletion fails
 func (s *AuthService) CleanupExpiredSessions(ctx context.Context) (int64, error) {
 	return s.sessionRepo.DeleteExpired(ctx)
 }
 
-// CleanupExpiredAPIKeys removes expired API keys from the database
+// CleanupExpiredAPIKeys removes expired API keys from the database.
+// This is typically called periodically as a maintenance task.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//
+// Returns:
+//   - The number of expired API keys deleted
+//   - An error if deletion fails
 func (s *AuthService) CleanupExpiredAPIKeys(ctx context.Context) (int64, error) {
 	return s.apiKeyRepo.DeleteExpired(ctx)
 }

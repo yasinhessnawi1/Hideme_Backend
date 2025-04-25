@@ -1,3 +1,13 @@
+// Package gdprlog provides GDPR-compliant logging functionalities.
+//
+// This package implements a GDPR-compliant logging system that categorizes logs based on
+// their data content, routes them to appropriate storage locations with proper permissions,
+// and provides utilities for data subject access requests. The system ensures logs containing
+// personal or sensitive data are handled according to data protection regulations.
+//
+// The logging system wraps the zerolog package, extending it with GDPR-specific features
+// such as log categorization, sanitization, and retention policies. This enables applications
+// to maintain comprehensive logging while ensuring compliance with data protection requirements.
 package gdprlog
 
 import (
@@ -14,19 +24,24 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
 )
 
-// LogCategory represents the GDPR classification of a log
+// LogCategory represents the GDPR classification of a log.
+// Logs are categorized based on the types of data they contain, with different
+// handling requirements for each category.
 type LogCategory int
 
 const (
-	// StandardLog contains no personal data
+	// StandardLog contains no personal data and has minimal restrictions.
 	StandardLog LogCategory = iota
-	// PersonalLog contains personal data (like usernames, IDs)
+	// PersonalLog contains personal data (like usernames, IDs) and requires protection.
 	PersonalLog
-	// SensitiveLog contains sensitive personal data (passwords, auth tokens)
+	// SensitiveLog contains sensitive personal data (passwords, auth tokens) and requires
+	// the highest level of protection.
 	SensitiveLog
 )
 
-// GDPRLogger wraps zerolog loggers with GDPR compliance features
+// GDPRLogger wraps zerolog loggers with GDPR compliance features.
+// It maintains separate loggers for different categories of data and provides
+// methods to detect, sanitize, and appropriately log data based on its sensitivity.
 type GDPRLogger struct {
 	standardLogger  zerolog.Logger
 	personalLogger  zerolog.Logger
@@ -34,7 +49,16 @@ type GDPRLogger struct {
 	config          *config.GDPRLoggingSettings
 }
 
-// NewGDPRLogger creates a new GDPR-compliant logger
+// NewGDPRLogger creates a new GDPR-compliant logger.
+// It sets up appropriate log directories with proper permissions and initializes
+// the different category loggers.
+//
+// Parameters:
+//   - cfg: Configuration settings for the GDPR logging system
+//
+// Returns:
+//   - *GDPRLogger: A configured GDPR-compliant logger
+//   - error: An error if logger creation fails, nil otherwise
 func NewGDPRLogger(cfg *config.GDPRLoggingSettings) (*GDPRLogger, error) {
 	// Ensure log directories exist
 	for _, dir := range []string{
@@ -89,7 +113,17 @@ func NewGDPRLogger(cfg *config.GDPRLoggingSettings) (*GDPRLogger, error) {
 	}, nil
 }
 
-// createLogWriter creates a file writer for logs with proper permissions
+// createLogWriter creates a file writer for logs with proper permissions.
+// It ensures log files are created with appropriate access restrictions based on the
+// sensitivity of the data they will contain.
+//
+// Parameters:
+//   - path: The file path where the log will be written
+//   - perm: File permissions to be set on the log file
+//
+// Returns:
+//   - io.Writer: A writer for the log file
+//   - error: An error if writer creation fails, nil otherwise
 func createLogWriter(path string, perm os.FileMode) (io.Writer, error) {
 	return os.OpenFile(
 		path,
@@ -98,7 +132,14 @@ func createLogWriter(path string, perm os.FileMode) (io.Writer, error) {
 	)
 }
 
-// DetermineLogCategory analyzes log data to determine its GDPR category
+// DetermineLogCategory analyzes log data to determine its GDPR category.
+// It examines the fields in a log entry to categorize it as standard, personal, or sensitive.
+//
+// Parameters:
+//   - fields: Map of key-value pairs that make up the log fields
+//
+// Returns:
+//   - LogCategory: The determined category (StandardLog, PersonalLog, or SensitiveLog)
 func (gl *GDPRLogger) DetermineLogCategory(fields map[string]interface{}) LogCategory {
 	// Check for sensitive data first
 	for key, value := range fields {
@@ -118,7 +159,15 @@ func (gl *GDPRLogger) DetermineLogCategory(fields map[string]interface{}) LogCat
 	return StandardLog
 }
 
-// SanitizeLogFields removes or masks sensitive data based on configuration
+// SanitizeLogFields removes or masks sensitive data based on configuration.
+// It applies different levels of sanitization based on the configuration setting,
+// with higher levels providing greater anonymization of personal and sensitive data.
+//
+// Parameters:
+//   - fields: Map of key-value pairs that make up the log fields
+//
+// Returns:
+//   - map[string]interface{}: A new map with sanitized values
 func (gl *GDPRLogger) SanitizeLogFields(fields map[string]interface{}) map[string]interface{} {
 	sanitizationLevel := strings.ToLower(gl.config.LogSanitizationLevel)
 	if sanitizationLevel == "none" {
@@ -163,7 +212,16 @@ func (gl *GDPRLogger) SanitizeLogFields(fields map[string]interface{}) map[strin
 	return sanitizedFields
 }
 
-// MaskPersonalData applies appropriate masking based on the field type and name
+// MaskPersonalData applies appropriate masking based on the field type and name.
+// It uses different masking strategies based on the data type and field name
+// to preserve useful information while protecting personal data.
+//
+// Parameters:
+//   - fieldName: The name of the field being masked
+//   - value: The value to mask, which can be of various types
+//
+// Returns:
+//   - interface{}: The masked value, with type preserved where possible
 func MaskPersonalData(fieldName string, value interface{}) interface{} {
 	// Always completely mask user_id field regardless of type
 	if strings.ToLower(fieldName) == "user_id" {
@@ -227,7 +285,14 @@ func MaskPersonalData(fieldName string, value interface{}) interface{} {
 	return "***"
 }
 
-// MaskEmail masks an email address, showing only the first 2 and last 2 characters of the username
+// MaskEmail masks an email address, showing only the first 2 and last 2 characters of the username.
+// This preserves some identifiability for debugging while protecting the full email address.
+//
+// Parameters:
+//   - email: The email address to mask
+//
+// Returns:
+//   - string: The masked email address
 func MaskEmail(email string) string {
 	parts := strings.Split(email, "@")
 	if len(parts) != 2 {
@@ -246,7 +311,14 @@ func MaskEmail(email string) string {
 	return username[0:2] + strings.Repeat("*", len(username)-4) + username[len(username)-2:] + "@" + domain
 }
 
-// Log creates a log event with GDPR compliance
+// Log creates a log event with GDPR compliance.
+// It determines the appropriate log category, routes the log to the correct logger,
+// and applies sanitization to ensure sensitive data is properly protected.
+//
+// Parameters:
+//   - level: The zerolog level for the log (debug, info, warn, etc.)
+//   - msg: The log message
+//   - fields: Map of key-value pairs that make up the log fields
 func (gl *GDPRLogger) Log(level zerolog.Level, msg string, fields map[string]interface{}) {
 	// Skip if below global log level
 	if level < zerolog.GlobalLevel() {
@@ -300,7 +372,16 @@ func (gl *GDPRLogger) Log(level zerolog.Level, msg string, fields map[string]int
 	}
 }
 
-// addField adds a field to a zerolog event with the appropriate type
+// addField adds a field to a zerolog event with the appropriate type.
+// It ensures fields are added with their correct type to maintain proper serialization.
+//
+// Parameters:
+//   - event: The zerolog event to add the field to
+//   - key: The field name
+//   - value: The field value, which can be of various types
+//
+// Returns:
+//   - *zerolog.Event: The updated zerolog event with the field added
 func addField(event *zerolog.Event, key string, value interface{}) *zerolog.Event {
 	switch v := value.(type) {
 	case string:
@@ -326,22 +407,40 @@ func addField(event *zerolog.Event, key string, value interface{}) *zerolog.Even
 	}
 }
 
-// Debug logs at debug level with GDPR compliance
+// Debug logs at debug level with GDPR compliance.
+//
+// Parameters:
+//   - msg: The log message
+//   - fields: Map of key-value pairs that make up the log fields
 func (gl *GDPRLogger) Debug(msg string, fields map[string]interface{}) {
 	gl.Log(zerolog.DebugLevel, msg, fields)
 }
 
-// Info logs at info level with GDPR compliance
+// Info logs at info level with GDPR compliance.
+//
+// Parameters:
+//   - msg: The log message
+//   - fields: Map of key-value pairs that make up the log fields
 func (gl *GDPRLogger) Info(msg string, fields map[string]interface{}) {
 	gl.Log(zerolog.InfoLevel, msg, fields)
 }
 
-// Warn logs at warn level with GDPR compliance
+// Warn logs at warn level with GDPR compliance.
+//
+// Parameters:
+//   - msg: The log message
+//   - fields: Map of key-value pairs that make up the log fields
 func (gl *GDPRLogger) Warn(msg string, fields map[string]interface{}) {
 	gl.Log(zerolog.WarnLevel, msg, fields)
 }
 
-// Error logs at error level with GDPR compliance
+// Error logs at error level with GDPR compliance.
+// It automatically adds the error to the log fields if provided.
+//
+// Parameters:
+//   - msg: The log message
+//   - err: The error that occurred, can be nil
+//   - fields: Map of key-value pairs that make up the log fields
 func (gl *GDPRLogger) Error(msg string, err error, fields map[string]interface{}) {
 	if fields == nil {
 		fields = make(map[string]interface{})
@@ -355,13 +454,25 @@ func (gl *GDPRLogger) Error(msg string, err error, fields map[string]interface{}
 	gl.Log(zerolog.ErrorLevel, msg, fields)
 }
 
-// Fatal logs at fatal level with GDPR compliance and then exits
+// Fatal logs at fatal level with GDPR compliance and then exits.
+// This function does not return as it calls os.Exit(1) after logging.
+//
+// Parameters:
+//   - msg: The log message
+//   - fields: Map of key-value pairs that make up the log fields
 func (gl *GDPRLogger) Fatal(msg string, fields map[string]interface{}) {
 	gl.Log(zerolog.FatalLevel, msg, fields)
 	os.Exit(1)
 }
 
-// WithContext returns a new GDPRLogger with context values added to the logging context
+// WithContext returns a new GDPRLogger with context values added to the logging context.
+// This is useful for carrying request-specific information through the logging chain.
+//
+// Parameters:
+//   - ctx: The context containing values to add to the logging context
+//
+// Returns:
+//   - *GDPRLogger: A new logger with context values added
 func (gl *GDPRLogger) WithContext(ctx context.Context) *GDPRLogger {
 	// Extract values from context that might be useful for logging
 	contextFields := make(map[string]interface{})

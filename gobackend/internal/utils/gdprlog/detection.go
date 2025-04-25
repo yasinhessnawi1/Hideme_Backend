@@ -1,3 +1,9 @@
+// Package gdprlog provides GDPR-compliant logging functionalities.
+//
+// This package implements mechanisms for detecting, categorizing, and sanitizing
+// personal and sensitive data in logs to meet GDPR compliance requirements.
+// It includes pattern matching for common sensitive data, field detection, and
+// sanitization utilities to create logs that respect data protection regulations.
 package gdprlog
 
 import (
@@ -8,19 +14,22 @@ import (
 
 // Regular expressions for detecting various types of personal and sensitive data
 var (
-	// Email pattern for validation and detection
+	// emailPattern matches valid email address formats for detection and validation.
 	emailPattern = regexp.MustCompile(`(?i)[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`)
 
-	// Credit card pattern - matches common credit card formats
+	// creditCardPattern matches common credit card number formats, accounting for
+	// potential spaces or dashes between number groups.
 	creditCardPattern = regexp.MustCompile(`(?i)(?:\d[ -]*?){13,16}`)
 
-	// Password-related patterns
+	// passwordPattern detects password-related field names and content.
 	passwordPattern = regexp.MustCompile(`(?i)passw(or)?d|pwd`)
 
-	// Authentication-related patterns
+	// authPattern detects authentication-related field names and content,
+	// such as tokens, API keys, and credentials.
 	authPattern = regexp.MustCompile(`(?i)auth|token|secret|key|credential|jwt|bearer`)
 
-	// Personal data indicators
+	// personalDataIndicators contains patterns that identify common personal data fields.
+	// These are used to detect personally identifiable information in logs.
 	personalDataIndicators = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)\bname\b`),
 		regexp.MustCompile(`(?i)\buser(name)?\b`),
@@ -36,7 +45,8 @@ var (
 		regexp.MustCompile(`(?i)\bsession[_\s-]?id\b`),
 	}
 
-	// Sensitive data indicators beyond passwords/auth
+	// sensitiveDataIndicators contains patterns that identify sensitive data beyond
+	// passwords and authentication tokens, such as financial and health information.
 	sensitiveDataIndicators = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)\bcredit[_\s-]?card\b`),
 		regexp.MustCompile(`(?i)\bcard[_\s-]?number\b`),
@@ -55,14 +65,16 @@ var (
 	}
 )
 
-// Field names that commonly contain sensitive information
+// SensitiveFieldNames is a list of field names that commonly contain sensitive information.
+// This list is used to identify fields that should be redacted or specially handled in logs.
 var SensitiveFieldNames = []string{
 	"password", "token", "key", "secret", "auth_token", "access_token",
 	"refresh_token", "jwt", "api_key", "credit_card", "card_number",
 	"cvv", "ssn", "social_security", "hash", "salt",
 }
 
-// Field names that commonly contain personal information
+// PersonalFieldNames is a list of field names that commonly contain personal information.
+// These fields identify individuals but are generally less sensitive than those in SensitiveFieldNames.
 var PersonalFieldNames = []string{
 	"user_id", "username", "email", "ip_address", "ip", "address",
 	"phone", "name", "full_name", "first_name", "last_name", "zip_code",
@@ -70,7 +82,15 @@ var PersonalFieldNames = []string{
 	"date_of_birth", "session_id", "customer_id", "client_id",
 }
 
-// IsSensitiveField checks if a field and its value appears to contain sensitive data
+// IsSensitiveField checks if a field and its value appears to contain sensitive data.
+// It examines both the field name and its value against known patterns and lists of sensitive data.
+//
+// Parameters:
+//   - fieldName: The name of the field to check
+//   - value: The value of the field, which can be of any type
+//
+// Returns:
+//   - bool: true if the field appears to contain sensitive data, false otherwise
 func IsSensitiveField(fieldName string, value interface{}) bool {
 	// Check field name against known sensitive fields
 	lowerName := strings.ToLower(fieldName)
@@ -92,9 +112,8 @@ func IsSensitiveField(fieldName string, value interface{}) bool {
 			return false
 		}
 
-		// Credit card check
+		// Credit card check with Luhn validation to reduce false positives
 		if creditCardPattern.MatchString(strValue) {
-			// Simple Luhn check to reduce false positives
 			cleaned := strings.ReplaceAll(strings.ReplaceAll(strValue, " ", ""), "-", "")
 			if len(cleaned) >= 13 && len(cleaned) <= 19 && couldBeCreditCard(cleaned) {
 				return true
@@ -112,7 +131,15 @@ func IsSensitiveField(fieldName string, value interface{}) bool {
 	return false
 }
 
-// IsPersonalField checks if a field and its value appears to contain personal data
+// IsPersonalField checks if a field and its value appears to contain personal data.
+// It examines both the field name and its value against known patterns and lists of personal data.
+//
+// Parameters:
+//   - fieldName: The name of the field to check
+//   - value: The value of the field, which can be of any type
+//
+// Returns:
+//   - bool: true if the field appears to contain personal data, false otherwise
 func IsPersonalField(fieldName string, value interface{}) bool {
 	// Check field name against known personal fields
 	lowerName := strings.ToLower(fieldName)
@@ -139,7 +166,15 @@ func IsPersonalField(fieldName string, value interface{}) bool {
 	return false
 }
 
-// IsEmailField checks if a field name or value appears to be an email address
+// IsEmailField checks if a field name or value appears to be an email address.
+// It checks both the field name for "email" and the value against email regex patterns.
+//
+// Parameters:
+//   - fieldName: The name of the field to check
+//   - value: The value of the field, which can be of any type
+//
+// Returns:
+//   - bool: true if the field appears to be an email, false otherwise
 func IsEmailField(fieldName string, value interface{}) bool {
 	// Check if field name contains "email"
 	if strings.Contains(strings.ToLower(fieldName), "email") {
@@ -154,7 +189,14 @@ func IsEmailField(fieldName string, value interface{}) bool {
 	return false
 }
 
-// couldBeCreditCard performs a basic validation check to see if a string could be a credit card number
+// couldBeCreditCard performs a basic validation check to see if a string could be a credit card number.
+// It implements the Luhn algorithm to reduce false positives when detecting credit card numbers.
+//
+// Parameters:
+//   - number: A string containing only digits to be validated
+//
+// Returns:
+//   - bool: true if the number passes the Luhn check and could be a valid credit card, false otherwise
 func couldBeCreditCard(number string) bool {
 	// Basic Luhn algorithm check (used by credit cards)
 	sum := 0
@@ -184,7 +226,14 @@ func couldBeCreditCard(number string) bool {
 	return sum%10 == 0
 }
 
-// ContainsPersonalData checks a string for personal data indicators
+// ContainsPersonalData checks a string for personal data indicators.
+// This is useful for analyzing arbitrary text fields or messages for potential personal data.
+//
+// Parameters:
+//   - s: The string to check for personal data
+//
+// Returns:
+//   - bool: true if the string appears to contain personal data, false otherwise
 func ContainsPersonalData(s string) bool {
 	// Skip very short strings
 	if len(s) < 5 {
@@ -206,7 +255,14 @@ func ContainsPersonalData(s string) bool {
 	return false
 }
 
-// ContainsSensitiveData checks a string for sensitive data indicators
+// ContainsSensitiveData checks a string for sensitive data indicators.
+// This is useful for analyzing arbitrary text fields or messages for potential sensitive data.
+//
+// Parameters:
+//   - s: The string to check for sensitive data
+//
+// Returns:
+//   - bool: true if the string appears to contain sensitive data, false otherwise
 func ContainsSensitiveData(s string) bool {
 	// Skip very short strings
 	if len(s) < 5 {
@@ -236,7 +292,14 @@ func ContainsSensitiveData(s string) bool {
 	return false
 }
 
-// ToSafeString converts a value to a string safely for logging purposes
+// ToSafeString converts a value to a string safely for logging purposes.
+// It handles nil values and provides consistent string representation.
+//
+// Parameters:
+//   - value: The value to convert to a string, which can be of any type or nil
+//
+// Returns:
+//   - string: A string representation of the value that is safe for logging
 func ToSafeString(value interface{}) string {
 	if value == nil {
 		return "nil"

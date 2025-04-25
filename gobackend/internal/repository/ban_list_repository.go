@@ -1,3 +1,10 @@
+// Package repository provides data access interfaces and implementations for the HideMe application.
+// It follows the repository pattern to abstract database operations and provide a clean API
+// for data persistence operations.
+//
+// This file implements the ban list repository, which manages collections of words that should be
+// excluded from sensitive information detection. Ban lists help reduce false positives by explicitly
+// marking certain terms as non-sensitive in a user's context.
 package repository
 
 import (
@@ -16,33 +23,145 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// BanListRepository defines methods for interacting with ban lists
+// BanListRepository defines methods for interacting with ban lists in the database.
+// It provides operations for managing lists of words that should be excluded from
+// sensitive information detection, helping to customize detection algorithms
+// for each user's specific needs.
 type BanListRepository interface {
+	// GetByID retrieves a ban list by its unique identifier.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the ban list
+	//
+	// Returns:
+	//   - The ban list if found
+	//   - NotFoundError if the ban list doesn't exist
+	//   - Other errors for database issues
 	GetByID(ctx context.Context, id int64) (*models.BanList, error)
+
+	// GetBySettingID retrieves a ban list associated with specific user settings.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - settingID: The ID of the user settings
+	//
+	// Returns:
+	//   - The ban list if found
+	//   - NotFoundError if no ban list exists for the settings
+	//   - Other errors for database issues
 	GetBySettingID(ctx context.Context, settingID int64) (*models.BanList, error)
+
+	// CreateBanList creates a new ban list for specific user settings.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - settingID: The ID of the user settings to associate with the ban list
+	//
+	// Returns:
+	//   - The newly created ban list
+	//   - DuplicateError if a ban list already exists for the settings
+	//   - Other errors for database issues
 	CreateBanList(ctx context.Context, settingID int64) (*models.BanList, error)
+
+	// Delete removes a ban list and all its words.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the ban list to delete
+	//
+	// Returns:
+	//   - NotFoundError if the ban list doesn't exist
+	//   - Other errors for database issues
 	Delete(ctx context.Context, id int64) error
 
 	// Ban list word operations
+
+	// GetBanListWords retrieves all words in a ban list.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - banListID: The unique identifier of the ban list
+	//
+	// Returns:
+	//   - A slice of words in the ban list
+	//   - An empty slice if the ban list has no words
+	//   - An error if retrieval fails
 	GetBanListWords(ctx context.Context, banListID int64) ([]string, error)
+
+	// AddWords adds words to a ban list.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - banListID: The unique identifier of the ban list
+	//   - words: The words to add to the ban list
+	//
+	// Returns:
+	//   - An error if addition fails
+	//   - nil if addition succeeds or there were no words to add
+	//
+	// This method uses an upsert approach, so calling it with existing words
+	// will not cause errors.
 	AddWords(ctx context.Context, banListID int64, words []string) error
+
+	// RemoveWords removes words from a ban list.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - banListID: The unique identifier of the ban list
+	//   - words: The words to remove from the ban list
+	//
+	// Returns:
+	//   - An error if removal fails
+	//   - nil if removal succeeds or there were no words to remove
+	//
+	// This method is idempotent - removing words that don't exist is not an error.
 	RemoveWords(ctx context.Context, banListID int64, words []string) error
+
+	// WordExists checks if a word exists in a ban list.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - banListID: The unique identifier of the ban list
+	//   - word: The word to check
+	//
+	// Returns:
+	//   - true if the word exists in the ban list
+	//   - false if the word does not exist in the ban list
+	//   - An error if the check fails
 	WordExists(ctx context.Context, banListID int64, word string) (bool, error)
 }
 
-// PostgresBanListRepository is a PostgreSQL implementation of BanListRepository
+// PostgresBanListRepository is a PostgreSQL implementation of BanListRepository.
+// It implements all required methods using PostgreSQL-specific features
+// and error handling.
 type PostgresBanListRepository struct {
 	db *database.Pool
 }
 
-// NewBanListRepository creates a new BanListRepository
+// NewBanListRepository creates a new BanListRepository implementation for PostgreSQL.
+//
+// Parameters:
+//   - db: A connection pool for PostgreSQL database access
+//
+// Returns:
+//   - An implementation of the BanListRepository interface
 func NewBanListRepository(db *database.Pool) BanListRepository {
 	return &PostgresBanListRepository{
 		db: db,
 	}
 }
 
-// GetByID retrieves a ban list by ID
+// GetByID retrieves a ban list by ID.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the ban list
+//
+// Returns:
+//   - The ban list if found
+//   - NotFoundError if the ban list doesn't exist
+//   - Other errors for database issues
 func (r *PostgresBanListRepository) GetByID(ctx context.Context, id int64) (*models.BanList, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -79,7 +198,16 @@ func (r *PostgresBanListRepository) GetByID(ctx context.Context, id int64) (*mod
 	return banList, nil
 }
 
-// GetBySettingID retrieves a ban list by setting ID
+// GetBySettingID retrieves a ban list by setting ID.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - settingID: The ID of the user settings
+//
+// Returns:
+//   - The ban list if found
+//   - NotFoundError if no ban list exists for the settings
+//   - Other errors for database issues
 func (r *PostgresBanListRepository) GetBySettingID(ctx context.Context, settingID int64) (*models.BanList, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -116,7 +244,16 @@ func (r *PostgresBanListRepository) GetBySettingID(ctx context.Context, settingI
 	return banList, nil
 }
 
-// CreateBanList creates a new ban list for a setting
+// CreateBanList creates a new ban list for a setting.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - settingID: The ID of the user settings to associate with the ban list
+//
+// Returns:
+//   - The newly created ban list
+//   - DuplicateError if a ban list already exists for the settings
+//   - Other errors for database issues
 func (r *PostgresBanListRepository) CreateBanList(ctx context.Context, settingID int64) (*models.BanList, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -164,7 +301,16 @@ func (r *PostgresBanListRepository) CreateBanList(ctx context.Context, settingID
 	return banList, nil
 }
 
-// Delete removes a ban list and all its words
+// Delete removes a ban list and all its words.
+// This operation uses a transaction to ensure both the ban list and its words are deleted atomically.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the ban list to delete
+//
+// Returns:
+//   - NotFoundError if the ban list doesn't exist
+//   - Other errors for database issues
 func (r *PostgresBanListRepository) Delete(ctx context.Context, id int64) error {
 	// Start query timer
 	startTime := time.Now()
@@ -212,7 +358,16 @@ func (r *PostgresBanListRepository) Delete(ctx context.Context, id int64) error 
 	})
 }
 
-// GetBanListWords retrieves all words in a ban list
+// GetBanListWords retrieves all words in a ban list.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - banListID: The unique identifier of the ban list
+//
+// Returns:
+//   - A slice of words in the ban list
+//   - An empty slice if the ban list has no words
+//   - An error if retrieval fails
 func (r *PostgresBanListRepository) GetBanListWords(ctx context.Context, banListID int64) ([]string, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -262,7 +417,18 @@ func (r *PostgresBanListRepository) GetBanListWords(ctx context.Context, banList
 	return words, nil
 }
 
-// AddWords adds words to a ban list
+// AddWords adds words to a ban list.
+// This method uses a transaction to ensure atomicity and an upsert approach
+// to handle duplicate words gracefully.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - banListID: The unique identifier of the ban list
+//   - words: The words to add to the ban list
+//
+// Returns:
+//   - An error if addition fails
+//   - nil if addition succeeds or there were no words to add
 func (r *PostgresBanListRepository) AddWords(ctx context.Context, banListID int64, words []string) error {
 	if len(words) == 0 {
 		return nil
@@ -305,7 +471,18 @@ func (r *PostgresBanListRepository) AddWords(ctx context.Context, banListID int6
 	})
 }
 
-// RemoveWords removes words from a ban list
+// RemoveWords removes words from a ban list.
+// This method uses a transaction to ensure atomicity and is idempotent -
+// removing words that don't exist is not an error.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - banListID: The unique identifier of the ban list
+//   - words: The words to remove from the ban list
+//
+// Returns:
+//   - An error if removal fails
+//   - nil if removal succeeds or there were no words to remove
 func (r *PostgresBanListRepository) RemoveWords(ctx context.Context, banListID int64, words []string) error {
 	if len(words) == 0 {
 		return nil
@@ -347,7 +524,17 @@ func (r *PostgresBanListRepository) RemoveWords(ctx context.Context, banListID i
 	})
 }
 
-// WordExists checks if a word exists in a ban list
+// WordExists checks if a word exists in a ban list.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - banListID: The unique identifier of the ban list
+//   - word: The word to check
+//
+// Returns:
+//   - true if the word exists in the ban list
+//   - false if the word does not exist in the ban list
+//   - An error if the check fails
 func (r *PostgresBanListRepository) WordExists(ctx context.Context, banListID int64, word string) (bool, error) {
 	// Start query timer
 	startTime := time.Now()

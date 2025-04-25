@@ -1,3 +1,10 @@
+// Package server provides HTTP server implementation for the HideMe application.
+// It handles routing, middleware configuration, and server lifecycle management.
+//
+// The server package follows a structured initialization approach with dependency injection
+// and proper lifecycle management. It handles graceful shutdown, maintenance tasks, and
+// GDPR-compliant logging. The server is designed to be secure, maintainable, and resilient,
+// with appropriate error handling and recovery mechanisms.
 package server
 
 import (
@@ -25,32 +32,73 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils/gdprlog"
 )
 
-// Handlers contains all HTTP handlers for the application
+// Handlers contains all HTTP handlers for the application.
+// It centralizes handler management for consistent request processing
+// and simplifies dependency injection throughout the application.
 type Handlers struct {
-	AuthHandler     *handlers.AuthHandler
-	UserHandler     *handlers.UserHandler
+	// AuthHandler manages authentication-related endpoints
+	AuthHandler *handlers.AuthHandler
+
+	// UserHandler manages user profile and account endpoints
+	UserHandler *handlers.UserHandler
+
+	// SettingsHandler manages user settings and preferences endpoints
 	SettingsHandler *handlers.SettingsHandler
-	GenericHandler  *handlers.GenericHandler
+
+	// GenericHandler provides generic database operation endpoints
+	GenericHandler *handlers.GenericHandler
 }
 
-// AuthProviders contains all authentication providers for the application
+// AuthProviders contains all authentication providers for the application.
+// This structure encapsulates authentication-related dependencies
+// to simplify initialization and testing.
 type AuthProviders struct {
-	JWTService  *auth.JWTService
+	// JWTService handles JWT token generation and validation
+	JWTService *auth.JWTService
+
+	// PasswordCfg contains password hashing and validation configuration
 	PasswordCfg *auth.PasswordConfig
 }
 
-// Server represents the API server
+// Server represents the API server for the HideMe application.
+// It encapsulates all server components and handles server lifecycle management,
+// including initialization, startup, and graceful shutdown.
 type Server struct {
-	Config        *config.AppConfig
-	Db            *database.Pool
-	router        chi.Router
-	Handlers      *Handlers
+	// Config contains application configuration
+	Config *config.AppConfig
+
+	// Db provides database access
+	Db *database.Pool
+
+	// router handles HTTP routing
+	router chi.Router
+
+	// Handlers contains all HTTP request handlers
+	Handlers *Handlers
+
+	// authProviders contains authentication services
 	authProviders *AuthProviders
-	httpServer    *http.Server
-	gdprLogger    *gdprlog.GDPRLogger
+
+	// httpServer is the underlying HTTP server
+	httpServer *http.Server
+
+	// gdprLogger handles GDPR-compliant logging
+	gdprLogger *gdprlog.GDPRLogger
 }
 
-// NewServer creates a new server instance
+// NewServer creates a new server instance with all required components.
+// It initializes the database, authentication providers, repositories, services,
+// handlers, and GDPR logging, then sets up the HTTP routes.
+//
+// Parameters:
+//   - cfg: Application configuration including database, server, and auth settings
+//
+// Returns:
+//   - A fully initialized Server instance ready to start
+//   - An error if initialization of any component fails
+//
+// The server initialization follows a specific order to ensure proper dependency
+// management: database → auth providers → repositories → services → handlers → routes.
 func NewServer(cfg *config.AppConfig) (*Server, error) {
 	// Create server instance
 	s := &Server{
@@ -98,7 +146,15 @@ func NewServer(cfg *config.AppConfig) (*Server, error) {
 	return s, nil
 }
 
-// setupGDPRLogging initializes GDPR-compliant logging if not already done
+// setupGDPRLogging initializes GDPR-compliant logging if not already done.
+// It creates a logger that separates personal data from regular logs
+// and handles proper rotation and retention policies.
+//
+// Returns:
+//   - An error if GDPR logging initialization fails
+//
+// If a GDPR logger has already been set up through utils.InitLogger,
+// this method will use that instance instead of creating a new one.
 func (s *Server) setupGDPRLogging() error {
 	// Check if we already have a GDPR logger from utils.InitLogger
 	if utils.GetGDPRLogger() != nil {
@@ -126,7 +182,15 @@ func (s *Server) setupGDPRLogging() error {
 	return nil
 }
 
-// setupDatabase initializes the database connection
+// setupDatabase initializes the database connection and runs migrations.
+// It ensures the database schema is up-to-date and seeds initial data if needed.
+//
+// Returns:
+//   - An error if database connection, migration, or seeding fails
+//
+// This method uses the provided application configuration to establish
+// a database connection, then runs migrations to create or update tables
+// and seeds initial data like default detection methods.
 func (s *Server) setupDatabase() error {
 	// Connect to the database
 	db, err := database.Connect(s.Config)
@@ -151,7 +215,14 @@ func (s *Server) setupDatabase() error {
 	return nil
 }
 
-// setupAuthProviders initializes authentication providers
+// setupAuthProviders initializes authentication providers.
+// It creates services for JWT token management and password handling.
+//
+// Returns:
+//   - An error if auth provider initialization fails
+//
+// The auth providers include JWT services for token generation and validation,
+// and password configuration for secure password hashing and verification.
 func (s *Server) setupAuthProviders() error {
 	// Create JWT service
 	jwtService := auth.NewJWTService(&s.Config.JWT)
@@ -168,7 +239,8 @@ func (s *Server) setupAuthProviders() error {
 	return nil
 }
 
-// repositories holds all repositories
+// repositories holds all repositories used by the server.
+// These provide data access abstraction for different domain entities.
 var repositories struct {
 	userRepo        repository.UserRepository
 	sessionRepo     repository.SessionRepository
@@ -179,7 +251,14 @@ var repositories struct {
 	modelEntityRepo repository.ModelEntityRepository
 }
 
-// setupRepositories initializes all repositories
+// setupRepositories initializes all data repositories.
+// It creates repository instances for each domain entity using the database connection.
+//
+// Returns:
+//   - An error if repository initialization fails
+//
+// Repositories provide a data access layer that abstracts database operations
+// and implements business logic for data validation and transformation.
 func (s *Server) setupRepositories() error {
 	// Initialize repositories
 	repositories.userRepo = repository.NewUserRepository(s.Db)
@@ -193,7 +272,8 @@ func (s *Server) setupRepositories() error {
 	return nil
 }
 
-// services holds all services
+// services holds all services used by the server.
+// These provide business logic implementations for the application.
 var services struct {
 	authService     *service.AuthService
 	userService     *service.UserService
@@ -201,7 +281,14 @@ var services struct {
 	dbService       *service.DatabaseService
 }
 
-// setupServices initializes all services
+// setupServices initializes all business services.
+// It creates service instances using the previously initialized repositories.
+//
+// Returns:
+//   - An error if service initialization fails or required dependencies are missing
+//
+// Services implement business logic and orchestrate operations across multiple
+// repositories, providing a higher-level API for the application handlers.
 func (s *Server) setupServices() error {
 	// Initialize services with explicit error handling
 	if s.authProviders == nil || s.authProviders.JWTService == nil {
@@ -239,7 +326,14 @@ func (s *Server) setupServices() error {
 	return nil
 }
 
-// In internal/server/server.go - setupHandlers method
+// setupHandlers initializes all HTTP request handlers.
+// It creates handler instances using the previously initialized services.
+//
+// Returns:
+//   - An error if handler initialization fails or required services are missing
+//
+// Handlers process HTTP requests, invoking the appropriate services to
+// fulfill each request and formatting the responses for clients.
 func (s *Server) setupHandlers() error {
 	// Initialize handlers with proper dependency injection
 	s.Handlers = &Handlers{
@@ -258,7 +352,18 @@ func (s *Server) setupHandlers() error {
 	return nil
 }
 
-// Start starts the HTTP server
+// Start starts the HTTP server and sets up signal handling for graceful shutdown.
+// It runs in a blocking mode, waiting for either server errors or shutdown signals.
+//
+// Returns:
+//   - An error if the server fails to start or encounters an error during operation
+//
+// This method performs the following operations:
+// 1. Starts the HTTP server in a separate goroutine
+// 2. Sets up signal handling for graceful shutdown (SIGINT, SIGTERM)
+// 3. Initializes periodic maintenance tasks
+// 4. Blocks until an error occurs or a shutdown signal is received
+// 5. Performs graceful shutdown when requested
 func (s *Server) Start() error {
 	// Create a channel to listen for errors from the server
 	serverErrors := make(chan error, 1)
@@ -305,7 +410,19 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Shutdown gracefully shuts down the server
+// Shutdown gracefully shuts down the server, closing all connections properly.
+// It ensures in-flight requests are completed before shutting down.
+//
+// Parameters:
+//   - ctx: Context with timeout for the shutdown operation
+//
+// Returns:
+//   - An error if shutdown fails within the context timeout
+//
+// This method performs the following cleanup operations:
+// 1. Gracefully shuts down the HTTP server, waiting for in-flight requests
+// 2. Closes the database connection
+// 3. Performs GDPR log cleanup if needed
 func (s *Server) Shutdown(ctx context.Context) error {
 	// Shutdown the HTTP server
 	if err := s.httpServer.Shutdown(ctx); err != nil {
@@ -328,7 +445,16 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// SetupMaintenanceTasks sets up periodic maintenance tasks
+// SetupMaintenanceTasks sets up periodic maintenance tasks for the server.
+// It creates background goroutines to perform cleanup operations at regular intervals.
+//
+// These maintenance tasks include:
+// 1. Cleaning up expired sessions to prevent database bloat
+// 2. Cleaning up expired API keys for security and performance
+// 3. Rotating and cleaning up GDPR logs according to retention policies
+//
+// The tasks run on a fixed schedule defined by constants.DBMaintenanceInterval.
+// Each task has its own timeout to prevent long-running operations from blocking others.
 func (s *Server) SetupMaintenanceTasks() {
 	// Set up a ticker for maintenance tasks
 	ticker := time.NewTicker(constants.DBMaintenanceInterval)

@@ -1,3 +1,9 @@
+// Package service provides business logic and service implementations.
+//
+// This package implements the application's core business logic, connecting
+// repositories with API handlers and enforcing business rules. The service layer
+// handles operations such as user management, authentication, and session handling
+// while ensuring proper validation, security, and data consistency.
 package service
 
 import (
@@ -13,7 +19,9 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// UserService handles user-related operations
+// UserService handles user-related operations.
+// It provides methods for user management, account operations,
+// and session handling.
 type UserService struct {
 	userRepo    repository.UserRepository
 	sessionRepo repository.SessionRepository
@@ -21,7 +29,16 @@ type UserService struct {
 	passwordCfg *auth.PasswordConfig
 }
 
-// NewUserService creates a new UserService
+// NewUserService creates a new UserService.
+//
+// Parameters:
+//   - userRepo: Repository for user data operations
+//   - sessionRepo: Repository for session management
+//   - apiKeyRepo: Repository for API key management
+//   - passwordCfg: Configuration for password hashing and validation
+//
+// Returns:
+//   - *UserService: A configured user service
 func NewUserService(
 	userRepo repository.UserRepository,
 	sessionRepo repository.SessionRepository,
@@ -36,7 +53,16 @@ func NewUserService(
 	}
 }
 
-// GetUserByID retrieves a user by ID
+// GetUserByID retrieves a user by ID.
+// Sensitive fields are sanitized before returning the user object.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - id: The user ID to retrieve
+//
+// Returns:
+//   - *models.User: The user object with sensitive fields sanitized
+//   - error: Any error encountered or nil if successful
 func (s *UserService) GetUserByID(ctx context.Context, id int64) (*models.User, error) {
 	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
@@ -45,7 +71,17 @@ func (s *UserService) GetUserByID(ctx context.Context, id int64) (*models.User, 
 	return user.Sanitize(), nil
 }
 
-// UpdateUser updates a user's profile information
+// UpdateUser updates a user's profile information.
+// It validates changes and checks for uniqueness constraints on username and email.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - id: The ID of the user to update
+//   - update: The user update data containing fields to change
+//
+// Returns:
+//   - *models.User: The updated user object with sensitive fields sanitized
+//   - error: Any error encountered or nil if successful
 func (s *UserService) UpdateUser(ctx context.Context, id int64, update *models.UserUpdate) (*models.User, error) {
 	// Get the existing user
 	user, err := s.userRepo.GetByID(ctx, id)
@@ -109,7 +145,17 @@ func (s *UserService) UpdateUser(ctx context.Context, id int64, update *models.U
 	return user.Sanitize(), nil
 }
 
-// ChangePassword updates a user's password
+// ChangePassword updates a user's password.
+// It validates the password, hashes it, and invalidates all existing sessions
+// for security.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - id: The user ID whose password is being changed
+//   - newPassword: The new password (in plaintext)
+//
+// Returns:
+//   - error: Any error encountered or nil if successful
 func (s *UserService) ChangePassword(ctx context.Context, id int64, newPassword string) error {
 	// Validate password
 	if err := utils.ValidatePassword(newPassword); err != nil {
@@ -143,7 +189,16 @@ func (s *UserService) ChangePassword(ctx context.Context, id int64, newPassword 
 	return nil
 }
 
-// DeleteUser permanently removes a user account and all associated data
+// DeleteUser permanently removes a user account and all associated data.
+// This is a destructive operation that will cascade delete all user-related
+// data in the system.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - id: The ID of the user to delete
+//
+// Returns:
+//   - error: Any error encountered or nil if successful
 func (s *UserService) DeleteUser(ctx context.Context, id int64) error {
 	// Delete all sessions
 	if err := s.sessionRepo.DeleteByUserID(ctx, id); err != nil {
@@ -174,7 +229,16 @@ func (s *UserService) DeleteUser(ctx context.Context, id int64) error {
 	return nil
 }
 
-// CheckUsername verifies if a username is available
+// CheckUsername verifies if a username is available.
+// It validates the username format and checks for uniqueness.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - username: The username to check
+//
+// Returns:
+//   - bool: True if the username is available, false if it's taken
+//   - error: Any error encountered or nil if successful
 func (s *UserService) CheckUsername(ctx context.Context, username string) (bool, error) {
 	// Validate username format
 	if err := utils.ValidateUsername(username); err != nil {
@@ -190,7 +254,16 @@ func (s *UserService) CheckUsername(ctx context.Context, username string) (bool,
 	return !exists, nil
 }
 
-// CheckEmail verifies if an email is available
+// CheckEmail verifies if an email is available.
+// It validates the email format and checks for uniqueness.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - email: The email to check
+//
+// Returns:
+//   - bool: True if the email is available, false if it's taken
+//   - error: Any error encountered or nil if successful
 func (s *UserService) CheckEmail(ctx context.Context, email string) (bool, error) {
 	// Validate email format
 	if !utils.IsValidEmail(email) {
@@ -206,7 +279,16 @@ func (s *UserService) CheckEmail(ctx context.Context, email string) (bool, error
 	return !exists, nil
 }
 
-// GetUserActiveSessions retrieves all active sessions for a user
+// GetUserActiveSessions retrieves all active sessions for a user.
+// This allows users to see and manage their login sessions.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - userID: The ID of the user whose sessions to retrieve
+//
+// Returns:
+//   - []*models.ActiveSessionInfo: A slice of active session information
+//   - error: Any error encountered or nil if successful
 func (s *UserService) GetUserActiveSessions(ctx context.Context, userID int64) ([]*models.ActiveSessionInfo, error) {
 	// Get all active sessions
 	sessions, err := s.sessionRepo.GetActiveByUserID(ctx, userID)
@@ -227,7 +309,17 @@ func (s *UserService) GetUserActiveSessions(ctx context.Context, userID int64) (
 	return result, nil
 }
 
-// InvalidateSession invalidates a specific session
+// InvalidateSession invalidates a specific session.
+// This allows users to log out from a specific device or session.
+// The method verifies that the session belongs to the user before invalidating it.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - userID: The ID of the user who owns the session
+//   - sessionID: The ID of the session to invalidate
+//
+// Returns:
+//   - error: Any error encountered or nil if successful
 func (s *UserService) InvalidateSession(ctx context.Context, userID int64, sessionID string) error {
 	// Get the session to verify ownership
 	session, err := s.sessionRepo.GetByID(ctx, sessionID)

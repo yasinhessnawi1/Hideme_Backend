@@ -1,77 +1,132 @@
+// Package constants provides shared constant values used throughout the application.
+//
+// The database_const.go file defines constants related to database structures,
+// including table names, column names, and schema references. These constants
+// ensure consistent and correct database access patterns throughout the application,
+// reducing the risk of SQL errors and simplifying database schema changes.
 package constants
 
-// Table Names
+// Table Names define the names of database tables used in the application.
+// Using these constants instead of string literals ensures consistency
+// and makes database schema changes easier to implement.
 const (
-	TableUsers            = "users"
-	TableUserSettings     = "user_settings"
-	TableDocuments        = "documents"
+	// TableUsers is the name of the table storing user account information.
+	TableUsers = "users"
+
+	// TableUserSettings is the name of the table storing user preferences and settings.
+	TableUserSettings = "user_settings"
+
+	// TableDocuments is the name of the table storing document metadata.
+	TableDocuments = "documents"
+
+	// TableDetectionMethods is the name of the table storing detection method configurations.
 	TableDetectionMethods = "detection_methods"
+
+	// TableDetectedEntities is the name of the table storing entities detected in documents.
 	TableDetectedEntities = "detected_entities"
-	TableModelEntities    = "model_entities"
-	TableSearchPatterns   = "search_patterns"
-	TableBanLists         = "ban_lists"
-	TableBanListWords     = "ban_list_words"
-	TableSessions         = "sessions"
-	TableAPIKeys          = "api_keys"
-	TableMigrations       = "migrations"
-	TableSeeds            = "seeds"
+
+	// TableModelEntities is the name of the table storing entity definitions for detection models.
+	TableModelEntities = "model_entities"
+
+	// TableSearchPatterns is the name of the table storing search pattern definitions.
+	TableSearchPatterns = "search_patterns"
+
+	// TableBanLists is the name of the table storing ban list metadata.
+	TableBanLists = "ban_lists"
+
+	// TableBanListWords is the name of the table storing words included in ban lists.
+	TableBanListWords = "ban_list_words"
+
+	// TableSessions is the name of the table storing user session information.
+	TableSessions = "sessions"
+
+	// TableAPIKeys is the name of the table storing API key information.
+	TableAPIKeys = "api_keys"
 )
 
-// Common Column Names
+// Common Column Names define frequently used database column names.
+// These constants ensure consistent column name usage in SQL queries.
 const (
-	ColumnID             = "id"
-	ColumnUserID         = "user_id"
-	ColumnSettingID      = "setting_id"
-	ColumnBanID          = "ban_id"
-	ColumnMethodID       = "method_id"
-	ColumnEntityID       = "entity_id"
-	ColumnPatternID      = "pattern_id"
-	ColumnCreatedAt      = "created_at"
-	ColumnUpdatedAt      = "updated_at"
-	ColumnUsername       = "username"
-	ColumnEmail          = "email"
-	ColumnPasswordHash   = "password_hash"
-	ColumnSalt           = "salt"
-	ColumnKeyID          = "key_id"
-	ColumnAPIKeyHash     = "api_key_hash"
-	ColumnName           = "name"
-	ColumnExpiresAt      = "expires_at"
-	ColumnWord           = "word"
-	ColumnPatternType    = "pattern_type"
-	ColumnPatternText    = "pattern_text"
-	ColumnSessionID      = "session_id"
-	ColumnJWTID          = "jwt_id"
-	ColumnDocumentID     = "document_id"
-	ColumnEntityName     = "entity_name"
-	ColumnEntityText     = "entity_text"
-	ColumnMethodName     = "method_name"
+	// ColumnID is the generic primary key column name.
+	ColumnID = "id"
+
+	// ColumnUserID is the column name for user identifier foreign keys.
+	ColumnUserID = "user_id"
+
+	// ColumnSettingID is the column name for user setting identifier foreign keys.
+	ColumnSettingID = "setting_id"
+
+	// ColumnBanID is the column name for ban list identifier foreign keys.
+	ColumnBanID = "ban_id"
+
+	// ColumnMethodID is the column name for detection method identifier foreign keys.
+	ColumnMethodID = "method_id"
+
+	// ColumnEntityID is the column name for entity identifier foreign keys.
+	ColumnEntityID = "entity_id"
+
+	// ColumnPatternID is the column name for pattern identifier foreign keys.
+	ColumnPatternID = "pattern_id"
+
+	// ColumnCreatedAt is the column name for creation timestamps.
+	ColumnCreatedAt = "created_at"
+
+	// ColumnUsername is the column name for user usernames.
+	ColumnUsername = "username"
+
+	// ColumnPasswordHash is the column name for hashed passwords.
+	ColumnPasswordHash = "password_hash"
+
+	// ColumnSalt is the column name for password salt values.
+	ColumnSalt = "salt"
+
+	// ColumnKeyID is the column name for API key identifiers.
+	ColumnKeyID = "key_id"
+
+	// ColumnAPIKeyHash is the column name for hashed API key values.
+	ColumnAPIKeyHash = "api_key_hash"
+
+	// ColumnName is the column name for resource names.
+	ColumnName = "name"
+
+	// ColumnExpiresAt is the column name for expiration timestamps.
+	ColumnExpiresAt = "expires_at"
+
+	// ColumnWord is the column name for ban list words.
+	ColumnWord = "word"
+
+	// ColumnPatternType is the column name for search pattern types.
+	ColumnPatternType = "pattern_type"
+
+	// ColumnSessionID is the column name for session identifiers.
+	ColumnSessionID = "session_id"
+
+	// ColumnJWTID is the column name for JWT identifiers.
+	ColumnJWTID = "jwt_id"
+
+	// ColumnDocumentID is the column name for document identifiers.
+	ColumnDocumentID = "document_id"
+
+	// ColumnEntityName is the column name for entity names.
+	ColumnEntityName = "entity_name"
+
+	// ColumnMethodName is the column name for detection method names.
+	ColumnMethodName = "method_name"
+
+	// ColumnHighlightColor is the column name for entity highlighting colors.
 	ColumnHighlightColor = "highlight_color"
 )
 
-// Index Names
+// Index Names define database index names.
+// These constants are used when creating or referencing database indexes.
 const (
-	IndexUserID     = "idx_user_id"
-	IndexSettingID  = "idx_setting_id"
-	IndexMethodID   = "idx_method_id"
-	IndexEntityName = "idx_entity_name"
-	IndexBanID      = "idx_ban_id"
-	IndexWord       = "idx_word"
-	IndexUsername   = "idx_username"
-	IndexEmail      = "idx_email"
-	IndexJWTID      = "idx_jwt_id"
-	IndexExpiresAt  = "idx_expires_at"
-	IndexBanWord    = "idx_ban_word"
+	// IndexJWTID is the name of the index on JWT identifiers.
+	IndexJWTID = "idx_jwt_id"
 )
 
-// Database Schema Names
+// Database Schema Names define the names of database schemas.
+// These constants are used when querying database metadata.
 const (
+	// SchemaInformation is the name of the PostgreSQL information schema.
 	SchemaInformation = "information_schema"
-	SchemaPublic      = "public"
-	CurrentSchema     = "current_schema()"
-)
-
-// Database Query Templates
-const (
-	QueryCheckTableExists  = "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = $1)"
-	QueryCheckColumnExists = "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2)"
 )

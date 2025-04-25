@@ -1,3 +1,10 @@
+// Package repository provides data access interfaces and implementations for the HideMe application.
+// It follows the repository pattern to abstract database operations and provide a clean API
+// for data persistence operations.
+//
+// This file implements the settings repository, which manages user-specific configuration options
+// for document processing and application behavior. These settings control features like
+// detection thresholds, ban list usage, and UI preferences.
 package repository
 
 import (
@@ -14,29 +21,119 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// SettingsRepository defines methods for interacting with user settings
+// SettingsRepository defines methods for interacting with user settings in the database.
+// It provides operations for managing configuration options that control the behavior
+// of document processing and the application UI for each user.
 type SettingsRepository interface {
+	// Create adds new user settings to the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - settings: The user settings to store, with required fields populated
+	//
+	// Returns:
+	//   - DuplicateError if settings already exist for the user
+	//   - Other errors for database issues
+	//   - nil on successful creation
+	//
+	// The settings ID will be populated after successful creation.
 	Create(ctx context.Context, settings *models.UserSetting) error
+
+	// GetByUserID retrieves user settings by user ID.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - userID: The unique identifier of the user
+	//
+	// Returns:
+	//   - The user settings if found
+	//   - NotFoundError if no settings exist for the user
+	//   - Other errors for database issues
 	GetByUserID(ctx context.Context, userID int64) (*models.UserSetting, error)
+
+	// Update updates user settings in the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - settings: The user settings to update
+	//
+	// Returns:
+	//   - NotFoundError if the settings don't exist
+	//   - Other errors for database issues
+	//   - nil on successful update
+	//
+	// This method automatically updates the UpdatedAt timestamp.
 	Update(ctx context.Context, settings *models.UserSetting) error
+
+	// Delete removes user settings from the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the settings to delete
+	//
+	// Returns:
+	//   - NotFoundError if the settings don't exist
+	//   - Other errors for database issues
+	//   - nil on successful deletion
 	Delete(ctx context.Context, id int64) error
+
+	// DeleteByUserID removes user settings for a specific user.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - userID: The unique identifier of the user
+	//
+	// Returns:
+	//   - NotFoundError if no settings exist for the user
+	//   - Other errors for database issues
+	//   - nil on successful deletion
 	DeleteByUserID(ctx context.Context, userID int64) error
+
+	// EnsureDefaultSettings ensures that default settings exist for a user,
+	// creating them if necessary.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - userID: The unique identifier of the user
+	//
+	// Returns:
+	//   - The user settings (either existing or newly created)
+	//   - An error if retrieval or creation fails
 	EnsureDefaultSettings(ctx context.Context, userID int64) (*models.UserSetting, error)
 }
 
-// PostgresSettingsRepository is a PostgreSQL implementation of SettingsRepository
+// PostgresSettingsRepository is a PostgreSQL implementation of SettingsRepository.
+// It implements all required methods using PostgreSQL-specific features
+// and error handling.
 type PostgresSettingsRepository struct {
 	db *database.Pool
 }
 
-// NewSettingsRepository creates a new SettingsRepository
+// NewSettingsRepository creates a new SettingsRepository implementation for PostgreSQL.
+//
+// Parameters:
+//   - db: A connection pool for PostgreSQL database access
+//
+// Returns:
+//   - An implementation of the SettingsRepository interface
 func NewSettingsRepository(db *database.Pool) SettingsRepository {
 	return &PostgresSettingsRepository{
 		db: db,
 	}
 }
 
-// Create adds new user settings to the database
+// Create adds new user settings to the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - settings: The user settings to store
+//
+// Returns:
+//   - DuplicateError if settings already exist for the user
+//   - Other errors for database issues
+//   - nil on successful creation
+//
+// The settings ID will be populated after successful creation.
 func (r *PostgresSettingsRepository) Create(ctx context.Context, settings *models.UserSetting) error {
 	// Start query timer
 	startTime := time.Now()
@@ -94,7 +191,16 @@ func (r *PostgresSettingsRepository) Create(ctx context.Context, settings *model
 	return nil
 }
 
-// GetByUserID retrieves user settings by user ID
+// GetByUserID retrieves user settings by user ID.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - userID: The unique identifier of the user
+//
+// Returns:
+//   - The user settings if found
+//   - NotFoundError if no settings exist for the user
+//   - Other errors for database issues
 func (r *PostgresSettingsRepository) GetByUserID(ctx context.Context, userID int64) (*models.UserSetting, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -138,7 +244,17 @@ func (r *PostgresSettingsRepository) GetByUserID(ctx context.Context, userID int
 	return settings, nil
 }
 
-// Update updates user settings in the database
+// Update updates user settings in the database.
+// This method automatically updates the UpdatedAt timestamp.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - settings: The user settings to update
+//
+// Returns:
+//   - NotFoundError if the settings don't exist
+//   - Other errors for database issues
+//   - nil on successful update
 func (r *PostgresSettingsRepository) Update(ctx context.Context, settings *models.UserSetting) error {
 	// Start query timer
 	startTime := time.Now()
@@ -199,7 +315,16 @@ func (r *PostgresSettingsRepository) Update(ctx context.Context, settings *model
 	return nil
 }
 
-// Delete removes user settings from the database
+// Delete removes user settings from the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the settings to delete
+//
+// Returns:
+//   - NotFoundError if the settings don't exist
+//   - Other errors for database issues
+//   - nil on successful deletion
 func (r *PostgresSettingsRepository) Delete(ctx context.Context, id int64) error {
 	// Start query timer
 	startTime := time.Now()
@@ -239,7 +364,16 @@ func (r *PostgresSettingsRepository) Delete(ctx context.Context, id int64) error
 	return nil
 }
 
-// DeleteByUserID removes user settings for a specific user
+// DeleteByUserID removes user settings for a specific user.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - userID: The unique identifier of the user
+//
+// Returns:
+//   - NotFoundError if no settings exist for the user
+//   - Other errors for database issues
+//   - nil on successful deletion
 func (r *PostgresSettingsRepository) DeleteByUserID(ctx context.Context, userID int64) error {
 	// Start query timer
 	startTime := time.Now()
@@ -279,7 +413,19 @@ func (r *PostgresSettingsRepository) DeleteByUserID(ctx context.Context, userID 
 	return nil
 }
 
-// EnsureDefaultSettings ensures that default settings exist for a user, creating them if necessary
+// EnsureDefaultSettings ensures that default settings exist for a user,
+// creating them if necessary.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - userID: The unique identifier of the user
+//
+// Returns:
+//   - The user settings (either existing or newly created)
+//   - An error if retrieval or creation fails
+//
+// This method is idempotent and is designed to be called at the beginning of operations
+// that require user settings to exist.
 func (r *PostgresSettingsRepository) EnsureDefaultSettings(ctx context.Context, userID int64) (*models.UserSetting, error) {
 	// Try to get existing settings
 	settings, err := r.GetByUserID(ctx, userID)

@@ -1,3 +1,9 @@
+// Package gdprlog provides GDPR-compliant logging functionalities.
+//
+// This file implements log rotation and retention policies for the GDPR logging system.
+// It ensures logs are properly rotated, old logs are deleted according to retention
+// policies, and different categories of logs (standard, personal, sensitive) are managed
+// with appropriate retention periods in compliance with data minimization principles.
 package gdprlog
 
 import (
@@ -11,14 +17,24 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
 )
 
-// LogRetentionConfig defines retention settings for different log types
+// LogRetentionConfig defines retention settings for different log types.
+// Each log category has its own retention period in days, reflecting the
+// different requirements for storing data of varying sensitivity levels.
 type LogRetentionConfig struct {
-	StandardLogRetentionDays   int
-	PersonalDataRetentionDays  int
+	// StandardLogRetentionDays is the number of days to retain standard logs.
+	StandardLogRetentionDays int
+	// PersonalDataRetentionDays is the number of days to retain logs containing personal data.
+	PersonalDataRetentionDays int
+	// SensitiveDataRetentionDays is the number of days to retain logs containing sensitive data.
 	SensitiveDataRetentionDays int
 }
 
-// SetupLogRotation configures log rotation for different log categories
+// SetupLogRotation configures log rotation for different log categories.
+// It starts a background goroutine for handling log rotation and creates
+// a logrotate configuration file for system-managed rotation as a fallback.
+//
+// Returns:
+//   - error: An error if log rotation setup fails, nil otherwise
 func (gl *GDPRLogger) SetupLogRotation() error {
 	// Set up cron-like job for log rotation
 	go gl.rotationWorker()
@@ -27,7 +43,9 @@ func (gl *GDPRLogger) SetupLogRotation() error {
 	return gl.createLogrotateConfig()
 }
 
-// rotationWorker periodically checks and rotates logs based on retention policy
+// rotationWorker periodically checks and rotates logs based on retention policy.
+// This function runs in the background as a goroutine, performing an initial
+// rotation on startup and then checking daily for logs that need rotation or deletion.
 func (gl *GDPRLogger) rotationWorker() {
 	// Run initial rotation to clean up old files
 	err := gl.rotateAllLogs()
@@ -49,7 +67,11 @@ func (gl *GDPRLogger) rotationWorker() {
 	}
 }
 
-// rotateAllLogs applies rotation to all log files
+// rotateAllLogs applies rotation to all log files.
+// It handles each log category separately, applying the appropriate retention policy.
+//
+// Returns:
+//   - error: An error if log rotation fails for any category, nil otherwise
 func (gl *GDPRLogger) rotateAllLogs() error {
 	// First rotate standard logs
 	if err := gl.rotateLogs(gl.config.StandardLogPath, gl.config.StandardLogRetentionDays); err != nil {
@@ -76,7 +98,16 @@ func (gl *GDPRLogger) rotateAllLogs() error {
 	return nil
 }
 
-// rotateLogs rotates logs in a specific directory based on retention days
+// rotateLogs rotates logs in a specific directory based on retention days.
+// It renames active log files with timestamps and deletes old rotated logs
+// that exceed the retention period.
+//
+// Parameters:
+//   - dirPath: The directory containing logs to rotate
+//   - retentionDays: The number of days to retain logs
+//
+// Returns:
+//   - error: An error if log rotation fails, nil otherwise
 func (gl *GDPRLogger) rotateLogs(dirPath string, retentionDays int) error {
 	// Check if directory exists
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
@@ -141,7 +172,14 @@ func (gl *GDPRLogger) rotateLogs(dirPath string, retentionDays int) error {
 	return nil
 }
 
-// isActiveLogFile checks if a file is an actively written log file
+// isActiveLogFile checks if a file is an actively written log file.
+// Active log files are the primary log files without timestamps in their names.
+//
+// Parameters:
+//   - fileName: The name of the file to check
+//
+// Returns:
+//   - bool: true if the file is an active log file, false otherwise
 func isActiveLogFile(fileName string) bool {
 	// Primary log files don't have dates in their names
 	return fileName == "standard.log" ||
@@ -149,7 +187,14 @@ func isActiveLogFile(fileName string) bool {
 		fileName == "sensitive.log"
 }
 
-// rotateActiveLogFile rotates an active log file by renaming it with a timestamp
+// rotateActiveLogFile rotates an active log file by renaming it with a timestamp.
+// This preserves the log content while creating a new empty file for future logs.
+//
+// Parameters:
+//   - filePath: The path to the active log file
+//
+// Returns:
+//   - error: An error if rotation fails, nil otherwise
 func rotateActiveLogFile(filePath string) error {
 	// Get file info to check if it's empty
 	info, err := os.Stat(filePath)
@@ -194,7 +239,11 @@ func rotateActiveLogFile(filePath string) error {
 	return nil
 }
 
-// createLogrotateConfig creates a logrotate configuration file for system-managed rotation
+// createLogrotateConfig creates a logrotate configuration file for system-managed rotation.
+// This provides a fallback rotation mechanism on Linux systems with logrotate installed.
+//
+// Returns:
+//   - error: An error if configuration creation fails, nil otherwise
 func (gl *GDPRLogger) createLogrotateConfig() error {
 	// Skip if we're not on Linux or permissions might be an issue
 	if !isLinuxSystem() {
@@ -276,17 +325,29 @@ func (gl *GDPRLogger) createLogrotateConfig() error {
 	return nil
 }
 
-// isLinuxSystem checks if the current system is Linux
+// isLinuxSystem checks if the current system is Linux.
+// This is used to determine whether to attempt creating logrotate configurations.
+//
+// Returns:
+//   - bool: true if the system is Linux, false otherwise
 func isLinuxSystem() bool {
 	return os.Getenv("OS") != "Windows_NT" && os.Getenv("GOOS") != "windows"
 }
 
-// CleanupLogs immediately deletes all logs beyond retention period
+// CleanupLogs immediately deletes all logs beyond retention period.
+// This can be called explicitly to force log cleanup outside the normal rotation schedule.
+//
+// Returns:
+//   - error: An error if cleanup fails, nil otherwise
 func (gl *GDPRLogger) CleanupLogs() error {
 	return gl.rotateAllLogs()
 }
 
-// GetLogRetentionConfig returns the current log retention configuration
+// GetLogRetentionConfig returns the current log retention configuration.
+// This allows retrieving the current retention settings for all log categories.
+//
+// Returns:
+//   - LogRetentionConfig: The current log retention configuration
 func (gl *GDPRLogger) GetLogRetentionConfig() LogRetentionConfig {
 	return LogRetentionConfig{
 		StandardLogRetentionDays:   gl.config.StandardLogRetentionDays,
@@ -295,7 +356,12 @@ func (gl *GDPRLogger) GetLogRetentionConfig() LogRetentionConfig {
 	}
 }
 
-// UpdateLogRetentionConfig updates the log retention configuration
+// UpdateLogRetentionConfig updates the log retention configuration.
+// It also updates the logrotate configuration and immediately applies
+// the new settings to rotate logs.
+//
+// Parameters:
+//   - cfg: The new GDPR logging settings to apply
 func (gl *GDPRLogger) UpdateLogRetentionConfig(cfg *config.GDPRLoggingSettings) {
 	gl.config.StandardLogRetentionDays = cfg.StandardLogRetentionDays
 	gl.config.PersonalDataRetentionDays = cfg.PersonalDataRetentionDays

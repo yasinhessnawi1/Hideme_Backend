@@ -1,3 +1,10 @@
+// Package main is the entry point for the HideMe API Server, which provides
+// secure backend services for the HideMe application. This server handles
+// authentication, API authorization, and core business logic.
+//
+// The server loads configuration from files, initializes logging, sets up
+// middleware, and manages application lifecycle. It's designed to be secure,
+// maintainable, and scalable for production environments.
 package main
 
 import (
@@ -13,75 +20,90 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// Version information (set during build)
+// Version information is set during build time through linker flags.
+// These variables provide runtime access to build metadata.
 var (
-	version   = "dev"
-	commit    = "none"
+	// version represents the release version of the application.
+	version = "dev"
+
+	// commit is the git commit hash from which the application was built.
+	commit = "none"
+
+	// buildDate is the timestamp when the application was built.
 	buildDate = "unknown"
 )
 
+// init loads environment variables from a .env file if present.
+// This function executes before main() and sets up initial environment.
 func init() {
-	// Load .env file if it exists
+	// Load .env file if it exists. Not finding a .env file is a non-fatal
+	// condition, as configuration might be provided by other means.
 	if err := godotenv.Load(); err != nil {
 		fmt.Println("Warning: .env file not found or couldn't be loaded")
 	}
 }
 
+// main is the entry point for the application. It initializes configuration,
+// sets up logging, creates and starts the server, and handles graceful shutdown.
 func main() {
-	// Define command-line flags
+	// Define command-line flags for configuration path and version display
 	var (
 		configPath  string
 		showVersion bool
 	)
 
+	// Register command-line flags
 	flag.StringVar(&configPath, "config", "./configs/config.yaml", "Path to configuration file")
 	flag.BoolVar(&showVersion, "version", false, "Show version information")
 	flag.Parse()
 
-	// Show version information and exit if requested
+	// If version flag is set, display build information and exit
 	if showVersion {
 		fmt.Printf("HideMe API Server\nVersion: %s\nCommit: %s\nBuild Date: %s\n", version, commit, buildDate)
 		os.Exit(0)
 	}
 
-	// Initialize zerolog with console output for development
+	// Initialize zerolog with console output format and Unix timestamp format
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = zerolog.New(os.Stdout).With().Timestamp().Logger()
 
-	// Load configuration
+	// Load application configuration from the specified path
+	// This includes database settings, JWT configuration, and server options
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		fmt.Printf("Failed to load configuration: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Override version from build
+	// Override version from build if available (not in dev mode)
 	if version != "dev" {
 		cfg.App.Version = version
 	}
 
-	// Initialize logger with configuration
+	// Initialize logger with configuration settings
+	// This sets log level, output format, and other logging parameters
 	utils.InitLogger(cfg)
 
-	// Log startup information
+	// Log startup information for operational visibility
 	log.Info().
 		Str("version", cfg.App.Version).
 		Str("environment", cfg.App.Environment).
 		Msg("Starting HideMe API Server")
 
-	// Initialize validator
+	// Initialize validator for request payload validation
 	utils.InitValidator()
 
-	// Create server
+	// Create server instance with loaded configuration
 	srv, err := server.NewServer(cfg)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create server")
 	}
 
-	// Set up maintenance tasks
+	// Configure periodic tasks like cleanup jobs and health checks
 	srv.SetupMaintenanceTasks()
 
-	// Start the server
+	// Start the server and handle any errors
+	// This is a blocking call that runs until termination
 	if err := srv.Start(); err != nil {
 		log.Fatal().Err(err).Msg("Server error")
 	}

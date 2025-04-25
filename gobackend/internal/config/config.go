@@ -1,3 +1,14 @@
+// Package config provides configuration management for the HideMe API Server.
+// It handles loading application settings from both YAML files and environment
+// variables, with environment variables taking precedence for easier deployment
+// configuration and containerization.
+//
+// The package implements a robust configuration system with sensible defaults,
+// validation, and secure handling of sensitive information. It supports different
+// environments (development, testing, production) with environment-specific defaults.
+//
+// Configuration is loaded once at application startup and then available globally
+// through the Get() function. All sensitive configuration values are masked in logs.
 package config
 
 import (
@@ -13,94 +24,192 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
-// AppConfig represents the entire application configuration
+// AppConfig represents the entire application configuration.
+// It contains all settings needed by the application, organized into logical groups
+// to maintain a clear structure as the application grows.
 type AppConfig struct {
-	App          AppSettings         `yaml:"app"`
-	Database     DatabaseSettings    `yaml:"database"`
-	Server       ServerSettings      `yaml:"server"`
-	JWT          JWTSettings         `yaml:"jwt"`
-	APIKey       APIKeySettings      `yaml:"api_key"`
-	Logging      LoggingSettings     `yaml:"logging"`
-	CORS         CORSSettings        `yaml:"cors"`
-	PasswordHash HashSettings        `yaml:"password_hash"`
-	GDPRLogging  GDPRLoggingSettings `yaml:"gdpr_logging"`
+	// App contains general application metadata and environment settings
+	App AppSettings `yaml:"app"`
+
+	// Database contains database connection and pool settings
+	Database DatabaseSettings `yaml:"database"`
+
+	// Server contains HTTP server configuration
+	Server ServerSettings `yaml:"server"`
+
+	// JWT contains JSON Web Token authentication settings
+	JWT JWTSettings `yaml:"jwt"`
+
+	// APIKey contains API key authentication settings
+	APIKey APIKeySettings `yaml:"api_key"`
+
+	// Logging contains logging configuration
+	Logging LoggingSettings `yaml:"logging"`
+
+	// CORS contains Cross-Origin Resource Sharing settings
+	CORS CORSSettings `yaml:"cors"`
+
+	// PasswordHash contains password hashing algorithm settings
+	PasswordHash HashSettings `yaml:"password_hash"`
+
+	// GDPRLogging contains GDPR-compliant logging configuration
+	GDPRLogging GDPRLoggingSettings `yaml:"gdpr_logging"`
 }
 
-// GDPRLoggingSettings contains GDPR-compliant logging configuration
+// GDPRLoggingSettings contains GDPR-compliant logging configuration.
+// These settings ensure that personal and sensitive data are handled according
+// to data protection regulations, with appropriate retention policies.
 type GDPRLoggingSettings struct {
-	PersonalDataRetentionDays  int    `yaml:"personal_data_retention_days" env:"GDPR_PERSONAL_RETENTION_DAYS"`
-	SensitiveDataRetentionDays int    `yaml:"sensitive_data_retention_days" env:"GDPR_SENSITIVE_RETENTION_DAYS"`
-	StandardLogRetentionDays   int    `yaml:"standard_log_retention_days" env:"GDPR_STANDARD_RETENTION_DAYS"`
-	PersonalLogPath            string `yaml:"personal_log_path" env:"GDPR_PERSONAL_LOG_PATH"`
-	SensitiveLogPath           string `yaml:"sensitive_log_path" env:"GDPR_SENSITIVE_LOG_PATH"`
-	StandardLogPath            string `yaml:"standard_log_path" env:"GDPR_STANDARD_LOG_PATH"`
-	LogSanitizationLevel       string `yaml:"log_sanitization_level" env:"GDPR_SANITIZATION_LEVEL"`
-	EnableDataSubjectAPI       bool   `yaml:"enable_data_subject_api" env:"GDPR_ENABLE_SUBJECT_API"`
+	// PersonalDataRetentionDays defines how many days to keep logs containing personal data
+	PersonalDataRetentionDays int `yaml:"personal_data_retention_days" env:"GDPR_PERSONAL_RETENTION_DAYS"`
+
+	// SensitiveDataRetentionDays defines how many days to keep logs containing sensitive data
+	SensitiveDataRetentionDays int `yaml:"sensitive_data_retention_days" env:"GDPR_SENSITIVE_RETENTION_DAYS"`
+
+	// StandardLogRetentionDays defines how many days to keep standard operational logs
+	StandardLogRetentionDays int `yaml:"standard_log_retention_days" env:"GDPR_STANDARD_RETENTION_DAYS"`
+
+	// PersonalLogPath defines the file path for logs containing personal data
+	PersonalLogPath string `yaml:"personal_log_path" env:"GDPR_PERSONAL_LOG_PATH"`
+
+	// SensitiveLogPath defines the file path for logs containing sensitive data
+	SensitiveLogPath string `yaml:"sensitive_log_path" env:"GDPR_SENSITIVE_LOG_PATH"`
+
+	// StandardLogPath defines the file path for standard operational logs
+	StandardLogPath string `yaml:"standard_log_path" env:"GDPR_STANDARD_LOG_PATH"`
+
+	// LogSanitizationLevel defines how aggressively to sanitize logs (low, medium, high)
+	LogSanitizationLevel string `yaml:"log_sanitization_level" env:"GDPR_SANITIZATION_LEVEL"`
+
+	// EnableDataSubjectAPI enables endpoints for data subject rights (access, erasure, etc.)
+	EnableDataSubjectAPI bool `yaml:"enable_data_subject_api" env:"GDPR_ENABLE_SUBJECT_API"`
 }
 
-// AppSettings contains general application settings
+// AppSettings contains general application settings such as environment and version.
 type AppSettings struct {
+	// Environment is the deployment environment (development, testing, production)
 	Environment string `yaml:"environment" env:"APP_ENV"`
-	Name        string `yaml:"name" env:"APP_NAME"`
-	Version     string `yaml:"version" env:"APP_VERSION"`
+
+	// Name is the application name used in logs and other identifiers
+	Name string `yaml:"name" env:"APP_NAME"`
+
+	// Version is the application version, typically set during build
+	Version string `yaml:"version" env:"APP_VERSION"`
 }
 
-// DatabaseSettings contains database connection settings
+// DatabaseSettings contains database connection settings.
+// These settings are used to establish and configure the database connection pool.
 type DatabaseSettings struct {
-	Host     string `yaml:"host" env:"DB_HOST"`
-	Port     int    `yaml:"port" env:"DB_PORT"`
-	Name     string `yaml:"name" env:"DB_NAME"`
-	User     string `yaml:"user" env:"DB_USER"`
+	// Host is the database server hostname or IP address
+	Host string `yaml:"host" env:"DB_HOST"`
+
+	// Port is the database server port
+	Port int `yaml:"port" env:"DB_PORT"`
+
+	// Name is the database name
+	Name string `yaml:"name" env:"DB_NAME"`
+
+	// User is the database username
+	User string `yaml:"user" env:"DB_USER"`
+
+	// Password is the database password (handled securely in logging)
 	Password string `yaml:"password" env:"DB_PASSWORD"`
-	MaxConns int    `yaml:"max_conns" env:"DB_MAX_CONNS"`
-	MinConns int    `yaml:"min_conns" env:"DB_MIN_CONNS"`
+
+	// MaxConns is the maximum number of connections in the connection pool
+	MaxConns int `yaml:"max_conns" env:"DB_MAX_CONNS"`
+
+	// MinConns is the minimum number of idle connections in the connection pool
+	MinConns int `yaml:"min_conns" env:"DB_MIN_CONNS"`
 }
 
-// ServerSettings contains HTTP server settings
+// ServerSettings contains HTTP server settings.
+// These settings control the behavior of the HTTP server, including timeouts.
 type ServerSettings struct {
-	Host            string        `yaml:"host" env:"SERVER_HOST"`
-	Port            int           `yaml:"port" env:"SERVER_PORT"`
-	ReadTimeout     time.Duration `yaml:"read_timeout" env:"SERVER_READ_TIMEOUT"`
-	WriteTimeout    time.Duration `yaml:"write_timeout" env:"SERVER_WRITE_TIMEOUT"`
+	// Host is the server hostname or IP address to bind to
+	Host string `yaml:"host" env:"SERVER_HOST"`
+
+	// Port is the server port to listen on
+	Port int `yaml:"port" env:"SERVER_PORT"`
+
+	// ReadTimeout is the maximum duration for reading the entire request
+	ReadTimeout time.Duration `yaml:"read_timeout" env:"SERVER_READ_TIMEOUT"`
+
+	// WriteTimeout is the maximum duration for writing the response
+	WriteTimeout time.Duration `yaml:"write_timeout" env:"SERVER_WRITE_TIMEOUT"`
+
+	// ShutdownTimeout is the maximum duration to wait for active connections to close during shutdown
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env:"SERVER_SHUTDOWN_TIMEOUT"`
 }
 
-// JWTSettings contains JWT authentication settings
+// JWTSettings contains JWT authentication settings.
+// These settings control the generation and validation of JWT tokens.
 type JWTSettings struct {
-	Secret        string        `yaml:"secret" env:"JWT_SECRET"`
-	Expiry        time.Duration `yaml:"expiry" env:"JWT_EXPIRY"`
+	// Secret is the signing key for JWT tokens (handled securely in logging)
+	Secret string `yaml:"secret" env:"JWT_SECRET"`
+
+	// Expiry is the lifetime of access tokens
+	Expiry time.Duration `yaml:"expiry" env:"JWT_EXPIRY"`
+
+	// RefreshExpiry is the lifetime of refresh tokens
 	RefreshExpiry time.Duration `yaml:"refresh_expiry" env:"JWT_REFRESH_EXPIRY"`
-	Issuer        string        `yaml:"issuer" env:"JWT_ISSUER"`
+
+	// Issuer is the JWT issuer claim value
+	Issuer string `yaml:"issuer" env:"JWT_ISSUER"`
 }
 
-// APIKeySettings contains API key settings
+// APIKeySettings contains API key settings.
 type APIKeySettings struct {
+	// DefaultExpiry is the default lifetime of generated API keys
 	DefaultExpiry time.Duration `yaml:"default_expiry" env:"API_KEY_EXPIRY"`
 }
 
-// LoggingSettings contains logging configuration
+// LoggingSettings contains logging configuration.
+// These settings control the verbosity, format, and behavior of logging.
 type LoggingSettings struct {
-	Level      string `yaml:"level" env:"LOG_LEVEL"`
-	Format     string `yaml:"format" env:"LOG_FORMAT"`
-	RequestLog bool   `yaml:"request_log" env:"LOG_REQUESTS"`
+	// Level is the minimum log level to output (debug, info, warn, error, etc.)
+	Level string `yaml:"level" env:"LOG_LEVEL"`
+
+	// Format is the log output format (json, pretty, etc.)
+	Format string `yaml:"format" env:"LOG_FORMAT"`
+
+	// RequestLog enables or disables HTTP request logging
+	RequestLog bool `yaml:"request_log" env:"LOG_REQUESTS"`
 }
 
-// CORSSettings contains CORS configuration
+// CORSSettings contains Cross-Origin Resource Sharing configuration.
+// These settings control which origins can access the API.
 type CORSSettings struct {
-	AllowedOrigins   []string `yaml:"allowed_origins" env:"ALLOWED_ORIGINS"`
-	AllowCredentials bool     `yaml:"allow_credentials" env:"CORS_ALLOW_CREDENTIALS"`
+	// AllowedOrigins is a list of origins that can access the API
+	AllowedOrigins []string `yaml:"allowed_origins" env:"ALLOWED_ORIGINS"`
+
+	// AllowCredentials enables the Access-Control-Allow-Credentials header
+	AllowCredentials bool `yaml:"allow_credentials" env:"CORS_ALLOW_CREDENTIALS"`
 }
 
-// HashSettings contains password hashing settings
+// HashSettings contains password hashing settings.
+// These settings control the Argon2id password hashing algorithm parameters.
 type HashSettings struct {
-	Memory      uint32 `yaml:"memory" env:"HASH_MEMORY"`
-	Iterations  uint32 `yaml:"iterations" env:"HASH_ITERATIONS"`
-	Parallelism uint8  `yaml:"parallelism" env:"HASH_PARALLELISM"`
-	SaltLength  uint32 `yaml:"salt_length" env:"HASH_SALT_LENGTH"`
-	KeyLength   uint32 `yaml:"key_length" env:"HASH_KEY_LENGTH"`
+	// Memory is the amount of memory used by the hashing algorithm, in KiB
+	Memory uint32 `yaml:"memory" env:"HASH_MEMORY"`
+
+	// Iterations is the number of iterations (passes) over the memory
+	Iterations uint32 `yaml:"iterations" env:"HASH_ITERATIONS"`
+
+	// Parallelism is the degree of parallelism (number of threads)
+	Parallelism uint8 `yaml:"parallelism" env:"HASH_PARALLELISM"`
+
+	// SaltLength is the length of the salt in bytes
+	SaltLength uint32 `yaml:"salt_length" env:"HASH_SALT_LENGTH"`
+
+	// KeyLength is the length of the generated hash in bytes
+	KeyLength uint32 `yaml:"key_length" env:"HASH_KEY_LENGTH"`
 }
 
-// ConnectionString returns the database connection string
+// ConnectionString returns the database connection string formatted for the database driver.
+// It properly escapes and formats all connection parameters for MariaDB/MySQL.
+//
+// Returns:
+//   - A connection string in the format "username:password@tcp(host:port)/dbname?params"
 func (dbs *DatabaseSettings) ConnectionString() string {
 	// MariaDB/MySQL connection string format: username:password@tcp(host:port)/dbname
 	password := dbs.Password
@@ -108,38 +217,65 @@ func (dbs *DatabaseSettings) ConnectionString() string {
 		password = ":" + password
 	}
 
+	// Build the connection string with additional parameters
+	// - parseTime=true: Handles DATE and DATETIME values properly
+	// - charset=utf8mb4: Uses full UTF-8 support for 4-byte characters
+	// - collation=utf8mb4_unicode_ci: Case-insensitive Unicode collation
 	return fmt.Sprintf(
 		"%s%s@tcp(%s:%d)/%s?parseTime=true&charset=utf8mb4&collation=utf8mb4_unicode_ci",
 		dbs.User, password, dbs.Host, dbs.Port, dbs.Name,
 	)
 }
 
-// ServerAddress returns the complete server address
+// ServerAddress returns the complete server address as a string.
+// This is used for binding the HTTP server to the configured host and port.
+//
+// Returns:
+//   - A formatted string in the form "host:port"
 func (ss *ServerSettings) ServerAddress() string {
 	return fmt.Sprintf("%s:%d", ss.Host, ss.Port)
 }
 
-// IsDevelopment checks if the application is running in development mode
+// IsDevelopment checks if the application is running in development mode.
+//
+// Returns:
+//   - true if the environment is "development", false otherwise
 func (as *AppSettings) IsDevelopment() bool {
 	return strings.ToLower(as.Environment) == constants.EnvDevelopment
 }
 
-// IsProduction checks if the application is running in production mode
+// IsProduction checks if the application is running in production mode.
+//
+// Returns:
+//   - true if the environment is "production", false otherwise
 func (as *AppSettings) IsProduction() bool {
 	return strings.ToLower(as.Environment) == constants.EnvProduction
 }
 
-// IsTesting checks if the application is running in testing mode
+// IsTesting checks if the application is running in testing mode.
+//
+// Returns:
+//   - true if the environment is "testing", false otherwise
 func (as *AppSettings) IsTesting() bool {
 	return strings.ToLower(as.Environment) == constants.EnvTesting
 }
 
 var (
-	// cfg holds the current application configuration
+	// cfg holds the current application configuration.
+	// It's initialized by Load() and accessed via Get().
 	cfg *AppConfig
 )
 
-// Load loads the configuration from a config file and environment variables
+// Load loads the configuration from a config file and environment variables.
+// Environment variables take precedence over file-based configuration to allow
+// for easy deployment configuration and containerization.
+//
+// Parameters:
+//   - configPath: Path to the YAML configuration file (can be empty if using only environment variables)
+//
+// Returns:
+//   - A pointer to the loaded and validated AppConfig
+//   - An error if loading or validation fails
 func Load(configPath string) (*AppConfig, error) {
 	config := &AppConfig{}
 
@@ -157,19 +293,22 @@ func Load(configPath string) (*AppConfig, error) {
 	}
 
 	// Override with environment variables
+	// This allows for easy configuration in container environments
 	if err := LoadEnv(config); err != nil {
 		return nil, fmt.Errorf("error loading environment variables: %w", err)
 	}
 
 	// Set defaults for missing values
+	// This ensures the application can run with minimal configuration
 	setDefaults(config)
 
 	// Validate the configuration
+	// This catches configuration errors early, before they cause runtime issues
 	if err := validateConfig(config); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	// Save the configuration globally
+	// Save the configuration globally for access through Get()
 	cfg = config
 
 	// Log the configuration (but hide sensitive values)
@@ -178,7 +317,14 @@ func Load(configPath string) (*AppConfig, error) {
 	return config, nil
 }
 
-// Get returns the current application configuration
+// Get returns the current application configuration.
+// This provides global access to the configuration after it has been loaded.
+//
+// Returns:
+//   - A pointer to the current AppConfig
+//
+// Panics:
+//   - If configuration hasn't been loaded yet via Load()
 func Get() *AppConfig {
 	if cfg == nil {
 		log.Fatal().Msg("configuration not loaded")
@@ -186,7 +332,11 @@ func Get() *AppConfig {
 	return cfg
 }
 
-// setDefaults sets default values for any missing configuration
+// setDefaults sets default values for any missing configuration settings.
+// This allows the application to run with minimal explicit configuration.
+//
+// Parameters:
+//   - config: The configuration to set defaults for
 func setDefaults(config *AppConfig) {
 	// App defaults
 	if config.App.Environment == "" {
@@ -246,7 +396,7 @@ func setDefaults(config *AppConfig) {
 		config.CORS.AllowedOrigins = []string{"*"}
 	}
 
-	// Password hash defaults
+	// Password hash defaults - adjust based on environment for security/performance balance
 	if config.PasswordHash.Memory == 0 {
 		// Lower for development, higher for production
 		if config.App.IsProduction() {
@@ -297,8 +447,15 @@ func setDefaults(config *AppConfig) {
 }
 
 // validateConfig validates that the configuration has all required values
+// and that those values are valid for their intended purpose.
+//
+// Parameters:
+//   - config: The configuration to validate
+//
+// Returns:
+//   - An error if validation fails, nil if the configuration is valid
 func validateConfig(config *AppConfig) error {
-	// Validate environment
+	// Validate environment - must be one of the predefined environments
 	env := strings.ToLower(config.App.Environment)
 	fmt.Printf("Debug - Environment value: '%s'\n", config.App.Environment)
 
@@ -309,6 +466,7 @@ func validateConfig(config *AppConfig) error {
 	}
 
 	// In production, ensure we have a proper JWT secret
+	// This is critical for security in production environments
 	if config.App.IsProduction() && (config.JWT.Secret == "" || config.JWT.Secret == "changeme") {
 		return fmt.Errorf("JWT secret must be set in production")
 	}
@@ -318,7 +476,7 @@ func validateConfig(config *AppConfig) error {
 		return fmt.Errorf("database user must be set")
 	}
 
-	// Validate log level
+	// Validate log level - must be one of the predefined levels
 	logLevel := strings.ToLower(config.Logging.Level)
 	validLevels := []string{"debug", "info", "warn", "error", "fatal", "panic"}
 	validLevel := false
@@ -335,12 +493,17 @@ func validateConfig(config *AppConfig) error {
 	return nil
 }
 
-// logConfig logs the current configuration, masking sensitive values
+// logConfig logs the current configuration, masking sensitive values.
+// This provides visibility into the active configuration while protecting
+// sensitive information like passwords and secrets.
+//
+// Parameters:
+//   - config: The configuration to log
 func logConfig(config *AppConfig) {
 	// Create a copy of the config to mask sensitive values
 	logCfg := *config
 
-	// Mask sensitive information
+	// Mask sensitive information to prevent accidental exposure in logs
 	if logCfg.Database.Password != "" {
 		logCfg.Database.Password = constants.LogRedactedValue
 	}
@@ -348,6 +511,7 @@ func logConfig(config *AppConfig) {
 		logCfg.JWT.Secret = constants.LogRedactedValue
 	}
 
+	// Log key configuration values for operational visibility
 	log.Info().
 		Str("environment", logCfg.App.Environment).
 		Str("version", logCfg.App.Version).

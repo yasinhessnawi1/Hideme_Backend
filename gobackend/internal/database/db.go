@@ -1,4 +1,9 @@
-// internal/database/db.go
+// Package database provides database access and management functions for the HideMe API.
+// It implements a connection pool, transaction management, and common database operations.
+//
+// The package uses the standard database/sql package with the PostgreSQL driver,
+// and provides a higher-level abstraction for common database operations.
+// It includes health checks, connection management, and proper error handling.
 package database
 
 import (
@@ -13,23 +18,36 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
-// Pool represents a database connection pool
+// Pool represents a database connection pool.
+// It embeds sql.DB to provide direct access to its methods while allowing
+// for extension with additional functionality.
 type Pool struct {
 	*sql.DB
 }
 
 var (
-	// dbPool is the global database connection pool
+	// dbPool is the global database connection pool.
+	// It's initialized by Connect() and accessed via Get().
 	dbPool *Pool
 )
 
-// Connect creates a new database connection pool
+// Connect creates a new database connection pool using the provided configuration.
+// It establishes a connection to the database, configures connection pool parameters,
+// and verifies the connection before returning.
+//
+// Parameters:
+//   - cfg: The application configuration containing database settings
+//
+// Returns:
+//   - A properly initialized database connection pool
+//   - An error if connection fails
 func Connect(cfg *config.AppConfig) (*Pool, error) {
-	// Use a longer timeout for database operations
+	// Use a longer timeout for database operations during initial connection
 	ctx, cancel := context.WithTimeout(context.Background(), constants.DBConnectionTimeout)
 	defer cancel()
 
 	// Get connection details from environment variables with fallbacks to config
+	// This allows for runtime configuration overrides
 	db_host := os.Getenv("DB_HOST")
 	if db_host == "" {
 		db_host = cfg.Database.Host
@@ -55,6 +73,7 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 		db_name = cfg.Database.Name
 	}
 
+	// Log connection attempt (without sensitive information)
 	log.Info().
 		Str("host", db_host).
 		Str("port", db_port).
@@ -62,7 +81,8 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 		Str("user", db_user).
 		Msg("Connecting to database")
 
-	// PostgreSQL connection string
+	// PostgreSQL connection string with safety parameters
+	// - connect_timeout: Prevents hanging indefinitely on connection attempts
 	connStr := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable connect_timeout=15",
 		db_host,
@@ -72,19 +92,21 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 		db_name,
 	)
 
-	// Connect to the database
+	// Open a connection to the database
+	// Note: This doesn't actually establish a connection yet, it just validates parameters
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Configure connection pool
-	db.SetMaxOpenConns(cfg.Database.MaxConns)
-	db.SetMaxIdleConns(cfg.Database.MinConns)
-	db.SetConnMaxLifetime(constants.DBConnMaxLifetime)
-	db.SetConnMaxIdleTime(constants.DBConnMaxIdleTime)
+	// Configure connection pool parameters for optimal performance
+	db.SetMaxOpenConns(cfg.Database.MaxConns)          // Maximum number of open connections
+	db.SetMaxIdleConns(cfg.Database.MinConns)          // Minimum number of idle connections
+	db.SetConnMaxLifetime(constants.DBConnMaxLifetime) // Maximum lifetime of a connection
+	db.SetConnMaxIdleTime(constants.DBConnMaxIdleTime) // Maximum idle time of a connection
 
-	// Verify connection
+	// Verify connection with a ping
+	// This ensures we can actually establish a connection before returning
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
@@ -97,7 +119,14 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 	return dbPool, nil
 }
 
-// Get returns the global database connection pool
+// Get returns the global database connection pool.
+// This provides global access to the database connection after it has been initialized.
+//
+// Returns:
+//   - The global database connection pool
+//
+// Panics:
+//   - If the database connection pool hasn't been initialized
 func Get() *Pool {
 	if dbPool == nil {
 		log.Fatal().Msg("database connection pool not initialized")
@@ -105,7 +134,8 @@ func Get() *Pool {
 	return dbPool
 }
 
-// Close closes the database connection pool
+// Close closes the database connection pool.
+// This should be called when the application shuts down to release resources.
 func (p *Pool) Close() {
 	if p != nil && p.DB != nil {
 		log.Info().Msg("Closing database connection pool")
@@ -113,7 +143,16 @@ func (p *Pool) Close() {
 	}
 }
 
-// Transaction executes a function within a transaction
+// Transaction executes a function within a database transaction.
+// It handles starting the transaction, committing on success, rolling back on error,
+// and properly handling panics to ensure the transaction is always cleaned up.
+//
+// Parameters:
+//   - ctx: The context for the transaction
+//   - fn: The function to execute within the transaction
+//
+// Returns:
+//   - An error if the transaction fails or the function returns an error
 func (p *Pool) Transaction(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	// Start a transaction
 	tx, err := p.BeginTx(ctx, nil)
@@ -150,11 +189,21 @@ func (p *Pool) Transaction(ctx context.Context, fn func(tx *sql.Tx) error) error
 	return nil
 }
 
-// HealthCheck performs a health check on the database connection
+// HealthCheck performs a health check on the database connection.
+// It verifies that the database is reachable and operational by
+// pinging it and executing a simple query.
+//
+// Parameters:
+//   - ctx: The context for the health check
+//
+// Returns:
+//   - An error if the health check fails, nil if the database is healthy
 func (p *Pool) HealthCheck(ctx context.Context) error {
+	// Use a timeout to prevent the health check from hanging
 	ctx, cancel := context.WithTimeout(ctx, constants.DBHealthCheckTimeout)
 	defer cancel()
 
+	// Ping the database to verify connection
 	if err := p.PingContext(ctx); err != nil {
 		return fmt.Errorf("database health check failed: %w", err)
 	}
@@ -165,6 +214,7 @@ func (p *Pool) HealthCheck(ctx context.Context) error {
 		return fmt.Errorf("database query test failed: %w", err)
 	}
 
+	// Verify that the result is what we expect
 	if result != 1 {
 		return fmt.Errorf("database returned unexpected result: %d", result)
 	}

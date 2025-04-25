@@ -1,3 +1,10 @@
+// Package gdprlog provides GDPR-compliant logging functionalities.
+//
+// This file implements subject access request handling for the GDPR logging system.
+// It provides functions to find, export, and delete logs related to a specific data
+// subject, supporting the GDPR rights of access, portability, and erasure. These
+// functions allow organizations to respond to data subject requests while maintaining
+// the integrity and security of their logging system.
 package gdprlog
 
 import (
@@ -14,38 +21,73 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// LogEntry represents a parsed log entry for subject access purposes
+// LogEntry represents a parsed log entry for subject access purposes.
+// It contains both the structured data of the log entry and metadata about its source.
 type LogEntry struct {
-	Timestamp time.Time              `json:"timestamp"`
-	Level     string                 `json:"level"`
-	Message   string                 `json:"message"`
-	Fields    map[string]interface{} `json:"fields"`
-	Source    string                 `json:"source"`
-	Raw       string                 `json:"raw,omitempty"`
+	// Timestamp is the time when the log entry was created
+	Timestamp time.Time `json:"timestamp"`
+	// Level is the log level (debug, info, warn, error, etc.)
+	Level string `json:"level"`
+	// Message is the log message text
+	Message string `json:"message"`
+	// Fields contains the structured data associated with the log entry
+	Fields map[string]interface{} `json:"fields"`
+	// Source indicates which log category (standard, personal, sensitive) the entry came from
+	Source string `json:"source"`
+	// Raw contains the original unparsed log entry text
+	Raw string `json:"raw,omitempty"`
 }
 
-// SubjectIdentifiers contains different ways to identify a subject in logs
+// SubjectIdentifiers contains different ways to identify a subject in logs.
+// It provides multiple ways to match a data subject, as the subject may be
+// represented differently across different parts of the system.
 type SubjectIdentifiers struct {
-	UserID    string   `json:"user_id,omitempty"`
-	Username  string   `json:"username,omitempty"`
-	Email     string   `json:"email,omitempty"`
-	IDs       []string `json:"ids,omitempty"`      // Additional numeric IDs
-	Keywords  []string `json:"keywords,omitempty"` // Additional search terms
-	IPAddress string   `json:"ip_address,omitempty"`
+	// UserID is the primary identifier for a user
+	UserID string `json:"user_id,omitempty"`
+	// Username is the user's login name
+	Username string `json:"username,omitempty"`
+	// Email is the user's email address
+	Email string `json:"email,omitempty"`
+	// IDs contains additional numeric identifiers for the user
+	IDs []string `json:"ids,omitempty"`
+	// Keywords contains additional search terms related to the user
+	Keywords []string `json:"keywords,omitempty"`
+	// IPAddress is the user's IP address
+	IPAddress string `json:"ip_address,omitempty"`
 }
 
-// SubjectDataResult contains the results of a subject data search
+// SubjectDataResult contains the results of a subject data search.
+// It provides comprehensive information about the search process and results.
 type SubjectDataResult struct {
-	SearchTime    time.Time   `json:"search_time"`
-	Subject       string      `json:"subject"`
-	TotalEntries  int         `json:"total_entries"`
-	Entries       []*LogEntry `json:"entries"`
-	SearchedFiles int         `json:"searched_files"`
-	FromDate      time.Time   `json:"from_date"`
-	ToDate        time.Time   `json:"to_date"`
+	// SearchTime is when the search was performed
+	SearchTime time.Time `json:"search_time"`
+	// Subject is a human-readable identifier for the data subject
+	Subject string `json:"subject"`
+	// TotalEntries is the number of log entries found
+	TotalEntries int `json:"total_entries"`
+	// Entries contains the actual log entries found
+	Entries []*LogEntry `json:"entries"`
+	// SearchedFiles is the number of files examined during the search
+	SearchedFiles int `json:"searched_files"`
+	// FromDate is the start of the date range searched
+	FromDate time.Time `json:"from_date"`
+	// ToDate is the end of the date range searched
+	ToDate time.Time `json:"to_date"`
 }
 
-// FindLogsForSubject searches logs for entries related to a specific data subject
+// FindLogsForSubject searches logs for entries related to a specific data subject.
+// It supports the GDPR right of access by allowing an organization to find all
+// data related to a specific individual.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout
+//   - identifiers: Various ways to identify the subject in logs
+//   - fromDate: Start of the date range to search
+//   - toDate: End of the date range to search
+//
+// Returns:
+//   - *SubjectDataResult: Results of the search, including found log entries
+//   - error: An error if the search fails, nil otherwise
 func (gl *GDPRLogger) FindLogsForSubject(ctx context.Context, identifiers SubjectIdentifiers, fromDate, toDate time.Time) (*SubjectDataResult, error) {
 	result := &SubjectDataResult{
 		SearchTime: time.Now(),
@@ -145,7 +187,18 @@ func (gl *GDPRLogger) FindLogsForSubject(ctx context.Context, identifiers Subjec
 	return result, nil
 }
 
-// searchLogFile searches a single log file for entries related to a subject
+// searchLogFile searches a single log file for entries related to a subject.
+// It performs an initial quick string search before doing more detailed parsing
+// to optimize performance on large log files.
+//
+// Parameters:
+//   - filePath: Path to the log file to search
+//   - fileLabel: Category label of the log file (standard, personal, sensitive)
+//   - identifiers: Various ways to identify the subject in logs
+//
+// Returns:
+//   - []*LogEntry: Log entries that match the subject identifiers
+//   - error: An error if the search fails, nil otherwise
 func (gl *GDPRLogger) searchLogFile(filePath, fileLabel string, identifiers SubjectIdentifiers) ([]*LogEntry, error) {
 	var entries []*LogEntry
 
@@ -195,7 +248,16 @@ func (gl *GDPRLogger) searchLogFile(filePath, fileLabel string, identifiers Subj
 	return entries, nil
 }
 
-// matchesAnyIdentifier does a quick string check to see if a line might be relevant
+// matchesAnyIdentifier does a quick string check to see if a line might be relevant.
+// This is an optimization to avoid parsing every log line as JSON when most
+// lines won't be relevant to the search.
+//
+// Parameters:
+//   - line: The raw log line text
+//   - identifiers: Various ways to identify the subject in logs
+//
+// Returns:
+//   - bool: true if the line contains any of the identifiers, false otherwise
 func matchesAnyIdentifier(line string, identifiers SubjectIdentifiers) bool {
 	// Quick check for user ID as a string
 	if identifiers.UserID != "" && strings.Contains(line, identifiers.UserID) {
@@ -234,7 +296,15 @@ func matchesAnyIdentifier(line string, identifiers SubjectIdentifiers) bool {
 	return false
 }
 
-// matchesSubjectIdentifiers does a detailed check for subject identifiers in a parsed log entry
+// matchesSubjectIdentifiers does a detailed check for subject identifiers in a parsed log entry.
+// It examines the structured data of the log entry to find matches to the subject identifiers.
+//
+// Parameters:
+//   - entry: The parsed log entry as a map
+//   - identifiers: Various ways to identify the subject in logs
+//
+// Returns:
+//   - bool: true if the entry matches any of the identifiers, false otherwise
 func matchesSubjectIdentifiers(entry map[string]interface{}, identifiers SubjectIdentifiers) bool {
 	// Check user_id or user id variants
 	if identifiers.UserID != "" {
@@ -368,7 +438,15 @@ func matchesSubjectIdentifiers(entry map[string]interface{}, identifiers Subject
 	return false
 }
 
-// matchesValue checks if a log value matches an identifier string
+// matchesValue checks if a log value matches an identifier string.
+// It handles direct matches and also attempts to match potentially masked or redacted values.
+//
+// Parameters:
+//   - value: The value from the log entry, which can be of any type
+//   - identifier: The identifier string to match against
+//
+// Returns:
+//   - bool: true if the value matches the identifier, false otherwise
 func matchesValue(value interface{}, identifier string) bool {
 	if value == nil {
 		return false
@@ -399,7 +477,16 @@ func matchesValue(value interface{}, identifier string) bool {
 	return false
 }
 
-// parseLogEntry converts a raw log line and parsed JSON into a LogEntry
+// parseLogEntry converts a raw log line and parsed JSON into a LogEntry.
+// It extracts and formats the relevant fields into a structured LogEntry object.
+//
+// Parameters:
+//   - rawLine: The raw log line text
+//   - parsed: The parsed JSON data from the log line
+//   - source: The source category of the log (standard, personal, sensitive)
+//
+// Returns:
+//   - *LogEntry: A structured representation of the log entry
 func parseLogEntry(rawLine string, parsed map[string]interface{}, source string) *LogEntry {
 	entry := &LogEntry{
 		Fields: make(map[string]interface{}),
@@ -436,7 +523,17 @@ func parseLogEntry(rawLine string, parsed map[string]interface{}, source string)
 	return entry
 }
 
-// DeleteLogsForSubject removes or redacts logs containing data for a specific subject
+// DeleteLogsForSubject removes or redacts logs containing data for a specific subject.
+// This supports the GDPR right to erasure by allowing removal of a data subject's
+// personal data from logs.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout
+//   - identifiers: Various ways to identify the subject in logs
+//
+// Returns:
+//   - int: The number of log entries processed
+//   - error: An error if the deletion fails, nil otherwise
 func (gl *GDPRLogger) DeleteLogsForSubject(ctx context.Context, identifiers SubjectIdentifiers) (int, error) {
 	// First, find all logs for this subject
 	// Use a long time range to ensure we catch all entries
@@ -512,7 +609,18 @@ func (gl *GDPRLogger) DeleteLogsForSubject(ctx context.Context, identifiers Subj
 	return totalProcessed, nil
 }
 
-// redactEntriesFromFile redacts entries from a single log file
+// redactEntriesFromFile redacts entries from a single log file.
+// It creates a temporary file with redacted entries and then replaces
+// the original file, ensuring atomicity and preventing data loss.
+//
+// Parameters:
+//   - filePath: Path to the log file to process
+//   - rawEntryContent: Raw text to match against log entries
+//   - identifiers: Various ways to identify the subject in logs
+//
+// Returns:
+//   - int: The number of log entries redacted
+//   - error: An error if redaction fails, nil otherwise
 func (gl *GDPRLogger) redactEntriesFromFile(filePath, rawEntryContent string, identifiers SubjectIdentifiers) (int, error) {
 	// Create a temporary file
 	tmpFile, err := os.CreateTemp(filepath.Dir(filePath), "redacted-*.log")
@@ -612,7 +720,16 @@ func (gl *GDPRLogger) redactEntriesFromFile(filePath, rawEntryContent string, id
 	return entriesRedacted, nil
 }
 
-// redactPersonalData redacts personal information from a log entry
+// redactPersonalData redacts personal information from a log entry.
+// It replaces personal identifiers with a redaction marker while
+// preserving the structure of the log entry.
+//
+// Parameters:
+//   - entry: The log entry to redact as a map
+//   - identifiers: Various ways to identify the subject in logs
+//
+// Returns:
+//   - map[string]interface{}: The redacted log entry
 func redactPersonalData(entry map[string]interface{}, identifiers SubjectIdentifiers) map[string]interface{} {
 	// Make a copy of the entry
 	redacted := make(map[string]interface{})
@@ -660,7 +777,15 @@ func redactPersonalData(entry map[string]interface{}, identifiers SubjectIdentif
 	return redacted
 }
 
-// contains checks if a string is in a slice
+// contains checks if a string is in a slice.
+// This is a utility function for checking if a field name is in a list of personal fields.
+//
+// Parameters:
+//   - slice: The slice of strings to search in
+//   - str: The string to search for
+//
+// Returns:
+//   - bool: true if the string is in the slice, false otherwise
 func contains(slice []string, str string) bool {
 	for _, s := range slice {
 		if s == str {
@@ -670,7 +795,17 @@ func contains(slice []string, str string) bool {
 	return false
 }
 
-// ExportLogsForSubject exports all logs for a subject in a GDPR-compliant format
+// ExportLogsForSubject exports all logs for a subject in a GDPR-compliant format.
+// This supports the GDPR right to data portability by providing all data about
+// a subject in a structured, machine-readable format.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout
+//   - identifiers: Various ways to identify the subject in logs
+//   - writer: Writer to output the exported logs to
+//
+// Returns:
+//   - error: An error if export fails, nil otherwise
 func (gl *GDPRLogger) ExportLogsForSubject(ctx context.Context, identifiers SubjectIdentifiers, writer io.Writer) error {
 	// Find logs for the subject
 	startDate := time.Now().AddDate(-10, 0, 0) // 10 years ago
@@ -691,7 +826,14 @@ func (gl *GDPRLogger) ExportLogsForSubject(ctx context.Context, identifiers Subj
 	return nil
 }
 
-// getSubjectName returns a display name for the subject based on available identifiers
+// getSubjectName returns a display name for the subject based on available identifiers.
+// It chooses the most specific and user-friendly identifier available.
+//
+// Parameters:
+//   - identifiers: Various ways to identify the subject
+//
+// Returns:
+//   - string: A human-readable name for the subject
 func getSubjectName(identifiers SubjectIdentifiers) string {
 	if identifiers.Username != "" {
 		return identifiers.Username

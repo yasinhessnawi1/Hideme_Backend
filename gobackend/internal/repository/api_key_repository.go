@@ -1,3 +1,10 @@
+// Package repository provides data access interfaces and implementations for the HideMe application.
+// It follows the repository pattern to abstract database operations and provide a clean API
+// for data persistence operations.
+//
+// The package encapsulates all database interactions, enforcing proper data access patterns,
+// transaction management, error handling, and security practices (including sensitive data redaction).
+// All repositories use the database connection pool and follow consistent patterns for CRUD operations.
 package repository
 
 import (
@@ -16,30 +23,122 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// APIKeyRepository defines methods for interacting with API keys
+// APIKeyRepository defines methods for interacting with API keys in the database.
+// It provides a clean interface for CRUD operations on API keys, allowing for
+// authentication and authorization of external services interacting with the system.
 type APIKeyRepository interface {
+	// Create adds a new API key to the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - apiKey: The API key to store, with all required fields populated
+	//
+	// Returns:
+	//   - An error if creation fails (e.g., due to duplicate key, database connectivity issues)
+	//   - nil on successful creation
 	Create(ctx context.Context, apiKey *models.APIKey) error
+
+	// GetByID retrieves an API key by its unique identifier.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the API key
+	//
+	// Returns:
+	//   - The API key if found
+	//   - NotFoundError if the key doesn't exist
+	//   - Other errors for database issues
 	GetByID(ctx context.Context, id string) (*models.APIKey, error)
+
+	// GetByUserID retrieves all API keys for a specific user.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - userID: The unique identifier of the user
+	//
+	// Returns:
+	//   - A slice of API keys belonging to the user
+	//   - An empty slice if no keys exist
+	//   - An error if retrieval fails
 	GetByUserID(ctx context.Context, userID int64) ([]*models.APIKey, error)
+
+	// VerifyKey validates an API key by checking its ID and hash against the database.
+	// This also verifies that the key has not expired.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - keyID: The unique identifier of the API key
+	//   - keyHash: The hashed value of the API key
+	//
+	// Returns:
+	//   - The API key if valid and not expired
+	//   - InvalidTokenError if the key doesn't exist or hash doesn't match
+	//   - ExpiredTokenError if the key exists but has expired
+	//   - Other errors for database issues
 	VerifyKey(ctx context.Context, keyID, keyHash string) (*models.APIKey, error)
+
+	// Delete removes an API key from the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the API key to delete
+	//
+	// Returns:
+	//   - NotFoundError if the key doesn't exist
+	//   - Other errors for database issues
 	Delete(ctx context.Context, id string) error
+
+	// DeleteByUserID removes all API keys for a specific user.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - userID: The unique identifier of the user
+	//
+	// Returns:
+	//   - An error if deletion fails
+	//   - nil if deletion succeeds or there were no keys to delete
 	DeleteByUserID(ctx context.Context, userID int64) error
+
+	// DeleteExpired removes all expired API keys from the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//
+	// Returns:
+	//   - The number of expired keys deleted
+	//   - An error if deletion fails
 	DeleteExpired(ctx context.Context) (int64, error)
 }
 
-// PostgresAPIKeyRepository is a PostgreSQL implementation of APIKeyRepository
+// PostgresAPIKeyRepository is a PostgreSQL implementation of APIKeyRepository.
+// It implements all required methods using PostgreSQL-specific features
+// and error handling.
 type PostgresAPIKeyRepository struct {
 	db *database.Pool
 }
 
-// NewAPIKeyRepository creates a new APIKeyRepository
+// NewAPIKeyRepository creates a new APIKeyRepository implementation for PostgreSQL.
+//
+// Parameters:
+//   - db: A connection pool for PostgreSQL database access
+//
+// Returns:
+//   - An implementation of the APIKeyRepository interface
 func NewAPIKeyRepository(db *database.Pool) APIKeyRepository {
 	return &PostgresAPIKeyRepository{
 		db: db,
 	}
 }
 
-// Create adds a new API key to the database
+// Create adds a new API key to the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - apiKey: The API key to store
+//
+// Returns:
+//   - DuplicateError if an API key with the same ID already exists
+//   - Other errors for database issues
 func (r *PostgresAPIKeyRepository) Create(ctx context.Context, apiKey *models.APIKey) error {
 	// Start query timer
 	startTime := time.Now()
@@ -92,7 +191,16 @@ func (r *PostgresAPIKeyRepository) Create(ctx context.Context, apiKey *models.AP
 	return nil
 }
 
-// GetByID retrieves an API key by ID
+// GetByID retrieves an API key by ID.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the API key
+//
+// Returns:
+//   - The API key if found
+//   - NotFoundError if the key doesn't exist
+//   - Other errors for database issues
 func (r *PostgresAPIKeyRepository) GetByID(ctx context.Context, id string) (*models.APIKey, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -133,7 +241,16 @@ func (r *PostgresAPIKeyRepository) GetByID(ctx context.Context, id string) (*mod
 	return apiKey, nil
 }
 
-// GetByUserID retrieves all API keys for a user
+// GetByUserID retrieves all API keys for a user.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - userID: The unique identifier of the user
+//
+// Returns:
+//   - A slice of API keys belonging to the user
+//   - An empty slice if no keys exist
+//   - An error if retrieval fails
 func (r *PostgresAPIKeyRepository) GetByUserID(ctx context.Context, userID int64) ([]*models.APIKey, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -191,7 +308,19 @@ func (r *PostgresAPIKeyRepository) GetByUserID(ctx context.Context, userID int64
 	return apiKeys, nil
 }
 
-// VerifyKey verifies an API key by its ID and hash
+// VerifyKey verifies an API key by its ID and hash.
+// The key must exist, the hash must match, and the key must not be expired.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - keyID: The unique identifier of the API key
+//   - keyHash: The hashed value of the API key
+//
+// Returns:
+//   - The API key if valid and not expired
+//   - InvalidTokenError if the key doesn't exist or hash doesn't match
+//   - ExpiredTokenError if the key exists but has expired
+//   - Other errors for database issues
 func (r *PostgresAPIKeyRepository) VerifyKey(ctx context.Context, keyID, keyHash string) (*models.APIKey, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -248,7 +377,15 @@ func (r *PostgresAPIKeyRepository) VerifyKey(ctx context.Context, keyID, keyHash
 	return apiKey, nil
 }
 
-// Delete removes an API key from the database
+// Delete removes an API key from the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the API key to delete
+//
+// Returns:
+//   - NotFoundError if the key doesn't exist
+//   - Other errors for database issues
 func (r *PostgresAPIKeyRepository) Delete(ctx context.Context, id string) error {
 	// Start query timer
 	startTime := time.Now()
@@ -288,7 +425,15 @@ func (r *PostgresAPIKeyRepository) Delete(ctx context.Context, id string) error 
 	return nil
 }
 
-// DeleteByUserID removes all API keys for a user
+// DeleteByUserID removes all API keys for a user.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - userID: The unique identifier of the user
+//
+// Returns:
+//   - An error if deletion fails
+//   - nil if deletion succeeds or there were no keys to delete
 func (r *PostgresAPIKeyRepository) DeleteByUserID(ctx context.Context, userID int64) error {
 	// Start query timer
 	startTime := time.Now()
@@ -321,7 +466,15 @@ func (r *PostgresAPIKeyRepository) DeleteByUserID(ctx context.Context, userID in
 	return nil
 }
 
-// DeleteExpired removes all expired API keys
+// DeleteExpired removes all expired API keys.
+// This is typically used by a scheduled cleanup process.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//
+// Returns:
+//   - The number of expired keys deleted
+//   - An error if deletion fails
 func (r *PostgresAPIKeyRepository) DeleteExpired(ctx context.Context) (int64, error) {
 	// Start query timer
 	startTime := time.Now()

@@ -1,3 +1,10 @@
+// Package service provides business logic implementations for the HideMe application.
+// It contains services that orchestrate operations across repositories and implement
+// the core application functionality.
+//
+// This file implements the settings service, which manages user preferences and configuration
+// including ban lists, search patterns, and model entities. It handles importing and exporting
+// settings, allowing users to transfer their configurations across environments.
 package service
 
 import (
@@ -13,7 +20,9 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// SettingsService handles user settings operations
+// SettingsService handles user settings operations for the application.
+// It provides methods for managing preferences, ban lists, search patterns,
+// and model entities, with a focus on user-specific configurations.
 type SettingsService struct {
 	settingsRepo    repository.SettingsRepository
 	banListRepo     repository.BanListRepository
@@ -21,7 +30,19 @@ type SettingsService struct {
 	modelEntityRepo repository.ModelEntityRepository
 }
 
-// NewSettingsService creates a new SettingsService
+// NewSettingsService creates a new SettingsService with the specified dependencies.
+//
+// Parameters:
+//   - settingsRepo: Repository for user settings operations
+//   - banListRepo: Repository for ban list operations
+//   - patternRepo: Repository for search pattern operations
+//   - modelEntityRepo: Repository for model entity operations
+//
+// Returns:
+//   - A new SettingsService instance with all dependencies initialized
+//
+// The settings service requires all these repositories to properly manage
+// the various aspects of user configuration and preferences.
 func NewSettingsService(
 	settingsRepo repository.SettingsRepository,
 	banListRepo repository.BanListRepository,
@@ -36,7 +57,19 @@ func NewSettingsService(
 	}
 }
 
-// GetUserSettings retrieves settings for a user
+// GetUserSettings retrieves settings for a user.
+// If settings don't exist for the user, default settings are created.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose settings to retrieve
+//
+// Returns:
+//   - The user's settings (either existing or newly created defaults)
+//   - An error if retrieval or creation fails
+//
+// This method ensures that every user has settings, creating default
+// settings if none exist yet.
 func (s *SettingsService) GetUserSettings(ctx context.Context, userID int64) (*models.UserSetting, error) {
 	// Get or create settings
 	settings, err := s.settingsRepo.EnsureDefaultSettings(ctx, userID)
@@ -47,7 +80,19 @@ func (s *SettingsService) GetUserSettings(ctx context.Context, userID int64) (*m
 	return settings, nil
 }
 
-// UpdateUserSettings updates settings for a user
+// UpdateUserSettings updates settings for a user.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose settings to update
+//   - update: The settings updates to apply
+//
+// Returns:
+//   - The updated user settings
+//   - An error if retrieval or update fails
+//
+// This method gets the existing settings, applies the updates, and
+// saves the modified settings back to the database.
 func (s *SettingsService) UpdateUserSettings(ctx context.Context, userID int64, update *models.UserSettingsUpdate) (*models.UserSetting, error) {
 	// Get existing settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -73,7 +118,19 @@ func (s *SettingsService) UpdateUserSettings(ctx context.Context, userID int64, 
 	return settings, nil
 }
 
-// GetBanList retrieves the ban list for a user
+// GetBanList retrieves the ban list for a user.
+// If a ban list doesn't exist for the user, a new empty one is created.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose ban list to retrieve
+//
+// Returns:
+//   - The user's ban list with all banned words
+//   - An error if retrieval or creation fails
+//
+// This method ensures that every user has a ban list, creating an empty
+// one if none exists yet.
 func (s *SettingsService) GetBanList(ctx context.Context, userID int64) (*models.BanListWithWords, error) {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -110,7 +167,19 @@ func (s *SettingsService) GetBanList(ctx context.Context, userID int64) (*models
 	return result, nil
 }
 
-// AddBanListWords adds words to a user's ban list
+// AddBanListWords adds words to a user's ban list.
+// These words will be excluded from sensitive information detection.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose ban list to modify
+//   - words: The words to add to the ban list
+//
+// Returns:
+//   - An error if retrieval, creation, or update fails
+//
+// This method ensures that the user has a ban list, creating one if needed,
+// then adds the specified words to it.
 func (s *SettingsService) AddBanListWords(ctx context.Context, userID int64, words []string) error {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -146,7 +215,18 @@ func (s *SettingsService) AddBanListWords(ctx context.Context, userID int64, wor
 	return nil
 }
 
-// RemoveBanListWords removes words from a user's ban list
+// RemoveBanListWords removes words from a user's ban list.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose ban list to modify
+//   - words: The words to remove from the ban list
+//
+// Returns:
+//   - An error if retrieval or update fails
+//
+// This method is idempotent - if the ban list doesn't exist or
+// some words aren't in the list, no error is returned.
 func (s *SettingsService) RemoveBanListWords(ctx context.Context, userID int64, words []string) error {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -178,7 +258,18 @@ func (s *SettingsService) RemoveBanListWords(ctx context.Context, userID int64, 
 	return nil
 }
 
-// GetSearchPatterns retrieves search patterns for a user
+// GetSearchPatterns retrieves search patterns for a user.
+// These patterns are used for detecting sensitive information in documents.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose search patterns to retrieve
+//
+// Returns:
+//   - A slice of the user's search patterns
+//   - An error if retrieval fails
+//
+// This method returns an empty slice if no patterns exist.
 func (s *SettingsService) GetSearchPatterns(ctx context.Context, userID int64) ([]*models.SearchPattern, error) {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -195,7 +286,20 @@ func (s *SettingsService) GetSearchPatterns(ctx context.Context, userID int64) (
 	return patterns, nil
 }
 
-// CreateSearchPattern creates a new search pattern
+// CreateSearchPattern creates a new search pattern for a user.
+// These patterns define how sensitive information is identified in documents.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user for whom to create the pattern
+//   - pattern: The pattern details to create
+//
+// Returns:
+//   - The newly created search pattern
+//   - ValidationError if the pattern type is invalid
+//   - Other errors if retrieval or creation fails
+//
+// This method validates the pattern type before creating the pattern.
 func (s *SettingsService) CreateSearchPattern(ctx context.Context, userID int64, pattern *models.SearchPatternCreate) (*models.SearchPattern, error) {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -224,7 +328,22 @@ func (s *SettingsService) CreateSearchPattern(ctx context.Context, userID int64,
 	return newPattern, nil
 }
 
-// UpdateSearchPattern updates an existing search pattern
+// UpdateSearchPattern updates an existing search pattern.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user who owns the pattern
+//   - patternID: The ID of the pattern to update
+//   - update: The pattern updates to apply
+//
+// Returns:
+//   - The updated search pattern
+//   - ForbiddenError if the pattern doesn't belong to the user
+//   - ValidationError if the pattern type is invalid
+//   - NotFoundError if the pattern doesn't exist
+//   - Other errors if retrieval or update fails
+//
+// This method verifies ownership of the pattern before updating it.
 func (s *SettingsService) UpdateSearchPattern(ctx context.Context, userID int64, patternID int64, update *models.SearchPatternUpdate) (*models.SearchPattern, error) {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -269,7 +388,19 @@ func (s *SettingsService) UpdateSearchPattern(ctx context.Context, userID int64,
 	return pattern, nil
 }
 
-// DeleteSearchPattern removes a search pattern
+// DeleteSearchPattern removes a search pattern.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user who owns the pattern
+//   - patternID: The ID of the pattern to delete
+//
+// Returns:
+//   - ForbiddenError if the pattern doesn't belong to the user
+//   - NotFoundError if the pattern doesn't exist
+//   - Other errors if retrieval or deletion fails
+//
+// This method verifies ownership of the pattern before deleting it.
 func (s *SettingsService) DeleteSearchPattern(ctx context.Context, userID int64, patternID int64) error {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -301,7 +432,19 @@ func (s *SettingsService) DeleteSearchPattern(ctx context.Context, userID int64,
 	return nil
 }
 
-// GetModelEntities retrieves model entities for a specific method
+// GetModelEntities retrieves model entities for a specific detection method.
+// These entities define custom terms for detection by specific ML/AI methods.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose entities to retrieve
+//   - methodID: The ID of the detection method to filter by
+//
+// Returns:
+//   - A slice of model entities with their associated method information
+//   - An error if retrieval fails
+//
+// This method returns an empty slice if no entities exist for the method.
 func (s *SettingsService) GetModelEntities(ctx context.Context, userID int64, methodID int64) ([]*models.ModelEntityWithMethod, error) {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -318,7 +461,19 @@ func (s *SettingsService) GetModelEntities(ctx context.Context, userID int64, me
 	return entities, nil
 }
 
-// AddModelEntities adds entities for a specific detection method
+// AddModelEntities adds entities for a specific detection method.
+// These entities customize detection algorithms for specific terms.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user for whom to add entities
+//   - batch: A batch of entities to add, including method ID and texts
+//
+// Returns:
+//   - The newly created model entities
+//   - An error if retrieval or creation fails
+//
+// This method creates multiple entities in a single transaction for efficiency.
 func (s *SettingsService) AddModelEntities(ctx context.Context, userID int64, batch *models.ModelEntityBatch) ([]*models.ModelEntity, error) {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -347,7 +502,19 @@ func (s *SettingsService) AddModelEntities(ctx context.Context, userID int64, ba
 	return entities, nil
 }
 
-// DeleteModelEntity removes a model entity
+// DeleteModelEntity removes a model entity.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user who owns the entity
+//   - entityID: The ID of the entity to delete
+//
+// Returns:
+//   - ForbiddenError if the entity doesn't belong to the user
+//   - NotFoundError if the entity doesn't exist
+//   - Other errors if retrieval or deletion fails
+//
+// This method verifies ownership of the entity before deleting it.
 func (s *SettingsService) DeleteModelEntity(ctx context.Context, userID int64, entityID int64) error {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -379,7 +546,18 @@ func (s *SettingsService) DeleteModelEntity(ctx context.Context, userID int64, e
 	return nil
 }
 
-// DeleteModelEntityByMethodID removes model entities for a specific method
+// DeleteModelEntityByMethodID removes all model entities for a specific detection method.
+// This is useful when replacing all entities for a particular method.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose entities to delete
+//   - methodID: The ID of the detection method whose entities to delete
+//
+// Returns:
+//   - An error if retrieval or deletion fails
+//
+// This method does not check if any entities exist before attempting deletion.
 func (s *SettingsService) DeleteModelEntityByMethodID(ctx context.Context, userID int64, methodID int64) error {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -400,7 +578,21 @@ func (s *SettingsService) DeleteModelEntityByMethodID(ctx context.Context, userI
 	return nil
 }
 
-// ExportSettings exports all settings for a user
+// ExportSettings exports all settings for a user.
+// This creates a comprehensive export of all user preferences and configurations
+// that can be used for backup or transfer to another environment.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose settings to export
+//
+// Returns:
+//   - A complete settings export including general settings, ban list,
+//     search patterns, and model entities
+//   - An error if retrieval fails
+//
+// This method collects all user settings components into a single export object
+// with the current timestamp.
 func (s *SettingsService) ExportSettings(ctx context.Context, userID int64) (*models.SettingsExport, error) {
 	// Get user settings
 	settings, err := s.GetUserSettings(ctx, userID)
@@ -460,7 +652,24 @@ func (s *SettingsService) ExportSettings(ctx context.Context, userID int64) (*mo
 	return export, nil
 }
 
-// ImportSettings imports settings for a user
+// ImportSettings imports settings for a user.
+// This applies a previously exported settings package to the user's account,
+// replacing all existing settings, ban lists, search patterns, and model entities.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user whose settings to update
+//   - importData: The complete settings export to import
+//
+// Returns:
+//   - An error if any part of the import fails
+//
+// This method performs several steps in sequence:
+// 1. Updates general settings
+// 2. Replaces the ban list with imported words
+// 3. Replaces search patterns with imported patterns
+// 4. Replaces model entities with imported entities
+// Each step is handled separately to ensure partial updates still succeed.
 func (s *SettingsService) ImportSettings(ctx context.Context, userID int64, importData *models.SettingsExport) error {
 	// 1. Update general settings
 	// Create an update object based on the imported settings

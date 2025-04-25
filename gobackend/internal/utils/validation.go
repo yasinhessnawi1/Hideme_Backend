@@ -1,4 +1,15 @@
-// internal/utils/validation.go
+// Package utils provides utility functions and helpers for the application.
+// This file implements a robust validation system that handles API request
+// validation, including JSON decoding, struct validation, and custom validation rules.
+//
+// The validation system includes:
+//   - Functions to decode and validate JSON request bodies
+//   - Consistent error handling for validation failures
+//   - Custom validation rules for common use cases like password strength
+//   - Helper functions for validating specific fields like emails and usernames
+//
+// This approach centralizes validation logic and ensures consistent error
+// handling and reporting across the API.
 package utils
 
 import (
@@ -21,7 +32,9 @@ var (
 	validate *validator.Validate
 )
 
-// InitValidator initializes the validator with custom validations
+// InitValidator initializes the validator with custom validations.
+// This sets up the validator instance with custom tag handling and validations.
+// It should be called once during application startup.
 func InitValidator() {
 	// Create a new validator instance
 	validate = validator.New()
@@ -41,7 +54,11 @@ func InitValidator() {
 	log.Info().Msg("Validator initialized")
 }
 
-// GetValidator returns the singleton validator instance
+// GetValidator returns the singleton validator instance.
+// If the validator hasn't been initialized yet, it initializes it first.
+//
+// Returns:
+//   - The global validator instance
 func GetValidator() *validator.Validate {
 	if validate == nil {
 		InitValidator()
@@ -50,7 +67,19 @@ func GetValidator() *validator.Validate {
 }
 
 // DecodeJSON decodes a JSON request body into the provided struct
-// with improved error handling and size limits
+// with improved error handling and size limits.
+//
+// Parameters:
+//   - r: The HTTP request containing the JSON body
+//   - v: A pointer to the struct to decode into
+//
+// Returns:
+//   - An error if decoding fails, with specific error messages for different failure cases
+//
+// This function includes several safeguards:
+//   - Limits request body size to prevent DOS attacks
+//   - Rejects unknown fields to prevent typos and ensure forward compatibility
+//   - Provides detailed error messages for different types of JSON parsing errors
 func DecodeJSON(r *http.Request, v interface{}) error {
 	// Limit the size of the request body to prevent DOS attacks
 	r.Body = http.MaxBytesReader(nil, r.Body, constants.MaxRequestBodySize)
@@ -102,7 +131,14 @@ func DecodeJSON(r *http.Request, v interface{}) error {
 	return nil
 }
 
-// ValidateStruct validates a struct using the validator
+// ValidateStruct validates a struct using the validator.
+// It converts validation errors into application errors with user-friendly messages.
+//
+// Parameters:
+//   - v: The struct to validate
+//
+// Returns:
+//   - An error if validation fails, with specific error messages for each validation failure
 func ValidateStruct(v interface{}) error {
 	if validate == nil {
 		InitValidator()
@@ -139,7 +175,15 @@ func ValidateStruct(v interface{}) error {
 	return NewBadRequestError(err.Error())
 }
 
-// DecodeAndValidate decodes a JSON request body and validates it
+// DecodeAndValidate decodes a JSON request body and validates it.
+// This combines DecodeJSON and ValidateStruct into a single convenient function.
+//
+// Parameters:
+//   - r: The HTTP request containing the JSON body
+//   - v: A pointer to the struct to decode into and validate
+//
+// Returns:
+//   - An error if decoding or validation fails
 func DecodeAndValidate(r *http.Request, v interface{}) error {
 	if err := DecodeJSON(r, v); err != nil {
 		return err
@@ -147,7 +191,14 @@ func DecodeAndValidate(r *http.Request, v interface{}) error {
 	return ValidateStruct(v)
 }
 
-// getErrorMessage returns a user-friendly error message for a validation error
+// getErrorMessage returns a user-friendly error message for a validation error.
+// It translates validation tags into readable messages.
+//
+// Parameters:
+//   - e: The validation error
+//
+// Returns:
+//   - A user-friendly error message
 func getErrorMessage(e validator.FieldError) string {
 	switch e.Tag() {
 	case "required":
@@ -177,7 +228,11 @@ func getErrorMessage(e validator.FieldError) string {
 	}
 }
 
-// registerCustomValidations adds custom validation functions to the validator
+// registerCustomValidations adds custom validation functions to the validator.
+// This allows defining application-specific validation rules.
+//
+// Parameters:
+//   - v: The validator instance to register the custom validations with
 func registerCustomValidations(v *validator.Validate) {
 	// Example custom validation: password strength
 	if err := v.RegisterValidation("strong_password", validateStrongPassword); err != nil {
@@ -185,7 +240,20 @@ func registerCustomValidations(v *validator.Validate) {
 	}
 }
 
-// Custom validation function for password strength
+// validateStrongPassword is a custom validation function for password strength.
+// It checks that passwords meet minimum complexity requirements.
+//
+// Parameters:
+//   - fl: The field level for validation
+//
+// Returns:
+//   - true if the password is strong enough, false otherwise
+//
+// A strong password must satisfy at least 3 of the following criteria:
+//   - Contains uppercase letters
+//   - Contains lowercase letters
+//   - Contains numbers
+//   - Contains special characters
 func validateStrongPassword(fl validator.FieldLevel) bool {
 	password := fl.Field().String()
 
@@ -226,7 +294,15 @@ func validateStrongPassword(fl validator.FieldLevel) bool {
 	return criteria >= 3
 }
 
-// NewValidationErrorWithDetails creates a validation error with multiple field details
+// NewValidationErrorWithDetails creates a validation error with multiple field details.
+// This is used for reporting validation errors across multiple fields.
+//
+// Parameters:
+//   - message: A general error message
+//   - details: A map of field names to error messages
+//
+// Returns:
+//   - An AppError with validation details
 func NewValidationErrorWithDetails(message string, details map[string]string) *AppError {
 	detailsMap := make(map[string]interface{})
 	for k, v := range details {
@@ -241,12 +317,26 @@ func NewValidationErrorWithDetails(message string, details map[string]string) *A
 	}
 }
 
-// IsValidEmail checks if a string is a valid email address
+// IsValidEmail checks if a string is a valid email address.
+// This provides a convenient way to validate email addresses.
+//
+// Parameters:
+//   - email: The email address to validate
+//
+// Returns:
+//   - true if the email is valid, false otherwise
 func IsValidEmail(email string) bool {
 	return GetValidator().Var(email, "email") == nil
 }
 
-// ValidateUsername validates a username
+// ValidateUsername validates a username.
+// It checks that usernames meet length and character requirements.
+//
+// Parameters:
+//   - username: The username to validate
+//
+// Returns:
+//   - An error if the username is invalid, nil otherwise
 func ValidateUsername(username string) error {
 	if len(username) < constants.MinUsernameLength {
 		return NewValidationError(constants.ColumnUsername, fmt.Sprintf("Username must be at least %d characters long", constants.MinUsernameLength))
@@ -260,7 +350,14 @@ func ValidateUsername(username string) error {
 	return nil
 }
 
-// ValidatePassword validates a password
+// ValidatePassword validates a password.
+// It checks that passwords meet minimum security requirements.
+//
+// Parameters:
+//   - password: The password to validate
+//
+// Returns:
+//   - An error if the password is invalid, nil otherwise
 func ValidatePassword(password string) error {
 	if len(password) < constants.MinPasswordLength {
 		return NewValidationError("password", fmt.Sprintf("Password must be at least %d characters long", constants.MinPasswordLength))
