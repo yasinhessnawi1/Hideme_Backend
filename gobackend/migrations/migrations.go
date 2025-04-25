@@ -202,14 +202,14 @@ func (m *Migrator) recordMigration(ctx context.Context, name, description string
 
 func (m *Migrator) tableExists(ctx context.Context, tableName string) (bool, error) {
 	query := `
-		SELECT COUNT(*)
-		FROM information_schema.tables
-		WHERE table_schema = current_schema()
-		AND table_name = $1
-	`
-	var count int
-	err := m.db.QueryRowContext(ctx, query, tableName).Scan(&count)
-	return count > 0, err
+        SELECT EXISTS(SELECT 1 
+        FROM information_schema.tables 
+        WHERE table_schema = current_schema()
+        AND table_name = $1)
+    `
+	var exists bool
+	err := m.db.QueryRowContext(ctx, query, tableName).Scan(&exists)
+	return exists, err
 }
 
 // ensureUserSettingsColumns ensures that the user_settings table has all required columns
