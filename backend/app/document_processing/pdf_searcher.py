@@ -496,14 +496,18 @@ class PDFSearcher:
         Dict[str, Any], int]:
         """
         Process a page when the candidate phrase consists of a single word.
-        It searches for words that exactly match the candidate phrase and returns their bounding boxes and text.
+
+        This method searches for words that match the candidate phrase, ignoring surrounding punctuation
+        from both the candidate and the words on the page.
 
         Args:
             page (Dict[str, Any]): A page dictionary containing "page" and "words".
-            candidate_phrase (str): The candidate phrase (a single word).
+            candidate_phrase (str): The candidate phrase (a single word to search for).
 
         Returns:
-            Tuple[Dict[str, Any], int]: A tuple with the page result and match count.
+            Tuple[Dict[str, Any], int]: A tuple with:
+                - A dictionary containing the page number and list of matches (each with a bounding box).
+                - The total count of matches found on the page.
         """
         # Retrieve the page number; default to "unknown" if not provided.
         page_number = page.get("page", "unknown")
@@ -511,17 +515,24 @@ class PDFSearcher:
         page_matches = []
         # Build a mapping of words to their positions and bounding boxes.
         mapping, _ = self.build_page_text_and_mapping(page.get("words", []))
-        # Iterate over each mapping entry.
+
+        # Clean the candidate phrase (remove punctuation)
+        cleaned_candidate_phrase = candidate_phrase.strip(string.punctuation)
+
+        # Iterate over each word mapping.
         for m in mapping:
-            # Check if the mapping text exactly matches the candidate phrase.
-            if m["text"] == candidate_phrase:
-                # Append the match information with its bounding box.
+            word_text = (m.get("text") or "").strip()
+            # Clean the word text (remove punctuation)
+            cleaned_word_text = word_text.strip(string.punctuation)
+
+            if cleaned_word_text == cleaned_candidate_phrase:
+                # If the cleaned word matches the cleaned candidate phrase, record its bounding box.
                 page_matches.append({
                     "bbox": m["bbox"],
                 })
-                # Log a debug message showing the occurrence.
                 log_debug(f"Page {page_number}: Found occurrence with bbox: {m['bbox']}")
-        # Return a dictionary with page results and the count of matches.
+
+        # Return a dictionary with the page number and matches, and the count of matches.
         return {"page": page_number, "matches": page_matches}, len(page_matches)
 
     @staticmethod
