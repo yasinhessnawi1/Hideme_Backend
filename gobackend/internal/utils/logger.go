@@ -1,3 +1,17 @@
+// Package utils provides utility functions and helpers for the application.
+// This file implements a robust logging system that is GDPR-compliant and provides
+// structured logging capabilities for different contexts like HTTP requests,
+// database queries, authentication events, and general application logs.
+//
+// The logging system includes:
+//   - A GDPR-compliant logger that sanitizes sensitive data
+//   - Context-specific logging functions
+//   - Log level management
+//   - Support for different output formats
+//   - Log rotation capabilities
+//
+// The implementation uses zerolog for performance and structured logging but
+// can be configured to use different backends.
 package utils
 
 import (
@@ -20,7 +34,15 @@ import (
 // Global GDPR logger instance
 var gdprLogger *gdprlog.GDPRLogger
 
-// InitLogger initializes the application logger with the given configuration
+// InitLogger initializes the application logger with the given configuration.
+// It sets up either a GDPR-compliant logger or falls back to a standard zerolog logger
+// if the GDPR logger initialization fails.
+//
+// Parameters:
+//   - cfg: The application configuration containing logging settings
+//
+// This function sets the global log level, initializes the GDPR logger,
+// sets up log rotation, and configures the log format based on the environment.
 func InitLogger(cfg *config.AppConfig) {
 	// Set global log level
 	level, err := zerolog.ParseLevel(strings.ToLower(cfg.Logging.Level))
@@ -51,17 +73,32 @@ func InitLogger(cfg *config.AppConfig) {
 	log.Info().Msg("Logger initialized")
 }
 
-// GetGDPRLogger returns the global GDPR logger instance
+// GetGDPRLogger returns the global GDPR logger instance.
+// This allows components to access the GDPR logger directly when needed.
+//
+// Returns:
+//   - The global GDPR logger instance
 func GetGDPRLogger() *gdprlog.GDPRLogger {
 	return gdprLogger
 }
 
-// SetGDPRLogger sets the global GDPR logger instance
+// SetGDPRLogger sets the global GDPR logger instance.
+// This is useful for testing or when a custom logger needs to be used.
+//
+// Parameters:
+//   - logger: The GDPR logger instance to set as global
 func SetGDPRLogger(logger *gdprlog.GDPRLogger) {
 	gdprLogger = logger
 }
 
-// setupStandardLogger configures the standard zerolog logger (fallback)
+// setupStandardLogger configures the standard zerolog logger (fallback).
+// This is used if the GDPR logger initialization fails.
+//
+// Parameters:
+//   - cfg: The application configuration containing logging settings
+//
+// The function configures the log format (JSON or console) based on the environment
+// and sets application metadata in the log context.
 func setupStandardLogger(cfg *config.AppConfig) {
 	// Configure logger output format
 	var output io.Writer = os.Stdout
@@ -83,7 +120,15 @@ func setupStandardLogger(cfg *config.AppConfig) {
 		Logger()
 }
 
-// createGDPRCompatibleLogger creates a zerolog.Logger that forwards to GDPR logger
+// createGDPRCompatibleLogger creates a zerolog.Logger that forwards to GDPR logger.
+// This allows using the standard zerolog API while ensuring all logs go through
+// the GDPR-compliant logger.
+//
+// Parameters:
+//   - cfg: The application configuration
+//
+// Returns:
+//   - A zerolog.Logger instance that forwards logs to the GDPR logger
 func createGDPRCompatibleLogger(cfg *config.AppConfig) zerolog.Logger {
 	return zerolog.New(gdprLogHook{}).
 		With().
@@ -94,10 +139,18 @@ func createGDPRCompatibleLogger(cfg *config.AppConfig) zerolog.Logger {
 		Logger()
 }
 
-// gdprLogHook is a writer that forwards logs to GDPR logger
+// gdprLogHook is a writer that forwards logs to GDPR logger.
+// It implements io.Writer to be used with zerolog.
 type gdprLogHook struct{}
 
-// Write implements io.Writer to handle log entries
+// Write implements io.Writer to handle log entries.
+// It parses the JSON log entry and forwards it to the appropriate GDPR logger method.
+//
+// Parameters:
+//   - p: The log entry as a byte slice
+//
+// Returns:
+//   - The number of bytes processed and any error that occurred
 func (h gdprLogHook) Write(p []byte) (n int, err error) {
 	// Parse the JSON log entry
 	var logEntry map[string]interface{}
@@ -143,7 +196,18 @@ func (h gdprLogHook) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-// RequestLogger creates a logger with request-specific context
+// RequestLogger creates a logger with request-specific context.
+// This is useful for tracing requests through the system and associating
+// log entries with specific requests and users.
+//
+// Parameters:
+//   - requestID: The unique ID for the request
+//   - userID: The ID of the user making the request (if authenticated)
+//   - method: The HTTP method of the request
+//   - path: The path of the request
+//
+// Returns:
+//   - A zerolog.Logger instance with request context
 func RequestLogger(requestID, userID, method, path string) zerolog.Logger {
 	logger := log.With().
 		Str(constants.RequestIDContextKey, requestID).
@@ -157,7 +221,23 @@ func RequestLogger(requestID, userID, method, path string) zerolog.Logger {
 	return logger.Logger()
 }
 
-// LogHTTPRequest logs an HTTP request with request details
+// LogHTTPRequest logs an HTTP request with request details.
+// It uses different log levels based on the request path and response status code.
+//
+// Parameters:
+//   - requestID: The unique ID for the request
+//   - method: The HTTP method of the request
+//   - path: The path of the request
+//   - remoteAddr: The IP address of the client
+//   - userAgent: The user agent of the client
+//   - statusCode: The HTTP status code of the response
+//   - latency: The time taken to process the request
+//
+// This function automatically adjusts the log level based on the status code:
+//   - 5xx errors are logged at ERROR level
+//   - 4xx errors are logged at WARN level
+//   - API requests are logged at INFO level
+//   - Health checks and metrics are logged at DEBUG level or skipped entirely in non-debug mode
 func LogHTTPRequest(requestID, method, path, remoteAddr, userAgent string, statusCode int, latency time.Duration) {
 	// Create fields for GDPR logger
 	fields := map[string]interface{}{
@@ -221,7 +301,12 @@ func LogHTTPRequest(requestID, method, path, remoteAddr, userAgent string, statu
 	}
 }
 
-// LogError logs an error with context information
+// LogError logs an error with context information.
+// This provides a consistent way to log errors throughout the application.
+//
+// Parameters:
+//   - err: The error that occurred
+//   - context: Additional context information about when/where/why the error occurred
 func LogError(err error, context map[string]interface{}) {
 	if gdprLogger != nil {
 		gdprLogger.Error("Error occurred", err, context)
@@ -251,7 +336,13 @@ func LogError(err error, context map[string]interface{}) {
 	}
 }
 
-// LogPanic logs a recovered panic value
+// LogPanic logs a recovered panic value.
+// This is intended to be used in recover() blocks to log panic information
+// before continuing execution.
+//
+// Parameters:
+//   - recovered: The value recovered from the panic
+//   - stack: The stack trace at the time of the panic
 func LogPanic(recovered interface{}, stack []byte) {
 	if gdprLogger != nil {
 		fields := map[string]interface{}{
@@ -267,7 +358,15 @@ func LogPanic(recovered interface{}, stack []byte) {
 	}
 }
 
-// LogDBQuery logs a database query for debugging
+// LogDBQuery logs a database query for debugging.
+// It sanitizes sensitive data in the query arguments to prevent logging
+// passwords, tokens, or other sensitive information.
+//
+// Parameters:
+//   - query: The SQL query that was executed
+//   - args: The arguments passed to the query
+//   - duration: The time taken to execute the query
+//   - err: Any error that occurred during execution
 func LogDBQuery(query string, args []interface{}, duration time.Duration, err error) {
 	// Mask sensitive data in the arguments (e.g., password)
 	safeArgs := make([]interface{}, len(args))
@@ -314,7 +413,16 @@ func LogDBQuery(query string, args []interface{}, duration time.Duration, err er
 	}
 }
 
-// LogAuth logs authentication events
+// LogAuth logs authentication events.
+// This provides a consistent way to log login attempts, logouts, and other
+// authentication-related events.
+//
+// Parameters:
+//   - event: The type of authentication event (e.g., "login", "logout")
+//   - userID: The ID of the user
+//   - username: The username of the user
+//   - success: Whether the authentication was successful
+//   - reason: The reason for failure, if applicable
 func LogAuth(event string, userID, username string, success bool, reason string) {
 	fields := map[string]interface{}{
 		"event":                      event,
@@ -353,7 +461,13 @@ func LogAuth(event string, userID, username string, success bool, reason string)
 	}
 }
 
-// LogAPIKey logs API key events
+// LogAPIKey logs API key events.
+// This provides a consistent way to log API key creation, deletion, and usage.
+//
+// Parameters:
+//   - event: The type of API key event (e.g., "created", "deleted", "used")
+//   - keyID: The ID of the API key
+//   - userID: The ID of the user who owns the API key
 func LogAPIKey(event, keyID, userID string) {
 	fields := map[string]interface{}{
 		"event":                    event,
@@ -372,12 +486,23 @@ func LogAPIKey(event, keyID, userID string) {
 	}
 }
 
-// GetLogLevel returns the current global log level as a string
+// GetLogLevel returns the current global log level as a string.
+//
+// Returns:
+//   - The current log level as a string (e.g., "debug", "info", "warn", "error")
 func GetLogLevel() string {
 	return zerolog.GlobalLevel().String()
 }
 
-// SetLogLevel updates the global log level
+// SetLogLevel updates the global log level.
+// This allows dynamically changing the log level at runtime, which is useful
+// for debugging production issues without restarting the application.
+//
+// Parameters:
+//   - level: The new log level as a string (e.g., "debug", "info", "warn", "error")
+//
+// Returns:
+//   - An error if the level string is invalid
 func SetLogLevel(level string) error {
 	parsedLevel, err := zerolog.ParseLevel(strings.ToLower(level))
 	if err != nil {

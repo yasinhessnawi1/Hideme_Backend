@@ -1,3 +1,10 @@
+// Package repository provides data access interfaces and implementations for the HideMe application.
+// It follows the repository pattern to abstract database operations and provide a clean API
+// for data persistence operations.
+//
+// This file implements the document repository, which manages processed documents and their
+// detected sensitive entities. The repository enforces data minimization principles by
+// storing only metadata about documents rather than actual document content.
 package repository
 
 import (
@@ -15,33 +22,170 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// DocumentRepository defines methods for interacting with documents
+// DocumentRepository defines methods for interacting with documents and their detected entities.
+// It provides operations for document management including creation, retrieval, update,
+// and deletion, as well as management of sensitive information detected within those documents.
 type DocumentRepository interface {
+	// Create adds a new document to the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - document: The document to store, with required fields populated
+	//
+	// Returns:
+	//   - An error if creation fails
+	//   - nil on successful creation
+	//
+	// The document ID will be populated after successful creation.
 	Create(ctx context.Context, document *models.Document) error
+
+	// GetByID retrieves a document by its unique identifier.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the document
+	//
+	// Returns:
+	//   - The document if found
+	//   - NotFoundError if the document doesn't exist
+	//   - Other errors for database issues
 	GetByID(ctx context.Context, id int64) (*models.Document, error)
+
+	// GetByUserID retrieves all documents for a user with pagination.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - userID: The unique identifier of the user
+	//   - page: The page number (starting from 1)
+	//   - pageSize: The number of documents per page
+	//
+	// Returns:
+	//   - A slice of documents owned by the user for the requested page
+	//   - The total count of documents owned by the user
+	//   - An error if retrieval fails
 	GetByUserID(ctx context.Context, userID int64, page, pageSize int) ([]*models.Document, int, error)
+
+	// Update updates a document in the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - document: The document to update
+	//
+	// Returns:
+	//   - NotFoundError if the document doesn't exist
+	//   - Other errors for database issues
+	//
+	// This method automatically updates the LastModified timestamp.
 	Update(ctx context.Context, document *models.Document) error
+
+	// Delete removes a document and all its detected entities.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the document to delete
+	//
+	// Returns:
+	//   - NotFoundError if the document doesn't exist
+	//   - Other errors for database issues
+	//
+	// This operation uses a transaction to ensure the document and all its entities
+	// are deleted atomically.
 	Delete(ctx context.Context, id int64) error
+
+	// DeleteByUserID removes all documents for a user.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - userID: The unique identifier of the user
+	//
+	// Returns:
+	//   - An error if deletion fails
+	//   - nil if deletion succeeds
+	//
+	// This operation uses a transaction to ensure all documents and their entities
+	// are deleted atomically.
 	DeleteByUserID(ctx context.Context, userID int64) error
+
+	// GetDetectedEntities retrieves all detected entities for a document.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - documentID: The unique identifier of the document
+	//
+	// Returns:
+	//   - A slice of detected entities with their associated detection methods
+	//   - An empty slice if the document has no detected entities
+	//   - An error if retrieval fails
 	GetDetectedEntities(ctx context.Context, documentID int64) ([]*models.DetectedEntityWithMethod, error)
+
+	// AddDetectedEntity adds a new detected entity to a document.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - entity: The detected entity to add
+	//
+	// Returns:
+	//   - An error if addition fails
+	//   - nil on successful addition
+	//
+	// The entity ID will be populated after successful addition.
 	AddDetectedEntity(ctx context.Context, entity *models.DetectedEntity) error
+
+	// DeleteDetectedEntity removes a detected entity.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - entityID: The unique identifier of the entity to delete
+	//
+	// Returns:
+	//   - NotFoundError if the entity doesn't exist
+	//   - Other errors for database issues
 	DeleteDetectedEntity(ctx context.Context, entityID int64) error
+
+	// GetDocumentSummary retrieves a summary of a document including entity count.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - documentID: The unique identifier of the document
+	//
+	// Returns:
+	//   - A document summary with metadata and entity count
+	//   - NotFoundError if the document doesn't exist
+	//   - Other errors for database issues
 	GetDocumentSummary(ctx context.Context, documentID int64) (*models.DocumentSummary, error)
 }
 
-// PostgresDocumentRepository is a PostgreSQL implementation of DocumentRepository
+// PostgresDocumentRepository is a PostgreSQL implementation of DocumentRepository.
+// It implements all required methods using PostgreSQL-specific features
+// and error handling.
 type PostgresDocumentRepository struct {
 	db *database.Pool
 }
 
-// NewDocumentRepository creates a new DocumentRepository
+// NewDocumentRepository creates a new DocumentRepository implementation for PostgreSQL.
+//
+// Parameters:
+//   - db: A connection pool for PostgreSQL database access
+//
+// Returns:
+//   - An implementation of the DocumentRepository interface
 func NewDocumentRepository(db *database.Pool) DocumentRepository {
 	return &PostgresDocumentRepository{
 		db: db,
 	}
 }
 
-// Create adds a new document to the database
+// Create adds a new document to the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - document: The document to store
+//
+// Returns:
+//   - An error if creation fails
+//   - nil on successful creation
+//
+// The document ID will be populated after successful creation.
 func (r *PostgresDocumentRepository) Create(ctx context.Context, document *models.Document) error {
 	// Start query timer
 	startTime := time.Now()
@@ -83,7 +227,16 @@ func (r *PostgresDocumentRepository) Create(ctx context.Context, document *model
 	return nil
 }
 
-// GetByID retrieves a document by ID
+// GetByID retrieves a document by ID.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the document
+//
+// Returns:
+//   - The document if found
+//   - NotFoundError if the document doesn't exist
+//   - Other errors for database issues
 func (r *PostgresDocumentRepository) GetByID(ctx context.Context, id int64) (*models.Document, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -123,7 +276,18 @@ func (r *PostgresDocumentRepository) GetByID(ctx context.Context, id int64) (*mo
 	return document, nil
 }
 
-// GetByUserID retrieves all documents for a user with pagination
+// GetByUserID retrieves all documents for a user with pagination.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - userID: The unique identifier of the user
+//   - page: The page number (starting from 1)
+//   - pageSize: The number of documents per page
+//
+// Returns:
+//   - A slice of documents owned by the user for the requested page
+//   - The total count of documents owned by the user
+//   - An error if retrieval fails
 func (r *PostgresDocumentRepository) GetByUserID(ctx context.Context, userID int64, page, pageSize int) ([]*models.Document, int, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -190,7 +354,16 @@ func (r *PostgresDocumentRepository) GetByUserID(ctx context.Context, userID int
 	return documents, totalCount, nil
 }
 
-// Update updates a document in the database
+// Update updates a document in the database.
+// This method automatically updates the LastModified timestamp.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - document: The document to update
+//
+// Returns:
+//   - NotFoundError if the document doesn't exist
+//   - Other errors for database issues
 func (r *PostgresDocumentRepository) Update(ctx context.Context, document *models.Document) error {
 	// Start query timer
 	startTime := time.Now()
@@ -242,7 +415,17 @@ func (r *PostgresDocumentRepository) Update(ctx context.Context, document *model
 	return nil
 }
 
-// Delete removes a document and all its detected entities
+// Delete removes a document and all its detected entities.
+// This operation uses a transaction to ensure the document and all its entities
+// are deleted atomically.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the document to delete
+//
+// Returns:
+//   - NotFoundError if the document doesn't exist
+//   - Other errors for database issues
 func (r *PostgresDocumentRepository) Delete(ctx context.Context, id int64) error {
 	// Start query timer
 	startTime := time.Now()
@@ -290,7 +473,19 @@ func (r *PostgresDocumentRepository) Delete(ctx context.Context, id int64) error
 	})
 }
 
-// DeleteByUserID removes all documents for a user
+// DeleteByUserID removes all documents for a user.
+// This operation first identifies all documents for the user, then
+// deletes all detected entities for those documents, and finally
+// deletes the documents themselves. All operations are performed
+// within a transaction to ensure consistency.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - userID: The unique identifier of the user
+//
+// Returns:
+//   - An error if deletion fails
+//   - nil if deletion succeeds
 func (r *PostgresDocumentRepository) DeleteByUserID(ctx context.Context, userID int64) error {
 	// Start query timer
 	startTime := time.Now()
@@ -356,7 +551,17 @@ func (r *PostgresDocumentRepository) DeleteByUserID(ctx context.Context, userID 
 	})
 }
 
-// GetDetectedEntities retrieves all detected entities for a document with method information
+// GetDetectedEntities retrieves all detected entities for a document with method information.
+// The entities are joined with their detection methods to include method-specific information.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - documentID: The unique identifier of the document
+//
+// Returns:
+//   - A slice of detected entities with their associated detection methods
+//   - An empty slice if the document has no detected entities
+//   - An error if retrieval fails
 func (r *PostgresDocumentRepository) GetDetectedEntities(ctx context.Context, documentID int64) ([]*models.DetectedEntityWithMethod, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -419,7 +624,18 @@ func (r *PostgresDocumentRepository) GetDetectedEntities(ctx context.Context, do
 	return entities, nil
 }
 
-// AddDetectedEntity adds a new detected entity to the database
+// AddDetectedEntity adds a new detected entity to the database.
+// This creates a record of sensitive information found in a document.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - entity: The detected entity to add
+//
+// Returns:
+//   - An error if addition fails
+//   - nil on successful addition
+//
+// The entity ID will be populated after successful addition.
 func (r *PostgresDocumentRepository) AddDetectedEntity(ctx context.Context, entity *models.DetectedEntity) error {
 	// Start query timer
 	startTime := time.Now()
@@ -464,7 +680,15 @@ func (r *PostgresDocumentRepository) AddDetectedEntity(ctx context.Context, enti
 	return nil
 }
 
-// DeleteDetectedEntity removes a detected entity from the database
+// DeleteDetectedEntity removes a detected entity from the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - entityID: The unique identifier of the entity to delete
+//
+// Returns:
+//   - NotFoundError if the entity doesn't exist
+//   - Other errors for database issues
 func (r *PostgresDocumentRepository) DeleteDetectedEntity(ctx context.Context, entityID int64) error {
 	// Start query timer
 	startTime := time.Now()
@@ -504,7 +728,18 @@ func (r *PostgresDocumentRepository) DeleteDetectedEntity(ctx context.Context, e
 	return nil
 }
 
-// GetDocumentSummary retrieves a summary of a document including the entity count
+// GetDocumentSummary retrieves a summary of a document including the entity count.
+// This method performs a join between the documents table and detected entities table
+// to count entities in a single query.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - documentID: The unique identifier of the document
+//
+// Returns:
+//   - A document summary with metadata and entity count
+//   - NotFoundError if the document doesn't exist
+//   - Other errors for database issues
 func (r *PostgresDocumentRepository) GetDocumentSummary(ctx context.Context, documentID int64) (*models.DocumentSummary, error) {
 	// Start query timer
 	startTime := time.Now()

@@ -1,3 +1,4 @@
+// Package handlers provides HTTP request handlers for the HideMe API.
 package handlers
 
 import (
@@ -11,19 +12,52 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// GenericHandler handles generic database operations
+// GenericHandler provides handlers for generic database operations.
+// It implements a REST API for CRUD operations on database tables.
+//
+// These handlers follow a consistent pattern and provide a flexible
+// way to interact with database tables without writing custom handlers
+// for each table.
 type GenericHandler struct {
 	dbService DatabaseServiceInterface
 }
 
-// NewGenericHandler creates a new GenericHandler
+// NewGenericHandler creates a new GenericHandler with the provided database service.
+//
+// Parameters:
+//   - dbService: Service handling database operations
+//
+// Returns:
+//   - A properly initialized GenericHandler
 func NewGenericHandler(dbService DatabaseServiceInterface) *GenericHandler {
 	return &GenericHandler{
 		dbService: dbService,
 	}
 }
 
-// GetTableData returns all records from a table
+// GetTableData returns all records from a table with optional filtering.
+// It supports pagination via query parameters and returns the results
+// in a standardized paginated format.
+//
+// HTTP Method:
+//   - GET
+//
+// URL Path:
+//   - /api/tables/{table}
+//
+// URL Parameters:
+//   - table: The name of the table to query
+//
+// Query Parameters:
+//   - page: Page number for pagination (default: 1)
+//   - page_size: Number of records per page (default: 10)
+//   - Any column name: Used for filtering records (e.g., ?name=John)
+//
+// Responses:
+//   - 200 OK: Data retrieved successfully
+//   - 400 Bad Request: Invalid table name or parameters
+//   - 403 Forbidden: Table access not allowed
+//   - 500 Internal Server Error: Server-side error
 func (h *GenericHandler) GetTableData(w http.ResponseWriter, r *http.Request) {
 	// Get the table name from the URL
 	table := chi.URLParam(r, constants.ParamTable)
@@ -32,13 +66,13 @@ func (h *GenericHandler) GetTableData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate table access
+	// Validate table access - security check to prevent access to sensitive tables
 	if err := h.dbService.ValidateTableAccess(table); err != nil {
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
 	}
 
-	// Extract query parameters as conditions
+	// Extract query parameters as conditions for filtering
 	conditions := make(map[string]interface{})
 	for key, values := range r.URL.Query() {
 		if len(values) > 0 && key != constants.QueryParamPage && key != constants.QueryParamPageSize {
@@ -49,7 +83,7 @@ func (h *GenericHandler) GetTableData(w http.ResponseWriter, r *http.Request) {
 	// Get pagination parameters
 	paginationParams := utils.GetPaginationParams(r)
 
-	// Get the total count
+	// Get the total count for pagination
 	totalCount, err := h.dbService.CountTableRecords(r.Context(), table, conditions)
 	if err != nil {
 		utils.ErrorFromAppError(w, utils.ParseError(err))
@@ -67,7 +101,24 @@ func (h *GenericHandler) GetTableData(w http.ResponseWriter, r *http.Request) {
 	utils.Paginated(w, constants.StatusOK, data, paginationParams.Page, paginationParams.PageSize, int(totalCount))
 }
 
-// GetRecordByID returns a single record by ID
+// GetRecordByID returns a single record from a table by its ID.
+//
+// HTTP Method:
+//   - GET
+//
+// URL Path:
+//   - /api/tables/{table}/{id}
+//
+// URL Parameters:
+//   - table: The name of the table to query
+//   - id: The ID of the record to retrieve
+//
+// Responses:
+//   - 200 OK: Record retrieved successfully
+//   - 400 Bad Request: Invalid table name or ID
+//   - 403 Forbidden: Table access not allowed
+//   - 404 Not Found: Record not found
+//   - 500 Internal Server Error: Server-side error
 func (h *GenericHandler) GetRecordByID(w http.ResponseWriter, r *http.Request) {
 	// Get the table name and ID from the URL
 	table := chi.URLParam(r, constants.ParamTable)
@@ -83,7 +134,7 @@ func (h *GenericHandler) GetRecordByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate table access
+	// Validate table access - security check to prevent access to sensitive tables
 	if err := h.dbService.ValidateTableAccess(table); err != nil {
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
@@ -106,7 +157,25 @@ func (h *GenericHandler) GetRecordByID(w http.ResponseWriter, r *http.Request) {
 	utils.JSON(w, constants.StatusOK, record)
 }
 
-// CreateRecord creates a new record in a table
+// CreateRecord creates a new record in a table.
+//
+// HTTP Method:
+//   - POST
+//
+// URL Path:
+//   - /api/tables/{table}
+//
+// URL Parameters:
+//   - table: The name of the table to insert into
+//
+// Request Body:
+//   - JSON object with column names and values
+//
+// Responses:
+//   - 201 Created: Record created successfully
+//   - 400 Bad Request: Invalid table name or request body
+//   - 403 Forbidden: Table access not allowed
+//   - 500 Internal Server Error: Server-side error
 func (h *GenericHandler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	// Get the table name from the URL
 	table := chi.URLParam(r, constants.ParamTable)
@@ -115,7 +184,7 @@ func (h *GenericHandler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate table access
+	// Validate table access - security check to prevent access to sensitive tables
 	if err := h.dbService.ValidateTableAccess(table); err != nil {
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
@@ -144,6 +213,7 @@ func (h *GenericHandler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	var placeholders []string
 	var values []interface{}
 
+	// Prepare the parameterized query - PostgreSQL uses $1, $2, etc.
 	i := 1
 	for col, val := range data {
 		columns = append(columns, col)
@@ -153,6 +223,7 @@ func (h *GenericHandler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Construct the full query for PostgreSQL with RETURNING
+	// RETURNING * returns the inserted row with any auto-generated values
 	query += "(" + utils.JoinStrings(columns, ", ") + ") VALUES (" + utils.JoinStrings(placeholders, ", ") + ") RETURNING *"
 
 	// Execute the query
@@ -171,7 +242,27 @@ func (h *GenericHandler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	utils.JSON(w, constants.StatusCreated, result[0])
 }
 
-// UpdateRecord updates a record in a table
+// UpdateRecord updates an existing record in a table.
+//
+// HTTP Method:
+//   - PUT
+//
+// URL Path:
+//   - /api/tables/{table}/{id}
+//
+// URL Parameters:
+//   - table: The name of the table to update
+//   - id: The ID of the record to update
+//
+// Request Body:
+//   - JSON object with column names and values to update
+//
+// Responses:
+//   - 200 OK: Record updated successfully
+//   - 400 Bad Request: Invalid table name, ID, or request body
+//   - 403 Forbidden: Table access not allowed
+//   - 404 Not Found: Record not found
+//   - 500 Internal Server Error: Server-side error
 func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 	// Get the table name and ID from the URL
 	table := chi.URLParam(r, constants.ParamTable)
@@ -187,7 +278,7 @@ func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate table access
+	// Validate table access - security check to prevent access to sensitive tables
 	if err := h.dbService.ValidateTableAccess(table); err != nil {
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
@@ -203,7 +294,7 @@ func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID for auditing
 	userID, _ := auth.GetUserID(r)
 
-	// Default ID column name
+	// Default ID column name - handle both singular and plural table names
 	idColumn := table + constants.ColumnID
 	if table[len(table)-1] == 's' {
 		idColumn = table[:len(table)-1] + constants.ColumnID
@@ -227,6 +318,7 @@ func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 	var setClauses []string
 	var values []interface{}
 
+	// Prepare the parameterized query - PostgreSQL uses $1, $2, etc.
 	i := 1
 	for col, val := range data {
 		setClauses = append(setClauses, col+" = $"+strconv.Itoa(i))
@@ -234,7 +326,7 @@ func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 		i++
 	}
 
-	// Add the WHERE clause (PostgreSQL uses $1, $2, etc.)
+	// Add the WHERE clause
 	query += utils.JoinStrings(setClauses, ", ") + " WHERE " + idColumn + " = $" + strconv.Itoa(i)
 	values = append(values, id)
 
@@ -257,7 +349,24 @@ func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 	utils.JSON(w, constants.StatusOK, result[0])
 }
 
-// DeleteRecord deletes a record from a table
+// DeleteRecord deletes a record from a table.
+//
+// HTTP Method:
+//   - DELETE
+//
+// URL Path:
+//   - /api/tables/{table}/{id}
+//
+// URL Parameters:
+//   - table: The name of the table to delete from
+//   - id: The ID of the record to delete
+//
+// Responses:
+//   - 204 No Content: Record deleted successfully
+//   - 400 Bad Request: Invalid table name or ID
+//   - 403 Forbidden: Table access not allowed
+//   - 404 Not Found: Record not found
+//   - 500 Internal Server Error: Server-side error
 func (h *GenericHandler) DeleteRecord(w http.ResponseWriter, r *http.Request) {
 	// Get the table name and ID from the URL
 	table := chi.URLParam(r, constants.ParamTable)
@@ -273,7 +382,7 @@ func (h *GenericHandler) DeleteRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate table access
+	// Validate table access - security check to prevent access to sensitive tables
 	if err := h.dbService.ValidateTableAccess(table); err != nil {
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
@@ -282,7 +391,7 @@ func (h *GenericHandler) DeleteRecord(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID for auditing
 	userID, _ := auth.GetUserID(r)
 
-	// Default ID column name
+	// Default ID column name - handle both singular and plural table names
 	idColumn := table + constants.ColumnID
 	if table[len(table)-1] == 's' {
 		idColumn = table[:len(table)-1] + constants.ColumnID
@@ -304,11 +413,27 @@ func (h *GenericHandler) DeleteRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return success
+	// Return success - 204 No Content is appropriate for successful DELETE
 	utils.NoContent(w)
 }
 
-// GetTableSchema returns the schema for a table
+// GetTableSchema returns the schema for a table.
+// This is useful for dynamically building forms and validations.
+//
+// HTTP Method:
+//   - GET
+//
+// URL Path:
+//   - /api/tables/{table}/schema
+//
+// URL Parameters:
+//   - table: The name of the table to get schema for
+//
+// Responses:
+//   - 200 OK: Schema retrieved successfully
+//   - 400 Bad Request: Invalid table name
+//   - 403 Forbidden: Table access not allowed
+//   - 500 Internal Server Error: Server-side error
 func (h *GenericHandler) GetTableSchema(w http.ResponseWriter, r *http.Request) {
 	// Get the table name from the URL
 	table := chi.URLParam(r, constants.ParamTable)
@@ -317,7 +442,7 @@ func (h *GenericHandler) GetTableSchema(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Validate table access
+	// Validate table access - security check to prevent access to sensitive tables
 	if err := h.dbService.ValidateTableAccess(table); err != nil {
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return

@@ -1,3 +1,10 @@
+// Package repository provides data access interfaces and implementations for the HideMe application.
+// It follows the repository pattern to abstract database operations and provide a clean API
+// for data persistence operations.
+//
+// This file implements the user repository, which manages user accounts with a focus on
+// security and privacy. The repository handles secure authentication, data privacy,
+// and GDPR compliance features including proper logging and masking of personal information.
 package repository
 
 import (
@@ -17,32 +24,178 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils/gdprlog"
 )
 
-// UserRepository defines methods for interacting with user data
+// UserRepository defines methods for interacting with user data in the database.
+// It provides operations for user management including creation, retrieval, update,
+// and deletion with a focus on security and privacy.
 type UserRepository interface {
+	// Create adds a new user to the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - user: The user to store, with required fields populated
+	//
+	// Returns:
+	//   - DuplicateError if a user with the same username or email already exists
+	//   - Other errors for database issues
+	//   - nil on successful creation
+	//
+	// The user ID will be populated after successful creation.
+	// This method automatically sets creation and update timestamps.
 	Create(ctx context.Context, user *models.User) error
+
+	// GetByID retrieves a user by their unique identifier.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the user
+	//
+	// Returns:
+	//   - The user if found (including sensitive fields like password hash)
+	//   - NotFoundError if the user doesn't exist
+	//   - Other errors for database issues
+	//
+	// Note: The caller should use user.Sanitize() before returning to clients.
 	GetByID(ctx context.Context, id int64) (*models.User, error)
+
+	// GetByUsername retrieves a user by their username.
+	// The comparison is case-insensitive for better user experience.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - username: The username to search for
+	//
+	// Returns:
+	//   - The user if found (including sensitive fields like password hash)
+	//   - NotFoundError if no user exists with the username
+	//   - Other errors for database issues
+	//
+	// Note: The caller should use user.Sanitize() before returning to clients.
 	GetByUsername(ctx context.Context, username string) (*models.User, error)
+
+	// GetByEmail retrieves a user by their email address.
+	// The comparison is case-insensitive for better user experience.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - email: The email address to search for
+	//
+	// Returns:
+	//   - The user if found (including sensitive fields like password hash)
+	//   - NotFoundError if no user exists with the email
+	//   - Other errors for database issues
+	//
+	// Note: The caller should use user.Sanitize() before returning to clients.
+	// For privacy reasons, this method avoids logging the actual email address.
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
+
+	// Update updates a user in the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - user: The user to update
+	//
+	// Returns:
+	//   - DuplicateError if the update would result in a unique constraint violation
+	//   - NotFoundError if the user doesn't exist
+	//   - Other errors for database issues
+	//   - nil on successful update
+	//
+	// This method automatically updates the UpdatedAt timestamp.
+	// It does not update password fields; use ChangePassword for that.
 	Update(ctx context.Context, user *models.User) error
+
+	// Delete removes a user from the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the user to delete
+	//
+	// Returns:
+	//   - NotFoundError if the user doesn't exist
+	//   - Other errors for database issues
+	//   - nil on successful deletion
+	//
+	// This method uses a transaction to ensure proper deletion of related records.
 	Delete(ctx context.Context, id int64) error
+
+	// ChangePassword updates a user's password credentials.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the user
+	//   - passwordHash: The new hashed password
+	//   - salt: The new salt used in password hashing
+	//
+	// Returns:
+	//   - NotFoundError if the user doesn't exist
+	//   - Other errors for database issues
+	//   - nil on successful update
+	//
+	// This method also updates the UpdatedAt timestamp.
 	ChangePassword(ctx context.Context, id int64, passwordHash, salt string) error
+
+	// ExistsByUsername checks if a user with the given username exists.
+	// The comparison is case-insensitive for better user experience.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - username: The username to check
+	//
+	// Returns:
+	//   - true if a user with the username exists
+	//   - false if no user with the username exists
+	//   - An error if the check fails
 	ExistsByUsername(ctx context.Context, username string) (bool, error)
+
+	// ExistsByEmail checks if a user with the given email exists.
+	// The comparison is case-insensitive for better user experience.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - email: The email to check
+	//
+	// Returns:
+	//   - true if a user with the email exists
+	//   - false if no user with the email exists
+	//   - An error if the check fails
+	//
+	// For privacy reasons, this method avoids logging the actual email address.
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 }
 
-// PostgresUserRepository is a PostgreSQL implementation of UserRepository
+// PostgresUserRepository is a PostgreSQL implementation of UserRepository.
+// It implements all required methods using PostgreSQL-specific features
+// and error handling, with special attention to security and privacy concerns.
 type PostgresUserRepository struct {
 	db *database.Pool
 }
 
-// NewUserRepository creates a new UserRepository
+// NewUserRepository creates a new UserRepository implementation for PostgreSQL.
+//
+// Parameters:
+//   - db: A connection pool for PostgreSQL database access
+//
+// Returns:
+//   - An implementation of the UserRepository interface
 func NewUserRepository(db *database.Pool) UserRepository {
 	return &PostgresUserRepository{
 		db: db,
 	}
 }
 
-// Create adds a new user to the database
+// Create adds a new user to the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - user: The user to store
+//
+// Returns:
+//   - DuplicateError if a user with the same username or email already exists
+//   - Other errors for database issues
+//   - nil on successful creation
+//
+// The user ID will be populated after successful creation.
+// This method automatically sets creation and update timestamps.
 func (r *PostgresUserRepository) Create(ctx context.Context, user *models.User) error {
 	// Start query timer
 	startTime := time.Now()
@@ -117,7 +270,16 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *models.User) 
 	return nil
 }
 
-// GetByID retrieves a user by ID
+// GetByID retrieves a user by ID.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the user
+//
+// Returns:
+//   - The user if found (including sensitive fields like password hash)
+//   - NotFoundError if the user doesn't exist
+//   - Other errors for database issues
 func (r *PostgresUserRepository) GetByID(ctx context.Context, id int64) (*models.User, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -159,7 +321,17 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id int64) (*models
 	return user, nil
 }
 
-// GetByUsername retrieves a user by username
+// GetByUsername retrieves a user by username.
+// The comparison is case-insensitive for better user experience.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - username: The username to search for
+//
+// Returns:
+//   - The user if found (including sensitive fields like password hash)
+//   - NotFoundError if no user exists with the username
+//   - Other errors for database issues
 func (r *PostgresUserRepository) GetByUsername(ctx context.Context, username string) (*models.User, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -201,7 +373,19 @@ func (r *PostgresUserRepository) GetByUsername(ctx context.Context, username str
 	return user, nil
 }
 
-// GetByEmail retrieves a user by email
+// GetByEmail retrieves a user by email.
+// The comparison is case-insensitive for better user experience.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - email: The email address to search for
+//
+// Returns:
+//   - The user if found (including sensitive fields like password hash)
+//   - NotFoundError if no user exists with the email
+//   - Other errors for database issues
+//
+// For privacy reasons, this method avoids logging the actual email address.
 func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -243,7 +427,19 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 	return user, nil
 }
 
-// Update updates a user in the database
+// Update updates a user in the database.
+// This method automatically updates the UpdatedAt timestamp.
+// It does not update password fields; use ChangePassword for that.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - user: The user to update
+//
+// Returns:
+//   - DuplicateError if the update would result in a unique constraint violation
+//   - NotFoundError if the user doesn't exist
+//   - Other errors for database issues
+//   - nil on successful update
 func (r *PostgresUserRepository) Update(ctx context.Context, user *models.User) error {
 	// Start query timer
 	startTime := time.Now()
@@ -322,7 +518,17 @@ func (r *PostgresUserRepository) Update(ctx context.Context, user *models.User) 
 	return nil
 }
 
-// Delete removes a user from the database
+// Delete removes a user from the database.
+// This method uses a transaction to ensure proper deletion of related records.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the user to delete
+//
+// Returns:
+//   - NotFoundError if the user doesn't exist
+//   - Other errors for database issues
+//   - nil on successful deletion
 func (r *PostgresUserRepository) Delete(ctx context.Context, id int64) error {
 	// Start query timer
 	startTime := time.Now()
@@ -374,7 +580,20 @@ func (r *PostgresUserRepository) Delete(ctx context.Context, id int64) error {
 	})
 }
 
-// ChangePassword updates a user's password
+// ChangePassword updates a user's password credentials.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the user
+//   - passwordHash: The new hashed password
+//   - salt: The new salt used in password hashing
+//
+// Returns:
+//   - NotFoundError if the user doesn't exist
+//   - Other errors for database issues
+//   - nil on successful update
+//
+// This method also updates the UpdatedAt timestamp.
 func (r *PostgresUserRepository) ChangePassword(ctx context.Context, id int64, passwordHash, salt string) error {
 	// Start query timer
 	startTime := time.Now()
@@ -435,7 +654,17 @@ func (r *PostgresUserRepository) ChangePassword(ctx context.Context, id int64, p
 	return nil
 }
 
-// ExistsByUsername checks if a user with the given username exists
+// ExistsByUsername checks if a user with the given username exists.
+// The comparison is case-insensitive for better user experience.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - username: The username to check
+//
+// Returns:
+//   - true if a user with the username exists
+//   - false if no user with the username exists
+//   - An error if the check fails
 func (r *PostgresUserRepository) ExistsByUsername(ctx context.Context, username string) (bool, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -462,7 +691,19 @@ func (r *PostgresUserRepository) ExistsByUsername(ctx context.Context, username 
 	return exists, nil
 }
 
-// ExistsByEmail checks if a user with the given email exists
+// ExistsByEmail checks if a user with the given email exists.
+// The comparison is case-insensitive for better user experience.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - email: The email to check
+//
+// Returns:
+//   - true if a user with the email exists
+//   - false if no user with the email exists
+//   - An error if the check fails
+//
+// For privacy reasons, this method avoids logging the actual email address.
 func (r *PostgresUserRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
 	// Start query timer
 	startTime := time.Now()

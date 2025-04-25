@@ -1,3 +1,9 @@
+// Package migrations provides a framework for database schema management.
+//
+// This file contains the definitions of all database table migrations.
+// Each function creates a Migration object that defines how to create
+// a specific table in the database. The migrations include constraints,
+// indexes, and relationships between tables to ensure data integrity.
 package migrations
 
 import (
@@ -7,7 +13,11 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
-// createUsersTable creates the users table
+// createUsersTable creates the users table.
+// This table stores basic user account information including credentials.
+//
+// Returns:
+//   - Migration: A migration that creates the users table
 func createUsersTable() Migration {
 	return Migration{
 		Name:        "create_users_table",
@@ -33,7 +43,11 @@ func createUsersTable() Migration {
 	}
 }
 
-// createUserSettingsTable creates the user_settings table
+// createUserSettingsTable creates the user_settings table.
+// This table stores user preferences and application settings associated with each user.
+//
+// Returns:
+//   - Migration: A migration that creates the user_settings table
 func createUserSettingsTable() Migration {
 	return Migration{
 		Name:        "create_user_settings_table",
@@ -61,7 +75,11 @@ func createUserSettingsTable() Migration {
 	}
 }
 
-// createDocumentsTable creates the documents table
+// createDocumentsTable creates the documents table.
+// This table stores metadata about user documents that have been uploaded for processing.
+//
+// Returns:
+//   - Migration: A migration that creates the documents table
 func createDocumentsTable() Migration {
 	return Migration{
 		Name:        "create_documents_table",
@@ -91,7 +109,12 @@ func createDocumentsTable() Migration {
 	}
 }
 
-// createSearchPatternsTable creates the search_patterns table
+// createSearchPatternsTable creates the search_patterns table.
+// This table stores patterns used for searching or filtering content,
+// with different pattern types for various search strategies.
+//
+// Returns:
+//   - Migration: A migration that creates the search_patterns table
 func createSearchPatternsTable() Migration {
 	return Migration{
 		Name:        "create_search_patterns_table",
@@ -119,7 +142,12 @@ func createSearchPatternsTable() Migration {
 	}
 }
 
-// createDetectionMethodsTable creates the detection_methods table
+// createDetectionMethodsTable creates the detection_methods table.
+// This table stores information about different methods used to detect
+// sensitive content or entities in documents.
+//
+// Returns:
+//   - Migration: A migration that creates the detection_methods table
 func createDetectionMethodsTable() Migration {
 	return Migration{
 		Name:        "create_detection_methods_table",
@@ -140,7 +168,12 @@ func createDetectionMethodsTable() Migration {
 	}
 }
 
-// createDetectedEntitiesTable creates the detected_entities table
+// createDetectedEntitiesTable creates the detected_entities table.
+// This table stores entities that have been detected in documents,
+// along with their redaction schema and detection method.
+//
+// Returns:
+//   - Migration: A migration that creates the detected_entities table
 func createDetectedEntitiesTable() Migration {
 	return Migration{
 		Name:        "create_detected_entities_table",
@@ -183,7 +216,12 @@ func createDetectedEntitiesTable() Migration {
 	}
 }
 
-// createModelEntitiesTable creates the model_entities table
+// createModelEntitiesTable creates the model_entities table.
+// This table stores entity definitions used by detection models,
+// allowing customization of entity detection per user.
+//
+// Returns:
+//   - Migration: A migration that creates the model_entities table
 func createModelEntitiesTable() Migration {
 	return Migration{
 		Name:        "create_model_entities_table",
@@ -223,7 +261,12 @@ func createModelEntitiesTable() Migration {
 	}
 }
 
-// createBanListsTable (added because it's referenced but was missing)
+// createBanListTable creates the ban_lists table.
+// This table stores ban lists associated with user settings,
+// which can be used to filter or block specific content.
+//
+// Returns:
+//   - Migration: A migration that creates the ban_lists table
 func createBanListTable() Migration {
 	return Migration{
 		Name:        "create_ban_lists_table",
@@ -244,7 +287,11 @@ func createBanListTable() Migration {
 	}
 }
 
-// createBanListWordsTable creates the ban_list_words table
+// createBanListWordsTable creates the ban_list_words table.
+// This table stores the individual words or terms in each ban list.
+//
+// Returns:
+//   - Migration: A migration that creates the ban_list_words table
 func createBanListWordsTable() Migration {
 	return Migration{
 		Name:        "create_ban_list_words_table",
@@ -283,7 +330,11 @@ func createBanListWordsTable() Migration {
 	}
 }
 
-// createSessionsTable creates the sessions table
+// createSessionsTable creates the sessions table.
+// This table stores user session information for authentication and authorization.
+//
+// Returns:
+//   - Migration: A migration that creates the sessions table
 func createSessionsTable() Migration {
 	return Migration{
 		Name:        "create_sessions_table",
@@ -324,7 +375,11 @@ func createSessionsTable() Migration {
 	}
 }
 
-// createAPIKeysTable creates the api_keys table
+// createAPIKeysTable creates the api_keys table.
+// This table stores API keys that allow programmatic access to the system.
+//
+// Returns:
+//   - Migration: A migration that creates the api_keys table
 func createAPIKeysTable() Migration {
 	return Migration{
 		Name:        "create_api_keys_table",

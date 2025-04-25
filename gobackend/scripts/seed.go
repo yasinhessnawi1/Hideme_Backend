@@ -1,3 +1,9 @@
+// Package scripts provides utility scripts for database and system management.
+//
+// This package implements database seeding functionality to populate initial data
+// required for the application to function properly. The seeding system works
+// similarly to migrations, tracking executed seeds to ensure they only run once,
+// making the process idempotent and safe to run on both new and existing databases.
 package scripts
 
 import (
@@ -11,19 +17,35 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 )
 
-// Seeder handles database seeding
+// Seeder handles database seeding.
+// It provides methods to run seeds that populate the database
+// with initial required data.
 type Seeder struct {
 	db *database.Pool
 }
 
-// NewSeeder creates a new seeder
+// NewSeeder creates a new seeder.
+//
+// Parameters:
+//   - db: A database connection pool to use for seeding
+//
+// Returns:
+//   - *Seeder: A configured seeder
 func NewSeeder(db *database.Pool) *Seeder {
 	return &Seeder{
 		db: db,
 	}
 }
 
-// SeedDatabase seeds the database with initial data
+// SeedDatabase seeds the database with initial data.
+// It creates the seeds tracking table if it doesn't exist, then runs
+// all seed functions that haven't been executed yet.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//
+// Returns:
+//   - error: Any error encountered during seeding, nil if successful
 func (s *Seeder) SeedDatabase(ctx context.Context) error {
 	log.Info().Msg("Seeding database")
 	startTime := time.Now()
@@ -66,7 +88,14 @@ func (s *Seeder) SeedDatabase(ctx context.Context) error {
 	return nil
 }
 
-// createSeedsTable creates the seeds table if it doesn't exist
+// createSeedsTable creates the seeds table if it doesn't exist.
+// This table tracks which seed operations have been executed.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//
+// Returns:
+//   - error: Any error encountered during table creation, nil if successful
 func (s *Seeder) createSeedsTable(ctx context.Context) error {
 	query := `
 		DROP TABLE IF EXISTS seeds;
@@ -79,7 +108,15 @@ func (s *Seeder) createSeedsTable(ctx context.Context) error {
 	return err
 }
 
-// getExecutedSeeds returns a map of executed seeds
+// getExecutedSeeds returns a map of executed seeds.
+// The map keys are seed names and values are always true.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//
+// Returns:
+//   - map[string]bool: A map containing names of executed seeds
+//   - error: Any error encountered while retrieving seeds, nil if successful
 func (s *Seeder) getExecutedSeeds(ctx context.Context) (map[string]bool, error) {
 	query := `SELECT name FROM seeds`
 	rows, err := s.db.QueryContext(ctx, query)
@@ -104,7 +141,16 @@ func (s *Seeder) getExecutedSeeds(ctx context.Context) (map[string]bool, error) 
 	return seeds, rows.Err()
 }
 
-// runSeed runs a seed function within a transaction
+// runSeed runs a seed function within a transaction.
+// If the seed operation fails, the transaction is rolled back.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//   - name: The name of the seed operation
+//   - seedFunc: The function that performs the seeding
+//
+// Returns:
+//   - error: Any error encountered during seeding, nil if successful
 func (s *Seeder) runSeed(ctx context.Context, name string, seedFunc func(ctx context.Context, tx *sql.Tx) error) error {
 	return s.db.Transaction(ctx, func(tx *sql.Tx) error {
 		// Run the seed
@@ -123,6 +169,16 @@ func (s *Seeder) runSeed(ctx context.Context, name string, seedFunc func(ctx con
 	})
 }
 
+// seedDetectionMethods seeds the detection_methods table with default values.
+// This ensures all standard detection methods are available in the system.
+// It checks for existing methods to avoid duplicates.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//   - tx: The SQL transaction to use for the operation
+//
+// Returns:
+//   - error: Any error encountered during seeding, nil if successful
 func (s *Seeder) seedDetectionMethods(ctx context.Context, tx *sql.Tx) error {
 	methods := models.DefaultDetectionMethods()
 

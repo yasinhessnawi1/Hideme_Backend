@@ -1,3 +1,15 @@
+// Package utils provides utility functions and helpers for the application.
+// This file implements a standardized API response system that ensures
+// consistent response formats across all API endpoints.
+//
+// The response system includes:
+//   - A standard Response structure for all API responses
+//   - Convenience functions for common response types (success, error, pagination)
+//   - HTTP status code helpers
+//   - Pagination parameter extraction
+//
+// This ensures that all API responses follow the same format, making it easier
+// for clients to parse and handle responses predictably.
 package utils
 
 import (
@@ -12,36 +24,48 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
-// Response represents a standardized API response
+// Response represents a standardized API response.
+// All API endpoints return responses in this format for consistency.
 type Response struct {
-	Success bool        `json:"success"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   *ErrorInfo  `json:"error,omitempty"`
-	Meta    *MetaInfo   `json:"meta,omitempty"`
+	Success bool        `json:"success"`         // Whether the request was successful
+	Data    interface{} `json:"data,omitempty"`  // The response data (omitted for error responses)
+	Error   *ErrorInfo  `json:"error,omitempty"` // Error information (omitted for successful responses)
+	Meta    *MetaInfo   `json:"meta,omitempty"`  // Metadata such as pagination information
 }
 
-// ErrorInfo represents error information in the response
+// ErrorInfo represents error information in the response.
+// This provides structured error information to clients.
 type ErrorInfo struct {
-	Code    string            `json:"code"`
-	Message string            `json:"message"`
-	Details map[string]string `json:"details,omitempty"`
+	Code    string            `json:"code"`              // A machine-readable error code
+	Message string            `json:"message"`           // A human-readable error message
+	Details map[string]string `json:"details,omitempty"` // Additional details about the error (e.g., validation errors)
 }
 
-// MetaInfo represents metadata in the response
+// MetaInfo represents metadata in the response.
+// This is primarily used for pagination information.
 type MetaInfo struct {
-	Page       int `json:"page,omitempty"`
-	PageSize   int `json:"page_size,omitempty"`
-	TotalItems int `json:"total_items,omitempty"`
-	TotalPages int `json:"total_pages,omitempty"`
+	Page       int `json:"page,omitempty"`        // The current page number
+	PageSize   int `json:"page_size,omitempty"`   // The number of items per page
+	TotalItems int `json:"total_items,omitempty"` // The total number of items
+	TotalPages int `json:"total_pages,omitempty"` // The total number of pages
 }
 
-// PaginationParams contains parameters for pagination
+// PaginationParams contains parameters for pagination.
+// This struct is used to extract and validate pagination parameters from requests.
 type PaginationParams struct {
-	Page     int
-	PageSize int
+	Page     int // The requested page number
+	PageSize int // The requested page size
 }
 
-// JSON sends a JSON response with the given status code and data
+// JSON sends a JSON response with the given status code and data.
+// This is the primary function for sending successful responses.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - statusCode: The HTTP status code
+//   - data: The data to include in the response
+//
+// The function automatically sets the success flag based on the status code.
 func JSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	// Create a successful response
 	response := Response{
@@ -52,6 +76,16 @@ func JSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	SendJSON(w, statusCode, response)
 }
 
+// JsonFile sends a JSON file as a downloadable attachment.
+// This is useful for exporting data that should be saved as a file.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - data: The data to include in the file
+//   - filename: The name of the file to be downloaded
+//
+// The function automatically adds .json extension if missing and sets appropriate
+// headers for file download.
 func JsonFile(w http.ResponseWriter, data interface{}, filename string) {
 	// Ensure filename ends with .json
 	if !strings.HasSuffix(strings.ToLower(filename), ".json") {
@@ -92,7 +126,15 @@ func JsonFile(w http.ResponseWriter, data interface{}, filename string) {
 	}
 }
 
-// Error sends an error response with the given status code and error information
+// Error sends an error response with the given status code and error information.
+// This is the primary function for sending error responses.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - statusCode: The HTTP status code
+//   - code: A machine-readable error code
+//   - message: A human-readable error message
+//   - details: Additional details about the error (e.g., validation errors)
 func Error(w http.ResponseWriter, statusCode int, code, message string, details map[string]string) {
 	// Create an error response
 	response := Response{
@@ -107,7 +149,15 @@ func Error(w http.ResponseWriter, statusCode int, code, message string, details 
 	SendJSON(w, statusCode, response)
 }
 
-// ErrorFromAppError sends an error response based on an AppError
+// ErrorFromAppError sends an error response based on an AppError.
+// This provides a convenient way to convert application errors to API responses.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - err: The application error
+//
+// The function extracts the error code, message, and details from the AppError
+// and sends an appropriate error response.
 func ErrorFromAppError(w http.ResponseWriter, err *AppError) {
 	// Extract error code from the underlying error
 	errCode := constants.CodeInternalError
@@ -144,7 +194,19 @@ func ErrorFromAppError(w http.ResponseWriter, err *AppError) {
 	Error(w, err.StatusCode, errCode, err.Message, details)
 }
 
-// Paginated sends a paginated response with the given status code, data, and pagination info
+// Paginated sends a paginated response with the given status code, data, and pagination info.
+// This is used for endpoints that return collections of items.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - statusCode: The HTTP status code
+//   - data: The data to include in the response
+//   - page: The current page number
+//   - pageSize: The number of items per page
+//   - totalItems: The total number of items
+//
+// The function automatically calculates the total number of pages based on the page size
+// and total items.
 func Paginated(w http.ResponseWriter, statusCode int, data interface{}, page, pageSize, totalItems int) {
 	// Calculate total pages
 	totalPages := totalItems / pageSize
@@ -167,7 +229,13 @@ func Paginated(w http.ResponseWriter, statusCode int, data interface{}, page, pa
 	SendJSON(w, statusCode, response)
 }
 
-// SendJSON is a helper function to send JSON data with proper headers
+// SendJSON is a helper function to send JSON data with proper headers.
+// This handles JSON marshaling and error handling for all response types.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - statusCode: The HTTP status code
+//   - data: The data to marshal to JSON and send
 func SendJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	// Set headers
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
@@ -193,17 +261,32 @@ func SendJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	}
 }
 
-// NoContent sends a 204 No Content response
+// NoContent sends a 204 No Content response.
+// This is used for successful operations that don't return any data.
+//
+// Parameters:
+//   - w: The HTTP response writer
 func NoContent(w http.ResponseWriter) {
 	w.WriteHeader(constants.StatusNoContent)
 }
 
-// BadRequest sends a 400 Bad Request response with the given message
+// BadRequest sends a 400 Bad Request response with the given message.
+// This is a convenience function for sending bad request errors.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - message: A human-readable error message
+//   - details: Additional details about the error
 func BadRequest(w http.ResponseWriter, message string, details map[string]string) {
 	Error(w, constants.StatusBadRequest, constants.CodeBadRequest, message, details)
 }
 
-// Unauthorized sends a 401 Unauthorized response with the given message
+// Unauthorized sends a 401 Unauthorized response with the given message.
+// This is a convenience function for sending unauthorized errors.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - message: A human-readable error message (falls back to a default message if empty)
 func Unauthorized(w http.ResponseWriter, message string) {
 	if message == "" {
 		message = constants.MsgAuthRequired
@@ -211,7 +294,12 @@ func Unauthorized(w http.ResponseWriter, message string) {
 	Error(w, constants.StatusUnauthorized, constants.CodeUnauthorized, message, nil)
 }
 
-// Forbidden sends a 403 Forbidden response with the given message
+// Forbidden sends a 403 Forbidden response with the given message.
+// This is a convenience function for sending forbidden errors.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - message: A human-readable error message (falls back to a default message if empty)
 func Forbidden(w http.ResponseWriter, message string) {
 	if message == "" {
 		message = constants.MsgAccessDenied
@@ -219,7 +307,12 @@ func Forbidden(w http.ResponseWriter, message string) {
 	Error(w, constants.StatusForbidden, constants.CodeForbidden, message, nil)
 }
 
-// NotFound sends a 404 Not Found response with the given message
+// NotFound sends a 404 Not Found response with the given message.
+// This is a convenience function for sending not found errors.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - message: A human-readable error message (falls back to a default message if empty)
 func NotFound(w http.ResponseWriter, message string) {
 	if message == "" {
 		message = constants.MsgResourceNotFound
@@ -227,28 +320,56 @@ func NotFound(w http.ResponseWriter, message string) {
 	Error(w, constants.StatusNotFound, constants.CodeNotFound, message, nil)
 }
 
-// MethodNotAllowed sends a 405 Method Not Allowed response
+// MethodNotAllowed sends a 405 Method Not Allowed response.
+// This is a convenience function for sending method not allowed errors.
+//
+// Parameters:
+//   - w: The HTTP response writer
 func MethodNotAllowed(w http.ResponseWriter) {
 	Error(w, constants.StatusMethodNotAllowed, constants.CodeMethodNotAllowed, constants.MsgMethodNotAllowed, nil)
 }
 
-// Conflict sends a 409 Conflict response with the given message
+// Conflict sends a 409 Conflict response with the given message.
+// This is a convenience function for sending conflict errors.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - message: A human-readable error message
 func Conflict(w http.ResponseWriter, message string) {
 	Error(w, constants.StatusConflict, constants.CodeConflict, message, nil)
 }
 
-// InternalServerError sends a 500 Internal Server Error response
+// InternalServerError sends a 500 Internal Server Error response.
+// This is a convenience function for sending internal server errors.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - err: The error that occurred (logged but not exposed to the client)
 func InternalServerError(w http.ResponseWriter, err error) {
 	log.Error().Err(err).Msg("Internal server error")
 	Error(w, constants.StatusInternalServerError, constants.CodeInternalError, constants.MsgInternalServerError, nil)
 }
 
-// ValidationError sends a 400 Bad Request response with validation error details
+// ValidationError sends a 400 Bad Request response with validation error details.
+// This is a convenience function for sending validation errors.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - errors: A map of field names to error messages
 func ValidationError(w http.ResponseWriter, errors map[string]string) {
 	Error(w, constants.StatusBadRequest, constants.CodeValidationError, "Validation failed", errors)
 }
 
-// GetPaginationParams extracts pagination parameters from the request
+// GetPaginationParams extracts pagination parameters from the request.
+// This provides a standardized way to handle pagination across all endpoints.
+//
+// Parameters:
+//   - r: The HTTP request
+//
+// Returns:
+//   - A PaginationParams struct containing the page and page size
+//
+// The function enforces minimum and maximum page sizes and provides sensible defaults.
 func GetPaginationParams(r *http.Request) PaginationParams {
 	// Get page and page_size parameters, with defaults
 	page := constants.DefaultPage
@@ -279,7 +400,16 @@ func GetPaginationParams(r *http.Request) PaginationParams {
 	}
 }
 
-// Helper function to parse integers with a default value
+// parseInt is a helper function to parse integers with a default value.
+// It handles invalid input gracefully by returning the default value.
+//
+// Parameters:
+//   - s: The string to parse
+//   - defaultValue: The default value to return if parsing fails
+//
+// Returns:
+//   - The parsed integer or the default value if parsing fails
+//   - Any error that occurred during parsing
 func parseInt(s string, defaultValue int) (int, error) {
 	var value int
 	err := json.Unmarshal([]byte(s), &value)

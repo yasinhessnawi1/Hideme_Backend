@@ -1,3 +1,10 @@
+// Package repository provides data access interfaces and implementations for the HideMe application.
+// It follows the repository pattern to abstract database operations and provide a clean API
+// for data persistence operations.
+//
+// This file implements the model entity repository, which manages predefined entities used by
+// machine learning and AI models to identify sensitive information in documents. These entities
+// allow for customization of detection algorithms based on user preferences.
 package repository
 
 import (
@@ -15,32 +22,151 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// ModelEntityRepository defines methods for interacting with model entities
+// ModelEntityRepository defines methods for interacting with model entities in the database.
+// It provides operations for managing predefined entities used by machine learning and
+// AI detection methods to identify sensitive information in documents.
 type ModelEntityRepository interface {
+	// Create adds a new model entity to the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - entity: The model entity to store, with required fields populated
+	//
+	// Returns:
+	//   - An error if creation fails
+	//   - nil on successful creation
+	//
+	// The entity ID will be populated after successful creation.
 	Create(ctx context.Context, entity *models.ModelEntity) error
+
+	// CreateBatch adds multiple model entities to the database in a single transaction.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - entities: A slice of model entities to store
+	//
+	// Returns:
+	//   - An error if creation fails
+	//   - nil on successful creation
+	//
+	// All entity IDs will be populated after successful creation.
+	// This method is more efficient than multiple individual Create calls.
 	CreateBatch(ctx context.Context, entities []*models.ModelEntity) error
+
+	// GetByID retrieves a model entity by its unique identifier.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the model entity
+	//
+	// Returns:
+	//   - The model entity if found
+	//   - NotFoundError if the entity doesn't exist
+	//   - Other errors for database issues
 	GetByID(ctx context.Context, id int64) (*models.ModelEntity, error)
+
+	// GetBySettingID retrieves all model entities for a specific user settings.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - settingID: The unique identifier of the user settings
+	//
+	// Returns:
+	//   - A slice of model entities associated with the user settings
+	//   - An empty slice if no entities exist
+	//   - An error if retrieval fails
 	GetBySettingID(ctx context.Context, settingID int64) ([]*models.ModelEntity, error)
+
+	// GetBySettingIDAndMethodID retrieves all model entities for specific user settings and detection method.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - settingID: The unique identifier of the user settings
+	//   - methodID: The unique identifier of the detection method
+	//
+	// Returns:
+	//   - A slice of model entities with their associated detection methods
+	//   - An empty slice if no entities exist
+	//   - An error if retrieval fails
 	GetBySettingIDAndMethodID(ctx context.Context, settingID, methodID int64) ([]*models.ModelEntityWithMethod, error)
+
+	// Update updates a model entity in the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - entity: The model entity to update
+	//
+	// Returns:
+	//   - NotFoundError if the entity doesn't exist
+	//   - Other errors for database issues
 	Update(ctx context.Context, entity *models.ModelEntity) error
+
+	// Delete removes a model entity from the database.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - id: The unique identifier of the model entity to delete
+	//
+	// Returns:
+	//   - NotFoundError if the entity doesn't exist
+	//   - Other errors for database issues
 	Delete(ctx context.Context, id int64) error
+
+	// DeleteBySettingID removes all model entities for specific user settings.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - settingID: The unique identifier of the user settings
+	//
+	// Returns:
+	//   - An error if deletion fails
+	//   - nil if deletion succeeds
 	DeleteBySettingID(ctx context.Context, settingID int64) error
+
+	// DeleteByMethodID removes all model entities for specific user settings and detection method.
+	//
+	// Parameters:
+	//   - ctx: Context for transaction and cancellation control
+	//   - settingID: The unique identifier of the user settings
+	//   - methodID: The unique identifier of the detection method
+	//
+	// Returns:
+	//   - An error if deletion fails
+	//   - nil if deletion succeeds
 	DeleteByMethodID(ctx context.Context, settingID, methodID int64) error
 }
 
-// PostgresModelEntityRepository is a PostgreSQL implementation of ModelEntityRepository
+// PostgresModelEntityRepository is a PostgreSQL implementation of ModelEntityRepository.
+// It implements all required methods using PostgreSQL-specific features
+// and error handling.
 type PostgresModelEntityRepository struct {
 	db *database.Pool
 }
 
-// NewModelEntityRepository creates a new ModelEntityRepository
+// NewModelEntityRepository creates a new ModelEntityRepository implementation for PostgreSQL.
+//
+// Parameters:
+//   - db: A connection pool for PostgreSQL database access
+//
+// Returns:
+//   - An implementation of the ModelEntityRepository interface
 func NewModelEntityRepository(db *database.Pool) ModelEntityRepository {
 	return &PostgresModelEntityRepository{
 		db: db,
 	}
 }
 
-// Create adds a new model entity to the database
+// Create adds a new model entity to the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - entity: The model entity to store
+//
+// Returns:
+//   - An error if creation fails
+//   - nil on successful creation
+//
+// The entity ID will be populated after successful creation.
 func (r *PostgresModelEntityRepository) Create(ctx context.Context, entity *models.ModelEntity) error {
 	// Start query timer
 	startTime := time.Now()
@@ -82,7 +208,19 @@ func (r *PostgresModelEntityRepository) Create(ctx context.Context, entity *mode
 	return nil
 }
 
-// CreateBatch adds multiple model entities to the database in a single transaction
+// CreateBatch adds multiple model entities to the database in a single transaction.
+// This method is more efficient than multiple individual Create calls when
+// adding many entities at once.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - entities: A slice of model entities to store
+//
+// Returns:
+//   - An error if creation fails
+//   - nil on successful creation or if the entities slice is empty
+//
+// All entity IDs will be populated after successful creation.
 func (r *PostgresModelEntityRepository) CreateBatch(ctx context.Context, entities []*models.ModelEntity) error {
 	if len(entities) == 0 {
 		return nil
@@ -130,7 +268,16 @@ func (r *PostgresModelEntityRepository) CreateBatch(ctx context.Context, entitie
 	})
 }
 
-// GetByID retrieves a model entity by ID
+// GetByID retrieves a model entity by ID.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the model entity
+//
+// Returns:
+//   - The model entity if found
+//   - NotFoundError if the entity doesn't exist
+//   - Other errors for database issues
 func (r *PostgresModelEntityRepository) GetByID(ctx context.Context, id int64) (*models.ModelEntity, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -169,7 +316,16 @@ func (r *PostgresModelEntityRepository) GetByID(ctx context.Context, id int64) (
 	return entity, nil
 }
 
-// GetBySettingID retrieves all model entities for a setting
+// GetBySettingID retrieves all model entities for a setting.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - settingID: The unique identifier of the user settings
+//
+// Returns:
+//   - A slice of model entities associated with the user settings
+//   - An empty slice if no entities exist
+//   - An error if retrieval fails
 func (r *PostgresModelEntityRepository) GetBySettingID(ctx context.Context, settingID int64) ([]*models.ModelEntity, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -224,7 +380,18 @@ func (r *PostgresModelEntityRepository) GetBySettingID(ctx context.Context, sett
 	return entities, nil
 }
 
-// GetBySettingIDAndMethodID retrieves all model entities for a setting and method with method information
+// GetBySettingIDAndMethodID retrieves all model entities for a setting and method with method information.
+// This is useful for retrieving entities with their associated detection method details in a single query.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - settingID: The unique identifier of the user settings
+//   - methodID: The unique identifier of the detection method
+//
+// Returns:
+//   - A slice of model entities with their associated detection methods
+//   - An empty slice if no entities exist
+//   - An error if retrieval fails
 func (r *PostgresModelEntityRepository) GetBySettingIDAndMethodID(ctx context.Context, settingID, methodID int64) ([]*models.ModelEntityWithMethod, error) {
 	// Start query timer
 	startTime := time.Now()
@@ -283,7 +450,18 @@ func (r *PostgresModelEntityRepository) GetBySettingIDAndMethodID(ctx context.Co
 	return entities, nil
 }
 
-// Update updates a model entity in the database
+// Update updates a model entity in the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - entity: The model entity to update
+//
+// Returns:
+//   - NotFoundError if the entity doesn't exist
+//   - Other errors for database issues
+//
+// This method only updates the entity_text field, preserving the entity's
+// associations with settings and detection methods.
 func (r *PostgresModelEntityRepository) Update(ctx context.Context, entity *models.ModelEntity) error {
 	// Start query timer
 	startTime := time.Now()
@@ -332,7 +510,15 @@ func (r *PostgresModelEntityRepository) Update(ctx context.Context, entity *mode
 	return nil
 }
 
-// Delete removes a model entity from the database
+// Delete removes a model entity from the database.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - id: The unique identifier of the model entity to delete
+//
+// Returns:
+//   - NotFoundError if the entity doesn't exist
+//   - Other errors for database issues
 func (r *PostgresModelEntityRepository) Delete(ctx context.Context, id int64) error {
 	// Start query timer
 	startTime := time.Now()
@@ -372,7 +558,16 @@ func (r *PostgresModelEntityRepository) Delete(ctx context.Context, id int64) er
 	return nil
 }
 
-// DeleteBySettingID removes all model entities for a setting
+// DeleteBySettingID removes all model entities for a setting.
+// This is typically used when a user's settings are being deleted or reset.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - settingID: The unique identifier of the user settings
+//
+// Returns:
+//   - An error if deletion fails
+//   - nil if deletion succeeds
 func (r *PostgresModelEntityRepository) DeleteBySettingID(ctx context.Context, settingID int64) error {
 	// Start query timer
 	startTime := time.Now()
@@ -405,7 +600,18 @@ func (r *PostgresModelEntityRepository) DeleteBySettingID(ctx context.Context, s
 	return nil
 }
 
-// DeleteByMethodID removes all model entities for a setting and method
+// DeleteByMethodID removes all model entities for a setting and method.
+// This is useful when a user wants to clear all entities for a specific detection method
+// without affecting other methods.
+//
+// Parameters:
+//   - ctx: Context for transaction and cancellation control
+//   - settingID: The unique identifier of the user settings
+//   - methodID: The unique identifier of the detection method
+//
+// Returns:
+//   - An error if deletion fails
+//   - nil if deletion succeeds
 func (r *PostgresModelEntityRepository) DeleteByMethodID(ctx context.Context, settingID, methodID int64) error {
 	// Start query timer
 	startTime := time.Now()

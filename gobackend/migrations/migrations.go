@@ -1,3 +1,14 @@
+// Package migrations provides a framework for database schema management.
+//
+// This package implements a migration system that allows for reliable, idempotent
+// database schema creation and updates. It tracks executed migrations in a dedicated
+// migrations table and ensures all required tables exist before application startup.
+//
+// The migration system supports:
+// - Automatic creation of missing tables
+// - Tracking of executed migrations
+// - Efficient verification of database schema
+// - Idempotent execution of migrations (safe to run multiple times)
 package migrations
 
 import (
@@ -10,26 +21,49 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
 )
 
-// Migration represents a database migrations
+// Migration represents a database migration.
+// Each migration performs a specific schema change and is tracked
+// to ensure it runs exactly once.
 type Migration struct {
-	Name        string
+	// Name is a unique identifier for the migration
+	Name string
+	// Description is a human-readable explanation of what the migration does
 	Description string
-	TableName   string // Added to store the table name for existence check
-	RunSQL      func(ctx context.Context, tx *sql.Tx) error
+	// TableName is the table affected by this migration, used for existence checks
+	TableName string
+	// RunSQL is the function that executes the migration SQL within a transaction
+	RunSQL func(ctx context.Context, tx *sql.Tx) error
 }
 
-// Migrator handles database migrations
+// Migrator handles database migrations.
+// It provides methods to run migrations, check for existing tables,
+// and ensure the database schema is up to date.
 type Migrator struct {
 	db *database.Pool
 }
 
-// NewMigrator creates a new migrator
+// NewMigrator creates a new migrator.
+//
+// Parameters:
+//   - db: A database connection pool to use for migrations
+//
+// Returns:
+//   - *Migrator: A configured migrator
 func NewMigrator(db *database.Pool) *Migrator {
 	return &Migrator{
 		db: db,
 	}
 }
 
+// RunMigrations runs all pending database migrations.
+// It creates the migrations table if it doesn't exist, verifies all required
+// tables exist, and runs any migrations that haven't been executed yet.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//
+// Returns:
+//   - error: Any error encountered during migration, nil if successful
 func (m *Migrator) RunMigrations(ctx context.Context) error {
 	log.Info().Msg("Running database migrations")
 	startTime := time.Now()
@@ -101,7 +135,14 @@ func (m *Migrator) RunMigrations(ctx context.Context) error {
 	return nil
 }
 
-// verifyAllTablesExist checks that all required tables exist, and runs migrations for missing tables
+// verifyAllTablesExist checks that all required tables exist, and runs migrations for missing tables.
+// This ensures database integrity even if migrations were previously interrupted.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//
+// Returns:
+//   - error: Any error encountered during verification, nil if successful
 func (m *Migrator) verifyAllTablesExist(ctx context.Context) error {
 	migrations := GetMigrations()
 
@@ -132,7 +173,14 @@ func (m *Migrator) verifyAllTablesExist(ctx context.Context) error {
 	return nil
 }
 
-// createMigrationsTable creates the migrations table if it doesn't exist
+// createMigrationsTable creates the migrations table if it doesn't exist.
+// This table tracks which migrations have been executed.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//
+// Returns:
+//   - error: Any error encountered during table creation, nil if successful
 func (m *Migrator) createMigrationsTable(ctx context.Context) error {
 	query := `
 		DROP TABLE IF EXISTS migrations;
@@ -146,7 +194,15 @@ func (m *Migrator) createMigrationsTable(ctx context.Context) error {
 	return err
 }
 
-// getExecutedMigrations returns a map of executed migrations
+// getExecutedMigrations returns a map of executed migrations.
+// The map keys are migration names and values are always true.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//
+// Returns:
+//   - map[string]bool: A map containing names of executed migrations
+//   - error: Any error encountered while retrieving migrations, nil if successful
 func (m *Migrator) getExecutedMigrations(ctx context.Context) (map[string]bool, error) {
 	query := `SELECT name FROM migrations`
 	rows, err := m.db.QueryContext(ctx, query)
@@ -171,7 +227,15 @@ func (m *Migrator) getExecutedMigrations(ctx context.Context) (map[string]bool, 
 	return migrations, rows.Err()
 }
 
-// runMigration runs a migrations within a transaction
+// runMigration runs a migration within a transaction.
+// If the migration fails, the transaction is rolled back.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//   - migration: The migration to run
+//
+// Returns:
+//   - error: Any error encountered during migration, nil if successful
 func (m *Migrator) runMigration(ctx context.Context, migration Migration) error {
 	return m.db.Transaction(ctx, func(tx *sql.Tx) error {
 		// Run the migrations
@@ -190,7 +254,16 @@ func (m *Migrator) runMigration(ctx context.Context, migration Migration) error 
 	})
 }
 
-// recordMigration records a migrations as completed without running the SQL
+// recordMigration records a migration as completed without running the SQL.
+// This is used when a table already exists but the migration record is missing.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//   - name: The name of the migration to record
+//   - description: The description of the migration
+//
+// Returns:
+//   - error: Any error encountered while recording the migration, nil if successful
 func (m *Migrator) recordMigration(ctx context.Context, name, description string) error {
 	query := `INSERT INTO migrations (name, description) VALUES ($1, $2)`
 	_, err := m.db.ExecContext(ctx, query, name, description)
@@ -200,6 +273,15 @@ func (m *Migrator) recordMigration(ctx context.Context, name, description string
 	return nil
 }
 
+// tableExists checks if a table exists in the current database schema.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//   - tableName: The name of the table to check
+//
+// Returns:
+//   - bool: True if the table exists, false otherwise
+//   - error: Any error encountered during the check, nil if successful
 func (m *Migrator) tableExists(ctx context.Context, tableName string) (bool, error) {
 	query := `
         SELECT EXISTS(SELECT 1 
@@ -212,7 +294,14 @@ func (m *Migrator) tableExists(ctx context.Context, tableName string) (bool, err
 	return exists, err
 }
 
-// ensureUserSettingsColumns ensures that the user_settings table has all required columns
+// ensureUserSettingsColumns ensures that the user_settings table has all required columns.
+// This handles schema evolution without requiring a full migration for minor column additions.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//
+// Returns:
+//   - error: Any error encountered while ensuring columns exist, nil if successful
 func (m *Migrator) ensureUserSettingsColumns(ctx context.Context) error {
 	// Check if the detection_threshold column exists
 	var columnExists bool
@@ -272,7 +361,11 @@ func (m *Migrator) ensureUserSettingsColumns(ctx context.Context) error {
 	return nil
 }
 
-// GetMigrations returns all migrations
+// GetMigrations returns all migrations.
+// This function returns a slice of all migrations that the system should apply.
+//
+// Returns:
+//   - []Migration: A slice of all migrations to be applied
 func GetMigrations() []Migration {
 	return []Migration{
 		createUsersTable(),

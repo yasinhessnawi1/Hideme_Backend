@@ -1,3 +1,10 @@
+// Package server provides HTTP server implementation for the HideMe application.
+// It handles routing, middleware configuration, and server lifecycle management.
+//
+// The package follows a structured approach to route organization, with clear
+// grouping based on functionality (auth, users, settings) and proper security
+// measures for protected routes. CORS and other security headers are carefully
+// configured to provide secure access while enabling legitimate API usage.
 package server
 
 import (
@@ -14,7 +21,19 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// SetupRoutes configures the routes for the application
+// SetupRoutes configures the routes for the application.
+// It creates a router hierarchy with middleware and grouped routes
+// according to functionality for organized API structure.
+//
+// The configured routes include:
+// - Health check and version endpoints (unprotected)
+// - Authentication endpoints (login, logout, token management)
+// - User management endpoints (profile, sessions)
+// - API key management
+// - Settings management (preferences, ban lists, patterns, entities)
+// - Generic database operations (admin/dev access only)
+//
+// Route protection is handled through middleware for authenticated endpoints.
 func (s *Server) SetupRoutes() {
 	// Create router
 	r := chi.NewRouter()
@@ -175,12 +194,29 @@ func (s *Server) SetupRoutes() {
 	s.router = r
 }
 
-// GetRouter returns the configured router
+// GetRouter returns the configured router.
+//
+// Returns:
+//   - The chi.Router implementation used by the server
+//
+// This method is primarily used for testing and for
+// integrating the router with other components.
 func (s *Server) GetRouter() chi.Router {
 	return s.router.(chi.Router)
 }
 
-// handlePreflight is an explicit handler for OPTIONS preflight requests
+// handlePreflight is an explicit handler for OPTIONS preflight requests.
+// It properly configures CORS headers for preflight requests to ensure
+// cross-origin requests can proceed if the origin is allowed.
+//
+// Parameters:
+//   - allowedOrigins: A list of origins that are allowed to access the API
+//
+// Returns:
+//   - An http.HandlerFunc that handles the OPTIONS preflight requests
+//
+// The handler responds with a 204 No Content status, along with appropriate
+// CORS headers to allow the specified origins, methods, and headers.
 func handlePreflight(allowedOrigins []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
@@ -207,7 +243,19 @@ func handlePreflight(allowedOrigins []string) http.HandlerFunc {
 	}
 }
 
-// corsMiddleware creates a custom CORS middleware with the specified allowed origins
+// corsMiddleware creates a custom CORS middleware with the specified allowed origins.
+// It handles Cross-Origin Resource Sharing to allow browsers to safely access the API
+// from different domains while protecting against unauthorized cross-origin requests.
+//
+// Parameters:
+//   - allowedOrigins: A list of origins that are allowed to access the API
+//
+// Returns:
+//   - A middleware function that adds CORS headers to responses
+//
+// The middleware checks incoming requests against the allowed origins list,
+// adds appropriate CORS headers to responses, and handles OPTIONS preflight requests.
+// It supports credentials mode for authenticated cross-origin requests.
 func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -245,7 +293,15 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	}
 }
 
-// getAllowedOrigins reads allowed CORS origins from environment variable or falls back to default values
+// getAllowedOrigins reads allowed CORS origins from environment variable or falls back to default values.
+// This provides flexibility to configure allowed origins without recompiling the application.
+//
+// Returns:
+//   - A slice of strings representing allowed origins for CORS
+//
+// The function first checks for an ALLOWED_ORIGINS environment variable.
+// If set, it splits the value by comma and uses the resulting list.
+// Otherwise, it falls back to a default list of origins.
 func getAllowedOrigins() []string {
 	// Check if ALLOWED_ORIGINS is set in environment
 	allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
@@ -268,7 +324,18 @@ func getAllowedOrigins() []string {
 	return defaultOrigins
 }
 
-// GetAPIRoutes returns documentation about all API routes
+// GetAPIRoutes returns documentation about all API routes.
+// This provides a self-documenting API endpoint that describes all available endpoints,
+// their parameters, expected responses, and required authentication.
+//
+// Parameters:
+//   - w: The HTTP response writer
+//   - r: The HTTP request
+//
+// The function builds a comprehensive map of all API routes organized by category,
+// including authentication, user management, API keys, settings, and system endpoints.
+// For each endpoint, it provides details about HTTP method, description, required headers,
+// request body format, and response format.
 func (s *Server) GetAPIRoutes(w http.ResponseWriter, r *http.Request) {
 	routes := map[string]interface{}{}
 

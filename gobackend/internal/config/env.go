@@ -1,3 +1,7 @@
+// Package config provides configuration management for the HideMe API Server.
+// It includes loading configurations from YAML files, environment variables,
+// and command-line arguments. The package supports structured configuration
+// with validation and type conversion, making it easy to manage application settings.
 package config
 
 import (
@@ -11,10 +15,23 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// LoadEnv loads environment variables into the config struct
-// It uses struct tags to determine which environment variables to load
+// LoadEnv loads environment variables into the config struct.
+// It uses struct tags to determine which environment variables to look for
+// and how to map them to the configuration fields.
+//
+// This function performs type-aware conversion from string environment variables
+// to the appropriate Go types (int, bool, duration, etc.) based on the field type.
+//
+// Parameters:
+//   - config: The configuration struct to populate from environment variables
+//
+// Returns:
+//   - An error if any environment variable conversion fails
 func LoadEnv(config *AppConfig) error {
 	log.Debug().Msg("Loading environment variables")
+
+	// Process each subsection of the configuration
+	// This allows for a more organized approach to configuration loading
 
 	// Process AppSettings
 	if err := processStructEnv(&config.App); err != nil {
@@ -61,7 +78,8 @@ func LoadEnv(config *AppConfig) error {
 		return err
 	}
 
-	// Log loaded environment variables (for debugging)
+	// Log some key environment variables for debugging purposes
+	// Note that sensitive values are not logged here
 	log.Debug().
 		Str("APP_ENV", os.Getenv("APP_ENV")).
 		Str("DB_USER", os.Getenv("DB_USER")).
@@ -71,16 +89,25 @@ func LoadEnv(config *AppConfig) error {
 	return nil
 }
 
-// processStructEnv processes environment variables for a struct
+// processStructEnv processes environment variables for a struct using reflection.
+// It looks for the "env" tag on struct fields to determine which environment
+// variables to read, and then sets the corresponding field values.
+//
+// Parameters:
+//   - s: A pointer to the struct to process
+//
+// Returns:
+//   - An error if any environment variable parsing fails
 func processStructEnv(s interface{}) error {
 	val := reflect.ValueOf(s).Elem()
 	typ := val.Type()
 
+	// Iterate through each field in the struct
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		fieldVal := val.Field(i)
 
-		// Skip if not settable
+		// Skip if not settable (e.g., unexported fields)
 		if !fieldVal.CanSet() {
 			continue
 		}
@@ -98,20 +125,21 @@ func processStructEnv(s interface{}) error {
 		}
 
 		// Set the field value based on its type
+		// This handles different types appropriately
 		switch fieldVal.Kind() {
 		case reflect.String:
 			fieldVal.SetString(envValue)
 
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			if field.Type == reflect.TypeOf(time.Duration(0)) {
-				// Handle time.Duration separately
+				// Special handling for time.Duration
 				duration, err := time.ParseDuration(envValue)
 				if err != nil {
 					return fmt.Errorf("invalid duration for %s: %w", envName, err)
 				}
 				fieldVal.Set(reflect.ValueOf(duration))
 			} else {
-				// Regular int types
+				// Regular integer types
 				intValue, err := strconv.ParseInt(envValue, 10, 64)
 				if err != nil {
 					return fmt.Errorf("invalid integer for %s: %w", envName, err)
@@ -143,6 +171,7 @@ func processStructEnv(s interface{}) error {
 		case reflect.Slice:
 			// Handle slice types (only string slices supported for now)
 			if fieldVal.Type().Elem().Kind() == reflect.String {
+				// Split comma-separated list into slice
 				values := strings.Split(envValue, ",")
 				// Trim whitespace from each value
 				for i, v := range values {
@@ -152,7 +181,8 @@ func processStructEnv(s interface{}) error {
 			}
 
 		default:
-			// Skip unsupported types
+			// Skip unsupported types without error
+			// This allows for future extension without breaking existing code
 		}
 	}
 
