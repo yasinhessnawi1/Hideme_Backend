@@ -56,6 +56,11 @@ func LoadEnv(config *AppConfig) error {
 		return err
 	}
 
+	// Process GDPRLoggingSettings
+	if err := processStructEnv(&config.GDPRLogging); err != nil {
+		return err
+	}
+
 	// Log loaded environment variables (for debugging)
 	log.Debug().
 		Str("APP_ENV", os.Getenv("APP_ENV")).

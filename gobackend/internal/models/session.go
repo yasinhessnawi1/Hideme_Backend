@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 // Session represents a user authentication session.
@@ -16,7 +18,7 @@ type Session struct {
 
 // TableName returns the database table name for the Session model.
 func (s *Session) TableName() string {
-	return "sessions"
+	return constants.TableSessions
 }
 
 // NewSession creates a new Session with the given parameters.

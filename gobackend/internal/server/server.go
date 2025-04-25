@@ -16,6 +16,7 @@ import (
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/handlers"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
@@ -91,7 +92,7 @@ func NewServer(cfg *config.AppConfig) (*Server, error) {
 		Handler:      s.router,
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
-		IdleTimeout:  120 * time.Second,
+		IdleTimeout:  constants.DefaultIdleTimeout,
 	}
 
 	return s, nil
@@ -330,7 +331,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 // SetupMaintenanceTasks sets up periodic maintenance tasks
 func (s *Server) SetupMaintenanceTasks() {
 	// Set up a ticker for maintenance tasks
-	ticker := time.NewTicker(1 * time.Hour)
+	ticker := time.NewTicker(constants.DBMaintenanceInterval)
 	go func() {
 		for range ticker.C {
 			// Create a context with a timeout

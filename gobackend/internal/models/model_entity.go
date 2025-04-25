@@ -1,5 +1,9 @@
 package models
 
+import (
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
+)
+
 // ModelEntity represents predefined entities associated with specific detection methods.
 // These are used by machine learning and AI models for identifying sensitive information.
 type ModelEntity struct {
@@ -11,7 +15,7 @@ type ModelEntity struct {
 
 // TableName returns the database table name for the ModelEntity model.
 func (me *ModelEntity) TableName() string {
-	return "model_entities"
+	return constants.TableModelEntities
 }
 
 // NewModelEntity creates a new ModelEntity with the given parameters.

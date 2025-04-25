@@ -86,8 +86,7 @@ func TestSettingsRepository_Create_DuplicateError(t *testing.T) {
 	repo, mock, cleanup := setupSettingsRepositoryTest(t)
 	defer cleanup()
 
-	// Set up test data
-	now := time.Now()
+	// Set up test data with minimal fields, allowing repository to handle timestamps
 	settings := &models.UserSetting{
 		UserID:                 100,
 		RemoveImages:           false,
@@ -95,8 +94,7 @@ func TestSettingsRepository_Create_DuplicateError(t *testing.T) {
 		DetectionThreshold:     0.5,
 		UseBanlistForDetection: true,
 		AutoProcessing:         true,
-		CreatedAt:              now,
-		UpdatedAt:              now,
+		// Not setting CreatedAt and UpdatedAt explicitly
 	}
 
 	// Use a string error that contains "duplicate" for the test
@@ -110,8 +108,8 @@ func TestSettingsRepository_Create_DuplicateError(t *testing.T) {
 			settings.DetectionThreshold,
 			settings.UseBanlistForDetection,
 			settings.AutoProcessing,
-			settings.CreatedAt,
-			settings.UpdatedAt,
+			sqlmock.AnyArg(), // CreatedAt - accept any timestamp
+			sqlmock.AnyArg(), // UpdatedAt - accept any timestamp
 		).
 		WillReturnError(duplicateErr)
 

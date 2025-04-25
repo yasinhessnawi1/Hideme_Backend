@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
@@ -31,7 +32,7 @@ func (s *APIKeyService) GenerateAPIKey(userID int64, name string, duration time.
 	keyID := uuid.New().String()
 
 	// Generate a random string for the secret part
-	randomPart, err := GenerateRandomString(32)
+	randomPart, err := GenerateRandomString(constants.APIKeyRandomStringLength)
 	if err != nil {
 		return nil, "", utils.NewInternalServerError(err)
 	}
@@ -76,14 +77,14 @@ func ParseAPIKey(apiKey string) (string, string, error) {
 // ParseDuration parses a user-friendly duration string into a time.Duration
 func ParseDuration(duration string) (time.Duration, error) {
 	switch duration {
-	case "30d":
-		return 30 * 24 * time.Hour, nil
-	case "90d":
-		return 90 * 24 * time.Hour, nil
-	case "180d":
-		return 180 * 24 * time.Hour, nil
-	case "365d":
-		return 365 * 24 * time.Hour, nil
+	case constants.APIKeyDurationFormat30Days:
+		return constants.APIKeyDuration30Days, nil
+	case constants.APIKeyDurationFormat90Days:
+		return constants.APIKeyDuration90Days, nil
+	case constants.APIKeyDurationFormat180Days:
+		return constants.APIKeyDuration180Days, nil
+	case constants.APIKeyDurationFormat365Days:
+		return constants.APIKeyDuration365Days, nil
 	default:
 		return 0, utils.NewValidationError("duration", "Invalid duration. Must be one of: 30d, 90d, 180d, 365d")
 	}

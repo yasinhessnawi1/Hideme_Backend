@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
@@ -23,7 +24,7 @@ type DatabaseService struct {
 func NewDatabaseService(db *database.Pool) *DatabaseService {
 	// Define allowed tables for generic operations
 	allowedTables := map[string]bool{
-		"detection_methods": true,
+		constants.TableDetectionMethods: true,
 		// Add other tables that can be accessed generically
 		// Note: Security-sensitive tables should NOT be included
 	}
@@ -54,8 +55,8 @@ func (s *DatabaseService) ExecuteQuery(ctx context.Context, query string, params
 
 	// Security check: No system table access
 	disallowedPatterns := []string{
-		"information_schema", "users", "user_settings",
-		"api_keys", "sessions", "password", "update ", "insert ",
+		constants.SchemaInformation, constants.TableUsers, constants.TableUserSettings,
+		constants.TableAPIKeys, constants.TableSessions, "password", "update ", "insert ",
 		"delete ", "drop ", "alter ", "create ", "truncate "}
 
 	for _, pattern := range disallowedPatterns {
@@ -162,8 +163,8 @@ func (s *DatabaseService) GetRecordByID(ctx context.Context, table string, id in
 
 	// Handle table-specific ID column names
 	var idColumn string
-	if table == "detection_methods" {
-		idColumn = "method_id" // Use correct column name for this table
+	if table == constants.TableDetectionMethods {
+		idColumn = constants.ColumnMethodID // Use correct column name for this table
 	} else {
 		idColumn = fmt.Sprintf("%s_id", strings.TrimSuffix(table, "s"))
 	}

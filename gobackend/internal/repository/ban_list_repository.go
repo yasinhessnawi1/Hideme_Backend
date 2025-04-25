@@ -10,6 +10,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
@@ -48,9 +49,9 @@ func (r *PostgresBanListRepository) GetByID(ctx context.Context, id int64) (*mod
 
 	// Define the query
 	query := `
-        SELECT ban_id, setting_id
-        FROM ban_lists
-        WHERE ban_id = $1
+        SELECT ` + constants.ColumnBanID + `, ` + constants.ColumnSettingID + `
+        FROM ` + constants.TableBanLists + `
+        WHERE ` + constants.ColumnBanID + ` = $1
     `
 
 	// Execute the query
@@ -85,9 +86,9 @@ func (r *PostgresBanListRepository) GetBySettingID(ctx context.Context, settingI
 
 	// Define the query
 	query := `
-        SELECT ban_id, setting_id
-        FROM ban_lists
-        WHERE setting_id = $1
+        SELECT ` + constants.ColumnBanID + `, ` + constants.ColumnSettingID + `
+        FROM ` + constants.TableBanLists + `
+        WHERE ` + constants.ColumnSettingID + ` = $1
     `
 
 	// Execute the query
@@ -122,9 +123,9 @@ func (r *PostgresBanListRepository) CreateBanList(ctx context.Context, settingID
 
 	// Define the query
 	query := `
-        INSERT INTO ban_lists (setting_id)
+        INSERT INTO ` + constants.TableBanLists + ` (` + constants.ColumnSettingID + `)
         VALUES ($1)
-        RETURNING ban_id
+        RETURNING ` + constants.ColumnBanID + `
     `
 
 	// Execute the query
@@ -142,9 +143,9 @@ func (r *PostgresBanListRepository) CreateBanList(ctx context.Context, settingID
 	if err != nil {
 		// Check for unique constraint violations
 		if pqErr, ok := err.(*pq.Error); ok {
-			// 23505 is the PostgreSQL error code for unique_violation
-			if pqErr.Code == "23505" {
-				return nil, utils.NewDuplicateError("BanList", "setting_id", settingID)
+			// Check for duplicate key error
+			if pqErr.Code == constants.PGErrorDuplicateConstraint {
+				return nil, utils.NewDuplicateError("BanList", constants.ColumnSettingID, settingID)
 			}
 		}
 		return nil, fmt.Errorf("failed to create ban list: %w", err)
@@ -156,8 +157,8 @@ func (r *PostgresBanListRepository) CreateBanList(ctx context.Context, settingID
 	}
 
 	log.Info().
-		Int64("ban_id", banID).
-		Int64("setting_id", settingID).
+		Int64(constants.ColumnBanID, banID).
+		Int64(constants.ColumnSettingID, settingID).
 		Msg("Ban list created")
 
 	return banList, nil
@@ -171,14 +172,14 @@ func (r *PostgresBanListRepository) Delete(ctx context.Context, id int64) error 
 	// Execute delete within a transaction to cascade properly
 	return r.db.Transaction(ctx, func(tx *sql.Tx) error {
 		// First delete all words in the ban list
-		wordQuery := "DELETE FROM ban_list_words WHERE ban_id = $1"
+		wordQuery := "DELETE FROM " + constants.TableBanListWords + " WHERE " + constants.ColumnBanID + " = $1"
 		_, err := tx.ExecContext(ctx, wordQuery, id)
 		if err != nil {
 			return fmt.Errorf("failed to delete ban list words: %w", err)
 		}
 
 		// Then delete the ban list itself
-		listQuery := "DELETE FROM ban_lists WHERE ban_id = $1"
+		listQuery := "DELETE FROM " + constants.TableBanLists + " WHERE " + constants.ColumnBanID + " = $1"
 		result, err := tx.ExecContext(ctx, listQuery, id)
 
 		// Log the query execution
@@ -204,7 +205,7 @@ func (r *PostgresBanListRepository) Delete(ctx context.Context, id int64) error 
 		}
 
 		log.Info().
-			Int64("ban_id", id).
+			Int64(constants.ColumnBanID, id).
 			Msg("Ban list deleted")
 
 		return nil
@@ -218,10 +219,10 @@ func (r *PostgresBanListRepository) GetBanListWords(ctx context.Context, banList
 
 	// Define the query
 	query := `
-        SELECT word
-        FROM ban_list_words
-        WHERE ban_id = $1
-        ORDER BY word
+        SELECT ` + constants.ColumnWord + `
+        FROM ` + constants.TableBanListWords + `
+        WHERE ` + constants.ColumnBanID + ` = $1
+        ORDER BY ` + constants.ColumnWord + `
     `
 
 	// Execute the query
@@ -274,9 +275,9 @@ func (r *PostgresBanListRepository) AddWords(ctx context.Context, banListID int6
 	return r.db.Transaction(ctx, func(tx *sql.Tx) error {
 		// Define the query - PostgreSQL version uses ON CONFLICT for upsert
 		query := `
-            INSERT INTO ban_list_words (ban_id, word)
+            INSERT INTO ` + constants.TableBanListWords + ` (` + constants.ColumnBanID + `, ` + constants.ColumnWord + `)
             VALUES ($1, $2)
-            ON CONFLICT (ban_id, word) DO UPDATE SET word = EXCLUDED.word
+            ON CONFLICT (` + constants.ColumnBanID + `, ` + constants.ColumnWord + `) DO UPDATE SET ` + constants.ColumnWord + ` = EXCLUDED.` + constants.ColumnWord + `
         `
 
 		// Insert each word individually
@@ -296,7 +297,7 @@ func (r *PostgresBanListRepository) AddWords(ctx context.Context, banListID int6
 		)
 
 		log.Info().
-			Int64("ban_id", banListID).
+			Int64(constants.ColumnBanID, banListID).
 			Int("word_count", len(words)).
 			Msg("Words added to ban list")
 
@@ -317,8 +318,8 @@ func (r *PostgresBanListRepository) RemoveWords(ctx context.Context, banListID i
 	return r.db.Transaction(ctx, func(tx *sql.Tx) error {
 		// Define the query
 		query := `
-            DELETE FROM ban_list_words
-            WHERE ban_id = $1 AND word = $2
+            DELETE FROM ` + constants.TableBanListWords + `
+            WHERE ` + constants.ColumnBanID + ` = $1 AND ` + constants.ColumnWord + ` = $2
         `
 
 		// Delete each word individually
@@ -338,7 +339,7 @@ func (r *PostgresBanListRepository) RemoveWords(ctx context.Context, banListID i
 		)
 
 		log.Info().
-			Int64("ban_id", banListID).
+			Int64(constants.ColumnBanID, banListID).
 			Int("word_count", len(words)).
 			Msg("Words removed from ban list")
 
@@ -354,8 +355,8 @@ func (r *PostgresBanListRepository) WordExists(ctx context.Context, banListID in
 	// Define the query
 	query := `
         SELECT EXISTS(
-            SELECT 1 FROM ban_list_words
-            WHERE ban_id = $1 AND word = $2
+            SELECT 1 FROM ` + constants.TableBanListWords + `
+            WHERE ` + constants.ColumnBanID + ` = $1 AND ` + constants.ColumnWord + ` = $2
         )
     `
 

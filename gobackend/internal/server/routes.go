@@ -9,6 +9,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog/log"
 
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/middleware"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
@@ -194,6 +195,7 @@ func handlePreflight(allowedOrigins []string) http.HandlerFunc {
 		}
 
 		if allowed {
+			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-CSRF-Token, X-Request-ID, X-API-Key")

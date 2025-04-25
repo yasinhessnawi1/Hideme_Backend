@@ -1,5 +1,9 @@
 package models
 
+import (
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
+)
+
 // BanList represents a collection of words to exclude from detection.
 // The ban list is associated with a specific user's settings.
 type BanList struct {
@@ -9,7 +13,7 @@ type BanList struct {
 
 // TableName returns the database table name for the BanList model.
 func (bl *BanList) TableName() string {
-	return "ban_lists"
+	return constants.TableBanLists
 }
 
 // NewBanList creates a new BanList with the given setting ID.

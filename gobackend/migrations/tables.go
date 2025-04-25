@@ -3,6 +3,8 @@ package migrations
 import (
 	"context"
 	"database/sql"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 // createUsersTable creates the users table
@@ -10,7 +12,7 @@ func createUsersTable() Migration {
 	return Migration{
 		Name:        "create_users_table",
 		Description: "Creates the users table",
-		TableName:   "users",
+		TableName:   constants.TableUsers,
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
 				CREATE TABLE IF NOT EXISTS users (
@@ -36,7 +38,7 @@ func createUserSettingsTable() Migration {
 	return Migration{
 		Name:        "create_user_settings_table",
 		Description: "Creates the user_settings table",
-		TableName:   "user_settings",
+		TableName:   constants.TableUserSettings,
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
                 CREATE TABLE IF NOT EXISTS user_settings (
@@ -64,7 +66,7 @@ func createDocumentsTable() Migration {
 	return Migration{
 		Name:        "create_documents_table",
 		Description: "Creates the documents table",
-		TableName:   "documents",
+		TableName:   constants.TableDocuments,
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
 				CREATE TABLE IF NOT EXISTS documents (
@@ -94,7 +96,7 @@ func createSearchPatternsTable() Migration {
 	return Migration{
 		Name:        "create_search_patterns_table",
 		Description: "Creates the search_patterns table",
-		TableName:   "search_patterns",
+		TableName:   constants.TableSearchPatterns,
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
                 CREATE TABLE IF NOT EXISTS search_patterns (
@@ -122,7 +124,7 @@ func createDetectionMethodsTable() Migration {
 	return Migration{
 		Name:        "create_detection_methods_table",
 		Description: "Creates the detection_methods table",
-		TableName:   "detection_methods",
+		TableName:   constants.TableDetectionMethods,
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
                 CREATE TABLE IF NOT EXISTS detection_methods (
@@ -143,7 +145,7 @@ func createDetectedEntitiesTable() Migration {
 	return Migration{
 		Name:        "create_detected_entities_table",
 		Description: "Creates the detected_entities table",
-		TableName:   "detected_entities",
+		TableName:   constants.TableDetectedEntities,
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
                 CREATE TABLE IF NOT EXISTS detected_entities (
@@ -186,7 +188,7 @@ func createModelEntitiesTable() Migration {
 	return Migration{
 		Name:        "create_model_entities_table",
 		Description: "Creates the model_entities table",
-		TableName:   "model_entities",
+		TableName:   constants.TableModelEntities,
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
                 CREATE TABLE IF NOT EXISTS model_entities (
@@ -226,7 +228,7 @@ func createBanListTable() Migration {
 	return Migration{
 		Name:        "create_ban_lists_table",
 		Description: "Creates the ban_lists table",
-		TableName:   "ban_lists",
+		TableName:   constants.TableBanLists,
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
                 CREATE TABLE IF NOT EXISTS ban_lists (
@@ -247,7 +249,7 @@ func createBanListWordsTable() Migration {
 	return Migration{
 		Name:        "create_ban_list_words_table",
 		Description: "Creates the ban_list_words table",
-		TableName:   "ban_list_words",
+		TableName:   constants.TableBanListWords,
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
                 CREATE TABLE IF NOT EXISTS ban_list_words (
@@ -286,7 +288,7 @@ func createSessionsTable() Migration {
 	return Migration{
 		Name:        "create_sessions_table",
 		Description: "Creates the sessions table",
-		TableName:   "sessions",
+		TableName:   constants.TableSessions,
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
 				CREATE TABLE IF NOT EXISTS sessions (
@@ -327,7 +329,7 @@ func createAPIKeysTable() Migration {
 	return Migration{
 		Name:        "create_api_keys_table",
 		Description: "Creates the api_keys table",
-		TableName:   "api_keys",
+		TableName:   constants.TableAPIKeys,
 		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
 			query := `
 				CREATE TABLE IF NOT EXISTS api_keys (

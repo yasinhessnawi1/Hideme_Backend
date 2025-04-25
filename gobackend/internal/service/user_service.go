@@ -7,6 +7,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
@@ -100,6 +101,8 @@ func (s *UserService) UpdateUser(ctx context.Context, id int64, update *models.U
 		}
 		log.Info().
 			Int64("user_id", user.ID).
+			Str("category", constants.LogCategoryUser).
+			Str("event", constants.LogEventUserUpdate).
 			Msg("User profile updated")
 	}
 
@@ -134,6 +137,7 @@ func (s *UserService) ChangePassword(ctx context.Context, id int64, newPassword 
 
 	log.Info().
 		Int64("user_id", id).
+		Str("category", constants.LogCategoryAuth).
 		Msg("User password changed")
 
 	return nil
@@ -164,6 +168,7 @@ func (s *UserService) DeleteUser(ctx context.Context, id int64) error {
 
 	log.Info().
 		Int64("user_id", id).
+		Str("category", constants.LogCategoryUser).
 		Msg("User account deleted")
 
 	return nil
@@ -232,7 +237,7 @@ func (s *UserService) InvalidateSession(ctx context.Context, userID int64, sessi
 
 	// Verify that the session belongs to the user
 	if session.UserID != userID {
-		return utils.NewForbiddenError("You do not have permission to invalidate this session")
+		return utils.NewForbiddenError(constants.MsgAccessDenied)
 	}
 
 	// Delete the session
@@ -243,6 +248,7 @@ func (s *UserService) InvalidateSession(ctx context.Context, userID int64, sessi
 	log.Info().
 		Str("session_id", sessionID).
 		Int64("user_id", userID).
+		Str("category", constants.LogCategoryAuth).
 		Msg("Session invalidated")
 
 	return nil

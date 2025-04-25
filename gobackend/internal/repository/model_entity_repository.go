@@ -9,6 +9,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
@@ -74,8 +75,8 @@ func (r *PostgresModelEntityRepository) Create(ctx context.Context, entity *mode
 
 	log.Info().
 		Int64("model_entity_id", entity.ID).
-		Int64("setting_id", entity.SettingID).
-		Int64("method_id", entity.MethodID).
+		Int64(constants.ColumnSettingID, entity.SettingID).
+		Int64(constants.ColumnMethodID, entity.MethodID).
 		Msg("Model entity created")
 
 	return nil
@@ -121,8 +122,8 @@ func (r *PostgresModelEntityRepository) CreateBatch(ctx context.Context, entitie
 
 		log.Info().
 			Int("entity_count", len(entities)).
-			Int64("setting_id", entities[0].SettingID).
-			Int64("method_id", entities[0].MethodID).
+			Int64(constants.ColumnSettingID, entities[0].SettingID).
+			Int64(constants.ColumnMethodID, entities[0].MethodID).
 			Msg("Model entities created in batch")
 
 		return nil
@@ -397,7 +398,7 @@ func (r *PostgresModelEntityRepository) DeleteBySettingID(ctx context.Context, s
 	// Log the deletion
 	rowsAffected, _ := result.RowsAffected()
 	log.Info().
-		Int64("setting_id", settingID).
+		Int64(constants.ColumnSettingID, settingID).
 		Int64("count", rowsAffected).
 		Msg("Model entities deleted for setting")
 
@@ -430,8 +431,8 @@ func (r *PostgresModelEntityRepository) DeleteByMethodID(ctx context.Context, se
 	// Log the deletion
 	rowsAffected, _ := result.RowsAffected()
 	log.Info().
-		Int64("setting_id", settingID).
-		Int64("method_id", methodID).
+		Int64(constants.ColumnSettingID, settingID).
+		Int64(constants.ColumnMethodID, methodID).
 		Int64("count", rowsAffected).
 		Msg("Model entities deleted for setting and method")
 

@@ -37,7 +37,7 @@ func TestRecovery(t *testing.T) {
 				panic(errors.New("test error"))
 			}),
 			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   `{"success":false,"error":{"code":"internal_error","message":"An unexpected error occurred while processing your request"}}`,
+			expectedBody:   `{"success":false,"error":{"code":"internal_error","message":"An internal server error occurred"}}`, // Updated expected message
 		},
 		{
 			name: "Panic with string",
@@ -45,7 +45,7 @@ func TestRecovery(t *testing.T) {
 				panic("test panic")
 			}),
 			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   `{"success":false,"error":{"code":"internal_error","message":"An unexpected error occurred while processing your request"}}`,
+			expectedBody:   `{"success":false,"error":{"code":"internal_error","message":"An internal server error occurred"}}`, // Updated expected message
 		},
 	}
 

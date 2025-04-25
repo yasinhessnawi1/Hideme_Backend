@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils/gdprlog"
 )
@@ -56,8 +57,8 @@ func Recovery() func(http.Handler) http.Handler {
 					utils.Error(
 						w,
 						http.StatusInternalServerError,
-						"internal_error",
-						"An unexpected error occurred while processing your request",
+						constants.CodeInternalError,
+						constants.MsgInternalServerError,
 						nil,
 					)
 				}

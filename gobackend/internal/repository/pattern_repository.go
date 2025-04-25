@@ -9,6 +9,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
@@ -70,9 +71,9 @@ func (r *PostgresPatternRepository) Create(ctx context.Context, pattern *models.
 	}
 
 	log.Info().
-		Int64("pattern_id", pattern.ID).
-		Int64("setting_id", pattern.SettingID).
-		Str("pattern_type", string(pattern.PatternType)).
+		Int64(constants.ColumnPatternID, pattern.ID).
+		Int64(constants.ColumnSettingID, pattern.SettingID).
+		Str(constants.ColumnPatternType, string(pattern.PatternType)).
 		Msg("Search pattern created")
 
 	return nil
@@ -222,8 +223,8 @@ func (r *PostgresPatternRepository) Update(ctx context.Context, pattern *models.
 	}
 
 	log.Info().
-		Int64("pattern_id", pattern.ID).
-		Str("pattern_type", string(pattern.PatternType)).
+		Int64(constants.ColumnPatternID, pattern.ID).
+		Str(constants.ColumnPatternType, string(pattern.PatternType)).
 		Msg("Search pattern updated")
 
 	return nil
@@ -263,7 +264,7 @@ func (r *PostgresPatternRepository) Delete(ctx context.Context, id int64) error 
 	}
 
 	log.Info().
-		Int64("pattern_id", id).
+		Int64(constants.ColumnPatternID, id).
 		Msg("Search pattern deleted")
 
 	return nil
@@ -295,7 +296,7 @@ func (r *PostgresPatternRepository) DeleteBySettingID(ctx context.Context, setti
 	// Log the deletion
 	rowsAffected, _ := result.RowsAffected()
 	log.Info().
-		Int64("setting_id", settingID).
+		Int64(constants.ColumnSettingID, settingID).
 		Int64("count", rowsAffected).
 		Msg("Search patterns deleted for setting")
 

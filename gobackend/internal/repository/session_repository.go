@@ -11,6 +11,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
@@ -79,13 +80,13 @@ func (r *PostgresSessionRepository) Create(ctx context.Context, session *models.
 	if err != nil {
 		// Check for unique constraint violations
 		if pqErr, ok := err.(*pq.Error); ok {
-			// 23505 is the PostgreSQL error code for unique_violation
-			if pqErr.Code == "23505" {
+			// Check for duplicate constraint
+			if pqErr.Code == constants.PGErrorDuplicateConstraint {
 				if pqErr.Constraint == "sessions_pkey" {
 					return utils.NewDuplicateError("Session", "id", session.ID)
 				}
-				if pqErr.Constraint == "idx_jwt_id" {
-					return utils.NewDuplicateError("Session", "jwt_id", session.JWTID)
+				if pqErr.Constraint == constants.IndexJWTID {
+					return utils.NewDuplicateError("Session", constants.ColumnJWTID, session.JWTID)
 				}
 			}
 		}
@@ -93,10 +94,10 @@ func (r *PostgresSessionRepository) Create(ctx context.Context, session *models.
 	}
 
 	log.Info().
-		Str("session_id", session.ID).
-		Int64("user_id", session.UserID).
-		Str("jwt_id", session.JWTID).
-		Time("expires_at", session.ExpiresAt).
+		Str(constants.ColumnSessionID, session.ID).
+		Int64(constants.ColumnUserID, session.UserID).
+		Str(constants.ColumnJWTID, session.JWTID).
+		Time(constants.ColumnExpiresAt, session.ExpiresAt).
 		Msg("Session created")
 
 	return nil
@@ -274,7 +275,7 @@ func (r *PostgresSessionRepository) Delete(ctx context.Context, id string) error
 	}
 
 	log.Info().
-		Str("session_id", id).
+		Str(constants.ColumnSessionID, id).
 		Msg("Session deleted")
 
 	return nil
@@ -314,7 +315,7 @@ func (r *PostgresSessionRepository) DeleteByJWTID(ctx context.Context, jwtID str
 	}
 
 	log.Info().
-		Str("jwt_id", jwtID).
+		Str(constants.ColumnJWTID, jwtID).
 		Msg("Session deleted by JWT ID")
 
 	return nil
@@ -346,7 +347,7 @@ func (r *PostgresSessionRepository) DeleteByUserID(ctx context.Context, userID i
 	// Log the deletion
 	rowsAffected, _ := result.RowsAffected()
 	log.Info().
-		Int64("user_id", userID).
+		Int64(constants.ColumnUserID, userID).
 		Int64("count", rowsAffected).
 		Msg("Sessions deleted for user")
 

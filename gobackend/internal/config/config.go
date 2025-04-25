@@ -9,13 +9,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
-)
 
-// Environment types
-const (
-	EnvDevelopment = "development"
-	EnvTesting     = "testing"
-	EnvProduction  = "production"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 // AppConfig represents the entire application configuration
@@ -126,17 +121,17 @@ func (ss *ServerSettings) ServerAddress() string {
 
 // IsDevelopment checks if the application is running in development mode
 func (as *AppSettings) IsDevelopment() bool {
-	return strings.ToLower(as.Environment) == EnvDevelopment
+	return strings.ToLower(as.Environment) == constants.EnvDevelopment
 }
 
 // IsProduction checks if the application is running in production mode
 func (as *AppSettings) IsProduction() bool {
-	return strings.ToLower(as.Environment) == EnvProduction
+	return strings.ToLower(as.Environment) == constants.EnvProduction
 }
 
 // IsTesting checks if the application is running in testing mode
 func (as *AppSettings) IsTesting() bool {
-	return strings.ToLower(as.Environment) == EnvTesting
+	return strings.ToLower(as.Environment) == constants.EnvTesting
 }
 
 var (
@@ -195,7 +190,7 @@ func Get() *AppConfig {
 func setDefaults(config *AppConfig) {
 	// App defaults
 	if config.App.Environment == "" {
-		config.App.Environment = EnvDevelopment
+		config.App.Environment = constants.EnvDevelopment
 	}
 
 	if config.App.Version == "" {
@@ -203,47 +198,47 @@ func setDefaults(config *AppConfig) {
 	}
 
 	if config.Server.Port == 0 {
-		config.Server.Port = 8080 // Changed from 3306 to 8080 for web server
+		config.Server.Port = constants.DefaultServerPort
 	}
 	if config.Server.ReadTimeout == 0 {
-		config.Server.ReadTimeout = 5 * time.Second
+		config.Server.ReadTimeout = constants.DefaultReadTimeout
 	}
 	if config.Server.WriteTimeout == 0 {
-		config.Server.WriteTimeout = 10 * time.Second
+		config.Server.WriteTimeout = constants.DefaultWriteTimeout
 	}
 	if config.Server.ShutdownTimeout == 0 {
-		config.Server.ShutdownTimeout = 30 * time.Second
+		config.Server.ShutdownTimeout = constants.DefaultShutdownTimeout
 	}
 
 	if config.Database.MaxConns == 0 {
-		config.Database.MaxConns = 20
+		config.Database.MaxConns = constants.DefaultDBMaxConnections
 	}
 	if config.Database.MinConns == 0 {
-		config.Database.MinConns = 5
+		config.Database.MinConns = constants.DefaultDBMinConnections
 	}
 
 	// JWT defaults
 	if config.JWT.Expiry == 0 {
-		config.JWT.Expiry = 15 * time.Minute
+		config.JWT.Expiry = constants.DefaultJWTExpiry
 	}
 	if config.JWT.RefreshExpiry == 0 {
-		config.JWT.RefreshExpiry = 7 * 24 * time.Hour
+		config.JWT.RefreshExpiry = constants.DefaultJWTRefreshExpiry
 	}
 	if config.JWT.Issuer == "" {
-		config.JWT.Issuer = "hideme-api"
+		config.JWT.Issuer = constants.DefaultJWTIssuer
 	}
 
 	// API Key defaults
 	if config.APIKey.DefaultExpiry == 0 {
-		config.APIKey.DefaultExpiry = 90 * 24 * time.Hour // 90 days
+		config.APIKey.DefaultExpiry = constants.DefaultAPIKeyExpiry
 	}
 
 	// Logging defaults
 	if config.Logging.Level == "" {
-		config.Logging.Level = "info"
+		config.Logging.Level = constants.DefaultLogLevel
 	}
 	if config.Logging.Format == "" {
-		config.Logging.Format = "json"
+		config.Logging.Format = constants.DefaultLogFormat
 	}
 
 	// CORS defaults
@@ -255,46 +250,46 @@ func setDefaults(config *AppConfig) {
 	if config.PasswordHash.Memory == 0 {
 		// Lower for development, higher for production
 		if config.App.IsProduction() {
-			config.PasswordHash.Memory = 64 * 1024
+			config.PasswordHash.Memory = constants.DefaultPasswordHashMemory
 		} else {
-			config.PasswordHash.Memory = 16 * 1024
+			config.PasswordHash.Memory = constants.DevPasswordHashMemory
 		}
 	}
 	if config.PasswordHash.Iterations == 0 {
 		if config.App.IsProduction() {
-			config.PasswordHash.Iterations = 3
+			config.PasswordHash.Iterations = constants.DefaultPasswordHashIterations
 		} else {
-			config.PasswordHash.Iterations = 1
+			config.PasswordHash.Iterations = constants.DevPasswordHashIterations
 		}
 	}
 	if config.PasswordHash.Parallelism == 0 {
-		config.PasswordHash.Parallelism = 2
+		config.PasswordHash.Parallelism = constants.DefaultPasswordHashParallelism
 	}
 	if config.PasswordHash.SaltLength == 0 {
-		config.PasswordHash.SaltLength = 16
+		config.PasswordHash.SaltLength = constants.DefaultPasswordHashSaltLength
 	}
 	if config.PasswordHash.KeyLength == 0 {
-		config.PasswordHash.KeyLength = 32
+		config.PasswordHash.KeyLength = constants.DefaultPasswordHashKeyLength
 	}
 
 	// GDPR logging defaults
 	if config.GDPRLogging.StandardLogRetentionDays == 0 {
-		config.GDPRLogging.StandardLogRetentionDays = 90 // 90 days for standard logs
+		config.GDPRLogging.StandardLogRetentionDays = constants.StandardLogRetentionDays
 	}
 	if config.GDPRLogging.PersonalDataRetentionDays == 0 {
-		config.GDPRLogging.PersonalDataRetentionDays = 30 // 30 days for personal data
+		config.GDPRLogging.PersonalDataRetentionDays = constants.PersonalDataRetentionDays
 	}
 	if config.GDPRLogging.SensitiveDataRetentionDays == 0 {
-		config.GDPRLogging.SensitiveDataRetentionDays = 15 // 15 days for sensitive data
+		config.GDPRLogging.SensitiveDataRetentionDays = constants.SensitiveDataRetentionDays
 	}
 	if config.GDPRLogging.StandardLogPath == "" {
-		config.GDPRLogging.StandardLogPath = "./logs/standard"
+		config.GDPRLogging.StandardLogPath = constants.DefaultStandardLogPath
 	}
 	if config.GDPRLogging.PersonalLogPath == "" {
-		config.GDPRLogging.PersonalLogPath = "./logs/personal"
+		config.GDPRLogging.PersonalLogPath = constants.DefaultPersonalLogPath
 	}
 	if config.GDPRLogging.SensitiveLogPath == "" {
-		config.GDPRLogging.SensitiveLogPath = "./logs/sensitive"
+		config.GDPRLogging.SensitiveLogPath = constants.DefaultSensitiveLogPath
 	}
 	if config.GDPRLogging.LogSanitizationLevel == "" {
 		config.GDPRLogging.LogSanitizationLevel = "medium"
@@ -307,10 +302,10 @@ func validateConfig(config *AppConfig) error {
 	env := strings.ToLower(config.App.Environment)
 	fmt.Printf("Debug - Environment value: '%s'\n", config.App.Environment)
 
-	if env != EnvDevelopment && env != EnvTesting && env != EnvProduction {
+	if env != constants.EnvDevelopment && env != constants.EnvTesting && env != constants.EnvProduction {
 		// Instead of failing, use a default and warn
 		fmt.Printf("Warning: Invalid environment '%s', defaulting to 'development'\n", config.App.Environment)
-		config.App.Environment = EnvDevelopment
+		config.App.Environment = constants.EnvDevelopment
 	}
 
 	// In production, ensure we have a proper JWT secret
@@ -347,10 +342,10 @@ func logConfig(config *AppConfig) {
 
 	// Mask sensitive information
 	if logCfg.Database.Password != "" {
-		logCfg.Database.Password = "********"
+		logCfg.Database.Password = constants.LogRedactedValue
 	}
 	if logCfg.JWT.Secret != "" {
-		logCfg.JWT.Secret = "********"
+		logCfg.JWT.Secret = constants.LogRedactedValue
 	}
 
 	log.Info().

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
@@ -17,10 +18,10 @@ type ContextKey string
 
 // Context keys
 const (
-	UserIDContextKey    ContextKey = "user_id"
-	UsernameContextKey  ContextKey = "username"
-	EmailContextKey     ContextKey = "email"
-	RequestIDContextKey ContextKey = "request_id"
+	UserIDContextKey    ContextKey = constants.UserIDContextKey
+	UsernameContextKey  ContextKey = constants.UsernameContextKey
+	EmailContextKey     ContextKey = constants.EmailContextKey
+	RequestIDContextKey ContextKey = constants.RequestIDContextKey
 )
 
 /*
@@ -53,26 +54,26 @@ func NewJWTAuthProvider(jwtService JWTValidator) *JWTAuthProvider {
 // Authenticate implements the AuthProvider interface for JWT
 func (p *JWTAuthProvider) Authenticate(r *http.Request) (int64, string, string, error) {
 	// Extract the token from the Authorization header
-	authHeader := r.Header.Get("Authorization")
+	authHeader := r.Header.Get(constants.HeaderAuthorization)
 	if authHeader == "" {
 		// Check for token in cookie as fallback
-		cookie, err := r.Cookie("auth_token")
+		cookie, err := r.Cookie(constants.AuthTokenCookie)
 		if err != nil {
 			return 0, "", "", utils.ErrUnauthorized
 		}
-		authHeader = "Bearer " + cookie.Value
+		authHeader = constants.BearerTokenPrefix + cookie.Value
 	}
 
 	// Check if the header has the correct format
-	if !strings.HasPrefix(authHeader, "Bearer ") {
+	if !strings.HasPrefix(authHeader, constants.BearerTokenPrefix) {
 		return 0, "", "", utils.ErrUnauthorized
 	}
 
 	// Extract the token
-	token := strings.TrimPrefix(authHeader, "Bearer ")
+	token := strings.TrimPrefix(authHeader, constants.BearerTokenPrefix)
 
 	// Validate the token
-	claims, err := p.jwtService.ValidateToken(token, "access")
+	claims, err := p.jwtService.ValidateToken(token, constants.TokenTypeAccess)
 	if err != nil {
 		return 0, "", "", err
 	}
@@ -90,10 +91,10 @@ type APIKeyAuthProvider struct {
 func AuthMiddleware(next http.Handler, providers ...AuthProvider) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Generate a request ID if not already present
-		requestID := r.Header.Get("X-Request-ID")
+		requestID := r.Header.Get(constants.HeaderXRequestID)
 		if requestID == "" {
 			requestID = uuid.New().String()
-			r.Header.Set("X-Request-ID", requestID)
+			r.Header.Set(constants.HeaderXRequestID, requestID)
 		}
 
 		// Add request ID to the context
@@ -139,11 +140,11 @@ func AuthMiddleware(next http.Handler, providers ...AuthProvider) http.Handler {
 		if errors.As(lastErr, &appErr) {
 			utils.ErrorFromAppError(w, appErr)
 		} else if errors.Is(lastErr, utils.ErrUnauthorized) {
-			utils.Unauthorized(w, "Authentication required")
+			utils.Unauthorized(w, constants.MsgAuthRequired)
 		} else if errors.Is(lastErr, utils.ErrExpiredToken) {
-			utils.Error(w, http.StatusUnauthorized, "token_expired", "Authentication token has expired", nil)
+			utils.Error(w, constants.StatusUnauthorized, constants.CodeTokenExpired, constants.MsgTokenExpired, nil)
 		} else {
-			utils.Error(w, http.StatusUnauthorized, "authentication_failed", "Authentication failed", nil)
+			utils.Error(w, constants.StatusUnauthorized, constants.CodeAuthenticationFailed, constants.MsgAuthRequired, nil)
 		}
 	})
 }
@@ -160,10 +161,10 @@ func OptionalAuth(providers ...AuthProvider) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Generate a request ID if not already present
-			requestID := r.Header.Get("X-Request-ID")
+			requestID := r.Header.Get(constants.HeaderXRequestID)
 			if requestID == "" {
 				requestID = uuid.New().String()
-				r.Header.Set("X-Request-ID", requestID)
+				r.Header.Set(constants.HeaderXRequestID, requestID)
 			}
 
 			// Add request ID to the context

@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 // APIKey represents an API key for authenticating with the system.
@@ -17,7 +19,7 @@ type APIKey struct {
 
 // TableName returns the database table name for the APIKey model.
 func (ak *APIKey) TableName() string {
-	return "api_keys"
+	return constants.TableAPIKeys
 }
 
 // NewAPIKey creates a new APIKey with the given parameters.

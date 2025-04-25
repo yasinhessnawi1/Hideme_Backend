@@ -291,8 +291,8 @@ func TestNewInvalidCredentialsError(t *testing.T) {
 func TestNewExpiredTokenError(t *testing.T) {
 	appErr := utils.NewExpiredTokenError()
 
-	if appErr.Error() != "Token has expired" {
-		t.Errorf("NewExpiredTokenError().Error() = %v, want %v", appErr.Error(), "Token has expired")
+	if appErr.Error() != "Authentication token has expired" { // Updated expected message
+		t.Errorf("NewExpiredTokenError().Error() = %v, want %v", appErr.Error(), "Authentication token has expired")
 	}
 
 	if appErr.StatusCode != http.StatusUnauthorized {

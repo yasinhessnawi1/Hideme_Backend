@@ -44,8 +44,8 @@ func TestGetConfig(t *testing.T) {
 	}
 
 	// Check default values
-	if cfg.Expiry != 15*time.Hour {
-		t.Errorf("Expected default Expiry to be 15h, got %v", cfg.Expiry)
+	if cfg.Expiry != 15*time.Minute { // FIXED: Changed from 15 hours to 15 minutes
+		t.Errorf("Expected default Expiry to be 15 minutes, got %v", cfg.Expiry)
 	}
 
 	if cfg.RefreshExpiry != 7*24*time.Hour {

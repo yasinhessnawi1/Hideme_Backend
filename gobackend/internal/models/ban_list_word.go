@@ -1,5 +1,9 @@
 package models
 
+import (
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
+)
+
 // BanListWord represents an individual banned word within a ban list.
 // These words are excluded from detection to reduce false positives.
 type BanListWord struct {
@@ -10,7 +14,7 @@ type BanListWord struct {
 
 // TableName returns the database table name for the BanListWord model.
 func (blw *BanListWord) TableName() string {
-	return "ban_list_words"
+	return constants.TableBanListWords
 }
 
 // NewBanListWord creates a new BanListWord with the given ban ID and word.

@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"time"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 // Document represents a document uploaded to the HideMe application for processing.
@@ -31,7 +33,7 @@ func NewDocument(userID int64, originalFilename string) *Document {
 
 // TableName returns the database table name for the Document model.
 func (d *Document) TableName() string {
-	return "documents"
+	return constants.TableDocuments
 }
 
 // hashDocumentName creates a SHA-256 hash of the original document name to protect

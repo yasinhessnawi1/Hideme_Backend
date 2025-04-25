@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
@@ -25,7 +26,7 @@ func NewGenericHandler(dbService DatabaseServiceInterface) *GenericHandler {
 // GetTableData returns all records from a table
 func (h *GenericHandler) GetTableData(w http.ResponseWriter, r *http.Request) {
 	// Get the table name from the URL
-	table := chi.URLParam(r, "table")
+	table := chi.URLParam(r, constants.ParamTable)
 	if table == "" {
 		utils.BadRequest(w, "Table name is required", nil)
 		return
@@ -40,7 +41,7 @@ func (h *GenericHandler) GetTableData(w http.ResponseWriter, r *http.Request) {
 	// Extract query parameters as conditions
 	conditions := make(map[string]interface{})
 	for key, values := range r.URL.Query() {
-		if len(values) > 0 && key != "page" && key != "page_size" {
+		if len(values) > 0 && key != constants.QueryParamPage && key != constants.QueryParamPageSize {
 			conditions[key] = values[0]
 		}
 	}
@@ -63,14 +64,14 @@ func (h *GenericHandler) GetTableData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return paginated response
-	utils.Paginated(w, http.StatusOK, data, paginationParams.Page, paginationParams.PageSize, int(totalCount))
+	utils.Paginated(w, constants.StatusOK, data, paginationParams.Page, paginationParams.PageSize, int(totalCount))
 }
 
 // GetRecordByID returns a single record by ID
 func (h *GenericHandler) GetRecordByID(w http.ResponseWriter, r *http.Request) {
 	// Get the table name and ID from the URL
-	table := chi.URLParam(r, "table")
-	idStr := chi.URLParam(r, "id")
+	table := chi.URLParam(r, constants.ParamTable)
+	idStr := chi.URLParam(r, constants.ParamID)
 
 	if table == "" {
 		utils.BadRequest(w, "Table name is required", nil)
@@ -102,13 +103,13 @@ func (h *GenericHandler) GetRecordByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the record
-	utils.JSON(w, http.StatusOK, record)
+	utils.JSON(w, constants.StatusOK, record)
 }
 
 // CreateRecord creates a new record in a table
 func (h *GenericHandler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	// Get the table name from the URL
-	table := chi.URLParam(r, "table")
+	table := chi.URLParam(r, constants.ParamTable)
 	if table == "" {
 		utils.BadRequest(w, "Table name is required", nil)
 		return
@@ -167,14 +168,14 @@ func (h *GenericHandler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the created record
-	utils.JSON(w, http.StatusCreated, result[0])
+	utils.JSON(w, constants.StatusCreated, result[0])
 }
 
 // UpdateRecord updates a record in a table
 func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 	// Get the table name and ID from the URL
-	table := chi.URLParam(r, "table")
-	idStr := chi.URLParam(r, "id")
+	table := chi.URLParam(r, constants.ParamTable)
+	idStr := chi.URLParam(r, constants.ParamID)
 
 	if table == "" {
 		utils.BadRequest(w, "Table name is required", nil)
@@ -203,9 +204,9 @@ func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 	userID, _ := auth.GetUserID(r)
 
 	// Default ID column name
-	idColumn := table + "_id"
+	idColumn := table + constants.ColumnID
 	if table[len(table)-1] == 's' {
-		idColumn = table[:len(table)-1] + "_id"
+		idColumn = table[:len(table)-1] + constants.ColumnID
 	}
 
 	// Parse the ID (could be string or int depending on the table)
@@ -248,19 +249,19 @@ func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(result) == 0 {
-		utils.NotFound(w, "Record not found")
+		utils.NotFound(w, constants.MsgResourceNotFound)
 		return
 	}
 
 	// Return the updated record
-	utils.JSON(w, http.StatusOK, result[0])
+	utils.JSON(w, constants.StatusOK, result[0])
 }
 
 // DeleteRecord deletes a record from a table
 func (h *GenericHandler) DeleteRecord(w http.ResponseWriter, r *http.Request) {
 	// Get the table name and ID from the URL
-	table := chi.URLParam(r, "table")
-	idStr := chi.URLParam(r, "id")
+	table := chi.URLParam(r, constants.ParamTable)
+	idStr := chi.URLParam(r, constants.ParamID)
 
 	if table == "" {
 		utils.BadRequest(w, "Table name is required", nil)
@@ -282,9 +283,9 @@ func (h *GenericHandler) DeleteRecord(w http.ResponseWriter, r *http.Request) {
 	userID, _ := auth.GetUserID(r)
 
 	// Default ID column name
-	idColumn := table + "_id"
+	idColumn := table + constants.ColumnID
 	if table[len(table)-1] == 's' {
-		idColumn = table[:len(table)-1] + "_id"
+		idColumn = table[:len(table)-1] + constants.ColumnID
 	}
 
 	// Parse the ID (could be string or int depending on the table)
@@ -310,7 +311,7 @@ func (h *GenericHandler) DeleteRecord(w http.ResponseWriter, r *http.Request) {
 // GetTableSchema returns the schema for a table
 func (h *GenericHandler) GetTableSchema(w http.ResponseWriter, r *http.Request) {
 	// Get the table name from the URL
-	table := chi.URLParam(r, "table")
+	table := chi.URLParam(r, constants.ParamTable)
 	if table == "" {
 		utils.BadRequest(w, "Table name is required", nil)
 		return
@@ -330,5 +331,5 @@ func (h *GenericHandler) GetTableSchema(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Return the schema
-	utils.JSON(w, http.StatusOK, schema)
+	utils.JSON(w, constants.StatusOK, schema)
 }
