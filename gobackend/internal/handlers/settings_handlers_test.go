@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -1675,6 +1676,392 @@ func TestDeleteModelEntity(t *testing.T) {
 
 		// Verify mock expectations
 		mockService.AssertExpectations(t)
+	})
+}
+func TestDeleteModelEntityByMethodID(t *testing.T) {
+	// Setup
+	handler, mockService := setupSettingsTest(t)
+	router := chi.NewRouter()
+	router.Delete("/api/settings/entities/methods/{methodID}", handler.DeleteModelEntityByMethodID)
+
+	// Test successful case
+	t.Run("Success", func(t *testing.T) {
+		// Create method ID
+		methodID := int64(5)
+
+		// Setup mock service
+		mockService.On("DeleteModelEntityByMethodID", mock.Anything, int64(1001), methodID).Return(nil).Once()
+
+		// Create test request
+		req, err := http.NewRequest("DELETE", "/api/settings/entities/methods/"+strconv.FormatInt(methodID, 10), nil)
+		require.NoError(t, err)
+		req = req.WithContext(createAuthContext(1001))
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler via router
+		router.ServeHTTP(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusNoContent, rr.Code)
+
+		// Verify mock expectations
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("Invalid Method ID", func(t *testing.T) {
+		// Create test request with invalid method ID
+		req, err := http.NewRequest("DELETE", "/api/settings/entities/methods/invalid", nil)
+		require.NoError(t, err)
+		req = req.WithContext(createAuthContext(1001))
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler via router
+		router.ServeHTTP(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+	})
+
+	t.Run("Unauthorized", func(t *testing.T) {
+		// Create test request without auth context
+		req, err := http.NewRequest("DELETE", "/api/settings/entities/methods/5", nil)
+		require.NoError(t, err)
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler directly to test auth check
+		handler.DeleteModelEntityByMethodID(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("Service Error", func(t *testing.T) {
+		// Create method ID
+		methodID := int64(5)
+
+		// Setup mock service to return error
+		mockService.On("DeleteModelEntityByMethodID", mock.Anything, int64(1001), methodID).
+			Return(errors.New("service error")).Once()
+
+		// Create test request
+		req, err := http.NewRequest("DELETE", "/api/settings/entities/methods/"+strconv.FormatInt(methodID, 10), nil)
+		require.NoError(t, err)
+		req = req.WithContext(createAuthContext(1001))
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler via router
+		router.ServeHTTP(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+
+		// Verify mock expectations
+		mockService.AssertExpectations(t)
+	})
+}
+
+func TestExportSettings(t *testing.T) {
+	// Setup
+	handler, mockService := setupSettingsTest(t)
+
+	t.Run("Unauthorized", func(t *testing.T) {
+		// Create test request without auth context
+		req, err := http.NewRequest("GET", "/api/settings/export", nil)
+		require.NoError(t, err)
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler
+		handler.ExportSettings(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("Service Error", func(t *testing.T) {
+		// Setup mock service to return error
+		mockService.On("ExportSettings", mock.Anything, int64(1001)).
+			Return(nil, errors.New("service error")).Once()
+
+		// Create test request
+		req, err := http.NewRequest("GET", "/api/settings/export", nil)
+		require.NoError(t, err)
+		req = req.WithContext(createAuthContext(1001))
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler
+		handler.ExportSettings(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+
+		// Verify mock expectations
+		mockService.AssertExpectations(t)
+	})
+}
+
+func TestImportSettings(t *testing.T) {
+	// Setup
+	handler, mockService := setupSettingsTest(t)
+
+	// Helper function to create multipart request with settings file
+	createSettingsFileRequest := func(t *testing.T, content []byte, filename string) *http.Request {
+		// Create multipart body
+		body := new(bytes.Buffer)
+		writer := multipart.NewWriter(body)
+
+		// Create form file
+		part, err := writer.CreateFormFile("settings", filename)
+		require.NoError(t, err)
+
+		// Write content
+		_, err = part.Write(content)
+		require.NoError(t, err)
+
+		// Close writer
+		err = writer.Close()
+		require.NoError(t, err)
+
+		// Create request
+		req, err := http.NewRequest("POST", "/api/settings/import", body)
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+
+		// Add auth context
+		req = req.WithContext(createAuthContext(1001))
+
+		return req
+	}
+
+	// Test successful case
+	t.Run("Success", func(t *testing.T) {
+		// Create settings export JSON
+		validSettings := &models.SettingsExport{
+			GeneralSettings: &models.UserSetting{
+				Theme:                  "dark",
+				RemoveImages:           true,
+				AutoProcessing:         true,
+				DetectionThreshold:     0.75,
+				UseBanlistForDetection: true,
+			},
+			BanList: &models.BanListWithWords{
+				ID:    1,
+				Words: []string{"word1", "word2"},
+			},
+		}
+
+		settingsJSON, err := json.Marshal(validSettings)
+		require.NoError(t, err)
+
+		// Setup mock service
+		mockService.On("ImportSettings", mock.Anything, int64(1001), mock.MatchedBy(func(s *models.SettingsExport) bool {
+			return s.GeneralSettings.Theme == validSettings.GeneralSettings.Theme &&
+				s.BanList != nil &&
+				len(s.BanList.Words) == len(validSettings.BanList.Words)
+		})).Return(nil).Once()
+
+		// Create test request
+		req := createSettingsFileRequest(t, settingsJSON, "settings.json")
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler
+		handler.ImportSettings(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		// Verify mock expectations
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("Non-JSON File", func(t *testing.T) {
+		// Create test request with non-JSON file
+		req := createSettingsFileRequest(t, []byte("not a JSON"), "settings.txt")
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler
+		handler.ImportSettings(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+	})
+
+	t.Run("Invalid JSON Format", func(t *testing.T) {
+		// Create invalid JSON
+		invalidJSON := []byte(`{"general_settings": invalid}`)
+
+		// Create test request
+		req := createSettingsFileRequest(t, invalidJSON, "settings.json")
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler
+		handler.ImportSettings(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+	})
+
+	t.Run("Missing General Settings", func(t *testing.T) {
+		// Create settings JSON without general settings
+		invalidSettings := &models.SettingsExport{
+			BanList: &models.BanListWithWords{
+				ID:    1,
+				Words: []string{"word1", "word2"},
+			},
+		}
+
+		settingsJSON, err := json.Marshal(invalidSettings)
+		require.NoError(t, err)
+
+		// Create test request
+		req := createSettingsFileRequest(t, settingsJSON, "settings.json")
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler
+		handler.ImportSettings(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+	})
+
+	t.Run("Invalid Theme Value", func(t *testing.T) {
+		// Create settings with invalid theme
+		invalidSettings := &models.SettingsExport{
+			GeneralSettings: &models.UserSetting{
+				Theme: "invalid_theme",
+			},
+		}
+
+		settingsJSON, err := json.Marshal(invalidSettings)
+		require.NoError(t, err)
+
+		// Create test request
+		req := createSettingsFileRequest(t, settingsJSON, "settings.json")
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler
+		handler.ImportSettings(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+	})
+
+	t.Run("Missing File", func(t *testing.T) {
+		// Create multipart body without file
+		body := new(bytes.Buffer)
+		writer := multipart.NewWriter(body)
+		err := writer.Close()
+		require.NoError(t, err)
+
+		// Create request
+		req, err := http.NewRequest("POST", "/api/settings/import", body)
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		req = req.WithContext(createAuthContext(1001))
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler
+		handler.ImportSettings(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+	})
+
+	t.Run("Service Error", func(t *testing.T) {
+		// Create valid settings JSON
+		validSettings := &models.SettingsExport{
+			GeneralSettings: &models.UserSetting{
+				Theme: "dark",
+			},
+		}
+
+		settingsJSON, err := json.Marshal(validSettings)
+		require.NoError(t, err)
+
+		// Setup mock service to return error
+		mockService.On("ImportSettings", mock.Anything, int64(1001), mock.MatchedBy(func(s *models.SettingsExport) bool {
+			return s.GeneralSettings.Theme == validSettings.GeneralSettings.Theme
+		})).Return(errors.New("service error")).Once()
+
+		// Create test request
+		req := createSettingsFileRequest(t, settingsJSON, "settings.json")
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler
+		handler.ImportSettings(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+
+		// Verify mock expectations
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("Unauthorized", func(t *testing.T) {
+		// Create valid settings JSON
+		validSettings := &models.SettingsExport{
+			GeneralSettings: &models.UserSetting{
+				Theme: "dark",
+			},
+		}
+
+		settingsJSON, err := json.Marshal(validSettings)
+		require.NoError(t, err)
+
+		// Create multipart body
+		body := new(bytes.Buffer)
+		writer := multipart.NewWriter(body)
+
+		// Create form file
+		part, err := writer.CreateFormFile("settings", "settings.json")
+		require.NoError(t, err)
+
+		// Write content
+		_, err = part.Write(settingsJSON)
+		require.NoError(t, err)
+
+		// Close writer
+		err = writer.Close()
+		require.NoError(t, err)
+
+		// Create request without auth context
+		req, err := http.NewRequest("POST", "/api/settings/import", body)
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+
+		// Create response recorder
+		rr := httptest.NewRecorder()
+
+		// Call the handler
+		handler.ImportSettings(rr, req)
+
+		// Verify response
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 	})
 }
 
