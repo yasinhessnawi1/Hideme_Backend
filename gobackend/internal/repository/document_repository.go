@@ -9,6 +9,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
@@ -47,9 +48,9 @@ func (r *PostgresDocumentRepository) Create(ctx context.Context, document *model
 
 	// Define the query with RETURNING for PostgreSQL
 	query := `
-        INSERT INTO documents (user_id, hashed_document_name, upload_timestamp, last_modified)
+        INSERT INTO ` + constants.TableDocuments + ` (` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified)
         VALUES ($1, $2, $3, $4)
-        RETURNING document_id
+        RETURNING ` + constants.ColumnDocumentID + `
     `
 
 	// Execute the query
@@ -75,8 +76,8 @@ func (r *PostgresDocumentRepository) Create(ctx context.Context, document *model
 	}
 
 	log.Info().
-		Int64("document_id", document.ID).
-		Int64("user_id", document.UserID).
+		Int64(constants.ColumnDocumentID, document.ID).
+		Int64(constants.ColumnUserID, document.UserID).
 		Msg("Document created")
 
 	return nil
@@ -89,9 +90,9 @@ func (r *PostgresDocumentRepository) GetByID(ctx context.Context, id int64) (*mo
 
 	// Define the query
 	query := `
-        SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified
-        FROM documents
-        WHERE document_id = $1
+        SELECT ` + constants.ColumnDocumentID + `, ` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified
+        FROM ` + constants.TableDocuments + `
+        WHERE ` + constants.ColumnDocumentID + ` = $1
     `
 
 	// Execute the query
@@ -131,7 +132,7 @@ func (r *PostgresDocumentRepository) GetByUserID(ctx context.Context, userID int
 	offset := (page - 1) * pageSize
 
 	// Get total count
-	countQuery := `SELECT COUNT(*) FROM documents WHERE user_id = $1`
+	countQuery := `SELECT COUNT(*) FROM ` + constants.TableDocuments + ` WHERE ` + constants.ColumnUserID + ` = $1`
 	var totalCount int
 	if err := r.db.QueryRowContext(ctx, countQuery, userID).Scan(&totalCount); err != nil {
 		return nil, 0, fmt.Errorf("failed to count documents: %w", err)
@@ -139,9 +140,9 @@ func (r *PostgresDocumentRepository) GetByUserID(ctx context.Context, userID int
 
 	// Define the query
 	query := `
-        SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified
-        FROM documents
-        WHERE user_id = $1
+        SELECT ` + constants.ColumnDocumentID + `, ` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified
+        FROM ` + constants.TableDocuments + `
+        WHERE ` + constants.ColumnUserID + ` = $1
         ORDER BY upload_timestamp DESC
         LIMIT $2 OFFSET $3
     `
@@ -199,9 +200,9 @@ func (r *PostgresDocumentRepository) Update(ctx context.Context, document *model
 
 	// Define the query
 	query := `
-        UPDATE documents
+        UPDATE ` + constants.TableDocuments + `
         SET last_modified = $1
-        WHERE document_id = $2
+        WHERE ` + constants.ColumnDocumentID + ` = $2
     `
 
 	// Execute the query
@@ -235,7 +236,7 @@ func (r *PostgresDocumentRepository) Update(ctx context.Context, document *model
 	}
 
 	log.Info().
-		Int64("document_id", document.ID).
+		Int64(constants.ColumnDocumentID, document.ID).
 		Msg("Document updated")
 
 	return nil
@@ -249,14 +250,14 @@ func (r *PostgresDocumentRepository) Delete(ctx context.Context, id int64) error
 	// Execute the delete within a transaction to cascade properly
 	return r.db.Transaction(ctx, func(tx *sql.Tx) error {
 		// First delete all detected entities
-		entitiesQuery := "DELETE FROM detected_entities WHERE document_id = $1"
+		entitiesQuery := "DELETE FROM " + constants.TableDetectedEntities + " WHERE " + constants.ColumnDocumentID + " = $1"
 		_, err := tx.ExecContext(ctx, entitiesQuery, id)
 		if err != nil {
 			return fmt.Errorf("failed to delete detected entities: %w", err)
 		}
 
 		// Then delete the document
-		documentQuery := "DELETE FROM documents WHERE document_id = $1"
+		documentQuery := "DELETE FROM " + constants.TableDocuments + " WHERE " + constants.ColumnDocumentID + " = $1"
 		result, err := tx.ExecContext(ctx, documentQuery, id)
 
 		// Log the query execution
@@ -282,7 +283,7 @@ func (r *PostgresDocumentRepository) Delete(ctx context.Context, id int64) error
 		}
 
 		log.Info().
-			Int64("document_id", id).
+			Int64(constants.ColumnDocumentID, id).
 			Msg("Document deleted")
 
 		return nil
@@ -297,7 +298,7 @@ func (r *PostgresDocumentRepository) DeleteByUserID(ctx context.Context, userID 
 	// Execute the delete within a transaction to cascade properly
 	return r.db.Transaction(ctx, func(tx *sql.Tx) error {
 		// First get all document IDs
-		documentIDsQuery := "SELECT document_id FROM documents WHERE user_id = $1"
+		documentIDsQuery := "SELECT " + constants.ColumnDocumentID + " FROM " + constants.TableDocuments + " WHERE " + constants.ColumnUserID + " = $1"
 		rows, err := tx.QueryContext(ctx, documentIDsQuery, userID)
 		if err != nil {
 			return fmt.Errorf("failed to get document IDs: %w", err)
@@ -320,7 +321,7 @@ func (r *PostgresDocumentRepository) DeleteByUserID(ctx context.Context, userID 
 		// Delete all detected entities for these documents
 		if len(documentIDs) > 0 {
 			for _, documentID := range documentIDs {
-				entitiesQuery := "DELETE FROM detected_entities WHERE document_id = $1"
+				entitiesQuery := "DELETE FROM " + constants.TableDetectedEntities + " WHERE " + constants.ColumnDocumentID + " = $1"
 				_, err := tx.ExecContext(ctx, entitiesQuery, documentID)
 				if err != nil {
 					return fmt.Errorf("failed to delete detected entities: %w", err)
@@ -329,7 +330,7 @@ func (r *PostgresDocumentRepository) DeleteByUserID(ctx context.Context, userID 
 		}
 
 		// Then delete all documents
-		documentsQuery := "DELETE FROM documents WHERE user_id = $1"
+		documentsQuery := "DELETE FROM " + constants.TableDocuments + " WHERE " + constants.ColumnUserID + " = $1"
 		result, err := tx.ExecContext(ctx, documentsQuery, userID)
 
 		// Log the query execution
@@ -347,7 +348,7 @@ func (r *PostgresDocumentRepository) DeleteByUserID(ctx context.Context, userID 
 		// Log the deletion
 		rowsAffected, _ := result.RowsAffected()
 		log.Info().
-			Int64("user_id", userID).
+			Int64(constants.ColumnUserID, userID).
 			Int64("count", rowsAffected).
 			Msg("Documents deleted for user")
 
@@ -362,11 +363,11 @@ func (r *PostgresDocumentRepository) GetDetectedEntities(ctx context.Context, do
 
 	// Define the query
 	query := `
-        SELECT de.entity_id, de.document_id, de.method_id, de.entity_name, de.redaction_schema, de.detected_timestamp,
-               dm.method_name, dm.highlight_color
-        FROM detected_entities de
-        JOIN detection_methods dm ON de.method_id = dm.method_id
-        WHERE de.document_id = $1
+        SELECT de.` + constants.ColumnEntityID + `, de.` + constants.ColumnDocumentID + `, de.` + constants.ColumnMethodID + `, de.` + constants.ColumnEntityName + `, de.redaction_schema, de.detected_timestamp,
+               dm.` + constants.ColumnMethodName + `, dm.` + constants.ColumnHighlightColor + `
+        FROM ` + constants.TableDetectedEntities + ` de
+        JOIN ` + constants.TableDetectionMethods + ` dm ON de.` + constants.ColumnMethodID + ` = dm.` + constants.ColumnMethodID + `
+        WHERE de.` + constants.ColumnDocumentID + ` = $1
         ORDER BY de.detected_timestamp DESC
     `
 
@@ -425,9 +426,9 @@ func (r *PostgresDocumentRepository) AddDetectedEntity(ctx context.Context, enti
 
 	// Define the query with RETURNING for PostgreSQL
 	query := `
-        INSERT INTO detected_entities (document_id, method_id, entity_name, redaction_schema, detected_timestamp)
+        INSERT INTO ` + constants.TableDetectedEntities + ` (` + constants.ColumnDocumentID + `, ` + constants.ColumnMethodID + `, ` + constants.ColumnEntityName + `, redaction_schema, detected_timestamp)
         VALUES ($1, $2, $3, $4, $5)
-        RETURNING entity_id
+        RETURNING ` + constants.ColumnEntityID + `
     `
 
 	// Execute the query
@@ -454,10 +455,10 @@ func (r *PostgresDocumentRepository) AddDetectedEntity(ctx context.Context, enti
 	}
 
 	log.Info().
-		Int64("entity_id", entity.ID).
-		Int64("document_id", entity.DocumentID).
-		Int64("method_id", entity.MethodID).
-		Str("entity_name", entity.EntityName).
+		Int64(constants.ColumnEntityID, entity.ID).
+		Int64(constants.ColumnDocumentID, entity.DocumentID).
+		Int64(constants.ColumnMethodID, entity.MethodID).
+		Str(constants.ColumnEntityName, entity.EntityName).
 		Msg("Detected entity created")
 
 	return nil
@@ -469,7 +470,7 @@ func (r *PostgresDocumentRepository) DeleteDetectedEntity(ctx context.Context, e
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM detected_entities WHERE entity_id = $1`
+	query := `DELETE FROM ` + constants.TableDetectedEntities + ` WHERE ` + constants.ColumnEntityID + ` = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, entityID)
@@ -497,7 +498,7 @@ func (r *PostgresDocumentRepository) DeleteDetectedEntity(ctx context.Context, e
 	}
 
 	log.Info().
-		Int64("entity_id", entityID).
+		Int64(constants.ColumnEntityID, entityID).
 		Msg("Detected entity deleted")
 
 	return nil
@@ -510,12 +511,12 @@ func (r *PostgresDocumentRepository) GetDocumentSummary(ctx context.Context, doc
 
 	// Define the query
 	query := `
-        SELECT d.document_id, d.hashed_document_name, d.upload_timestamp, d.last_modified,
-               COUNT(de.entity_id) AS entity_count
-        FROM documents d
-        LEFT JOIN detected_entities de ON d.document_id = de.document_id
-        WHERE d.document_id = $1
-        GROUP BY d.document_id
+        SELECT d.` + constants.ColumnDocumentID + `, d.hashed_document_name, d.upload_timestamp, d.last_modified,
+               COUNT(de.` + constants.ColumnEntityID + `) AS entity_count
+        FROM ` + constants.TableDocuments + ` d
+        LEFT JOIN ` + constants.TableDetectedEntities + ` de ON d.` + constants.ColumnDocumentID + ` = de.` + constants.ColumnDocumentID + `
+        WHERE d.` + constants.ColumnDocumentID + ` = $1
+        GROUP BY d.` + constants.ColumnDocumentID + `
     `
 
 	// Execute the query

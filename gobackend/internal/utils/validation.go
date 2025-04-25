@@ -12,6 +12,8 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/rs/zerolog/log"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 var (
@@ -51,8 +53,7 @@ func GetValidator() *validator.Validate {
 // with improved error handling and size limits
 func DecodeJSON(r *http.Request, v interface{}) error {
 	// Limit the size of the request body to prevent DOS attacks
-	maxBytes := int64(1048576) // 1MB
-	r.Body = http.MaxBytesReader(nil, r.Body, maxBytes)
+	r.Body = http.MaxBytesReader(nil, r.Body, constants.MaxRequestBodySize)
 
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -64,13 +65,13 @@ func DecodeJSON(r *http.Request, v interface{}) error {
 
 		switch {
 		case err.Error() == "http: request body too large":
-			return NewBadRequestError("Request body too large")
+			return NewBadRequestError(constants.MsgRequestBodyTooLarge)
 
 		case err == io.EOF:
-			return NewBadRequestError("Request body must not be empty")
+			return NewBadRequestError(constants.MsgEmptyRequestBody)
 
 		case err == io.ErrUnexpectedEOF:
-			return NewBadRequestError("Request body contains invalid JSON")
+			return NewBadRequestError(constants.MsgMalformedJSON)
 
 		case strings.HasPrefix(err.Error(), "json: unknown field "):
 			fieldName := strings.TrimPrefix(err.Error(), "json: unknown field ")
@@ -247,22 +248,22 @@ func IsValidEmail(email string) bool {
 
 // ValidateUsername validates a username
 func ValidateUsername(username string) error {
-	if len(username) < 3 {
-		return NewValidationError("username", "Username must be at least 3 characters long")
+	if len(username) < constants.MinUsernameLength {
+		return NewValidationError(constants.ColumnUsername, fmt.Sprintf("Username must be at least %d characters long", constants.MinUsernameLength))
 	}
-	if len(username) > 50 {
-		return NewValidationError("username", "Username must be at most 50 characters long")
+	if len(username) > constants.MaxUsernameLength {
+		return NewValidationError(constants.ColumnUsername, fmt.Sprintf("Username must be at most %d characters long", constants.MaxUsernameLength))
 	}
 	if err := GetValidator().Var(username, "alphanum"); err != nil {
-		return NewValidationError("username", "Username must contain only alphanumeric characters")
+		return NewValidationError(constants.ColumnUsername, "Username must contain only alphanumeric characters")
 	}
 	return nil
 }
 
 // ValidatePassword validates a password
 func ValidatePassword(password string) error {
-	if len(password) < 8 {
-		return NewValidationError("password", "Password must be at least 8 characters long")
+	if len(password) < constants.MinPasswordLength {
+		return NewValidationError("password", fmt.Sprintf("Password must be at least %d characters long", constants.MinPasswordLength))
 	}
 
 	if err := GetValidator().Var(password, "strong_password"); err != nil {

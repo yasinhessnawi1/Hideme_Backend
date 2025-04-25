@@ -200,7 +200,6 @@ func (m *Migrator) recordMigration(ctx context.Context, name, description string
 	return nil
 }
 
-// tableExists checks if a table exists in the database
 func (m *Migrator) tableExists(ctx context.Context, tableName string) (bool, error) {
 	query := `
 		SELECT COUNT(*)

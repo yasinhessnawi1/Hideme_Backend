@@ -6,6 +6,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
@@ -22,7 +23,7 @@ func APIKeyAuth( /* apiKeyRepo repository.APIKeyRepository */ ) func(http.Handle
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get API key from header
-			apiKey := r.Header.Get("X-API-Key")
+			apiKey := r.Header.Get(constants.HeaderXAPIKey)
 			if apiKey == "" {
 				utils.Unauthorized(w, "API key required")
 				return
@@ -44,7 +45,7 @@ func RequireRole(role string) func(http.Handler) http.Handler {
 			// Get user ID from context
 			userID, ok := auth.GetUserID(r)
 			if !ok {
-				utils.Unauthorized(w, "Authentication required")
+				utils.Unauthorized(w, constants.MsgAuthRequired)
 				return
 			}
 
@@ -71,8 +72,8 @@ func CSRF() func(http.Handler) http.Handler {
 			}
 
 			// Check CSRF token
-			csrfToken := r.Header.Get("X-CSRF-Token")
-			cookie, err := r.Cookie("csrf_token")
+			csrfToken := r.Header.Get(constants.HeaderXCSRFToken)
+			cookie, err := r.Cookie(constants.CSRFTokenCookie)
 
 			if err != nil || cookie.Value == "" || csrfToken == "" || cookie.Value != csrfToken {
 				utils.Forbidden(w, "Invalid or missing CSRF token")
@@ -108,11 +109,11 @@ func SecurityHeaders() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Add security headers
-			w.Header().Set("X-Content-Type-Options", "nosniff")
-			w.Header().Set("X-Frame-Options", "DENY")
-			w.Header().Set("X-XSS-Protection", "1; mode=block")
-			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-			w.Header().Set("Content-Security-Policy", "default-src 'self'")
+			w.Header().Set(constants.HeaderXContentTypeOptions, constants.ContentTypeOptionsNoSniff)
+			w.Header().Set(constants.HeaderXFrameOptions, constants.FrameOptionsDeny)
+			w.Header().Set(constants.HeaderXXSSProtection, constants.XSSProtectionModeBlock)
+			w.Header().Set(constants.HeaderReferrerPolicy, constants.ReferrerPolicyStrictOrigin)
+			w.Header().Set(constants.HeaderContentSecurityPolicy, constants.CSPDefaultSrc)
 
 			next.ServeHTTP(w, r)
 		})

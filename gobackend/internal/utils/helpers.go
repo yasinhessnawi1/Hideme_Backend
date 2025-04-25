@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 // JoinStrings joins a slice of strings with the given separator
@@ -93,16 +95,16 @@ func MaskEmail(email string) string {
 func SanitizeKeys(data map[string]interface{}) map[string]interface{} {
 	// List of keys to remove or mask
 	sensitiveKeys := map[string]bool{
-		"password":        true,
-		"password_hash":   true,
-		"salt":            true,
-		"api_key":         true,
-		"api_key_hash":    true,
-		"token":           true,
-		"secret":          true,
-		"credit_card":     true,
-		"ssn":             true,
-		"social_security": true,
+		constants.ColumnPasswordHash: true,
+		constants.ColumnSalt:         true,
+		constants.ColumnAPIKeyHash:   true,
+		"password":                   true,
+		"api_key":                    true,
+		"token":                      true,
+		"secret":                     true,
+		"credit_card":                true,
+		"ssn":                        true,
+		"social_security":            true,
 	}
 
 	result := make(map[string]interface{})
@@ -110,7 +112,7 @@ func SanitizeKeys(data map[string]interface{}) map[string]interface{} {
 	for k, v := range data {
 		// Skip sensitive keys
 		if sensitiveKeys[strings.ToLower(k)] {
-			result[k] = "[REDACTED]"
+			result[k] = constants.LogRedactedValue
 			continue
 		}
 

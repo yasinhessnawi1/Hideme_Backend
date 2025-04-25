@@ -9,6 +9,7 @@ import (
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
@@ -47,7 +48,7 @@ func NewAuthService(
 func (s *AuthService) RegisterUser(ctx context.Context, reg *models.UserRegistration) (*models.User, error) {
 	// Validate password match
 	if reg.Password != reg.ConfirmPassword {
-		return nil, utils.NewValidationError("confirm_password", "Passwords do not match")
+		return nil, utils.NewValidationError("confirm_password", constants.MsgPasswordsDoNotMatch)
 	}
 
 	// Check if username already exists
@@ -85,7 +86,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, reg *models.UserRegistra
 	}
 
 	// Log successful registration (using existing utility function that now integrates with GDPR)
-	utils.LogAuth("register_success", fmt.Sprintf("%d", user.ID), user.Username, true, "")
+	utils.LogAuth(constants.LogEventRegister, fmt.Sprintf("%d", user.ID), user.Username, true, "")
 
 	return user.Sanitize(), nil
 }
@@ -106,7 +107,7 @@ func (s *AuthService) AuthenticateUser(ctx context.Context, creds *models.UserCr
 
 	if err != nil {
 		if utils.IsNotFoundError(err) {
-			utils.LogAuth("login_failed", "0", creds.Username, false, "user not found")
+			utils.LogAuth(constants.LogEventLogin, "0", creds.Username, false, "user not found")
 			return nil, "", "", utils.NewInvalidCredentialsError()
 		}
 		return nil, "", "", fmt.Errorf("failed to get user: %w", err)
@@ -119,7 +120,7 @@ func (s *AuthService) AuthenticateUser(ctx context.Context, creds *models.UserCr
 	}
 
 	if !match {
-		utils.LogAuth("login_failed", fmt.Sprintf("%d", user.ID), user.Username, false, "invalid password")
+		utils.LogAuth(constants.LogEventLogin, fmt.Sprintf("%d", user.ID), user.Username, false, constants.MsgInvalidPassword)
 		return nil, "", "", utils.NewInvalidCredentialsError()
 	}
 
@@ -140,7 +141,7 @@ func (s *AuthService) AuthenticateUser(ctx context.Context, creds *models.UserCr
 		return nil, "", "", fmt.Errorf("failed to create session: %w", err)
 	}
 
-	utils.LogAuth("login_success", fmt.Sprintf("%d", user.ID), user.Username, true, "")
+	utils.LogAuth(constants.LogEventLogin, fmt.Sprintf("%d", user.ID), user.Username, true, "")
 
 	return user.Sanitize(), accessToken, refreshToken, nil
 }
@@ -164,7 +165,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (s
 	}
 
 	// Validate the refresh token
-	claims, err := s.jwtService.ValidateToken(refreshToken, "refresh")
+	claims, err := s.jwtService.ValidateToken(refreshToken, constants.TokenTypeRefresh)
 	if err != nil {
 		// Delete the session if the token is invalid
 		_ = s.sessionRepo.DeleteByJWTID(ctx, jwtID)
@@ -263,7 +264,7 @@ func (s *AuthService) CreateAPIKey(ctx context.Context, userID int64, name strin
 		CreatedAt: apiKey.CreatedAt,
 	}
 
-	utils.LogAPIKey("created", apiKey.ID, fmt.Sprintf("%d", userID))
+	utils.LogAPIKey(constants.LogEventAPIKey, apiKey.ID, fmt.Sprintf("%d", userID))
 
 	return rawKey, response, nil
 }
@@ -297,7 +298,7 @@ func (s *AuthService) DeleteAPIKey(ctx context.Context, userID int64, keyID stri
 
 	// Verify that the API key belongs to the user
 	if apiKey.UserID != userID {
-		return utils.NewForbiddenError("You do not have permission to delete this API key")
+		return utils.NewForbiddenError(constants.MsgAccessDenied)
 	}
 
 	// Delete the API key

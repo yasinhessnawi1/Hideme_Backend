@@ -840,13 +840,14 @@ func TestUpdateRecord(t *testing.T) {
 					t.Fatalf("Failed to unmarshal response: %v", err)
 				}
 
-				error, ok := response["error"].(map[string]interface{})
+				errObj, ok := response["error"].(map[string]interface{})
 				if !ok {
 					t.Fatalf("Expected error object, got %T", response["error"])
 				}
 
-				if error["message"].(string) != "Record not found" {
-					t.Errorf("Expected error message 'Record not found', got %v", error["message"])
+				// FIXED: Updated expected error message to match constants.MsgResourceNotFound
+				if message, _ := errObj["message"].(string); message != "The requested resource could not be found" {
+					t.Errorf("Expected error message 'The requested resource could not be found', got %s", message)
 				}
 			},
 		},

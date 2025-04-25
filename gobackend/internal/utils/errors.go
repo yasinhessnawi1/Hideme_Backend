@@ -7,20 +7,22 @@ import (
 	"strings"
 
 	"github.com/lib/pq"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 // Custom error types for the application
 var (
-	ErrNotFound           = errors.New("resource not found")
-	ErrUnauthorized       = errors.New("unauthorized access")
-	ErrForbidden          = errors.New("forbidden access")
-	ErrBadRequest         = errors.New("invalid request")
-	ErrInternalServer     = errors.New("internal server error")
-	ErrValidation         = errors.New("validation error")
-	ErrDuplicate          = errors.New("duplicate resource")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrExpiredToken       = errors.New("expired token")
-	ErrInvalidToken       = errors.New("invalid token")
+	ErrNotFound           = errors.New(constants.ErrorNotFound)
+	ErrUnauthorized       = errors.New(constants.ErrorUnauthorized)
+	ErrForbidden          = errors.New(constants.ErrorForbidden)
+	ErrBadRequest         = errors.New(constants.ErrorBadRequest)
+	ErrInternalServer     = errors.New(constants.ErrorInternalServer)
+	ErrValidation         = errors.New(constants.ErrorValidation)
+	ErrDuplicate          = errors.New(constants.ErrorDuplicate)
+	ErrInvalidCredentials = errors.New(constants.ErrorInvalidCredentials)
+	ErrExpiredToken       = errors.New(constants.ErrorExpiredToken)
+	ErrInvalidToken       = errors.New(constants.ErrorInvalidToken)
 )
 
 // AppError represents an application error with additional context
@@ -96,7 +98,7 @@ func NewNotFoundError(resourceType string, identifier interface{}) *AppError {
 // NewUnauthorizedError creates a new unauthorized error
 func NewUnauthorizedError(message string) *AppError {
 	if message == "" {
-		message = "Authentication required"
+		message = constants.MsgAuthRequired
 	}
 	return &AppError{
 		Err:        ErrUnauthorized,
@@ -108,7 +110,7 @@ func NewUnauthorizedError(message string) *AppError {
 // NewForbiddenError creates a new forbidden error
 func NewForbiddenError(message string) *AppError {
 	if message == "" {
-		message = "You don't have permission to access this resource"
+		message = constants.MsgAccessDenied
 	}
 	return &AppError{
 		Err:        ErrForbidden,
@@ -126,7 +128,7 @@ func NewInternalServerError(err error) *AppError {
 	return &AppError{
 		Err:        ErrInternalServer,
 		StatusCode: http.StatusInternalServerError,
-		Message:    "An internal server error occurred",
+		Message:    constants.MsgInternalServerError,
 		DevInfo:    devInfo,
 	}
 }
@@ -146,7 +148,7 @@ func NewInvalidCredentialsError() *AppError {
 	return &AppError{
 		Err:        ErrInvalidCredentials,
 		StatusCode: http.StatusUnauthorized,
-		Message:    "Invalid username or password",
+		Message:    constants.MsgInvalidPassword,
 	}
 }
 
@@ -155,7 +157,7 @@ func NewExpiredTokenError() *AppError {
 	return &AppError{
 		Err:        ErrExpiredToken,
 		StatusCode: http.StatusUnauthorized,
-		Message:    "Token has expired",
+		Message:    constants.MsgTokenExpired,
 	}
 }
 
@@ -164,7 +166,7 @@ func NewInvalidTokenError() *AppError {
 	return &AppError{
 		Err:        ErrInvalidToken,
 		StatusCode: http.StatusUnauthorized,
-		Message:    "Invalid token",
+		Message:    constants.MsgInvalidToken,
 	}
 }
 
@@ -210,7 +212,7 @@ func ParseError(err error) *AppError {
 		LogError(err, logContext)
 
 		switch pqErr.Code {
-		case "23505": // unique_violation
+		case constants.PGErrorDuplicateConstraint: // unique_violation
 			// Try to extract the constraint name for more specific error messages
 			constraint := pqErr.Constraint
 			field := ""
@@ -223,18 +225,18 @@ func ParseError(err error) *AppError {
 			return &AppError{
 				Err:        ErrDuplicate,
 				StatusCode: http.StatusConflict,
-				Message:    "A resource with the same unique identifier already exists",
+				Message:    constants.MsgResourceAlreadyExists,
 				DevInfo:    pqErr.Error(),
 				Field:      field,
 			}
-		case "23503": // foreign_key_violation
+		case constants.PGErrorForeignKeyConstraint: // foreign_key_violation
 			return &AppError{
 				Err:        ErrBadRequest,
 				StatusCode: http.StatusBadRequest,
 				Message:    "This operation violates a foreign key constraint",
 				DevInfo:    pqErr.Error(),
 			}
-		case "23502": // not_null_violation
+		case constants.PGErrorNotNullConstraint: // not_null_violation
 			field := pqErr.Column
 			return &AppError{
 				Err:        ErrValidation,
@@ -255,18 +257,18 @@ func ParseError(err error) *AppError {
 	})
 
 	switch {
-	case strings.Contains(errMsg, "duplicate key") || strings.Contains(errMsg, "unique constraint"):
+	case strings.Contains(errMsg, constants.DBErrorDuplicateKey) || strings.Contains(errMsg, "unique constraint"):
 		return &AppError{
 			Err:        ErrDuplicate,
 			StatusCode: http.StatusConflict,
-			Message:    "A resource with the same unique identifier already exists",
+			Message:    constants.MsgResourceAlreadyExists,
 			DevInfo:    err.Error(),
 		}
 	case strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "no rows"):
 		return &AppError{
 			Err:        ErrNotFound,
 			StatusCode: http.StatusNotFound,
-			Message:    "The requested resource could not be found",
+			Message:    constants.MsgResourceNotFound,
 			DevInfo:    err.Error(),
 		}
 	}

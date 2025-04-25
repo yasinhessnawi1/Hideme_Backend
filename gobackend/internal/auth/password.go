@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/argon2"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils/gdprlog"
 )
@@ -25,11 +26,11 @@ type PasswordConfig struct {
 // DefaultPasswordConfig returns the default configuration for password hashing
 func DefaultPasswordConfig() *PasswordConfig {
 	return &PasswordConfig{
-		Memory:      64 * 1024,
-		Iterations:  3,
-		Parallelism: 2,
-		SaltLength:  16,
-		KeyLength:   32,
+		Memory:      constants.DefaultPasswordHashMemory,
+		Iterations:  constants.DefaultPasswordHashIterations,
+		Parallelism: constants.DefaultPasswordHashParallelism,
+		SaltLength:  constants.DefaultPasswordHashSaltLength,
+		KeyLength:   constants.DefaultPasswordHashKeyLength,
 	}
 }
 

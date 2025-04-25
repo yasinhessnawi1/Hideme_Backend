@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog/log"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 // Response represents a standardized API response
@@ -68,19 +70,19 @@ func JsonFile(w http.ResponseWriter, data interface{}, filename string) {
 	}
 
 	// Set headers for file download
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonData)))
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeOctetStream)
+	w.Header().Set(constants.HeaderContentLength, fmt.Sprintf("%d", len(jsonData)))
 
 	// This is the critical line - format it EXACTLY as shown:
-	w.Header().Set("Content-Disposition",
+	w.Header().Set(constants.HeaderContentDisposition,
 		fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s",
 			filename,
 			url.PathEscape(filename)))
 
 	// Add cache control headers to prevent caching
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
+	w.Header().Set(constants.HeaderCacheControl, constants.CacheControlNoStore)
+	w.Header().Set(constants.HeaderPragma, constants.PragmaNoCache)
+	w.Header().Set(constants.HeaderExpires, constants.ExpiresZero)
 
 	w.WriteHeader(http.StatusOK)
 
@@ -94,7 +96,7 @@ func JsonFile(w http.ResponseWriter, data interface{}, filename string) {
 func Error(w http.ResponseWriter, statusCode int, code, message string, details map[string]string) {
 	// Create an error response
 	response := Response{
-		Success: false,
+		Success: constants.ResponseFailure,
 		Error: &ErrorInfo{
 			Code:    code,
 			Message: message,
@@ -108,26 +110,26 @@ func Error(w http.ResponseWriter, statusCode int, code, message string, details 
 // ErrorFromAppError sends an error response based on an AppError
 func ErrorFromAppError(w http.ResponseWriter, err *AppError) {
 	// Extract error code from the underlying error
-	errCode := "internal_error"
+	errCode := constants.CodeInternalError
 	switch err.Err {
 	case ErrNotFound:
-		errCode = "not_found"
+		errCode = constants.CodeNotFound
 	case ErrBadRequest:
-		errCode = "bad_request"
+		errCode = constants.CodeBadRequest
 	case ErrUnauthorized:
-		errCode = "unauthorized"
+		errCode = constants.CodeUnauthorized
 	case ErrForbidden:
-		errCode = "forbidden"
+		errCode = constants.CodeForbidden
 	case ErrValidation:
-		errCode = "validation_error"
+		errCode = constants.CodeValidationError
 	case ErrDuplicate:
-		errCode = "duplicate_resource"
+		errCode = constants.CodeDuplicateResource
 	case ErrInvalidCredentials:
-		errCode = "invalid_credentials"
+		errCode = constants.CodeInvalidCredentials
 	case ErrExpiredToken:
-		errCode = "token_expired"
+		errCode = constants.CodeTokenExpired
 	case ErrInvalidToken:
-		errCode = "token_invalid"
+		errCode = constants.CodeTokenInvalid
 	}
 
 	// Create error details if field is present
@@ -152,7 +154,7 @@ func Paginated(w http.ResponseWriter, statusCode int, data interface{}, page, pa
 
 	// Create a successful response with pagination metadata
 	response := Response{
-		Success: statusCode >= 200 && statusCode < 300,
+		Success: constants.ResponseSuccess,
 		Data:    data,
 		Meta: &MetaInfo{
 			Page:       page,
@@ -168,7 +170,7 @@ func Paginated(w http.ResponseWriter, statusCode int, data interface{}, page, pa
 // SendJSON is a helper function to send JSON data with proper headers
 func SendJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	// Set headers
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(statusCode)
 
 	// Marshal the data to JSON
@@ -193,79 +195,79 @@ func SendJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 
 // NoContent sends a 204 No Content response
 func NoContent(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(constants.StatusNoContent)
 }
 
 // BadRequest sends a 400 Bad Request response with the given message
 func BadRequest(w http.ResponseWriter, message string, details map[string]string) {
-	Error(w, http.StatusBadRequest, "bad_request", message, details)
+	Error(w, constants.StatusBadRequest, constants.CodeBadRequest, message, details)
 }
 
 // Unauthorized sends a 401 Unauthorized response with the given message
 func Unauthorized(w http.ResponseWriter, message string) {
 	if message == "" {
-		message = "Authentication required"
+		message = constants.MsgAuthRequired
 	}
-	Error(w, http.StatusUnauthorized, "unauthorized", message, nil)
+	Error(w, constants.StatusUnauthorized, constants.CodeUnauthorized, message, nil)
 }
 
 // Forbidden sends a 403 Forbidden response with the given message
 func Forbidden(w http.ResponseWriter, message string) {
 	if message == "" {
-		message = "You don't have permission to access this resource"
+		message = constants.MsgAccessDenied
 	}
-	Error(w, http.StatusForbidden, "forbidden", message, nil)
+	Error(w, constants.StatusForbidden, constants.CodeForbidden, message, nil)
 }
 
 // NotFound sends a 404 Not Found response with the given message
 func NotFound(w http.ResponseWriter, message string) {
 	if message == "" {
-		message = "The requested resource could not be found"
+		message = constants.MsgResourceNotFound
 	}
-	Error(w, http.StatusNotFound, "not_found", message, nil)
+	Error(w, constants.StatusNotFound, constants.CodeNotFound, message, nil)
 }
 
 // MethodNotAllowed sends a 405 Method Not Allowed response
 func MethodNotAllowed(w http.ResponseWriter) {
-	Error(w, http.StatusMethodNotAllowed, "method_not_allowed", "This method is not allowed for this resource", nil)
+	Error(w, constants.StatusMethodNotAllowed, constants.CodeMethodNotAllowed, constants.MsgMethodNotAllowed, nil)
 }
 
 // Conflict sends a 409 Conflict response with the given message
 func Conflict(w http.ResponseWriter, message string) {
-	Error(w, http.StatusConflict, "conflict", message, nil)
+	Error(w, constants.StatusConflict, constants.CodeConflict, message, nil)
 }
 
 // InternalServerError sends a 500 Internal Server Error response
 func InternalServerError(w http.ResponseWriter, err error) {
 	log.Error().Err(err).Msg("Internal server error")
-	Error(w, http.StatusInternalServerError, "internal_error", "An internal server error occurred", nil)
+	Error(w, constants.StatusInternalServerError, constants.CodeInternalError, constants.MsgInternalServerError, nil)
 }
 
 // ValidationError sends a 400 Bad Request response with validation error details
 func ValidationError(w http.ResponseWriter, errors map[string]string) {
-	Error(w, http.StatusBadRequest, "validation_error", "Validation failed", errors)
+	Error(w, constants.StatusBadRequest, constants.CodeValidationError, "Validation failed", errors)
 }
 
 // GetPaginationParams extracts pagination parameters from the request
 func GetPaginationParams(r *http.Request) PaginationParams {
 	// Get page and page_size parameters, with defaults
-	page := 1
-	pageSize := 20
+	page := constants.DefaultPage
+	pageSize := constants.DefaultPageSize
 
 	// Parse page parameter
-	if r.URL.Query().Get("page") != "" {
-		parsedPage, _ := parseInt(r.URL.Query().Get("page"), 1)
+	if r.URL.Query().Get(constants.QueryParamPage) != "" {
+		parsedPage, _ := parseInt(r.URL.Query().Get(constants.QueryParamPage), constants.DefaultPage)
 		page = parsedPage
 	}
 
 	// Parse page_size parameter
-	if r.URL.Query().Get("page_size") != "" {
-		parsedPageSize, _ := parseInt(r.URL.Query().Get("page_size"), 20)
+	if r.URL.Query().Get(constants.QueryParamPageSize) != "" {
+		parsedPageSize, _ := parseInt(r.URL.Query().Get(constants.QueryParamPageSize), constants.DefaultPageSize)
 		// Limit page size to a reasonable range
-		if parsedPageSize < 1 {
-			pageSize = 1
-		} else if parsedPageSize > 100 {
-			pageSize = 100
+		if parsedPageSize < constants.MinPageSize {
+			pageSize = constants.MinPageSize
+		} else if parsedPageSize > constants.MaxPageSize {
+			pageSize = constants.MaxPageSize
 		} else {
 			pageSize = parsedPageSize
 		}

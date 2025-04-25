@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
@@ -49,7 +50,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the newly created user
-	utils.JSON(w, http.StatusCreated, user)
+	utils.JSON(w, constants.StatusCreated, user)
 }
 
 // Login handles user authentication
@@ -89,7 +90,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	refreshExpiry := h.jwtService.GetConfig().RefreshExpiry
 	secure := r.TLS != nil || !strings.Contains(h.jwtService.GetConfig().Issuer, "localhost")
 	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
+		Name:     constants.RefreshTokenCookie,
 		Value:    refreshToken,
 		Path:     "/",
 		HttpOnly: true,
@@ -100,10 +101,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Return the access token and user info
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
 		"user":         user,
 		"access_token": accessToken,
-		"token_type":   "Bearer",
+		"token_type":   constants.BearerTokenPrefix[:len(constants.BearerTokenPrefix)-1], // Remove the space
 		"expires_in":   int(h.jwtService.GetConfig().Expiry.Seconds()),
 	})
 }
@@ -111,9 +112,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 // RefreshToken handles token refresh
 func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	// Get the refresh token from the cookie
-	cookie, err := r.Cookie("refresh_token")
+	cookie, err := r.Cookie(constants.RefreshTokenCookie)
 	if err != nil {
-		utils.Unauthorized(w, "Refresh token not found")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -127,7 +128,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	// Set the new refresh token as a cookie
 	refreshExpiry := h.jwtService.GetConfig().RefreshExpiry
 	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
+		Name:     constants.RefreshTokenCookie,
 		Value:    newRefreshToken,
 		Path:     "/",
 		HttpOnly: true,
@@ -138,9 +139,9 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Return the new access token
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
 		"access_token": accessToken,
-		"token_type":   "Bearer",
+		"token_type":   constants.BearerTokenPrefix[:len(constants.BearerTokenPrefix)-1], // Remove the space
 		"expires_in":   int(h.jwtService.GetConfig().Expiry.Seconds()),
 	})
 }
@@ -148,7 +149,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 // Logout handles user logout
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// Get the refresh token from the cookie
-	cookie, err := r.Cookie("refresh_token")
+	cookie, err := r.Cookie(constants.RefreshTokenCookie)
 	if err == nil {
 		// Invalidate the session
 		_ = h.authService.Logout(r.Context(), cookie.Value)
@@ -156,7 +157,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	// Clear the refresh token cookie
 	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
+		Name:     constants.RefreshTokenCookie,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
@@ -167,8 +168,8 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Return success
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
-		"message": "Successfully logged out",
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
+		"message": constants.MsgLogoutSuccess,
 	})
 }
 
@@ -177,7 +178,7 @@ func (h *AuthHandler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -189,7 +190,7 @@ func (h *AuthHandler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 
 	// Clear the refresh token cookie
 	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
+		Name:     constants.RefreshTokenCookie,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
@@ -200,8 +201,8 @@ func (h *AuthHandler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Return success
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
-		"message": "Successfully logged out of all sessions",
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
+		"message": constants.MsgLogoutAllSuccess,
 	})
 }
 
@@ -211,14 +212,14 @@ func (h *AuthHandler) VerifyToken(w http.ResponseWriter, r *http.Request) {
 	// Just need to get the user ID and return success
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
 	username, _ := auth.GetUsername(r)
 	email, _ := auth.GetEmail(r)
 
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
 		"authenticated": true,
 		"user_id":       userID,
 		"username":      username,
@@ -231,7 +232,7 @@ func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -257,7 +258,7 @@ func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the API key
-	utils.JSON(w, http.StatusCreated, models.APIKeyResponse{
+	utils.JSON(w, constants.StatusCreated, models.APIKeyResponse{
 		ID:        apiKey.ID,
 		Name:      apiKey.Name,
 		Key:       rawKey,
@@ -271,7 +272,7 @@ func (h *AuthHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -283,7 +284,7 @@ func (h *AuthHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the API keys
-	utils.JSON(w, http.StatusOK, apiKeys)
+	utils.JSON(w, constants.StatusOK, apiKeys)
 }
 
 // DeleteAPIKey handles revoking an API key
@@ -291,13 +292,13 @@ func (h *AuthHandler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
 	//TODO check key_id
 	// Get the key ID from the URL
-	keyID := chi.URLParam(r, "keyID")
+	keyID := chi.URLParam(r, constants.ParamKeyID)
 	if keyID == "" {
 		utils.BadRequest(w, "key_id parameter is required", nil)
 		return
@@ -310,15 +311,15 @@ func (h *AuthHandler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return success
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
-		"message": "API key successfully revoked",
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
+		"message": constants.MsgAPIKeyRevoked,
 	})
 }
 
 // ValidateAPIKey handles validating an API key for external services
 func (h *AuthHandler) ValidateAPIKey(w http.ResponseWriter, r *http.Request) {
 	// Get the API key from the header
-	apiKey := r.Header.Get("X-API-Key")
+	apiKey := r.Header.Get(constants.HeaderXAPIKey)
 	if apiKey == "" {
 		utils.Unauthorized(w, "API key required")
 		return
@@ -332,7 +333,7 @@ func (h *AuthHandler) ValidateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the user info
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
 		"valid":    true,
 		"user_id":  user.ID,
 		"username": user.Username,

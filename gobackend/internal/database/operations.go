@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog/log"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 // Table represents a database table with common methods
@@ -50,7 +52,7 @@ func (c *CRUD) Create(ctx context.Context, model Table) error {
 		}
 
 		// Skip zero values for auto-generated fields (like IDs)
-		if strings.HasSuffix(dbTag, "_id") && isZeroValue(fieldValue) {
+		if strings.HasSuffix(dbTag, constants.ColumnID) && isZeroValue(fieldValue) {
 			// Remember the ID field for later
 			idField = fieldValue
 			idColumn = dbTag
@@ -131,13 +133,13 @@ func (c *CRUD) GetByID(ctx context.Context, model Table, id interface{}) error {
 	for i := 0; i < modelType.NumField(); i++ {
 		field := modelType.Field(i)
 		dbTag := field.Tag.Get("db")
-		if strings.HasSuffix(dbTag, "_id") {
+		if strings.HasSuffix(dbTag, constants.ColumnID) {
 			idColumn = dbTag
 			break
 		}
 	}
 	if idColumn == "" {
-		idColumn = "id" // Default if not found
+		idColumn = constants.ColumnID // Default if not found
 	}
 
 	// Build the query
@@ -206,7 +208,7 @@ func (c *CRUD) Update(ctx context.Context, model Table) error {
 		}
 
 		// Handle ID field separately
-		if strings.HasSuffix(dbTag, "_id") {
+		if strings.HasSuffix(dbTag, constants.ColumnID) {
 			idColumn = dbTag
 			idValue = fieldValue.Interface()
 			continue
@@ -263,13 +265,13 @@ func (c *CRUD) Delete(ctx context.Context, model Table, id interface{}) error {
 	for i := 0; i < modelType.NumField(); i++ {
 		field := modelType.Field(i)
 		dbTag := field.Tag.Get("db")
-		if strings.HasSuffix(dbTag, "_id") {
+		if strings.HasSuffix(dbTag, constants.ColumnID) {
 			idColumn = dbTag
 			break
 		}
 	}
 	if idColumn == "" {
-		idColumn = "id" // Default if not found
+		idColumn = constants.ColumnID // Default if not found
 	}
 
 	// Build the query

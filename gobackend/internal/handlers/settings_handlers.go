@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
@@ -30,7 +31,7 @@ func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -42,7 +43,7 @@ func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the settings
-	utils.JSON(w, http.StatusOK, settings)
+	utils.JSON(w, constants.StatusOK, settings)
 }
 
 // UpdateSettings updates the current user's settings
@@ -50,7 +51,7 @@ func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request)
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -69,7 +70,7 @@ func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Return the updated settings
-	utils.JSON(w, http.StatusOK, settings)
+	utils.JSON(w, constants.StatusOK, settings)
 }
 
 // GetBanList returns the current user's ban list
@@ -77,7 +78,7 @@ func (h *SettingsHandler) GetBanList(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -89,7 +90,7 @@ func (h *SettingsHandler) GetBanList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the ban list
-	utils.JSON(w, http.StatusOK, banList)
+	utils.JSON(w, constants.StatusOK, banList)
 }
 
 // AddBanListWords adds words to the current user's ban list
@@ -97,7 +98,7 @@ func (h *SettingsHandler) AddBanListWords(w http.ResponseWriter, r *http.Request
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -121,7 +122,7 @@ func (h *SettingsHandler) AddBanListWords(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	utils.JSON(w, http.StatusOK, banList)
+	utils.JSON(w, constants.StatusOK, banList)
 }
 
 // RemoveBanListWords removes words from the current user's ban list
@@ -129,7 +130,7 @@ func (h *SettingsHandler) RemoveBanListWords(w http.ResponseWriter, r *http.Requ
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -153,7 +154,7 @@ func (h *SettingsHandler) RemoveBanListWords(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	utils.JSON(w, http.StatusOK, banList)
+	utils.JSON(w, constants.StatusOK, banList)
 }
 
 // GetSearchPatterns returns the current user's search patterns
@@ -161,7 +162,7 @@ func (h *SettingsHandler) GetSearchPatterns(w http.ResponseWriter, r *http.Reque
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -173,7 +174,7 @@ func (h *SettingsHandler) GetSearchPatterns(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Return the search patterns
-	utils.JSON(w, http.StatusOK, patterns)
+	utils.JSON(w, constants.StatusOK, patterns)
 }
 
 // CreateSearchPattern creates a new search pattern for the current user
@@ -181,7 +182,7 @@ func (h *SettingsHandler) CreateSearchPattern(w http.ResponseWriter, r *http.Req
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -200,7 +201,7 @@ func (h *SettingsHandler) CreateSearchPattern(w http.ResponseWriter, r *http.Req
 	}
 
 	// Return the new pattern
-	utils.JSON(w, http.StatusCreated, newPattern)
+	utils.JSON(w, constants.StatusCreated, newPattern)
 }
 
 // UpdateSearchPattern updates an existing search pattern
@@ -208,12 +209,12 @@ func (h *SettingsHandler) UpdateSearchPattern(w http.ResponseWriter, r *http.Req
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
 	// Get the pattern ID from the URL
-	patternIDStr := chi.URLParam(r, "patternID")
+	patternIDStr := chi.URLParam(r, constants.ParamPatternID)
 	patternID, err := strconv.ParseInt(patternIDStr, 10, 64)
 	if err != nil {
 		utils.BadRequest(w, "Invalid pattern ID", nil)
@@ -235,7 +236,7 @@ func (h *SettingsHandler) UpdateSearchPattern(w http.ResponseWriter, r *http.Req
 	}
 
 	// Return the updated pattern
-	utils.JSON(w, http.StatusOK, updatedPattern)
+	utils.JSON(w, constants.StatusOK, updatedPattern)
 }
 
 // DeleteSearchPattern deletes a search pattern
@@ -243,12 +244,12 @@ func (h *SettingsHandler) DeleteSearchPattern(w http.ResponseWriter, r *http.Req
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
 	// Get the pattern ID from the URL
-	patternIDStr := chi.URLParam(r, "patternID")
+	patternIDStr := chi.URLParam(r, constants.ParamPatternID)
 	patternID, err := strconv.ParseInt(patternIDStr, 10, 64)
 	if err != nil {
 		utils.BadRequest(w, "Invalid pattern ID", nil)
@@ -270,12 +271,12 @@ func (h *SettingsHandler) GetModelEntities(w http.ResponseWriter, r *http.Reques
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
 	// Get the method ID from the URL
-	methodIDStr := chi.URLParam(r, "methodID")
+	methodIDStr := chi.URLParam(r, constants.ParamMethodID)
 	methodID, err := strconv.ParseInt(methodIDStr, 10, 64)
 	if err != nil {
 		utils.BadRequest(w, "Invalid method ID", nil)
@@ -290,7 +291,7 @@ func (h *SettingsHandler) GetModelEntities(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Return the entities
-	utils.JSON(w, http.StatusOK, entities)
+	utils.JSON(w, constants.StatusOK, entities)
 }
 
 // AddModelEntities adds entities for a specific detection method
@@ -298,7 +299,7 @@ func (h *SettingsHandler) AddModelEntities(w http.ResponseWriter, r *http.Reques
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -317,7 +318,7 @@ func (h *SettingsHandler) AddModelEntities(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Return the new entities
-	utils.JSON(w, http.StatusCreated, entities)
+	utils.JSON(w, constants.StatusCreated, entities)
 }
 
 // DeleteModelEntity deletes a model entity
@@ -325,12 +326,12 @@ func (h *SettingsHandler) DeleteModelEntity(w http.ResponseWriter, r *http.Reque
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
 	// Get the entity ID from the URL
-	entityIDStr := chi.URLParam(r, "entityID")
+	entityIDStr := chi.URLParam(r, constants.ParamEntityID)
 	entityID, err := strconv.ParseInt(entityIDStr, 10, 64)
 	if err != nil {
 		utils.BadRequest(w, "Invalid entity ID", nil)
@@ -352,12 +353,12 @@ func (h *SettingsHandler) DeleteModelEntityByMethodID(w http.ResponseWriter, r *
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
 	// Get the entity ID from the URL
-	methodIDStr := chi.URLParam(r, "methodID")
+	methodIDStr := chi.URLParam(r, constants.ParamMethodID)
 	methodID, err := strconv.ParseInt(methodIDStr, 10, 64)
 	if err != nil {
 		utils.BadRequest(w, "Invalid entity ID", nil)
@@ -379,7 +380,7 @@ func (h *SettingsHandler) ExportSettings(w http.ResponseWriter, r *http.Request)
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -418,12 +419,12 @@ func (h *SettingsHandler) ImportSettings(w http.ResponseWriter, r *http.Request)
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
 	// Limit the size of the upload
-	maxSize := int64(1024 * 1024) // 1MB should be more than enough for settings
+	maxSize := int64(constants.MaxRequestBodySize)
 	r.Body = http.MaxBytesReader(w, r.Body, maxSize)
 
 	// Parse the multipart form file
@@ -462,7 +463,9 @@ func (h *SettingsHandler) ImportSettings(w http.ResponseWriter, r *http.Request)
 
 	// Validate theme value if present
 	if theme := settingsExport.GeneralSettings.Theme; theme != "" &&
-		theme != "system" && theme != "light" && theme != "dark" {
+		theme != constants.ThemeSystem &&
+		theme != constants.ThemeLight &&
+		theme != constants.ThemeDark {
 		utils.BadRequest(w, "Invalid theme value", nil)
 		return
 	}
@@ -474,7 +477,7 @@ func (h *SettingsHandler) ImportSettings(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Return success
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
-		"message": "Settings imported successfully",
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
+		"message": constants.MsgSettingsImported,
 	})
 }

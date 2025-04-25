@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils/gdprlog"
 )
 
@@ -145,12 +146,12 @@ func (h gdprLogHook) Write(p []byte) (n int, err error) {
 // RequestLogger creates a logger with request-specific context
 func RequestLogger(requestID, userID, method, path string) zerolog.Logger {
 	logger := log.With().
-		Str("request_id", requestID).
+		Str(constants.RequestIDContextKey, requestID).
 		Str("method", method).
 		Str("path", path)
 
 	if userID != "" {
-		logger = logger.Str("user_id", userID)
+		logger = logger.Str(constants.UserIDContextKey, userID)
 	}
 
 	return logger.Logger()
@@ -160,17 +161,17 @@ func RequestLogger(requestID, userID, method, path string) zerolog.Logger {
 func LogHTTPRequest(requestID, method, path, remoteAddr, userAgent string, statusCode int, latency time.Duration) {
 	// Create fields for GDPR logger
 	fields := map[string]interface{}{
-		"request_id":  requestID,
-		"method":      method,
-		"path":        path,
-		"remote_addr": remoteAddr,
-		"user_agent":  userAgent,
-		"status":      statusCode,
-		"latency":     latency,
+		constants.RequestIDContextKey: requestID,
+		"method":                      method,
+		"path":                        path,
+		"remote_addr":                 remoteAddr,
+		"user_agent":                  userAgent,
+		"status":                      statusCode,
+		"latency":                     latency,
 	}
 
 	// Only log some paths at debug level to reduce noise
-	if path == "/health" || path == "/metrics" {
+	if path == constants.HealthPath || path == "/metrics" {
 		if zerolog.GlobalLevel() != zerolog.DebugLevel {
 			return // Skip logging entirely for high-volume endpoints in non-debug mode
 		}
@@ -187,7 +188,7 @@ func LogHTTPRequest(requestID, method, path, remoteAddr, userAgent string, statu
 			gdprLogger.Warn("HTTP Request", fields)
 		} else if statusCode >= 500 {
 			gdprLogger.Error("HTTP Request", nil, fields)
-		} else if strings.HasPrefix(path, "/api") {
+		} else if strings.HasPrefix(path, constants.APIBasePath) {
 			// Log API requests at info level
 			gdprLogger.Info("HTTP Request", fields)
 		} else {
@@ -202,14 +203,14 @@ func LogHTTPRequest(requestID, method, path, remoteAddr, userAgent string, statu
 			event = log.Warn()
 		} else if statusCode >= 500 {
 			event = log.Error()
-		} else if strings.HasPrefix(path, "/api") {
+		} else if strings.HasPrefix(path, constants.APIBasePath) {
 			// Log API requests at info level
 			event = log.Info()
 		}
 
 		// Include request details
 		event.
-			Str("request_id", requestID).
+			Str(constants.RequestIDContextKey, requestID).
 			Str("method", method).
 			Str("path", path).
 			Str("remote_addr", remoteAddr).
@@ -273,10 +274,10 @@ func LogDBQuery(query string, args []interface{}, duration time.Duration, err er
 	for i, arg := range args {
 		// Check if the argument might contain sensitive data
 		if s, ok := arg.(string); ok {
-			if strings.Contains(strings.ToLower(query), "password") ||
+			if strings.Contains(strings.ToLower(query), constants.ColumnPasswordHash) ||
 				strings.Contains(strings.ToLower(query), "secret") ||
 				strings.Contains(strings.ToLower(query), "token") {
-				safeArgs[i] = "[REDACTED]"
+				safeArgs[i] = constants.LogRedactedValue
 			} else {
 				safeArgs[i] = s
 			}
@@ -316,10 +317,10 @@ func LogDBQuery(query string, args []interface{}, duration time.Duration, err er
 // LogAuth logs authentication events
 func LogAuth(event string, userID, username string, success bool, reason string) {
 	fields := map[string]interface{}{
-		"event":    event,
-		"user_id":  userID,
-		"username": username,
-		"success":  success,
+		"event":                      event,
+		constants.UserIDContextKey:   userID,
+		constants.UsernameContextKey: username,
+		"success":                    success,
 	}
 
 	if reason != "" {
@@ -328,9 +329,9 @@ func LogAuth(event string, userID, username string, success bool, reason string)
 
 	if gdprLogger != nil {
 		if success {
-			gdprLogger.Info("Authentication event", fields)
+			gdprLogger.Info(constants.LogCategoryAuth, fields)
 		} else {
-			gdprLogger.Warn("Authentication event", fields)
+			gdprLogger.Warn(constants.LogCategoryAuth, fields)
 		}
 	} else {
 		logEvent := log.Info()
@@ -340,34 +341,34 @@ func LogAuth(event string, userID, username string, success bool, reason string)
 
 		logEvent.
 			Str("event", event).
-			Str("user_id", userID).
-			Str("username", username).
+			Str(constants.UserIDContextKey, userID).
+			Str(constants.UsernameContextKey, username).
 			Bool("success", success)
 
 		if reason != "" {
 			logEvent = logEvent.Str("reason", reason)
 		}
 
-		logEvent.Msg("Authentication event")
+		logEvent.Msg(constants.LogEventLogin)
 	}
 }
 
 // LogAPIKey logs API key events
 func LogAPIKey(event, keyID, userID string) {
 	fields := map[string]interface{}{
-		"event":   event,
-		"key_id":  keyID,
-		"user_id": userID,
+		"event":                    event,
+		constants.ParamKeyID:       keyID,
+		constants.UserIDContextKey: userID,
 	}
 
 	if gdprLogger != nil {
-		gdprLogger.Info("API key event", fields)
+		gdprLogger.Info(constants.LogEventAPIKey, fields)
 	} else {
 		log.Info().
 			Str("event", event).
-			Str("key_id", keyID).
-			Str("user_id", userID).
-			Msg("API key event")
+			Str(constants.ParamKeyID, keyID).
+			Str(constants.UserIDContextKey, userID).
+			Msg(constants.LogEventAPIKey)
 	}
 }
 

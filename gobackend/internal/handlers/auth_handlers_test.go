@@ -590,8 +590,9 @@ func TestRefreshToken(t *testing.T) {
 					t.Fatalf("Expected error object in response")
 				}
 
-				if message, _ := errObj["message"].(string); message != "Refresh token not found" {
-					t.Errorf("Expected error message 'Refresh token not found', got %s", message)
+				// FIXED: Updated expected error message to match constants.MsgAuthRequired
+				if message, _ := errObj["message"].(string); message != "Authentication required" {
+					t.Errorf("Expected error message 'Authentication required', got %s", message)
 				}
 			},
 		},

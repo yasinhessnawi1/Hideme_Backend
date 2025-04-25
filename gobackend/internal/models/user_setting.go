@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 // UserSetting represents user-specific configuration options for the HideMe application.
@@ -24,7 +26,7 @@ func NewUserSetting(userID int64) *UserSetting {
 	return &UserSetting{
 		UserID:                 userID,
 		RemoveImages:           true,
-		Theme:                  "system",
+		Theme:                  constants.ThemeSystem,
 		DetectionThreshold:     0.50,
 		UseBanlistForDetection: true,
 		AutoProcessing:         true,
@@ -35,7 +37,7 @@ func NewUserSetting(userID int64) *UserSetting {
 
 // TableName returns the database table name for the UserSetting model.
 func (us *UserSetting) TableName() string {
-	return "user_settings"
+	return constants.TableUserSettings
 }
 
 // UserSettingsUpdate represents the data that can be updated for user settings.
@@ -64,4 +66,7 @@ func (s *UserSetting) Apply(update *UserSettingsUpdate) {
 	if update.UseBanlistForDetection != nil {
 		s.UseBanlistForDetection = *update.UseBanlistForDetection
 	}
+
+	// Update the timestamp
+	s.UpdatedAt = time.Now()
 }

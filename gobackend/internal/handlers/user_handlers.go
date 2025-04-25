@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
@@ -25,7 +26,7 @@ func (h *UserHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -37,7 +38,7 @@ func (h *UserHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the user
-	utils.JSON(w, http.StatusOK, user)
+	utils.JSON(w, constants.StatusOK, user)
 }
 
 // UpdateUser handles updating the current user's profile
@@ -45,7 +46,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -64,7 +65,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the updated user
-	utils.JSON(w, http.StatusOK, user)
+	utils.JSON(w, constants.StatusOK, user)
 }
 
 // ChangePassword handles changing the current user's password
@@ -72,7 +73,7 @@ func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -98,8 +99,8 @@ func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return success
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
-		"message": "Password successfully changed",
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
+		"message": constants.MsgPasswordChanged,
 	})
 }
 
@@ -108,7 +109,7 @@ func (h *UserHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -133,15 +134,15 @@ func (h *UserHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return success
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
-		"message": "Account successfully deleted",
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
+		"message": constants.MsgUserDeleted,
 	})
 }
 
 // CheckUsername checks if a username is available
 func (h *UserHandler) CheckUsername(w http.ResponseWriter, r *http.Request) {
 	// Get the username from the query
-	username := r.URL.Query().Get("username")
+	username := r.URL.Query().Get(constants.QueryParamUsername)
 	if username == "" {
 		utils.BadRequest(w, "Username parameter is required", nil)
 		return
@@ -155,7 +156,7 @@ func (h *UserHandler) CheckUsername(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the result
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
 		"username":  username,
 		"available": available,
 	})
@@ -164,7 +165,7 @@ func (h *UserHandler) CheckUsername(w http.ResponseWriter, r *http.Request) {
 // CheckEmail checks if an email is available
 func (h *UserHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
 	// Get the email from the query
-	email := r.URL.Query().Get("email")
+	email := r.URL.Query().Get(constants.QueryParamEmail)
 	if email == "" {
 		utils.BadRequest(w, "Email parameter is required", nil)
 		return
@@ -178,7 +179,7 @@ func (h *UserHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the result
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
 		"email":     email,
 		"available": available,
 	})
@@ -189,7 +190,7 @@ func (h *UserHandler) GetActiveSessions(w http.ResponseWriter, r *http.Request) 
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -201,7 +202,7 @@ func (h *UserHandler) GetActiveSessions(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Return the sessions
-	utils.JSON(w, http.StatusOK, sessions)
+	utils.JSON(w, constants.StatusOK, sessions)
 }
 
 // InvalidateSession invalidates a specific session
@@ -209,7 +210,7 @@ func (h *UserHandler) InvalidateSession(w http.ResponseWriter, r *http.Request) 
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
 	if !ok {
-		utils.Unauthorized(w, "Authentication required")
+		utils.Unauthorized(w, constants.MsgAuthRequired)
 		return
 	}
 
@@ -229,7 +230,7 @@ func (h *UserHandler) InvalidateSession(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Return success
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
-		"message": "Session successfully invalidated",
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
+		"message": constants.MsgSessionInvalidated,
 	})
 }

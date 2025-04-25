@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
 // DetectedEntity represents sensitive information identified within a document.
@@ -20,7 +22,7 @@ type DetectedEntity struct {
 
 // TableName returns the database table name for the DetectedEntity model.
 func (de *DetectedEntity) TableName() string {
-	return "detected_entities"
+	return constants.TableDetectedEntities
 }
 
 // NewDetectedEntity creates a new DetectedEntity instance with the given parameters.

@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
@@ -65,6 +66,8 @@ func (s *SettingsService) UpdateUserSettings(ctx context.Context, userID int64, 
 	log.Info().
 		Int64("user_id", userID).
 		Int64("setting_id", settings.ID).
+		Str("category", constants.LogCategoryUser).
+		Str("event", constants.LogEventUserUpdate).
 		Msg("User settings updated")
 
 	return settings, nil
@@ -237,7 +240,7 @@ func (s *SettingsService) UpdateSearchPattern(ctx context.Context, userID int64,
 
 	// Verify that the pattern belongs to the user
 	if pattern.SettingID != settings.ID {
-		return nil, utils.NewForbiddenError("You do not have permission to update this pattern")
+		return nil, utils.NewForbiddenError(constants.MsgAccessDenied)
 	}
 
 	// Apply updates
@@ -282,7 +285,7 @@ func (s *SettingsService) DeleteSearchPattern(ctx context.Context, userID int64,
 
 	// Verify that the pattern belongs to the user
 	if pattern.SettingID != settings.ID {
-		return utils.NewForbiddenError("You do not have permission to delete this pattern")
+		return utils.NewForbiddenError(constants.MsgAccessDenied)
 	}
 
 	// Delete the pattern
@@ -360,7 +363,7 @@ func (s *SettingsService) DeleteModelEntity(ctx context.Context, userID int64, e
 
 	// Verify that the entity belongs to the user
 	if entity.SettingID != settings.ID {
-		return utils.NewForbiddenError("You do not have permission to delete this entity")
+		return utils.NewForbiddenError(constants.MsgAccessDenied)
 	}
 
 	// Delete the entity

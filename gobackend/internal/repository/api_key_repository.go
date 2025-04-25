@@ -10,6 +10,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/database"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
@@ -64,7 +65,7 @@ func (r *PostgresAPIKeyRepository) Create(ctx context.Context, apiKey *models.AP
 	// Log the query execution with sensitive data redacted
 	utils.LogDBQuery(
 		query,
-		[]interface{}{apiKey.ID, apiKey.UserID, "[REDACTED]", apiKey.Name, apiKey.ExpiresAt, apiKey.CreatedAt},
+		[]interface{}{apiKey.ID, apiKey.UserID, constants.LogRedactedValue, apiKey.Name, apiKey.ExpiresAt, apiKey.CreatedAt},
 		time.Since(startTime),
 		err,
 	)
@@ -72,8 +73,8 @@ func (r *PostgresAPIKeyRepository) Create(ctx context.Context, apiKey *models.AP
 	if err != nil {
 		// Handle PostgreSQL specific errors
 		if pqErr, ok := err.(*pq.Error); ok {
-			// 23505 is the PostgreSQL error code for unique_violation
-			if pqErr.Code == "23505" {
+			// Check for duplicate key error
+			if pqErr.Code == constants.PGErrorDuplicateConstraint {
 				return utils.NewDuplicateError("APIKey", "id", apiKey.ID)
 			}
 		}
@@ -82,11 +83,11 @@ func (r *PostgresAPIKeyRepository) Create(ctx context.Context, apiKey *models.AP
 
 	// Use the regular log function which now routes through GDPR logger
 	log.Info().
-		Str("key_id", apiKey.ID).
-		Int64("user_id", apiKey.UserID).
-		Str("name", apiKey.Name).
-		Time("expires_at", apiKey.ExpiresAt).
-		Msg("API key created")
+		Str(constants.ParamKeyID, apiKey.ID).
+		Int64(constants.ColumnUserID, apiKey.UserID).
+		Str(constants.ColumnName, apiKey.Name).
+		Time(constants.ColumnExpiresAt, apiKey.ExpiresAt).
+		Msg(constants.LogEventAPIKey + " created")
 
 	return nil
 }
@@ -98,9 +99,9 @@ func (r *PostgresAPIKeyRepository) GetByID(ctx context.Context, id string) (*mod
 
 	// Define the query
 	query := `
-		SELECT key_id, user_id, api_key_hash, name, expires_at, created_at
-		FROM api_keys
-		WHERE key_id = $1
+		SELECT ` + constants.ColumnKeyID + `, ` + constants.ColumnUserID + `, ` + constants.ColumnAPIKeyHash + `, ` + constants.ColumnName + `, ` + constants.ColumnExpiresAt + `, ` + constants.ColumnCreatedAt + `
+		FROM ` + constants.TableAPIKeys + `
+		WHERE ` + constants.ColumnKeyID + ` = $1
 	`
 
 	// Execute the query
@@ -139,10 +140,10 @@ func (r *PostgresAPIKeyRepository) GetByUserID(ctx context.Context, userID int64
 
 	// Define the query
 	query := `
-		SELECT key_id, user_id, api_key_hash, name, expires_at, created_at
-		FROM api_keys
-		WHERE user_id = $1
-		ORDER BY created_at DESC
+		SELECT ` + constants.ColumnKeyID + `, ` + constants.ColumnUserID + `, ` + constants.ColumnAPIKeyHash + `, ` + constants.ColumnName + `, ` + constants.ColumnExpiresAt + `, ` + constants.ColumnCreatedAt + `
+		FROM ` + constants.TableAPIKeys + `
+		WHERE ` + constants.ColumnUserID + ` = $1
+		ORDER BY ` + constants.ColumnCreatedAt + ` DESC
 	`
 
 	// Execute the query
@@ -197,9 +198,9 @@ func (r *PostgresAPIKeyRepository) VerifyKey(ctx context.Context, keyID, keyHash
 
 	// Define the query
 	query := `
-		SELECT key_id, user_id, api_key_hash, name, expires_at, created_at
-		FROM api_keys
-		WHERE key_id = $1 AND api_key_hash = $2 AND expires_at > $3
+		SELECT ` + constants.ColumnKeyID + `, ` + constants.ColumnUserID + `, ` + constants.ColumnAPIKeyHash + `, ` + constants.ColumnName + `, ` + constants.ColumnExpiresAt + `, ` + constants.ColumnCreatedAt + `
+		FROM ` + constants.TableAPIKeys + `
+		WHERE ` + constants.ColumnKeyID + ` = $1 AND ` + constants.ColumnAPIKeyHash + ` = $2 AND ` + constants.ColumnExpiresAt + ` > $3
 	`
 
 	// Execute the query
@@ -217,7 +218,7 @@ func (r *PostgresAPIKeyRepository) VerifyKey(ctx context.Context, keyID, keyHash
 	// Log the query execution
 	utils.LogDBQuery(
 		query,
-		[]interface{}{keyID, "[REDACTED]", now},
+		[]interface{}{keyID, constants.LogRedactedValue, now},
 		time.Since(startTime),
 		err,
 	)
@@ -225,7 +226,7 @@ func (r *PostgresAPIKeyRepository) VerifyKey(ctx context.Context, keyID, keyHash
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// Check if the key exists but is expired
-			expiredQuery := `SELECT expires_at FROM api_keys WHERE key_id = $1`
+			expiredQuery := `SELECT ` + constants.ColumnExpiresAt + ` FROM ` + constants.TableAPIKeys + ` WHERE ` + constants.ColumnKeyID + ` = $1`
 			var expiresAt time.Time
 			expiredErr := r.db.QueryRowContext(ctx, expiredQuery, keyID).Scan(&expiresAt)
 
@@ -240,9 +241,9 @@ func (r *PostgresAPIKeyRepository) VerifyKey(ctx context.Context, keyID, keyHash
 
 	// Log the successful verification
 	log.Info().
-		Str("key_id", apiKey.ID).
-		Int64("user_id", apiKey.UserID).
-		Msg("API key verified")
+		Str(constants.ParamKeyID, apiKey.ID).
+		Int64(constants.ColumnUserID, apiKey.UserID).
+		Msg(constants.LogEventAPIKey + " verified")
 
 	return apiKey, nil
 }
@@ -253,7 +254,7 @@ func (r *PostgresAPIKeyRepository) Delete(ctx context.Context, id string) error 
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM api_keys WHERE key_id = $1`
+	query := `DELETE FROM ` + constants.TableAPIKeys + ` WHERE ` + constants.ColumnKeyID + ` = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, id)
@@ -281,8 +282,8 @@ func (r *PostgresAPIKeyRepository) Delete(ctx context.Context, id string) error 
 	}
 
 	log.Info().
-		Str("key_id", id).
-		Msg("API key deleted")
+		Str(constants.ParamKeyID, id).
+		Msg(constants.LogEventAPIKey + " deleted")
 
 	return nil
 }
@@ -293,7 +294,7 @@ func (r *PostgresAPIKeyRepository) DeleteByUserID(ctx context.Context, userID in
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM api_keys WHERE user_id = $1`
+	query := `DELETE FROM ` + constants.TableAPIKeys + ` WHERE ` + constants.ColumnUserID + ` = $1`
 
 	// Execute the query
 	result, err := r.db.ExecContext(ctx, query, userID)
@@ -313,9 +314,9 @@ func (r *PostgresAPIKeyRepository) DeleteByUserID(ctx context.Context, userID in
 	// Log the deletion
 	rowsAffected, _ := result.RowsAffected()
 	log.Info().
-		Int64("user_id", userID).
+		Int64(constants.ColumnUserID, userID).
 		Int64("count", rowsAffected).
-		Msg("API keys deleted for user")
+		Msg(constants.LogEventAPIKey + " deleted for user")
 
 	return nil
 }
@@ -326,7 +327,7 @@ func (r *PostgresAPIKeyRepository) DeleteExpired(ctx context.Context) (int64, er
 	startTime := time.Now()
 
 	// Define the query
-	query := `DELETE FROM api_keys WHERE expires_at < $1`
+	query := `DELETE FROM ` + constants.TableAPIKeys + ` WHERE ` + constants.ColumnExpiresAt + ` < $1`
 
 	// Execute the query
 	now := time.Now()

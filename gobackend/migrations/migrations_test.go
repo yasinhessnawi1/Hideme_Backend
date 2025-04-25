@@ -98,8 +98,8 @@ func TestRunMigrations(t *testing.T) {
 				mock.ExpectExec("DROP TABLE IF EXISTS migrations").
 					WillReturnResult(sqlmock.NewResult(0, 0))
 
-				// First tableExists check fails
-				mock.ExpectQuery("SELECT COUNT.*FROM information_schema.tables").
+				// First tableExists check fails - Update to match actual SQL query
+				mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM information_schema.tables").
 					WithArgs("users").
 					WillReturnError(errors.New("failed to check table existence"))
 			},
@@ -118,9 +118,9 @@ func TestRunMigrations(t *testing.T) {
 				migrations := migrations.GetMigrations()
 				for _, migration := range migrations {
 					if migration.TableName != "" {
-						mock.ExpectQuery("SELECT COUNT.*FROM information_schema.tables").
+						mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM information_schema.tables").
 							WithArgs(migration.TableName).
-							WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+							WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(1)) // Return 1 instead of true
 					}
 				}
 
@@ -139,9 +139,9 @@ func TestRunMigrations(t *testing.T) {
 					WillReturnResult(sqlmock.NewResult(0, 0))
 
 				// Set up failed table existence check for first table to trigger migration
-				mock.ExpectQuery("SELECT COUNT.*FROM information_schema.tables").
+				mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM information_schema.tables").
 					WithArgs("users").
-					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(0)) // Return 0 instead of false
 
 				// Begin transaction
 				mock.ExpectBegin()
@@ -167,9 +167,9 @@ func TestRunMigrations(t *testing.T) {
 				migrations := migrations.GetMigrations()
 				for _, migration := range migrations {
 					if migration.TableName != "" {
-						mock.ExpectQuery("SELECT COUNT.*FROM information_schema.tables").
+						mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM information_schema.tables").
 							WithArgs(migration.TableName).
-							WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+							WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(1)) // Return 1 instead of true
 					}
 				}
 
@@ -185,11 +185,11 @@ func TestRunMigrations(t *testing.T) {
 
 				// Check detection_threshold column exists
 				mock.ExpectQuery("SELECT EXISTS").
-					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(1)) // Return 1 instead of true
 
 				// Check use_banlist_for_detection column exists
 				mock.ExpectQuery("SELECT EXISTS").
-					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(1)) // Return 1 instead of true
 			},
 			wantErr: false,
 		},
@@ -204,9 +204,9 @@ func TestRunMigrations(t *testing.T) {
 				migrations := migrations.GetMigrations()
 				for _, migration := range migrations {
 					if migration.TableName != "" {
-						mock.ExpectQuery("SELECT COUNT.*FROM information_schema.tables").
+						mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM information_schema.tables").
 							WithArgs(migration.TableName).
-							WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+							WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(1)) // Return 1 instead of true
 					}
 				}
 
@@ -222,7 +222,7 @@ func TestRunMigrations(t *testing.T) {
 
 				// Check detection_threshold column doesn't exist
 				mock.ExpectQuery("SELECT EXISTS").
-					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(0)) // Return 0 instead of false
 
 				// Add the missing column
 				mock.ExpectExec("ALTER TABLE user_settings ADD COLUMN detection_threshold").
@@ -230,7 +230,7 @@ func TestRunMigrations(t *testing.T) {
 
 				// Check use_banlist_for_detection column doesn't exist
 				mock.ExpectQuery("SELECT EXISTS").
-					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(0)) // Return 0 instead of false
 
 				// Add the missing column
 				mock.ExpectExec("ALTER TABLE user_settings ADD COLUMN use_banlist_for_detection").

@@ -10,13 +10,14 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
 // JWT errors
 var (
-	ErrInvalidToken         = errors.New("invalid token")
-	ErrExpiredToken         = errors.New("token has expired")
+	ErrInvalidToken         = errors.New(constants.ErrorInvalidToken)
+	ErrExpiredToken         = errors.New(constants.ErrorExpiredToken)
 	ErrInvalidSigningMethod = errors.New("invalid signing method")
 	ErrInvalidTokenClaims   = errors.New("invalid token claims")
 )
@@ -46,9 +47,9 @@ func NewJWTService(config *config.JWTSettings) *JWTService {
 func (s *JWTService) GetConfig() *config.JWTSettings {
 	if s.Config == nil {
 		return &config.JWTSettings{
-			Expiry:        15 * time.Hour,
-			RefreshExpiry: 7 * 24 * time.Hour,
-			Issuer:        "hideme-api",
+			Expiry:        constants.DefaultJWTExpiry,
+			RefreshExpiry: constants.DefaultJWTRefreshExpiry,
+			Issuer:        constants.DefaultJWTIssuer,
 		}
 	}
 	return s.Config
@@ -56,12 +57,12 @@ func (s *JWTService) GetConfig() *config.JWTSettings {
 
 // GenerateAccessToken generates a new JWT access token for a user
 func (s *JWTService) GenerateAccessToken(userID int64, username, email string) (string, string, error) {
-	return s.generateToken(userID, username, email, "access", s.Config.Expiry)
+	return s.generateToken(userID, username, email, constants.TokenTypeAccess, s.Config.Expiry)
 }
 
 // GenerateRefreshToken generates a new JWT refresh token for a user
 func (s *JWTService) GenerateRefreshToken(userID int64, username, email string) (string, string, error) {
-	return s.generateToken(userID, username, email, "refresh", s.Config.RefreshExpiry)
+	return s.generateToken(userID, username, email, constants.TokenTypeRefresh, s.Config.RefreshExpiry)
 }
 
 // generateToken creates a new JWT token with the provided parameters
@@ -154,7 +155,7 @@ func (s *JWTService) ParseTokenWithoutValidation(tokenString string) (string, er
 
 // ExtractUserIDFromToken extracts the user ID from a token string
 func (s *JWTService) ExtractUserIDFromToken(tokenString string) (int64, error) {
-	claims, err := s.ValidateToken(tokenString, "access")
+	claims, err := s.ValidateToken(tokenString, constants.TokenTypeAccess)
 	if err != nil {
 		return 0, err
 	}
@@ -164,7 +165,7 @@ func (s *JWTService) ExtractUserIDFromToken(tokenString string) (int64, error) {
 // RefreshTokens validates a refresh token and issues new access and refresh tokens
 func (s *JWTService) RefreshTokens(refreshToken, userID int64, username, email string) (string, string, string, string, error) {
 	// Validate the refresh token
-	claims, err := s.ValidateToken(strconv.FormatInt(refreshToken, 10), "refresh")
+	claims, err := s.ValidateToken(strconv.FormatInt(refreshToken, 10), constants.TokenTypeRefresh)
 	if err != nil {
 		return "", "", "", "", err
 	}
