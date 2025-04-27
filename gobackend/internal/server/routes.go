@@ -140,6 +140,7 @@ func (s *Server) SetupRoutes() {
 			r.Get("/", s.Handlers.AuthHandler.ListAPIKeys)
 			r.Post("/", s.Handlers.AuthHandler.CreateAPIKey)
 			r.Delete("/{keyID}", s.Handlers.AuthHandler.DeleteAPIKey)
+			r.Get("/{keyID}/decode", s.Handlers.AuthHandler.GetAPIKeyDecoded)
 		})
 
 		// Settings routes (all protected)

@@ -25,6 +25,8 @@ type AuthServiceInterface interface {
 	//   - An error if registration fails (e.g., duplicate username/email)
 	RegisterUser(ctx context.Context, reg *models.UserRegistration) (*models.User, error)
 
+	GetDecryptedAPIKey(ctx context.Context, userID int64, keyID string) (*models.APIKey, string, error)
+
 	// AuthenticateUser authenticates a user with the provided credentials.
 	//
 	// Parameters:

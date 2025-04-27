@@ -455,24 +455,6 @@ func (s *AuthService) DeleteAPIKey(ctx context.Context, userID int64, keyID stri
 }
 
 // VerifyAPIKey verifies an API key and returns the associated user.
-//
-// Parameters:
-//   - ctx: Context for the operation
-//   - apiKeyString: The API key to verify
-//
-// Returns:
-//   - The user associated with the API key (sanitized)
-//   - InvalidTokenError if the key format is invalid
-//   - ExpiredTokenError if the key has expired
-//   - NotFoundError if the key doesn't exist
-//   - Other errors for database issues
-//
-// The method performs the following operations:
-// 1. Parses the API key to extract the ID and secret
-// 2. Hashes the key for secure comparison
-// 3. Verifies the key against the database
-// 4. Retrieves the associated user
-// 5. Logs the verification event
 func (s *AuthService) VerifyAPIKey(ctx context.Context, apiKeyString string) (*models.User, error) {
 	// Parse the API key
 	keyID, _, err := auth.ParseAPIKey(apiKeyString)
@@ -480,24 +462,103 @@ func (s *AuthService) VerifyAPIKey(ctx context.Context, apiKeyString string) (*m
 		return nil, utils.NewInvalidTokenError()
 	}
 
-	// Hash the API key
-	keyHash := auth.HashAPIKey(apiKeyString)
-
-	// Verify the API key
-	apiKey, err := s.apiKeyRepo.VerifyKey(ctx, keyID, keyHash)
+	// Get the API key
+	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get the associated user
-	user, err := s.userRepo.GetByID(ctx, apiKey.UserID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user for API key: %w", err)
+	// Check if the API key has expired
+	if apiKey.IsExpired() {
+		return nil, utils.NewExpiredTokenError()
 	}
 
-	utils.LogAPIKey("verified", keyID, fmt.Sprintf("%d", user.ID))
+	// Get the encryption key from the config
+	var encryptionKey []byte
+	if s.apiKeyCfg != nil && s.apiKeyCfg.EncryptionKey != "" {
+		encryptionKey = []byte(s.apiKeyCfg.EncryptionKey)
+	}
 
-	return user.Sanitize(), nil
+	// Check if the stored key is encrypted
+	if auth.IsEncrypted(apiKey.APIKeyHash) {
+		// Try to decrypt
+		decryptedKey, err := auth.DecryptAPIKey(apiKey.APIKeyHash, encryptionKey)
+		if err == nil && decryptedKey == apiKeyString {
+			// Decryption successful and keys match
+			user, err := s.userRepo.GetByID(ctx, apiKey.UserID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get user for API key: %w", err)
+			}
+			utils.LogAPIKey("verified", keyID, fmt.Sprintf("%d", user.ID))
+			return user.Sanitize(), nil
+		}
+	}
+
+	// Fall back to hash comparison
+	hashedKey := auth.HashAPIKey(apiKeyString, nil) // nil forces hash mode
+	if hashedKey == apiKey.APIKeyHash {
+		user, err := s.userRepo.GetByID(ctx, apiKey.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user for API key: %w", err)
+		}
+		utils.LogAPIKey("verified", keyID, fmt.Sprintf("%d", user.ID))
+		return user.Sanitize(), nil
+	}
+
+	return nil, utils.NewInvalidTokenError()
+}
+
+// GetDecryptedAPIKey retrieves an API key by its ID and decrypts it if encrypted.
+// This is a privileged operation that should only be accessible to authenticated users
+// for their own API keys.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - userID: The ID of the user requesting the key (for authorization)
+//   - keyID: The ID of the API key to retrieve
+//
+// Returns:
+//   - The API key model with the decrypted original key
+//   - ForbiddenError if the key doesn't belong to the user
+//   - NotFoundError if the key doesn't exist
+//   - Other errors for database or decryption issues
+func (s *AuthService) GetDecryptedAPIKey(ctx context.Context, userID int64, keyID string) (*models.APIKey, string, error) {
+	// Get the API key
+	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Verify that the API key belongs to the user
+	if apiKey.UserID != userID {
+		return nil, "", utils.NewForbiddenError(constants.MsgAccessDenied)
+	}
+
+	// Check if the API key has expired
+	if apiKey.IsExpired() {
+		return nil, "", utils.NewExpiredTokenError()
+	}
+
+	// Get the encryption key
+	var encryptionKey []byte
+	if s.apiKeyCfg != nil && s.apiKeyCfg.EncryptionKey != "" {
+		encryptionKey = []byte(s.apiKeyCfg.EncryptionKey)
+	}
+
+	// Try to decode the API key
+	var originalKey string
+	if auth.IsEncrypted(apiKey.APIKeyHash) {
+		// API key is encrypted with AES-256-GCM
+		originalKey, err = auth.DecryptAPIKey(apiKey.APIKeyHash, encryptionKey)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to decrypt API key: %w", err)
+		}
+	} else {
+		// API key is hashed (not reversible)
+		return nil, "", fmt.Errorf("API key is hashed and cannot be decrypted")
+	}
+
+	return apiKey, originalKey, nil
 }
 
 // CleanupExpiredSessions removes expired sessions from the database.
