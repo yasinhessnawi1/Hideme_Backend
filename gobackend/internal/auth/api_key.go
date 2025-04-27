@@ -8,12 +8,20 @@
 package auth
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
@@ -45,7 +53,7 @@ func NewAPIKeyService(config *config.APIKeySettings) *APIKeyService {
 // The key consists of two parts: a UUID for the ID and a cryptographically secure
 // random string for the secret part, combined with a dot separator.
 //
-// The API key is securely hashed before storage to protect against exposure.
+// The API key is securely encrypted or hashed before storage to protect against exposure.
 //
 // Parameters:
 //   - userID: The ID of the user who owns this API key
@@ -53,7 +61,7 @@ func NewAPIKeyService(config *config.APIKeySettings) *APIKeyService {
 //   - duration: How long the key should be valid; if 0, uses the default expiry duration
 //
 // Returns:
-//   - apiKeyModel: The database model (with hashed key) for storing the API key
+//   - apiKeyModel: The database model (with secured key) for storing the API key
 //   - apiKey: The plain text API key to be returned to the user (shown only once)
 //   - error: Any error that occurred during key generation
 func (s *APIKeyService) GenerateAPIKey(userID int64, name string, duration time.Duration) (*models.APIKey, string, error) {
@@ -70,9 +78,14 @@ func (s *APIKeyService) GenerateAPIKey(userID int64, name string, duration time.
 	// Using the format: keyID.randomPart
 	apiKey := strings.Join([]string{keyID, randomPart}, ".")
 
-	// Hash the API key for secure storage
-	// Only the hash is stored in the database, never the plain text key
-	hashedKey := HashAPIKey(apiKey)
+	// Get the encryption key from config
+	var encryptionKey []byte
+	if s.config != nil && s.config.EncryptionKey != "" {
+		encryptionKey = []byte(s.config.EncryptionKey)
+	}
+
+	// Secure the API key for storage using encryption or hashing
+	securedKey := HashAPIKey(apiKey, encryptionKey)
 
 	// Set the expiry time based on the requested duration or default
 	var expiryDuration time.Duration
@@ -83,21 +96,135 @@ func (s *APIKeyService) GenerateAPIKey(userID int64, name string, duration time.
 	}
 
 	// Create the API key model for database storage
-	apiKeyModel := models.NewAPIKey(userID, name, hashedKey, expiryDuration)
+	apiKeyModel := models.NewAPIKey(userID, name, securedKey, expiryDuration)
 	apiKeyModel.ID = keyID
 
 	return apiKeyModel, apiKey, nil
 }
 
-// HashAPIKey creates a SHA-256 hash of an API key for secure storage.
-// This ensures that even if the database is compromised, the actual API keys remain secure.
+// EncryptAPIKey encrypts an API key using AES-256-GCM.
+// This allows the key to be decrypted by authorized services.
 //
 // Parameters:
-//   - apiKey: The plain text API key to hash
+//   - apiKey: The plain text API key to encrypt
+//   - encryptionKey: The key used for encryption (must be at least 32 bytes)
 //
 // Returns:
-//   - A hex-encoded string of the SHA-256 hash
-func HashAPIKey(apiKey string) string {
+//   - A base64-encoded encrypted string
+//   - An error if encryption fails
+func EncryptAPIKey(apiKey string, encryptionKey []byte) (string, error) {
+	// Create a new cipher block
+	block, err := aes.NewCipher(encryptionKey[:32]) // Use first 32 bytes as AES-256 key
+	if err != nil {
+		return "", fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	// Create a new GCM
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	// Create a nonce
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", fmt.Errorf("failed to create nonce: %w", err)
+	}
+
+	// Encrypt the data
+	ciphertext := gcm.Seal(nonce, nonce, []byte(apiKey), nil)
+
+	// Return the encrypted data as a base64 string
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// DecryptAPIKey decrypts an API key using AES-256-GCM.
+//
+// Parameters:
+//   - encryptedAPIKey: The base64-encoded encrypted API key
+//   - encryptionKey: The key used for decryption (must be at least 32 bytes)
+//
+// Returns:
+//   - The original plain text API key
+//   - An error if decryption fails
+func DecryptAPIKey(encryptedAPIKey string, encryptionKey []byte) (string, error) {
+	// Decode the base64 string
+	ciphertext, err := base64.StdEncoding.DecodeString(encryptedAPIKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode base64: %w", err)
+	}
+
+	// Create a new cipher block
+	block, err := aes.NewCipher(encryptionKey[:32]) // Use first 32 bytes as AES-256 key
+	if err != nil {
+		return "", fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	// Create a new GCM
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	// Get the nonce size
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return "", errors.New("ciphertext too short")
+	}
+
+	// Extract the nonce
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+
+	// Decrypt the data
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt: %w", err)
+	}
+
+	return string(plaintext), nil
+}
+
+// IsEncrypted checks if an API key is encrypted with AES-256-GCM.
+// This is used to determine whether to try decryption or fall back to hash comparison.
+//
+// Parameters:
+//   - securedAPIKey: The secured API key to check
+//
+// Returns:
+//   - true if the key appears to be encrypted, false otherwise
+func IsEncrypted(securedAPIKey string) bool {
+	// Try to decode as base64
+	bytes, err := base64.StdEncoding.DecodeString(securedAPIKey)
+	if err != nil {
+		return false
+	}
+
+	// Check if it's long enough to contain a nonce (at least 12 bytes for GCM)
+	return len(bytes) >= 12
+}
+
+// HashAPIKey secures an API key for storage.
+// It uses AES-256-GCM encryption if a valid encryption key is provided,
+// otherwise falls back to SHA-256 hashing.
+//
+// Parameters:
+//   - apiKey: The plain text API key to secure
+//   - encryptionKey: The key used for encryption (can be nil to force hashing)
+//
+// Returns:
+//   - A secured representation of the API key (encrypted or hashed)
+func HashAPIKey(apiKey string, encryptionKey []byte) string {
+	if encryptionKey != nil && len(encryptionKey) >= 32 {
+		// Try to encrypt the API key
+		encrypted, err := EncryptAPIKey(apiKey, encryptionKey)
+		if err == nil {
+			return encrypted
+		}
+		// Log the error and fall back to hashing
+		log.Error().Err(err).Msg("Failed to encrypt API key, falling back to SHA-256 hash")
+	}
+
+	// Fall back to SHA-256 hash
 	hash := sha256.Sum256([]byte(apiKey))
 	return hex.EncodeToString(hash[:])
 }

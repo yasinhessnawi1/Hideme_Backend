@@ -494,6 +494,40 @@ func (h *AuthHandler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetAPIKeyDecoded retrieves and decodes a specific API key.
+// This endpoint allows users to retrieve their original API key values.
+func (h *AuthHandler) GetAPIKeyDecoded(w http.ResponseWriter, r *http.Request) {
+	// Get the user ID from the context
+	userID, ok := auth.GetUserID(r)
+	if !ok {
+		utils.Unauthorized(w, constants.MsgAuthRequired)
+		return
+	}
+
+	// Get the key ID from the URL
+	keyID := chi.URLParam(r, constants.ParamKeyID)
+	if keyID == "" {
+		utils.BadRequest(w, "key_id parameter is required", nil)
+		return
+	}
+
+	// Get the API key with decrypted value
+	apiKey, originalKey, err := h.authService.GetDecryptedAPIKey(r.Context(), userID, keyID)
+	if err != nil {
+		utils.ErrorFromAppError(w, utils.ParseError(err))
+		return
+	}
+
+	// Return the API key with the original value
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
+		"id":         apiKey.ID,   // Use the field directly from apiKey
+		"name":       apiKey.Name, // Use the field directly from apiKey
+		"key":        originalKey,
+		"expires_at": apiKey.ExpiresAt, // Use the field directly from apiKey
+		"created_at": apiKey.CreatedAt,
+	})
+}
+
 // ValidateAPIKey handles validating an API key for external services.
 // This endpoint allows verification of API keys without using them directly.
 //

@@ -161,6 +161,9 @@ type JWTSettings struct {
 type APIKeySettings struct {
 	// DefaultExpiry is the default lifetime of generated API keys
 	DefaultExpiry time.Duration `yaml:"default_expiry" env:"API_KEY_EXPIRY"`
+
+	// EncryptionKey is the key used for API key encryption
+	EncryptionKey string `yaml:"encryption_key" env:"API_KEY_ENCRYPTION_KEY"`
 }
 
 // LoggingSettings contains logging configuration.
