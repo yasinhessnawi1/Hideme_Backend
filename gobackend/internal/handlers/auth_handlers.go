@@ -567,3 +567,41 @@ func (h *AuthHandler) ValidateAPIKey(w http.ResponseWriter, r *http.Request) {
 		"email":    user.Email,
 	})
 }
+
+// VerifyAPIKeySimple handles simple validation of an API key without returning detailed user information.
+// This endpoint is designed for machine-to-machine verification of API keys.
+//
+// HTTP Method:
+//   - GET
+//
+// URL Path:
+//   - /api/auth/verify-key
+//
+// Headers:
+//   - X-API-Key: The API key to verify
+//
+// Responses:
+//   - 200 OK: API key is valid with minimal response
+//   - 401 Unauthorized: API key is invalid, expired, or missing
+//   - 500 Internal Server Error: Server-side error
+func (h *AuthHandler) VerifyAPIKeySimple(w http.ResponseWriter, r *http.Request) {
+	// Get the API key from the header
+	apiKey := r.Header.Get(constants.HeaderXAPIKey)
+	if apiKey == "" {
+		utils.Unauthorized(w, "API key required")
+		return
+	}
+
+	// Verify the API key (reusing existing service method)
+	_, err := h.authService.VerifyAPIKey(r.Context(), apiKey)
+	if err != nil {
+		// Return a generic error without details for security
+		utils.Unauthorized(w, "Invalid API key")
+		return
+	}
+
+	// Return minimal success response
+	utils.JSON(w, constants.StatusOK, map[string]interface{}{
+		"valid": true,
+	})
+}
