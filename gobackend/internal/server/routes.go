@@ -89,6 +89,8 @@ func (s *Server) SetupRoutes() {
 				r.Post("/refresh", s.Handlers.AuthHandler.RefreshToken)
 				r.Post("/logout", s.Handlers.AuthHandler.Logout)
 				r.Post("/validate-key", s.Handlers.AuthHandler.ValidateAPIKey)
+				// endpoint for verifying API keys without user authentication
+				r.Get("/verify-key", s.Handlers.AuthHandler.VerifyAPIKeySimple)
 
 				// Explicitly handle OPTIONS preflight request for /verify endpoint
 				r.Options("/verify", handlePreflight(allowedOrigins))
