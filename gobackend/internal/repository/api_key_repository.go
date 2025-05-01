@@ -108,6 +108,8 @@ type APIKeyRepository interface {
 	//   - The number of expired keys deleted
 	//   - An error if deletion fails
 	DeleteExpired(ctx context.Context) (int64, error)
+
+	GetAll(ctx context.Context) ([]*models.APIKey, error)
 }
 
 // PostgresAPIKeyRepository is a PostgreSQL implementation of APIKeyRepository.
@@ -509,4 +511,95 @@ func (r *PostgresAPIKeyRepository) DeleteExpired(ctx context.Context) (int64, er
 		Msg("Expired API keys deleted")
 
 	return count, nil
+}
+
+func (r *PostgresAPIKeyRepository) GetByHash(ctx context.Context, hash string) (*models.APIKey, error) {
+	// Start query timer
+	startTime := time.Now()
+
+	// Define the query
+	query := `
+        SELECT ` + constants.ColumnKeyID + `, ` + constants.ColumnUserID + `, ` + constants.ColumnAPIKeyHash + `, ` + constants.ColumnName + `, ` + constants.ColumnExpiresAt + `, ` + constants.ColumnCreatedAt + `
+        FROM ` + constants.TableAPIKeys + `
+        WHERE ` + constants.ColumnAPIKeyHash + ` = $1 AND ` + constants.ColumnExpiresAt + ` > $2
+    `
+
+	// Execute the query
+	now := time.Now()
+	apiKey := &models.APIKey{}
+	err := r.db.QueryRowContext(ctx, query, hash, now).Scan(
+		&apiKey.ID,
+		&apiKey.UserID,
+		&apiKey.APIKeyHash,
+		&apiKey.Name,
+		&apiKey.ExpiresAt,
+		&apiKey.CreatedAt,
+	)
+
+	// Log the query execution
+	utils.LogDBQuery(
+		query,
+		[]interface{}{constants.LogRedactedValue, now},
+		time.Since(startTime),
+		err,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, utils.NewInvalidTokenError()
+		}
+		return nil, fmt.Errorf("failed to get API key by hash: %w", err)
+	}
+
+	return apiKey, nil
+}
+
+func (r *PostgresAPIKeyRepository) GetAll(ctx context.Context) ([]*models.APIKey, error) {
+	startTime := time.Now()
+
+	query := `
+		SELECT key_id, user_id, api_key_hash, name, expires_at, created_at
+		FROM api_keys
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
+
+	utils.LogDBQuery(
+		query,
+		nil,
+		time.Since(startTime),
+		err,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API keys: %w", err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			log.Error().Err(closeErr).Msg("failed to close rows")
+		}
+	}()
+
+	var apiKeys []*models.APIKey
+	for rows.Next() {
+		apiKey := &models.APIKey{}
+		err := rows.Scan(
+			&apiKey.ID,
+			&apiKey.UserID,
+			&apiKey.APIKeyHash,
+			&apiKey.Name,
+			&apiKey.ExpiresAt,
+			&apiKey.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan API key row: %w", err)
+		}
+		apiKeys = append(apiKeys, apiKey)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating API key rows: %w", err)
+	}
+
+	return apiKeys, nil
 }

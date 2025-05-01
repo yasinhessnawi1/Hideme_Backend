@@ -454,23 +454,13 @@ func (s *AuthService) DeleteAPIKey(ctx context.Context, userID int64, keyID stri
 	return nil
 }
 
-// VerifyAPIKey verifies an API key and returns the associated user.
 func (s *AuthService) VerifyAPIKey(ctx context.Context, apiKeyString string) (*models.User, error) {
-	// Parse the API key
-	keyID, _, err := auth.ParseAPIKey(apiKeyString)
-	if err != nil {
-		return nil, utils.NewInvalidTokenError()
-	}
+	// No need to parse the API key - just use the entire string for validation
 
-	// Get the API key
-	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
+	// Get all API keys
+	apiKeys, err := s.apiKeyRepo.GetAll(ctx)
 	if err != nil {
-		return nil, err
-	}
-
-	// Check if the API key has expired
-	if apiKey.IsExpired() {
-		return nil, utils.NewExpiredTokenError()
+		return nil, fmt.Errorf("failed to get API keys: %w", err)
 	}
 
 	// Get the encryption key from the config
@@ -479,30 +469,38 @@ func (s *AuthService) VerifyAPIKey(ctx context.Context, apiKeyString string) (*m
 		encryptionKey = []byte(s.apiKeyCfg.EncryptionKey)
 	}
 
-	// Check if the stored key is encrypted
-	if auth.IsEncrypted(apiKey.APIKeyHash) {
-		// Try to decrypt
-		decryptedKey, err := auth.DecryptAPIKey(apiKey.APIKeyHash, encryptionKey)
-		if err == nil && decryptedKey == apiKeyString {
-			// Decryption successful and keys match
-			user, err := s.userRepo.GetByID(ctx, apiKey.UserID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get user for API key: %w", err)
-			}
-			utils.LogAPIKey("verified", keyID, fmt.Sprintf("%d", user.ID))
-			return user.Sanitize(), nil
+	// Check each API key
+	for _, apiKey := range apiKeys {
+		// Skip expired keys
+		if time.Now().After(apiKey.ExpiresAt) {
+			continue
 		}
-	}
 
-	// Fall back to hash comparison
-	hashedKey := auth.HashAPIKey(apiKeyString, nil) // nil forces hash mode
-	if hashedKey == apiKey.APIKeyHash {
-		user, err := s.userRepo.GetByID(ctx, apiKey.UserID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get user for API key: %w", err)
+		// Check if the stored key is encrypted
+		if auth.IsEncrypted(apiKey.APIKeyHash) {
+			// Try to decrypt
+			decryptedKey, err := auth.DecryptAPIKey(apiKey.APIKeyHash, encryptionKey)
+			if err == nil && decryptedKey == apiKeyString {
+				// Found a match
+				user, err := s.userRepo.GetByID(ctx, apiKey.UserID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get user for API key: %w", err)
+				}
+				utils.LogAPIKey("verified", apiKey.ID, fmt.Sprintf("%d", user.ID))
+				return user.Sanitize(), nil
+			}
+		} else {
+			// Fall back to hash comparison
+			hashedKey := auth.HashAPIKey(apiKeyString, nil) // nil forces hash mode
+			if hashedKey == apiKey.APIKeyHash {
+				user, err := s.userRepo.GetByID(ctx, apiKey.UserID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get user for API key: %w", err)
+				}
+				utils.LogAPIKey("verified", apiKey.ID, fmt.Sprintf("%d", user.ID))
+				return user.Sanitize(), nil
+			}
 		}
-		utils.LogAPIKey("verified", keyID, fmt.Sprintf("%d", user.ID))
-		return user.Sanitize(), nil
 	}
 
 	return nil, utils.NewInvalidTokenError()
