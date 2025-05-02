@@ -70,8 +70,6 @@ class DetectionResultUpdater:
         try:
             # Log the start of update_result.
             log_debug("✅ Starting update_result in DetectionResultUpdater")
-            # Log the removal phrases.
-            log_debug(f"✅ Remove phrases: {remove_words}")
 
             # Initialize a list to hold updated page redaction mappings.
             updated_pages: List[Dict[str, Any]] = []

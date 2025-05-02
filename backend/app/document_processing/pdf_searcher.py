@@ -422,10 +422,14 @@ class PDFSearcher:
         compare = (lambda a, b: a == b) if case_sensitive else (lambda a, b: a.lower() == b.lower())
         # Split the entity's text into individual tokens.
         for token in entity_query.split():
+            # strip punctuation from the AI token
+            token = token.strip(string.punctuation)
+            if not token:
+                continue
             # Iterate over each mapping entry.
             for m in mapping:
-                # Retrieve the text from the mapping.
-                mapping_text = m.get("text", "")
+                # retrieve and strip punctuation from the mapping text
+                mapping_text = (m.get("text") or "").strip(string.punctuation)
                 # Compare the mapping text with the token.
                 if compare(mapping_text, token):
                     # If they match, append a dictionary of token information.
@@ -530,7 +534,7 @@ class PDFSearcher:
                 page_matches.append({
                     "bbox": m["bbox"],
                 })
-                log_debug(f"Page {page_number}: Found occurrence with bbox: {m['bbox']}")
+                log_debug(f"Page {page_number}: Found occurrence")
 
         # Return a dictionary with the page number and matches, and the count of matches.
         return {"page": page_number, "matches": page_matches}, len(page_matches)
@@ -557,8 +561,6 @@ class PDFSearcher:
         full_text, text_mapping = TextUtils.reconstruct_text_and_mapping(page.get("words", []))
         # Compute the offsets where the candidate phrase occurs.
         matches = TextUtils.recompute_offsets(full_text, candidate_phrase)
-        # Log the offsets found.
-        log_debug(f"Page {page_number}: Found candidate phrase offsets: {matches}")
         # Process each occurrence identified by its start and end offsets.
         for s, e in matches:
             try:
@@ -570,7 +572,7 @@ class PDFSearcher:
                 continue
             # If no bounding boxes are found, skip this occurrence.
             if not bboxes:
-                log_debug(f"Page {page_number}: No bounding boxes found for offsets {s}-{e}")
+                log_debug(f"Page {page_number}: No bounding boxes found for offsets")
                 continue
             # Merge the bounding boxes and get the merged data (which includes composite and per-line boxes).
             merged_data = TextUtils.merge_bounding_boxes(bboxes)
@@ -578,8 +580,6 @@ class PDFSearcher:
             final_bbox = merged_data["composite"]
             # Append the composite bounding box to the match results.
             page_matches.append({"bbox": final_bbox})
-            # Log the merged bounding box result.
-            log_debug(f"Page {page_number}: Merged composite bounding box for offsets {s}-{e}: {final_bbox}")
         # Return the page result along with the count of matches.
         return {"page": page_number, "matches": page_matches}, len(page_matches)
 
@@ -624,7 +624,7 @@ class PDFSearcher:
               - Total number of occurrences across all pages.
         """
         # Log the start of the search with the provided bounding box
-        log_debug(f"Starting find_target_phrase_occurrences with target_bbox: {target_bbox}")
+        log_debug("Starting find_target_phrase_occurrences with target_bbox")
 
         # Locate the exact phrase and its word count
         best_candidate, best_word_count = self._find_exact_phrase_by_bbox(target_bbox)
@@ -636,9 +636,6 @@ class PDFSearcher:
 
         # Search for that confirmed phrase across all pages
         total_occurrences, pages_results = self._search_all_pages(best_candidate, best_word_count)
-
-        # Log the final tally of occurrences
-        log_debug(f" find_target_phrase_occurrences: Final occurrences: {total_occurrences}")
 
         # Return the detailed results and total count
         return {
@@ -662,8 +659,6 @@ class PDFSearcher:
             Tuple[Optional[str], int]: A tuple of the matched phrase (or None) and the number of words in it.
         """
         for page in self.extracted_data.get("pages", []):
-            # Extract the page number for logging/debugging
-            page_number = page.get("page", "unknown")
 
             # Build mapping of words to text and bbox
             mapping, _ = self.build_page_text_and_mapping(page.get("words", []))
@@ -674,15 +669,12 @@ class PDFSearcher:
                 if self._word_center_in_bbox(m["bbox"], target_bbox)
             ]
 
-            log_debug(f"Page {page_number}: candidate_indices: {candidate_indices}")
-
             if not candidate_indices:
                 # Skip this page if no candidates were found
                 continue
 
-                # Group the candidate indices into consecutive word groups (phrases)
+            # Group the candidate indices into consecutive word groups (phrases)
             groups = self._group_consecutive_indices(candidate_indices)
-            log_debug(f"Page {page_number}: grouped candidate indices: {groups}")
 
             # Evaluate each group to check for exact bbox match
             for group in groups:
@@ -692,12 +684,8 @@ class PDFSearcher:
                 # Compute the bbox for the phrase
                 bbox = self._get_phrase_bbox(page, mapping, group, phrase, target_bbox=target_bbox)
 
-                log_debug(f"Page {page_number}: Phrase = '{phrase}'")
-                log_debug(f"Page {page_number}: Computed bbox = {bbox}")
-
                 # Compare to the target bbox
                 if bbox and self._bbox_equal(bbox, target_bbox):
-                    log_debug(f"[MATCH] Page {page_number}: Matched exact bbox with phrase: '{phrase}'")
                     return phrase, len(phrase.split())  # Return phrase and word count
 
         # If no match found across all pages
@@ -776,7 +764,7 @@ class PDFSearcher:
 
         except Exception as exc:
             # Log error for debugging and continue gracefully
-            log_debug(f"[ERROR] Failed to compute bbox for phrase '{phrase}': {exc}")
+            log_debug(f"[ERROR] Failed to compute bbox for phrase : {exc}")
 
         # If no matching phrase bbox found, return None
         return None

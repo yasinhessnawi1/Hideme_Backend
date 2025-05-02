@@ -144,7 +144,7 @@ def validate_all_engines_requested_entities(
                         detail=f"Invalid entity type: {entity}. Available entities: {available_entities}"
                     )
         # Log the successfully validated entity list.
-        log_info(f"[OK] Validated entity list: {entity_list}")
+        log_info("[OK] Validated entity list")
         # Return the validated entity list.
         return entity_list
 
@@ -194,9 +194,9 @@ def validate_gemini_requested_entities(requested_entities: Optional[str]) -> Lis
         invalid_entities = [entity for entity in validated_entities if entity not in GEMINI_AVAILABLE_ENTITIES]
         # If there are any invalid entities, log a warning.
         if invalid_entities:
-            log_warning(f"[Gemini] Removing invalid entities: {invalid_entities}")
+            log_warning("[Gemini] Removing invalid entities")
         # Log the final validated list of Gemini entities.
-        log_info(f"[Gemini] Validated entity list: {filtered_entities}")
+        log_info("[Gemini] Validated entity list")
         # Return the filtered, validated entity list.
         return filtered_entities
 
@@ -246,9 +246,9 @@ def validate_presidio_requested_entities(requested_entities: Optional[str]) -> L
         invalid_entities = [entity for entity in validated_entities if entity not in PRESIDIO_AVAILABLE_ENTITIES]
         # Log a warning if any invalid entities are found.
         if invalid_entities:
-            log_warning(f"[Presidio] Removing invalid entities: {invalid_entities}")
+            log_warning("[Presidio] Removing invalid entities")
         # Log the validated Presidio entity list.
-        log_info(f"[Presidio] Validated entity list: {filtered_entities}")
+        log_info("[Presidio] Validated entity list")
         # Return the filtered validated list.
         return filtered_entities
 
@@ -298,9 +298,9 @@ def validate_gliner_requested_entities(requested_entities: Optional[str]) -> Lis
         invalid_entities = [entity for entity in validated_entities if entity not in GLINER_AVAILABLE_ENTITIES]
         # Log a warning if there are any invalid entities.
         if invalid_entities:
-            log_warning(f"[Gliner] Removing invalid entities: {invalid_entities}")
+            log_warning("[Gliner] Removing invalid entities")
         # Log the final validated GLiNER entity list.
-        log_info(f"[Gliner] Validated entity list: {filtered_entities}")
+        log_info("[Gliner] Validated entity list")
         # Return the filtered validated list.
         return filtered_entities
 
@@ -350,9 +350,9 @@ def validate_hideme_requested_entities(requested_entities: Optional[str]) -> Lis
         invalid_entities = [entity for entity in validated_entities if entity not in HIDEME_AVAILABLE_ENTITIES]
         # Log a warning if any invalid entities are found.
         if invalid_entities:
-            log_warning(f"[Hideme] Removing invalid entities: {invalid_entities}")
+            log_warning("[Hideme] Removing invalid entities")
         # Log the final validated list for HIDEME.
-        log_info(f"[Hideme] Validated entity list: {filtered_entities}")
+        log_info("[Hideme] Validated entity list")
         # Return the filtered validated list.
         return filtered_entities
 

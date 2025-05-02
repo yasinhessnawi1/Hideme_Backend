@@ -11,6 +11,7 @@ services:
     environment:
       # This will use the GEMINI_API_KEY from the host (or from GitHub Secrets via deployment)
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GO_BACKEND_URL: ${GO_BACKEND_URL}
 
     # For development, you might mount the code. For production, you might remove or adjust this.
     volumes:

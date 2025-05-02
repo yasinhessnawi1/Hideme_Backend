@@ -442,9 +442,7 @@ class GeminiEntityDetector(BaseEntityDetector):
                 ))
         else:
             log_info("[PERF] Gemini processing summary: 0s total time recorded.")
-        # Retrieve and log the API usage summary.
-        usage_summary = gemini_usage_manager.get_usage_summary()
-        log_info("[USAGE] Gemini API Usage: {0}".format(usage_summary))
+
         # Return the final entities and updated redaction mapping.
         return combined_entities, redaction_mapping
 
