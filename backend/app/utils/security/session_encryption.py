@@ -593,7 +593,7 @@ class SessionEncryptionManager:
                 decrypted_any = True
             except Exception as e:
                 # Log decryption failure and fallback to raw bytes
-                log_error(f"[RAW] File decryption failed for '{orig.filename}': {e}")
+                log_error(f"[RAW] File decryption failed for: {e}")
                 processed.append(UploadFile(filename=orig.filename, file=BytesIO(blob)))
 
         # Return the list of processed files and whether any decryption succeeded

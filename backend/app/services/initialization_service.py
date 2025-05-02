@@ -306,7 +306,7 @@ class InitializationService:
             An instance of the GLiNER detector.
         """
         # Log the beginning of GLiNER detector initialization with the provided model and entities.
-        log_info(f"Initializing GLiNER detector with model {model_name} for entities: {entities}")
+        log_info(f"Initializing GLiNER detector with model {model_name}")
         # Record the start time for performance measurement.
         start_time = time.time()
         try:
@@ -343,8 +343,8 @@ class InitializationService:
         Returns:
             An instance of the HIDEME detector.
         """
-        # Log the beginning of HIDEME detector initialization with the provided model and entities.
-        log_info(f"Initializing HIDEME detector with model {model_name} for entities: {entities}")
+        # Log the beginning of HIDEME detector initialization with the provided model.
+        log_info(f"Initializing HIDEME detector with model {model_name}")
         # Record the start time for performance measurement.
         start_time = time.time()
         try:
@@ -353,7 +353,7 @@ class InitializationService:
             # Instantiate the HIDEME detector.
             detector = HidemeEntityDetector(
                 model_name=HIDEME_MODEL_NAME,
-                entities=HIDEME_AVAILABLE_ENTITIES,
+                entities=entities or HIDEME_AVAILABLE_ENTITIES,
                 local_model_path=HIDEME_MODEL_PATH
             )
             # Mark the HIDEME detector as successfully initialized.
@@ -382,8 +382,8 @@ class InitializationService:
         Returns:
             An instance of the Hybrid detector.
         """
-        # Log the beginning of Hybrid detector initialization with the given configuration.
-        log_info(f"Initializing Hybrid detector with config: {config}")
+        # Log the beginning of Hybrid detector initialization.
+        log_info("Initializing Hybrid detector")
         # Record the start time for performance measurement.
         start_time = time.time()
         try:

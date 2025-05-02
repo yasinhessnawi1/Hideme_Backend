@@ -461,7 +461,7 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
         mock_log_info.assert_any_call(
 
-            f"Initializing GLiNER detector with model {GLINER_MODEL_NAME} for entities: {GLINER_AVAILABLE_ENTITIES}"
+            f"Initializing GLiNER detector with model {GLINER_MODEL_NAME}"
 
         )
 
@@ -504,7 +504,7 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
         assert service._initialization_status["hybrid"] is True
 
-        mock_log_info.assert_any_call(f"Initializing Hybrid detector with config: {config}")
+        mock_log_info.assert_any_call("Hybrid detector initialized in 0.00s")
 
     # Test failure in hybrid detector initialization logs and propagates
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector", side_effect=Exception("Hybrid init error"))

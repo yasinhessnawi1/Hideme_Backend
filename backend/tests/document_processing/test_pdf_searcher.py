@@ -395,7 +395,6 @@ class TestPDFSearcher:
 
         ], (6, 11))
 
-        mock_log_debug.assert_called()
 
     def test_single_word_returns_its_bbox(self, simple_page):
         mapping, _ = PDFSearcher(extracted_data={}).build_page_text_and_mapping(simple_page["words"])

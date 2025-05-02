@@ -624,7 +624,7 @@ class PDFSearcher:
               - Total number of occurrences across all pages.
         """
         # Log the start of the search with the provided bounding box
-        log_debug(f"Starting find_target_phrase_occurrences with target_bbox: {target_bbox}")
+        log_debug("Starting find_target_phrase_occurrences with target_bbox")
 
         # Locate the exact phrase and its word count
         best_candidate, best_word_count = self._find_exact_phrase_by_bbox(target_bbox)

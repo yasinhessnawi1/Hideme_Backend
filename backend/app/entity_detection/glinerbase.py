@@ -1030,9 +1030,6 @@ class GenericEntityDetector(BaseEntityDetector):
             log_warning(f"[{self.ENGINE_NAME}] Timeout acquiring model analyzer lock")
             return local_entities
         try:
-            # Log the start of processing the group text.
-            log_info(
-                f"[DEBUG] Processing group_text (length {len(group_text)}): for entity_types: {requested_entities}")
             # Use the model's predict_entities method to extract entities from the group.
             group_entities = self.model.predict_entities(group_text, requested_entities, threshold=0.40)
             # Iterate over each detected entity.

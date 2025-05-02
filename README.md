@@ -103,21 +103,19 @@ GEMINI_API_KEY=your_gemini_api_key
 # Redis (Optional)
 REDIS_URL=redis://redis:6379/0
 
-# Rate Limiting
+# Rate Limiting (Optional)
 RATE_LIMIT_RPM=60
 ADMIN_RATE_LIMIT_RPM=120
 ANON_RATE_LIMIT_RPM=30
 RATE_LIMIT_BURST=30
 
-# Security
-METRICS_API_KEY=your_metrics_api_key
 ```
 
 ### Local Setup
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/Hideme_Backend.git
+   git clone https://github.com/yasinhessnawi1/Hideme_Backend.git
    cd Hideme_Backend
    ```
 
@@ -162,9 +160,11 @@ The API will be available at `http://localhost:8000`.
    ```bash
    docker-compose down
    ```
+
 ## Running Tests & Coverage
 
-We use **pytest** along with **pytest-cov** to validate functionality and measure test coverage for the `backend.app` package.
+We use **pytest** along with **pytest-cov** to validate functionality and measure test coverage for the `backend.app`
+package.
 
 1. **Install testing dependencies**:
    ```bash
@@ -177,84 +177,84 @@ We use **pytest** along with **pytest-cov** to validate functionality and measur
    start htmlcov/index.html  # On macOS/Linux: open htmlcov/index.html
    ```
 
-The generated report (as of **2025-04-20**) shows an overall test coverage of **87%**:
+The generated report (as of **2025-05-02**) shows an overall test coverage of **87%**:
 
-| File                                               | statements | missing | excluded | coverage |
-|----------------------------------------------------|-----------:|--------:|---------:|---------:|
-| backend/app/__init__.py                            |          3 |       0 |        0 |    100% |
-| backend/app/api/__init__.py                        |          0 |       0 |        0 |    100% |
-| backend/app/api/main.py                            |        166 |      29 |        0 |     83% |
-| backend/app/api/routes/__init__.py                 |          7 |       0 |        0 |    100% |
-| backend/app/api/routes/ai_routes.py                |         31 |       5 |        0 |     84% |
-| backend/app/api/routes/batch_routes.py             |        112 |      12 |        0 |     89% |
-| backend/app/api/routes/machine_learning.py         |         82 |       8 |        0 |     90% |
-| backend/app/api/routes/metadata_routes.py          |        126 |       3 |        0 |     98% |
-| backend/app/api/routes/pdf_routes.py               |         36 |       0 |        0 |    100% |
-| backend/app/api/routes/status_routes.py            |        112 |      23 |        0 |     79% |
-| backend/app/configs/__init__.py                    |          0 |       0 |        0 |    100% |
-| backend/app/configs/config_singleton.py            |         31 |       4 |        0 |     87% |
-| backend/app/configs/gdpr_config.py                 |         10 |       0 |        0 |    100% |
-| backend/app/configs/gemini_config.py               |          8 |       0 |        0 |    100% |
-| backend/app/configs/gliner_config.py               |          7 |       0 |        0 |    100% |
-| backend/app/configs/hideme_config.py               |          7 |       0 |        0 |    100% |
-| backend/app/configs/presidio_config.py             |          4 |       0 |        0 |    100% |
-| backend/app/document_processing/__init__.py        |          0 |       0 |        0 |    100% |
-| backend/app/document_processing/detection_updater.py |       126 |      27 |        0 |     79% |
-| backend/app/document_processing/pdf_extractor.py   |        170 |      28 |        0 |     84% |
-| backend/app/document_processing/pdf_redactor.py    |        192 |      33 |        0 |     83% |
-| backend/app/document_processing/pdf_searcher.py    |        196 |      26 |        0 |     87% |
-| backend/app/domain/__init__.py                     |          2 |       0 |        0 |    100% |
-| backend/app/domain/interfaces.py                   |         23 |       6 |        0 |     74% |
-| backend/app/entity_detection/__init__.py           |          8 |       0 |        0 |    100% |
-| backend/app/entity_detection/base.py               |        203 |      21 |        0 |     90% |
-| backend/app/entity_detection/engines.py            |          7 |       0 |        0 |    100% |
-| backend/app/entity_detection/gemini.py             |        163 |      16 |        0 |     90% |
-| backend/app/entity_detection/gliner.py             |         14 |       1 |        0 |     93% |
-| backend/app/entity_detection/glinerbase.py         |        438 |     254 |        0 |     42% |
-| backend/app/entity_detection/hideme.py             |         14 |       1 |        0 |     93% |
-| backend/app/entity_detection/hybrid.py             |        230 |      54 |        0 |     77% |
-| backend/app/entity_detection/presidio.py           |        165 |      50 |        0 |     70% |
-| backend/app/services/__init__.py                   |          4 |       0 |        0 |    100% |
-| backend/app/services/ai_detect_service.py          |         54 |       5 |        0 |     91% |
-| backend/app/services/base_detect_service.py        |        135 |       5 |        0 |     96% |
-| backend/app/services/batch_detect_service.py       |        185 |      17 |        0 |     91% |
-| backend/app/services/batch_redact_service.py       |        187 |       8 |        0 |     96% |
-| backend/app/services/batch_search_service.py       |        137 |      24 |        0 |     82% |
-| backend/app/services/document_extract_service.py   |         56 |       1 |        0 |     98% |
-| backend/app/services/document_redact_service.py    |         65 |       3 |        0 |     95% |
-| backend/app/services/initialization_service.py     |        425 |      46 |        0 |     89% |
-| backend/app/services/machine_learning_service.py   |         61 |       4 |        0 |     93% |
-| backend/app/utils/__init__.py                      |          2 |       0 |        0 |    100% |
-| backend/app/utils/constant/__init__.py             |          0 |       0 |        0 |    100% |
-| backend/app/utils/constant/constant.py             |         36 |       0 |        0 |    100% |
-| backend/app/utils/helpers/__init__.py              |          5 |       0 |        0 |    100% |
-| backend/app/utils/helpers/gemini_helper.py         |        124 |      10 |        0 |     92% |
-| backend/app/utils/helpers/gemini_usage_manager.py  |         73 |       7 |        0 |     90% |
-| backend/app/utils/helpers/gliner_helper.py         |         78 |       0 |        0 |    100% |
-| backend/app/utils/helpers/json_helper.py           |        127 |       7 |        0 |     94% |
-| backend/app/utils/helpers/ml_models_helper.py      |         25 |       0 |        0 |    100% |
-| backend/app/utils/helpers/text_utils.py            |        105 |       0 |        0 |    100% |
-| backend/app/utils/logging/__init__.py              |          0 |       0 |        0 |    100% |
-| backend/app/utils/logging/logger.py                |         32 |       0 |        0 |    100% |
-| backend/app/utils/logging/secure_logging.py        |         15 |       0 |        0 |    100% |
-| backend/app/utils/parallel/__init__.py             |          0 |       0 |        0 |    100% |
-| backend/app/utils/parallel/core.py                 |        205 |       9 |        0 |     96% |
-| backend/app/utils/security/__init__.py             |          0 |       0 |        0 |    100% |
-| backend/app/utils/security/caching_middleware.py   |        239 |      19 |        0 |     92% |
-| backend/app/utils/security/processing_records.py   |        109 |      13 |        0 |     88% |
-| backend/app/utils/security/rate_limiting.py        |        101 |       3 |        0 |     97% |
-| backend/app/utils/security/retention_management.py |        128 |       6 |        0 |     95% |
-| backend/app/utils/system_utils/__init__.py         |          0 |       0 |        0 |    100% |
-| backend/app/utils/system_utils/error_handling.py   |        281 |      30 |        0 |     89% |
-| backend/app/utils/system_utils/memory_management.py|        347 |      50 |        0 |     86% |
-| backend/app/utils/system_utils/secure_file_utils.py|        112 |      14 |        0 |     88% |
-| backend/app/utils/system_utils/synchronization_utils.py |      311 |      20 |        0 |     94% |
-| backend/app/utils/validation/__init__.py           |          0 |       0 |        0 |    100% |
-| backend/app/utils/validation/data_minimization.py  |        129 |       6 |        0 |     95% |
-| backend/app/utils/validation/file_validation.py    |        143 |       5 |        0 |     97% |
-| backend/app/utils/validation/sanitize_utils.py     |         99 |       1 |        0 |     99% |
-| **Total**                                         |       6828 |     914 |        0 |    **87%** |
-
+| File                                                      | statements | missing | excluded | coverage |
+|-----------------------------------------------------------|-----------:|--------:|---------:|---------:|
+| backend/app/**init**.py                                   |          3 |       0 |        0 |     100% |
+| backend/app/api/**init**.py                               |          0 |       0 |        0 |     100% |
+| backend/app/api/main.py                                   |        166 |      29 |        0 |      83% |
+| backend/app/api/routes/**init**.py                        |          7 |       0 |        0 |     100% |
+| backend/app/api/routes/ai\_routes.py                      |         31 |       5 |        0 |      84% |
+| backend/app/api/routes/batch\_routes.py                   |        128 |      13 |        0 |      90% |
+| backend/app/api/routes/machine\_learning.py               |         82 |       8 |        0 |      90% |
+| backend/app/api/routes/metadata\_routes.py                |        126 |       3 |        0 |      98% |
+| backend/app/api/routes/pdf\_routes.py                     |         36 |       0 |        0 |     100% |
+| backend/app/api/routes/status\_routes.py                  |        112 |      23 |        0 |      79% |
+| backend/app/configs/**init**.py                           |          0 |       0 |        0 |     100% |
+| backend/app/configs/config\_singleton.py                  |         31 |       4 |        0 |      87% |
+| backend/app/configs/gdpr\_config.py                       |         10 |       0 |        0 |     100% |
+| backend/app/configs/gemini\_config.py                     |          8 |       0 |        0 |     100% |
+| backend/app/configs/gliner\_config.py                     |          7 |       0 |        0 |     100% |
+| backend/app/configs/hideme\_config.py                     |          7 |       0 |        0 |     100% |
+| backend/app/configs/presidio\_config.py                   |          4 |       0 |        0 |     100% |
+| backend/app/document\_processing/**init**.py              |          0 |       0 |        0 |     100% |
+| backend/app/document\_processing/detection\_updater.py    |        125 |      27 |        0 |      78% |
+| backend/app/document\_processing/pdf\_extractor.py        |        170 |      28 |        0 |      84% |
+| backend/app/document\_processing/pdf\_redactor.py         |        192 |      33 |        0 |      83% |
+| backend/app/document\_processing/pdf\_searcher.py         |        227 |      35 |        0 |      85% |
+| backend/app/domain/**init**.py                            |          2 |       0 |        0 |     100% |
+| backend/app/domain/interfaces.py                          |         23 |       6 |        0 |      74% |
+| backend/app/entity\_detection/**init**.py                 |          8 |       0 |        0 |     100% |
+| backend/app/entity\_detection/base.py                     |        203 |      21 |        0 |      90% |
+| backend/app/entity\_detection/engines.py                  |          7 |       0 |        0 |     100% |
+| backend/app/entity\_detection/gemini.py                   |        161 |      16 |        0 |      90% |
+| backend/app/entity\_detection/gliner.py                   |         14 |       1 |        0 |      93% |
+| backend/app/entity\_detection/glinerbase.py               |        437 |     254 |        0 |      42% |
+| backend/app/entity\_detection/hideme.py                   |         14 |       1 |        0 |      93% |
+| backend/app/entity\_detection/hybrid.py                   |        230 |      54 |        0 |      77% |
+| backend/app/entity\_detection/presidio.py                 |        164 |      49 |        0 |      70% |
+| backend/app/services/**init**.py                          |          4 |       0 |        0 |     100% |
+| backend/app/services/ai\_detect\_service.py               |         54 |       5 |        0 |      91% |
+| backend/app/services/base\_detect\_service.py             |        135 |       5 |        0 |      96% |
+| backend/app/services/batch\_detect\_service.py            |        185 |      17 |        0 |      91% |
+| backend/app/services/batch\_redact\_service.py            |        187 |       8 |        0 |      96% |
+| backend/app/services/batch\_search\_service.py            |        150 |      24 |        0 |      84% |
+| backend/app/services/document\_extract\_service.py        |         56 |       1 |        0 |      98% |
+| backend/app/services/document\_redact\_service.py         |         65 |       3 |        0 |      95% |
+| backend/app/services/initialization\_service.py           |        425 |      46 |        0 |      89% |
+| backend/app/services/machine\_learning\_service.py        |         61 |       4 |        0 |      93% |
+| backend/app/utils/**init**.py                             |          2 |       0 |        0 |     100% |
+| backend/app/utils/constant/**init**.py                    |          0 |       0 |        0 |     100% |
+| backend/app/utils/constant/constant.py                    |         36 |       0 |        0 |     100% |
+| backend/app/utils/helpers/**init**.py                     |          5 |       0 |        0 |     100% |
+| backend/app/utils/helpers/gemini\_helper.py               |        124 |      10 |        0 |      92% |
+| backend/app/utils/helpers/gemini\_usage\_manager.py       |         73 |       7 |        0 |      90% |
+| backend/app/utils/helpers/gliner\_helper.py               |         78 |       0 |        0 |     100% |
+| backend/app/utils/helpers/json\_helper.py                 |        127 |       7 |        0 |      94% |
+| backend/app/utils/helpers/ml\_models\_helper.py           |         25 |       0 |        0 |     100% |
+| backend/app/utils/helpers/text\_utils.py                  |        105 |       0 |        0 |     100% |
+| backend/app/utils/logging/**init**.py                     |          0 |       0 |        0 |     100% |
+| backend/app/utils/logging/logger.py                       |         32 |       0 |        0 |     100% |
+| backend/app/utils/logging/secure\_logging.py              |         15 |       0 |        0 |     100% |
+| backend/app/utils/parallel/**init**.py                    |          0 |       0 |        0 |     100% |
+| backend/app/utils/parallel/core.py                        |        205 |       9 |        0 |      96% |
+| backend/app/utils/security/**init**.py                    |          0 |       0 |        0 |     100% |
+| backend/app/utils/security/caching\_middleware.py         |        239 |      19 |        0 |      92% |
+| backend/app/utils/security/processing\_records.py         |        109 |      13 |        0 |      88% |
+| backend/app/utils/security/rate\_limiting.py              |        101 |       3 |        0 |      97% |
+| backend/app/utils/security/retention\_management.py       |        128 |       6 |        0 |      95% |
+| backend/app/utils/security/session\_encryption.py         |        231 |      26 |        0 |      89% |
+| backend/app/utils/system\_utils/**init**.py               |          0 |       0 |        0 |     100% |
+| backend/app/utils/system\_utils/error\_handling.py        |        281 |      25 |        0 |      91% |
+| backend/app/utils/system\_utils/memory\_management.py     |        347 |      50 |        0 |      86% |
+| backend/app/utils/system\_utils/secure\_file\_utils.py    |        112 |      14 |        0 |      88% |
+| backend/app/utils/system\_utils/synchronization\_utils.py |        311 |      20 |        0 |      94% |
+| backend/app/utils/validation/**init**.py                  |          0 |       0 |        0 |     100% |
+| backend/app/utils/validation/data\_minimization.py        |        129 |       6 |        0 |      95% |
+| backend/app/utils/validation/file\_validation.py          |        143 |       5 |        0 |      97% |
+| backend/app/utils/validation/sanitize\_utils.py           |         99 |       1 |        0 |      99% |
+| **Total**                                                 |      7,114 |     944 |        0 |  **87%** |
 
 ## Project Structure
 
@@ -340,7 +340,8 @@ backend/
 │       │   ├── caching_middleware.py
 │       │   ├── processing_records.py
 │       │   ├── rate_limiting.py
-│       │   └── retention_management.py
+│       │   ├── retention_management.py
+│       │   └── session_encryption.py
 │       ├── system_utils/                 # System utilities
 │       │   ├── __init__.py
 │       │   ├── error_handling.py
@@ -659,14 +660,31 @@ Extracts text with positions from a PDF file.
 
 Processes multiple files for entity detection in parallel by using one engine.
 
-**Parameters:**
+**Form-data parameters:**
 
-- `files`: List of files to process (multipart/form-data)
-- `requested_entities`: Optional comma-separated list of entities to detect
-- `detection_engine`: Detection engine to use (default: "presidio")
-- `max_parallel_files`: Maximum number of concurrent file processes (default: 4)
-- `remove_words`: Optional comma-separated list of words to remove
-- `threshold`: Optional confidence threshold (0.0-1.0)
+- `files` (required): One or more files to process (multipart/form-data).
+- `requested_entities` (optional): Comma-separated list of entity types to detect (e.g. `PERSON_P`).
+- `detection_engine` (optional): Which engine to use; one of `presidio`, `gemini`, `gliner`, `hideme`).
+- `max_parallel_files` (optional): Maximum number of concurrent file analyses (default: `4`).
+- `remove_words` (optional): Comma-separated words to strip before analysis.
+- `threshold` (optional): Confidence cutoff between `0.0` and `1.0`.
+
+**Headers (choose one mode):**
+
+1. **Session-authenticated mode**
+    - `session-key`: your session token
+    - `api-key-id`: your key identifier
+    - *All inputs (files + form fields) must be AES-GCM encrypted.*
+    - *Response is AES-GCM encrypted & base64-URL encoded in* `"encrypted_data"`.
+
+2. **Raw-API-key mode**
+    - `raw-api-key`: 256-bit key (URL-safe base64)
+    - *Input values may be encrypted or plaintext; if any decryption succeeds, the response will be encrypted.*
+    - *Encrypted response in* `"encrypted_data"`; *otherwise plaintext JSON.*
+
+3. **Public mode (no encryption)**
+    - *No special headers required.*
+    - *Inputs and response are handled as plaintext.*
 
 **Response:**
 
@@ -777,17 +795,34 @@ Processes multiple files for entity detection in parallel by using one engine.
 
 Processes multiple files using a hybrid detection approach (multiple engines).
 
-**Parameters:**
+**Form-data parameters:**
 
-- `files`: List of files to process (multipart/form-data)
-- `requested_entities`: Optional comma-separated list of entities to detect
-- `use_presidio`: Flag to enable Presidio detection (default: true)
-- `use_gemini`: Flag to enable Gemini detection (default: false)
-- `use_gliner`: Flag to enable GLiNER detection (default: false)
-- `use_hideme`: Flag to enable HIDEME detection (default: false)
-- `max_parallel_files`: Maximum number of concurrent file processes (default: 4)
-- `remove_words`: Optional comma-separated list of words to remove
-- `threshold`: Optional confidence threshold (0.0-1.0)
+- `files` (required): One or more files to process (multipart/form-data).
+- `requested_entities` (optional): Comma-separated list of entity types to detect (e.g. `PERSON_P`).
+- `use_presidio` (optional): `true` to enable Presidio engine (default: `true`).
+- `use_gemini` (optional): `true` to enable Gemini engine (default: `false`).
+- `use_gliner` (optional): `true` to enable GLiNER engine (default: `false`).
+- `use_hideme` (optional): `true` to enable HideMe engine (default: `false`).
+- `max_parallel_files` (optional): Maximum number of concurrent file analyses (default: `4`).
+- `remove_words` (optional): Comma-separated words to strip before analysis.
+- `threshold` (optional): Confidence cutoff between `0.0` and `1.0`.
+
+**Headers (choose one mode):**
+
+1. **Session-authenticated mode**
+    - `session-key`: your session token
+    - `api-key-id`: your key identifier
+    - *All inputs must be AES-GCM encrypted.*
+    - *Response is AES-GCM encrypted & base64-URL encoded in* `"encrypted_data"`.
+
+2. **Raw-API-key mode**
+    - `raw-api-key`: 256-bit key (URL-safe base64)
+    - *Inputs may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
+    - *Encrypted response in* `"encrypted_data"`; *otherwise plaintext JSON.*
+
+3. **Public mode (no encryption)**
+    - *No special headers required.*
+    - *Inputs and response are handled as plaintext.*
 
 **Response:** Same as `/batch/detect`
 
@@ -795,13 +830,30 @@ Processes multiple files using a hybrid detection approach (multiple engines).
 
 Searches for specific terms in multiple PDF files in parallel.
 
-**Parameters:**
+**Form-data parameters:**
 
-- `files`: List of PDF files to search (multipart/form-data)
-- `search_terms`: String of search terms
-- `case_sensitive`: Flag for case-sensitive search (default: false)
-- `ai_search`: Flag to enable AI-powered search (default: false)
-- `max_parallel_files`: Maximum number of concurrent file processes (default: 4)
+- `files` (required): One or more PDF files to search (multipart/form-data).
+- `search_terms` (required): Space-separated string of terms to search for.
+- `case_sensitive` (optional): `true` to perform a case-sensitive match (default: `false`).
+- `ai_search` (optional): `true` to enable AI-powered search enhancements (default: `false`).
+- `max_parallel_files` (optional): Maximum number of concurrent file analyses (default: `4`).
+
+**Headers (choose one mode):**
+
+1. **Session-authenticated mode**
+    - `session-key`: your session token
+    - `api-key-id`: your key identifier
+    - *All inputs must be AES-GCM encrypted.*
+    - *Response is AES-GCM encrypted & base64-URL encoded in* `"encrypted_data"`.
+
+2. **Raw-API-key mode**
+    - `raw-api-key`: 256-bit key (URL-safe base64)
+    - *Inputs may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
+    - *Encrypted response in* `"encrypted_data"`; *otherwise plaintext JSON.*
+
+3. **Public mode (no encryption)**
+    - *No special headers required.*
+    - *Inputs and response are handled as plaintext.*
 
 **Response:**
 
@@ -857,12 +909,30 @@ Searches for specific terms in multiple PDF files in parallel.
 
 #### POST /batch/find_words
 
-Find words in multiple PDF files based on the provided bounding box.
+Finds words in multiple PDF files within a specified region.
 
-**Parameters:**
+**Form-data parameters:**
 
-- `files`: List of PDF files to search (multipart/form-data)
-- `bounding_box`: JSON string representing a bounding box with keys: "x0", "y0", "x1", and "y1".
+- `files` (required): One or more PDF files to process (multipart/form-data).
+- `bounding_box` (required): JSON string with numeric keys `"x0"`, `"y0"`, `"x1"`, and `"y1"` defining the search
+  rectangle, e.g. `{"x0":0,"y0":0,"x1":100,"y1":50}`.
+
+**Headers (choose one mode):**
+
+1. **Session-authenticated mode**
+    - `session-key`: your session token
+    - `api-key-id`: your key identifier
+    - *All inputs must be AES-GCM encrypted.*
+    - *Response is AES-GCM encrypted & base64-URL encoded in* `"encrypted_data"`.
+
+2. **Raw-API-key mode**
+    - `raw-api-key`: 256-bit key (URL-safe base64)
+    - *Inputs may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
+    - *Encrypted response in* `"encrypted_data"`; *otherwise plaintext JSON.*
+
+3. **Public mode (no encryption)**
+    - *No special headers required.*
+    - *Inputs and response are handled as plaintext.*
 
 **Response:**
 
@@ -915,14 +985,31 @@ Find words in multiple PDF files based on the provided bounding box.
 
 #### POST /batch/redact
 
-Applies redactions to multiple documents and returns them as a ZIP file.
+Applies redactions to one or more PDF documents and returns the results as a ZIP archive (encrypted if requested).
 
-**Parameters:**
+**Form-data parameters:**
 
-- `files`: List of documents to redact (multipart/form-data)
-- `redaction_mappings`: Redaction mappings as a string
-- `remove_images`: Flag to remove images (default: false)
-- `max_parallel_files`: Maximum number of concurrent file processes
+- `files` (required): One or more PDF files to redact (multipart/form-data).
+- `redaction_mappings` (required): JSON string (or AES-GCM encrypted blob) mapping sensitive fields to redacted values.
+- `remove_images` (optional, default: `false`): Set to `true` to strip all images from the PDFs.
+- `max_parallel_files` (optional): Maximum number of documents to process concurrently (default: server-configured).
+
+**Headers (choose one mode):**
+
+1. **Session-authenticated mode**
+    - `session-key`: your session token
+    - `api-key-id`: your key identifier
+    - *Inputs (PDF bytes + mappings) must be AES-GCM encrypted.*
+    - *Response ZIP is AES-GCM encrypted & base64-URL encoded in* `"encrypted_data"`.
+
+2. **Raw-API-key mode**
+    - `raw-api-key`: 256-bit key (URL-safe base64)
+    - *Inputs may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
+    - *Encrypted response in* `"encrypted_data"`; *otherwise streams raw ZIP.*
+
+3. **Public mode (no encryption)**
+    - *No special headers required.*
+    - *Inputs and response are plaintext; response streams raw ZIP.*
 
 **Response:**
 
@@ -1347,9 +1434,10 @@ Provide a comprehensive overview of all available API routes.
 - Combines results from multiple detection engines to improve accuracy.
 
 ### Document Processing
+
 #### Detection Result Updater:
 
-- Responsible for updating a detection result by processing sensitive entities extracted from PDF pages. 
+- Responsible for updating a detection result by processing sensitive entities extracted from PDF pages.
 - It removes specified phrases from entity texts and, if necessary, splits entities into multiple entries.
 
 #### Document Extractor:
@@ -1449,6 +1537,25 @@ Memory optimization to handle large documents:
 - Threshold-based optimization
 - Garbage collection triggering
 - Memory-optimized decorator for endpoints
+
+### Session Encryption
+
+All sensitive inputs and outputs can be protected end-to-end via AES-GCM:
+
+- **Session mode**  
+  - Headers: `session-key` + `api-key-id`  
+  - All uploaded file payloads and form fields must be AES-GCM encrypted & base64-URL encoded.  
+  - Responses are AES-GCM encrypted and base64-URL encoded in the `encrypted_data` JSON field.
+
+- **Raw-API-Key mode**  
+  - Header: `raw-api-key` (256-bit, URL-safe base64)  
+  - Inputs may be encrypted or plaintext; any successful decryption triggers encrypted response.  
+  - Encrypted responses returned in the `encrypted_data` field; otherwise raw data is streamed.
+
+- **Public mode**  
+  - No encryption or decryption applied; all data is plaintext.
+
+Session encryption keys are rotated and stored securely; incorrect or missing keys yield HTTP 401 Unauthorized.
 
 ## Extending the System
 
