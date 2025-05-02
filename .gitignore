@@ -225,6 +225,7 @@ flow/inspeksjonsrapport/
 flow/**.jsonl
 
 backend/app/logs/
+pkg
 
 #
 # Binaries for programs and plugins
