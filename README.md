@@ -674,12 +674,12 @@ Processes multiple files for entity detection in parallel by using one engine.
 1. **Session-authenticated mode**
     - `session-key`: your session token
     - `api-key-id`: your key identifier
-    - *All inputs (files + form fields) must be AES-GCM encrypted.*
+    - *All inputs (files + requested_entities + remove_words) must be AES-GCM encrypted.*
     - *Response is AES-GCM encrypted & base64-URL encoded in* `"encrypted_data"`.
 
 2. **Raw-API-key mode**
     - `raw-api-key`: 256-bit key (URL-safe base64)
-    - *Input values may be encrypted or plaintext; if any decryption succeeds, the response will be encrypted.*
+    - *Input values (files + requested_entities + remove_words) may be encrypted or plaintext; if any decryption succeeds, the response will be encrypted.*
     - *Encrypted response in* `"encrypted_data"`; *otherwise plaintext JSON.*
 
 3. **Public mode (no encryption)**
@@ -812,12 +812,12 @@ Processes multiple files using a hybrid detection approach (multiple engines).
 1. **Session-authenticated mode**
     - `session-key`: your session token
     - `api-key-id`: your key identifier
-    - *All inputs must be AES-GCM encrypted.*
+    - *All inputs (files + requested_entities + remove_words) must be AES-GCM encrypted.*
     - *Response is AES-GCM encrypted & base64-URL encoded in* `"encrypted_data"`.
 
 2. **Raw-API-key mode**
     - `raw-api-key`: 256-bit key (URL-safe base64)
-    - *Inputs may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
+    - *Inputs (files + requested_entities + remove_words) may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
     - *Encrypted response in* `"encrypted_data"`; *otherwise plaintext JSON.*
 
 3. **Public mode (no encryption)**
@@ -843,12 +843,12 @@ Searches for specific terms in multiple PDF files in parallel.
 1. **Session-authenticated mode**
     - `session-key`: your session token
     - `api-key-id`: your key identifier
-    - *All inputs must be AES-GCM encrypted.*
+    - *All inputs (files + search_terms) must be AES-GCM encrypted.*
     - *Response is AES-GCM encrypted & base64-URL encoded in* `"encrypted_data"`.
 
 2. **Raw-API-key mode**
     - `raw-api-key`: 256-bit key (URL-safe base64)
-    - *Inputs may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
+    - *Inputs (files + search_terms) may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
     - *Encrypted response in* `"encrypted_data"`; *otherwise plaintext JSON.*
 
 3. **Public mode (no encryption)**
@@ -922,12 +922,12 @@ Finds words in multiple PDF files within a specified region.
 1. **Session-authenticated mode**
     - `session-key`: your session token
     - `api-key-id`: your key identifier
-    - *All inputs must be AES-GCM encrypted.*
+    - *All inputs (files + bounding_box) must be AES-GCM encrypted.*
     - *Response is AES-GCM encrypted & base64-URL encoded in* `"encrypted_data"`.
 
 2. **Raw-API-key mode**
     - `raw-api-key`: 256-bit key (URL-safe base64)
-    - *Inputs may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
+    - *Inputs (files + bounding_box) may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
     - *Encrypted response in* `"encrypted_data"`; *otherwise plaintext JSON.*
 
 3. **Public mode (no encryption)**
@@ -999,12 +999,12 @@ Applies redactions to one or more PDF documents and returns the results as a ZIP
 1. **Session-authenticated mode**
     - `session-key`: your session token
     - `api-key-id`: your key identifier
-    - *Inputs (PDF bytes + mappings) must be AES-GCM encrypted.*
+    - *Inputs (files + redaction_mappings) must be AES-GCM encrypted.*
     - *Response ZIP is AES-GCM encrypted & base64-URL encoded in* `"encrypted_data"`.
 
 2. **Raw-API-key mode**
     - `raw-api-key`: 256-bit key (URL-safe base64)
-    - *Inputs may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
+    - *Inputs (files + redaction_mappings) may be encrypted or plaintext; if any decryption succeeds, response is encrypted.*
     - *Encrypted response in* `"encrypted_data"`; *otherwise streams raw ZIP.*
 
 3. **Public mode (no encryption)**
