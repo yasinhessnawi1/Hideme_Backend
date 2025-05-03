@@ -14,7 +14,6 @@ import io
 import os
 import time
 from typing import Dict, Any, List, Union, BinaryIO, Optional, Tuple
-
 import pymupdf
 
 from backend.app.domain.interfaces import DocumentExtractor
