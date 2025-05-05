@@ -1,3 +1,5 @@
+// auth_handlers_test.go
+
 package handlers
 
 import (
@@ -30,6 +32,10 @@ type MockAuthService struct {
 	VerifyAPIKeyFunc          func(ctx context.Context, apiKeyString string) (*models.User, error)
 	CleanupExpiredFunc        func(ctx context.Context) (int64, error)
 	CleanupExpiredAPIKeysFunc func(ctx context.Context) (int64, error)
+}
+
+func (m *MockAuthService) GetDecryptedAPIKey(ctx context.Context, userID int64, keyID string) (*models.APIKey, string, error) {
+	return nil, "", nil
 }
 
 func (m *MockAuthService) RegisterUser(ctx context.Context, reg *models.UserRegistration) (*models.User, error) {

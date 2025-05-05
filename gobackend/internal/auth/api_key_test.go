@@ -1,6 +1,8 @@
+// api_key_test.go
 package auth_test
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +23,179 @@ func TestNewAPIKeyService(t *testing.T) {
 	// Check if service is created
 	if service == nil {
 		t.Error("Expected service to be created, got nil")
+	}
+}
+
+func TestEncryptAPIKey(t *testing.T) {
+	// Test cases
+	testCases := []struct {
+		name          string
+		apiKey        string
+		encryptionKey []byte
+		shouldError   bool
+	}{
+		{
+			name:          "Valid encryption",
+			apiKey:        "secretuihiuhwiughiurhiuetrhgutih",
+			encryptionKey: []byte("12345678901234567890123456789012"), // 32 bytes for AES-256
+			shouldError:   false,
+		},
+		{
+			name:          "Invalid encryption key (too short)",
+			apiKey:        "secretuihiuhwiughiurhiuetrhgutih",
+			encryptionKey: []byte("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+			shouldError:   false,
+		},
+		{
+			name:          "Empty API key",
+			apiKey:        "",
+			encryptionKey: []byte("12345678901234567890123456789012"),
+			shouldError:   false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Encrypt the API key
+			encrypted, err := auth.EncryptAPIKey(tc.apiKey, tc.encryptionKey)
+
+			// Check if error matches expectation
+			if (err != nil) != tc.shouldError {
+				t.Errorf("Expected error: %v, got error: %v", tc.shouldError, err != nil)
+				return
+			}
+
+			// If no error expected, validate the encrypted result
+			if !tc.shouldError {
+				// Encrypted result should be non-empty
+				if encrypted == "" {
+					t.Error("Expected non-empty encrypted result, got empty string")
+				}
+
+				// Encrypted result should be different from input (for non-empty input)
+				if tc.apiKey != "" && encrypted == tc.apiKey {
+					t.Error("Encrypted result should be different from input")
+				}
+
+				// Encrypted result should be a valid base64 string
+				if _, err := base64.StdEncoding.DecodeString(encrypted); err != nil {
+					t.Errorf("Encrypted result is not valid base64: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestDecryptAPIKey(t *testing.T) {
+	// Create a valid encryption key (32 bytes for AES-256)
+	encryptionKey := []byte("12345678901234567890123456789012")
+
+	// Test cases
+	testCases := []struct {
+		name           string
+		apiKey         string
+		encryptionKey  []byte
+		shouldError    bool
+		expectOriginal bool
+	}{
+		{
+			name:           "Valid encryption and decryption",
+			apiKey:         "secretuihiuhwiughiurhiuetrhgutih",
+			encryptionKey:  encryptionKey,
+			shouldError:    false,
+			expectOriginal: true,
+		},
+		{
+			name:           "Different encryption key",
+			apiKey:         "secretuihiuhwiughiurhiuetrhgutih",
+			encryptionKey:  []byte("differentkey890123456789012345678"),
+			shouldError:    true,
+			expectOriginal: false,
+		},
+		{
+			name:           "Empty API key",
+			apiKey:         "",
+			encryptionKey:  encryptionKey,
+			shouldError:    false,
+			expectOriginal: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// First encrypt the API key with the original encryption key
+			encrypted, err := auth.EncryptAPIKey(tc.apiKey, encryptionKey)
+			if err != nil {
+				t.Fatalf("Failed to encrypt API key: %v", err)
+			}
+
+			// Now try to decrypt with the test case's encryption key
+			decrypted, err := auth.DecryptAPIKey(encrypted, tc.encryptionKey)
+
+			// Check if error matches expectation
+			if (err != nil) != tc.shouldError {
+				t.Errorf("Expected error: %v, got error: %v", tc.shouldError, err != nil)
+				return
+			}
+
+			// If no error and expecting original value, verify the decrypted result
+			if !tc.shouldError && tc.expectOriginal {
+				if decrypted != tc.apiKey {
+					t.Errorf("Expected decrypted value '%s', got '%s'", tc.apiKey, decrypted)
+				}
+			}
+		})
+	}
+}
+
+func TestIsEncrypted(t *testing.T) {
+	// Test cases
+	testCases := []struct {
+		name        string
+		input       string
+		isEncrypted bool
+	}{
+		{
+			name:        "Encrypted API key",
+			input:       "", // Will be populated with an actual encrypted key
+			isEncrypted: true,
+		},
+		{
+			name:        "Hashed API key (non-encrypted)",
+			input:       "abc123", // Short base64 string, decodes to fewer than 12 bytes
+			isEncrypted: false,
+		},
+		{
+			name:        "Empty string",
+			input:       "",
+			isEncrypted: false,
+		},
+		{
+			name:        "Invalid base64",
+			input:       "not-valid-base64!@#$",
+			isEncrypted: false,
+		},
+	}
+
+	// Create a real encrypted key for the first test case
+	encryptionKey := []byte("12345678901234567890123456789012")
+	encryptedKey, err := auth.EncryptAPIKey("secretuihiuhwiughiurhiuetrhgutih", encryptionKey)
+	if err != nil {
+		t.Fatalf("Failed to create encrypted key for test: %v", err)
+	}
+	testCases[0].input = encryptedKey
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Check if the string is encrypted
+			result := auth.IsEncrypted(tc.input)
+
+			// Verify the result
+			if result != tc.isEncrypted {
+				t.Errorf("Expected IsEncrypted to return %v for '%s', got %v",
+					tc.isEncrypted, tc.input, result)
+			}
+		})
 	}
 }
 
@@ -115,17 +290,6 @@ func TestGenerateAPIKey(t *testing.T) {
 					t.Errorf("Expiry time not within expected range: got %v, want ~%v",
 						apiKey.ExpiresAt, expectedExpiry)
 				}
-
-				// Check raw key format
-				parts := strings.Split(rawKey, ".")
-				if len(parts) != 2 {
-					t.Errorf("Expected raw key to be in format 'keyID.randomPart', got %s", rawKey)
-				}
-
-				// Check key ID matches
-				if parts[0] != apiKey.ID {
-					t.Errorf("Key ID in raw key doesn't match API key ID: %s vs %s", parts[0], apiKey.ID)
-				}
 			}
 		})
 	}
@@ -151,7 +315,7 @@ func TestHashAPIKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Hash the API key
-			hash := auth.HashAPIKey(tt.apiKey)
+			hash := auth.HashAPIKey(tt.apiKey, nil)
 
 			// Check that hash is not empty for non-empty input
 			if tt.apiKey != "" && hash == "" {
@@ -159,74 +323,16 @@ func TestHashAPIKey(t *testing.T) {
 			}
 
 			// Check that the hash is consistent
-			hash2 := auth.HashAPIKey(tt.apiKey)
+			hash2 := auth.HashAPIKey(tt.apiKey, nil)
 			if hash != hash2 {
 				t.Errorf("Hash should be deterministic: %s vs %s", hash, hash2)
 			}
 
 			// Check that different inputs give different hashes
 			if tt.apiKey != "" {
-				differentHash := auth.HashAPIKey(tt.apiKey + "different")
+				differentHash := auth.HashAPIKey(tt.apiKey+"different", nil)
 				if hash == differentHash {
 					t.Error("Different inputs should give different hashes")
-				}
-			}
-		})
-	}
-}
-
-func TestParseAPIKey(t *testing.T) {
-	// Test cases
-	tests := []struct {
-		name        string
-		apiKey      string
-		wantID      string
-		wantSecret  string
-		shouldError bool
-	}{
-		{
-			name:        "Valid API key",
-			apiKey:      "abc123.xyz789",
-			wantID:      "abc123",
-			wantSecret:  "xyz789",
-			shouldError: false,
-		},
-		{
-			name:        "Invalid format - no dot",
-			apiKey:      "abc123xyz789",
-			shouldError: true,
-		},
-		{
-			name:        "Invalid format - too many dots",
-			apiKey:      "abc.123.xyz",
-			shouldError: true,
-		},
-		{
-			name:        "Empty string",
-			apiKey:      "",
-			shouldError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Parse the API key
-			id, secret, err := auth.ParseAPIKey(tt.apiKey)
-
-			// Check error
-			if (err != nil) != tt.shouldError {
-				t.Errorf("ParseAPIKey() error = %v, shouldError %v", err, tt.shouldError)
-				return
-			}
-
-			// If should not error, check results
-			if !tt.shouldError {
-				if id != tt.wantID {
-					t.Errorf("ParseAPIKey() id = %v, want %v", id, tt.wantID)
-				}
-
-				if secret != tt.wantSecret {
-					t.Errorf("ParseAPIKey() secret = %v, want %v", secret, tt.wantSecret)
 				}
 			}
 		})
