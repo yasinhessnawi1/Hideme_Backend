@@ -1,0 +1,1504 @@
+{
+	"info": {
+		"_postman_id": "a69fd520-f77c-434b-9f76-64326469f43b",
+		"name": "Golang Server Testing",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "32807543"
+	},
+	"item": [
+		{
+			"name": "🔐 Authentication",
+			"item": [
+				{
+					"name": "signup",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"username\": \"jojojo1234\",\r\n  \"email\": \"jojojo1234@gmail.com\",\r\n  \"password\": \"jojojo1234\",\r\n  \"confirm_password\": \"jojojo1234\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/signup",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"auth",
+								"signup"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"username\": \"jojojo1234\",\r\n  \"password\": \"jojojo123456A\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/login",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "refresh access token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"password\": \"heiheihei12ha\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/refresh",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"auth",
+								"refresh"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "logout",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"email\": \"tesregfweewert@example.com\",\r\n  \"password\": \"TestPassword123!\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/logout",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"auth",
+								"logout"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "verify authentication status",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/verify",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"auth",
+								"verify"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "logout-all",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo1LCJ1c2VybmFtZSI6ImhlaWhlaWhlaSIsImVtYWlsIjoiaGVpaGVpaGVpQGV4YW1wbGUuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI1IiwiZXhwIjoxNzQzMjExNDAwLCJuYmYiOjE3NDMyMTA1MDAsImlhdCI6MTc0MzIxMDUwMCwianRpIjoiZjFmOGQ1MWUtZDJhYS00NTYxLTlhNWQtZTllYzkzMDBlMDgxIn0.r0NkAxaiUwypW9nJATjZe8_JF-ayfiOi7nsQce9_m7I",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/auth/logout-all",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"auth",
+								"logout-all"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "validate api key",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "kH2TRbZkGKFJGiY-6W22nfuQKp2uyzhz",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/validate-key",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"auth",
+								"validate-key"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "- `POST /auth/signup` - Register new user\n    \n- `POST /auth/login` - Authenticate user\n    \n- `POST /auth/refresh` - Refresh access token\n    \n- `POST /auth/logout` - End current session\n    \n- `POST /auth/validate-key` - Validate API key\n    \n- `GET /auth/verify` - Verify authentication status\n    \n- `POST /auth/logout-all` - End all user sessions"
+		},
+		{
+			"name": "👤 User Management",
+			"item": [
+				{
+					"name": "get current user profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/users/me",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"users",
+								"me"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "change password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"current_password\": \"jojojo1234\",\r\n  \"new_password\": \"jojojo123456A\",\r\n  \"confirm_password\": \"jojojo123456A\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/users/me/change-password",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"users",
+								"me",
+								"change-password"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "check username availability",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "",
+								"value": "",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/users/check/username?username=heiheihei",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"users",
+								"check",
+								"username"
+							],
+							"query": [
+								{
+									"key": "username",
+									"value": "heiheihei"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "check email availability",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/users/check/email?email=anwar@example.com",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"users",
+								"check",
+								"email"
+							],
+							"query": [
+								{
+									"key": "email",
+									"value": "anwar@example.com"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete account",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo2LCJ1c2VybmFtZSI6ImhlaWhlaSIsImVtYWlsIjoiaGVpaGVpQGV4YW1wbGUuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI2IiwiZXhwIjoxNzQzMjEzMzkxLCJuYmYiOjE3NDMyMTI0OTEsImlhdCI6MTc0MzIxMjQ5MSwianRpIjoiNTVmMGQyZjctOTQ1My00NmNiLThlMGItZDc1MDY0M2FlNGY0In0.O5ak7RpwiPLJ9awVwVmdzlGb1QGXTQb_bP_MHIdgtag",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"password\": \"12345hei\",\r\n  \"confirm\": \"DELETE\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/users/me",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"users",
+								"me"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "- `GET /users/me` - Get current user profile\n    \n- `PUT /users/me` - Update user profile\n    \n- `DELETE /users/me` - Delete account\n    \n- `POST /users/me/change-password` - Change password\n    \n- `GET /users/check/username` - Check username availability\n    \n- `GET /users/check/email` - Check email availability"
+		},
+		{
+			"name": "🔑 API Key Management",
+			"item": [
+				{
+					"name": "generate new API key",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"name\": \"hei\",\r\n  \"duration\": \"30d\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/keys",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"keys"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete api key",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6ImhlaSIsImVtYWlsIjoiaGVpQGdtYWlsLmNvbSIsInRva2VuX3R5cGUiOiJhY2Nlc3MiLCJpc3MiOiJoaWRlbWUtYXBpIiwic3ViIjoiOCIsImV4cCI6MTc0MzI2NDAzOCwibmJmIjoxNzQzMjYzMTM4LCJpYXQiOjE3NDMyNjMxMzgsImp0aSI6IjI4ZWJjOGU0LTdmM2ItNGM1OS1iYTgxLWNhNTgzNDM2MDQyOCJ9.iO_OxpmENxgdDv7I6UxrHXbxwssS2xncq0WA6Xj7HC4",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/keys/ccbf0ca6-cbb2-45b7-bb3e-3512ca868349",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"keys",
+								"ccbf0ca6-cbb2-45b7-bb3e-3512ca868349"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "decode-apiKey",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/keys/34d72b80-83be-47eb-8319-8022867af60f/decode",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"keys",
+								"34d72b80-83be-47eb-8319-8022867af60f",
+								"decode"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "verfiy apiKey without user authentication",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "J1UTzHAguod_VBX1mfOhb6BowUWzJVkP",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/auth/verify-key",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"auth",
+								"verify-key"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "- `GET /keys` - List all API keys\n    \n- `POST /keys` - Generate new API key\n    \n- `DELETE /keys/{keyId}` - Revoke API key"
+		},
+		{
+			"name": "🧑‍💻 Session Management",
+			"item": [
+				{
+					"name": "list active session",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/users/me/sessions",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"users",
+								"me",
+								"sessions"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete session",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo2LCJ1c2VybmFtZSI6ImhlaWhlaSIsImVtYWlsIjoiaGVpaGVpQGV4YW1wbGUuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI2IiwiZXhwIjoxNzQzMjEzMzkxLCJuYmYiOjE3NDMyMTI0OTEsImlhdCI6MTc0MzIxMjQ5MSwianRpIjoiNTVmMGQyZjctOTQ1My00NmNiLThlMGItZDc1MDY0M2FlNGY0In0.O5ak7RpwiPLJ9awVwVmdzlGb1QGXTQb_bP_MHIdgtag",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"session_id\": \"c1f3a10d-6766-4caa-874f-be93ed67843c\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/users/me/sessions",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"users",
+								"me",
+								"sessions"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "- `GET /users/me/sessions` - List active sessions\n    \n- `DELETE /users/me/sessions` - Revoke specific session"
+		},
+		{
+			"name": "⚙️ User Settings",
+			"item": [
+				{
+					"name": "get user setting",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/settings",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "update user setting",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"remove_images\": false \r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/settings",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get user ban list",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/settings/ban-list",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"ban-list"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "add words to ban list",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"words\": [\"eaf\", \"aef\", \"restricted\"]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/settings/ban-list/words",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"ban-list",
+								"words"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "remove words from ban list",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6ImhlaSIsImVtYWlsIjoiaGVpQGdtYWlsLmNvbSIsInRva2VuX3R5cGUiOiJhY2Nlc3MiLCJpc3MiOiJoaWRlbWUtYXBpIiwic3ViIjoiOCIsImV4cCI6MTc0MzI2NTA0NCwibmJmIjoxNzQzMjY0MTQ0LCJpYXQiOjE3NDMyNjQxNDQsImp0aSI6IjEzZGZhMzRmLTk1YzAtNDQ4My05NjViLWU0MGM3OGNlMGEwYyJ9.EaZ8_yQeXQi0hFRJUJiIZ06apW0C0yhxHjHH1nWG9SE",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"words\": [\"sensitive\", \"confidential\"]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/settings/ban-list/words",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"ban-list",
+								"words"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "import-user-setting",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "settings",
+									"type": "file",
+									"src": "postman-cloud:///1f01f8ed-1e2e-4390-8657-cd54e160ca02"
+								}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/settings/import",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"import"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "export-user-setting",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>User ID</th>\r",
+									"        <th>Export Date</th>\r",
+									"        <th>General Settings</th>\r",
+									"        <th>Ban List</th>\r",
+									"        <th>Search Patterns</th>\r",
+									"        <th>Model Entities</th>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>{{response.user_id}}</td>\r",
+									"        <td>{{response.export_date}}</td>\r",
+									"        <td>{{response.general_settings}}</td>\r",
+									"        <td>{{response.ban_list}}</td>\r",
+									"        <td>{{response.search_patterns}}</td>\r",
+									"        <td>{{response.model_entities}}</td>\r",
+									"    </tr>\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return { response: pm.response.json() }\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/settings/export",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"export"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "- `GET /settings` - Get user settings\n    \n- `PUT /settings` - Update user settings\n    \n- `GET /settings/ban-list` - Get user ban list\n    \n- `POST /settings/ban-list/words` - Add words to ban list\n    \n- `DELETE /settings/ban-list/words` - Remove words from ban list"
+		},
+		{
+			"name": "🔍 Search Patterns",
+			"item": [
+				{
+					"name": "get all search patterns",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/settings/patterns",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"patterns"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create search pattern",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUyMzYxLCJuYmYiOjE3NDY0NTE0NjEsImlhdCI6MTc0NjQ1MTQ2MSwianRpIjoiZjRmNGU1ODctYTdkMC00ODljLThiZmUtNWM1MjMyMWViOWJlIn0.AVIakyAbVdAwz7Ia3auQlqedfOmSZHAqk4dbq0U86aE",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"pattern_type\": \"ai_search\",\r\n  \"pattern_text\": \"kewnfklewni\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/settings/patterns",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"patterns"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "update search pattern",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUzNTIxLCJuYmYiOjE3NDY0NTI2MjEsImlhdCI6MTc0NjQ1MjYyMSwianRpIjoiZmM5Zjc5NzMtNjM2Zi00OGViLTg0ZjMtM2FjZjU4MzVkZDY5In0.L1nEobhXOkx19_KwYoJfi5-7qzIMAjkMYHGJoA6Zdu0",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUzMzEzLCJuYmYiOjE3NDY0NTI0MTMsImlhdCI6MTc0NjQ1MjQxMywianRpIjoiMzU2ODM5ZTItMDUwNy00YTZkLTg1YmYtOTBlZDM2N2ZlNGFiIn0.R9NugSlyQpwAdvv2mGIalZIM2AnPPs_7ZSTNew5r7RM",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"pattern_text\": \"jepojwoejfepwojfpew\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/settings/patterns/1",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"patterns",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete search pattern",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUzMzEzLCJuYmYiOjE3NDY0NTI0MTMsImlhdCI6MTc0NjQ1MjQxMywianRpIjoiMzU2ODM5ZTItMDUwNy00YTZkLTg1YmYtOTBlZDM2N2ZlNGFiIn0.R9NugSlyQpwAdvv2mGIalZIM2AnPPs_7ZSTNew5r7RM",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/settings/patterns/1",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"patterns",
+								"1"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "- `GET /settings/patterns` - Get all search patterns\n    \n- `POST /settings/patterns` - Create search pattern\n    \n- `PUT /settings/patterns/{patternId}` - Update search pattern\n    \n- `DELETE /settings/patterns/{patternId}` - Delete search pattern"
+		},
+		{
+			"name": "🧠 Model Entities",
+			"item": [
+				{
+					"name": "get entities for method",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUzNTIxLCJuYmYiOjE3NDY0NTI2MjEsImlhdCI6MTc0NjQ1MjYyMSwianRpIjoiZmM5Zjc5NzMtNjM2Zi00OGViLTg0ZjMtM2FjZjU4MzVkZDY5In0.L1nEobhXOkx19_KwYoJfi5-7qzIMAjkMYHGJoA6Zdu0",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/settings/entities/7",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"entities",
+								"7"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "add model entities",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUzNTIxLCJuYmYiOjE3NDY0NTI2MjEsImlhdCI6MTc0NjQ1MjYyMSwianRpIjoiZmM5Zjc5NzMtNjM2Zi00OGViLTg0ZjMtM2FjZjU4MzVkZDY5In0.L1nEobhXOkx19_KwYoJfi5-7qzIMAjkMYHGJoA6Zdu0",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUzNTIxLCJuYmYiOjE3NDY0NTI2MjEsImlhdCI6MTc0NjQ1MjYyMSwianRpIjoiZmM5Zjc5NzMtNjM2Zi00OGViLTg0ZjMtM2FjZjU4MzVkZDY5In0.L1nEobhXOkx19_KwYoJfi5-7qzIMAjkMYHGJoA6Zdu0",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"method_id\": 7,\r\n  \"entity_texts\": [\"Phone Number\", \"Email Address\", \"IP Address\",\"eifjiewo\",\"jjiwjefo\"]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/settings/entities",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"entities"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete model entity",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6ImhlaSIsImVtYWlsIjoiaGVpQGdtYWlsLmNvbSIsInRva2VuX3R5cGUiOiJhY2Nlc3MiLCJpc3MiOiJoaWRlbWUtYXBpIiwic3ViIjoiOCIsImV4cCI6MTc0MzI2NzU3NCwibmJmIjoxNzQzMjY2Njc0LCJpYXQiOjE3NDMyNjY2NzQsImp0aSI6Ijc5NGEyZTM2LTNjNDgtNDRjNy1hZjM2LWM3Y2JmNGM0MTRlOCJ9.KexTXGiTHcu9bhhVgsW6PHroTesTAs8wYTO0usiV0zc",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/settings/entities/1",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"settings",
+								"entities",
+								"1"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "- `GET /settings/entities/{methodId}` - Get entities for method\n    \n- `POST /settings/entities` - Add model entities\n    \n- `DELETE /settings/entities/{entityId}` - Delete model entity"
+		},
+		{
+			"name": "🗃️ Database Operations",
+			"item": [
+				{
+					"name": "get table schema",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUzNTIxLCJuYmYiOjE3NDY0NTI2MjEsImlhdCI6MTc0NjQ1MjYyMSwianRpIjoiZmM5Zjc5NzMtNjM2Zi00OGViLTg0ZjMtM2FjZjU4MzVkZDY5In0.L1nEobhXOkx19_KwYoJfi5-7qzIMAjkMYHGJoA6Zdu0",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/db/detection_methods/schema",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"db",
+								"detection_methods",
+								"schema"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get table data",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>Method ID</th>\r",
+									"        <th>Method Name</th>\r",
+									"        <th>Highlight Color</th>\r",
+									"    </tr>\r",
+									"    \r",
+									"    {{#each response.data}}\r",
+									"        <tr>\r",
+									"            <td>{{method_id}}</td>\r",
+									"            <td>{{method_name}}</td>\r",
+									"            <td>{{highlight_color}}</td>\r",
+									"        </tr>\r",
+									"    {{/each}}\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return {response: pm.response.json()}\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6Impvam9qbzEyMzQiLCJlbWFpbCI6Impvam9qbzEyMzRAZ21haWwuY29tIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImlzcyI6ImhpZGVtZS1hcGkiLCJzdWIiOiI4IiwiZXhwIjoxNzQ2NDUzMzEzLCJuYmYiOjE3NDY0NTI0MTMsImlhdCI6MTc0NjQ1MjQxMywianRpIjoiMzU2ODM5ZTItMDUwNy00YTZkLTg1YmYtOTBlZDM2N2ZlNGFiIn0.R9NugSlyQpwAdvv2mGIalZIM2AnPPs_7ZSTNew5r7RM",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/db/detection_methods",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"db",
+								"detection_methods"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get record by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMiwidXNlcm5hbWUiOiJqYWtvYjEyIiwiZW1haWwiOiJqYWtvYjEyQGdtYWlsLmNvbSIsInRva2VuX3R5cGUiOiJhY2Nlc3MiLCJpc3MiOiJoaWRlbWUtYXBpIiwic3ViIjoiMTIiLCJleHAiOjE3NDUyNjkwODgsIm5iZiI6MTc0NTI2ODE4OCwiaWF0IjoxNzQ1MjY4MTg4LCJqdGkiOiI5NmY0NTUwNy0yZDFjLTRjMzctOGFjZi1hMmU4MTE1NjY0ZTMifQ.Unnjdnyj9AnTok6PShH3OKOMHNnkWkzBewuY1n-CTQM",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/db/detection_methods/1",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"db",
+								"detection_methods",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create new record",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMiwidXNlcm5hbWUiOiJqYWtvYjEyIiwiZW1haWwiOiJqYWtvYjEyQGdtYWlsLmNvbSIsInRva2VuX3R5cGUiOiJhY2Nlc3MiLCJpc3MiOiJoaWRlbWUtYXBpIiwic3ViIjoiMTIiLCJleHAiOjE3NDUyNjkwODgsIm5iZiI6MTc0NTI2ODE4OCwiaWF0IjoxNzQ1MjY4MTg4LCJqdGkiOiI5NmY0NTUwNy0yZDFjLTRjMzctOGFjZi1hMmU4MTE1NjY0ZTMifQ.Unnjdnyj9AnTok6PShH3OKOMHNnkWkzBewuY1n-CTQM",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"method_name\": \"CustomMethod\",\r\n  \"highlight_color\": \"#FFBB33\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/db/detection_methods",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"db",
+								"detection_methods"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "update record",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6ImhlaSIsImVtYWlsIjoiaGVpQGdtYWlsLmNvbSIsInRva2VuX3R5cGUiOiJhY2Nlc3MiLCJpc3MiOiJoaWRlbWUtYXBpIiwic3ViIjoiOCIsImV4cCI6MTc0MzI3MjI4NywibmJmIjoxNzQzMjcxMzg3LCJpYXQiOjE3NDMyNzEzODcsImp0aSI6IjU4YzU3MGQ2LTAwODEtNDhhNy1iNDA3LTIxNzkxNDU3YTdhNyJ9.5_euopHyyPF5qkDWrEsT0z0q0Psn8ZQwJJUjuo0HBMk",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"highlight_color\": \"#FF9900\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/db/detection_methods/2",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"db",
+								"detection_methods",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete record",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo4LCJ1c2VybmFtZSI6ImhlaSIsImVtYWlsIjoiaGVpQGdtYWlsLmNvbSIsInRva2VuX3R5cGUiOiJhY2Nlc3MiLCJpc3MiOiJoaWRlbWUtYXBpIiwic3ViIjoiOCIsImV4cCI6MTc0MzI3NDEzOSwibmJmIjoxNzQzMjczMjM5LCJpYXQiOjE3NDMyNzMyMzksImp0aSI6IjU0MTJhMWM2LTQzM2UtNGE0Ni04MzcwLTY0MWNkYmEzNTBiYyJ9.551-D3CyjmDq4IodL-MNF9PE3sUmXBmNPlN2AoDXbeM",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/db/detection_methods/6",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"db",
+								"detection_methods",
+								"6"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "- `GET /db/{table}/schema` - Get table schema\n    \n- `GET /db/{table}` - Get table data\n    \n- `GET /db/{table}/{id}` - Get record by ID\n    \n- `POST /db/{table}` - Create new record\n    \n- `PUT /db/{table}/{id}` - Update record\n    \n- `DELETE /db/{table}/{id}` - Delete record"
+		},
+		{
+			"name": "⚙️ Service Info",
+			"item": [
+				{
+					"name": "version",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/version",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"version"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/health",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "api-routes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/routes",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"routes"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "- `GET /version`\n    \n- `GET /health`\n    \n- `GET /api‑routes`EndFragment"
+		}
+	]
+}
