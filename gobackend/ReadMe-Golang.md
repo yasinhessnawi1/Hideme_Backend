@@ -956,109 +956,108 @@ The API is organized into the following functional categories:
 The application utilizes a PostgreSQL database to persist user data, settings, sessions, API keys, and related information. The schema is designed to support the core functionalities of authentication, user management, and settings configuration. Database interactions are primarily managed through the Repository layer, often utilizing an ORM like GORM (verify based on `go.mod` and `database/db.go`).
 
 *(Diagram illustrating the database relationships and structure:)*
+
 ```mermaid
 erDiagram
-    USERS ||--o{ SESSIONS : has
-    USERS ||--o{ API_KEYS : has
-    USERS ||--o{ USER_SETTINGS : has
-    USERS ||--o{ DOCUMENTS : has
+    users ||--o{ sessions : "has"
+    users ||--o{ api_keys : "owns"
+    users ||--o| user_settings : "has"
+    users ||--o{ documents : "uploads"
+    user_settings ||--o| ban_list : "includes"
+    user_settings ||--o{ search_patterns : "defines"
+    user_settings ||--o{ model_entities : "configures"
+    ban_list ||--o{ ban_list_words : "contains"
+    documents ||--o{ detected_entities : "contains"
+    detection_methods ||--o{ detected_entities : "identifies"
+    detection_methods ||--o{ model_entities : "associated with"
 
-    USER_SETTINGS ||--o{ MODEL_ENTITIES : configures
-    USER_SETTINGS ||--o{ SEARCH_PATTERNS : configures
-    USER_SETTINGS ||--o{ BAN_LIST : configures
-
-    DOCUMENTS ||--o{ DETECTED_ENTITIES : contains
-
-    DETECTION_METHODS ||--o{ DETECTED_ENTITIES : detected_by
-    DETECTION_METHODS ||--o{ MODEL_ENTITIES : applies_to
-
-    BAN_LIST ||--o{ BAN_LIST_WORDS : contains
-
-    USERS {
-        BIGINT user_id PK
-        VARCHAR username UK
-        VARCHAR email UK
-        BYTEA password_hash
-        BYTEA salt
-        TIMESTAMP created_at
-        TIMESTAMP updated_at
+    users {
+        uuid user_id PK
+        string username UK
+        string email UK
+        string password_hash
+        string salt
+        timestamp created_at
+        timestamp updated_at
     }
 
-    SESSIONS {
-        UUID session_id PK
-        BIGINT user_id FK
-        UUID jwt_id UK
-        TIMESTAMP expires_at
-        TIMESTAMP created_at
+    sessions {
+        uuid session_id PK
+        uuid user_id FK
+        string jwt_id UK
+        timestamp expires_at
+        timestamp created_at
     }
 
-    API_KEYS {
-        UUID key_id PK
-        BIGINT user_id FK
-        VARCHAR name
-        BYTEA api_key_hash UK
-        TIMESTAMP expires_at
-        TIMESTAMP created_at
+    api_keys {
+        uuid key_id PK
+        uuid user_id FK
+        string name
+        string api_key_hash UK
+        timestamp expires_at
+        timestamp created_at
     }
 
-    USER_SETTINGS {
-        BIGINT setting_id PK
-        BIGINT user_id FK UK
-        BOOLEAN remove_images
-        TIMESTAMP created_at
-        TIMESTAMP updated_at
-        JSONB other_settings -- Placeholder for potential future settings
+    user_settings {
+        uuid setting_id PK
+        uuid user_id FK,UK
+        boolean remove_images
+        string theme
+        boolean auto_processing
+        float detection_threshold
+        boolean use_banlist_for_detection
+        timestamp created_at
+        timestamp updated_at
     }
 
-    DOCUMENTS {
-        BIGINT document_id PK
-        BIGINT user_id FK
-        VARCHAR hashed_document_name
-        TIMESTAMP upload_timestamp
-        TIMESTAMP last_modified
+    documents {
+        uuid document_id PK
+        uuid user_id FK
+        string hashed_document_name
+        timestamp created_at
     }
 
-    DETECTION_METHODS {
-        BIGINT method_id PK
-        VARCHAR method_name UK
-        VARCHAR highlight_color
+    detection_methods {
+        int method_id PK
+        string method_name UK
+        string highlight_color
     }
 
-    DETECTED_ENTITIES {
-        BIGINT entity_id PK
-        BIGINT document_id FK
-        BIGINT method_id FK
-        VARCHAR entity_name
-        JSONB redaction_schema
-        TIMESTAMP detected_timestamp
+    detected_entities {
+        uuid entity_id PK
+        uuid document_id FK
+        int method_id FK
+        string entity_name
+        json redaction_schema
+        timestamp detected_at
     }
 
-    MODEL_ENTITIES {
-        BIGINT model_entity_id PK
-        BIGINT setting_id FK
-        BIGINT method_id FK
-        VARCHAR entity_text
+    model_entities {
+        uuid model_entity_id PK
+        uuid setting_id FK
+        int method_id FK
+        string entity_text
     }
 
-    SEARCH_PATTERNS {
-        BIGINT pattern_id PK
-        BIGINT setting_id FK
-        VARCHAR pattern_type -- e.g., 'Regex', 'Normal'
-        VARCHAR pattern_text
+    search_patterns {
+        uuid pattern_id PK
+        uuid setting_id FK
+        string pattern_type
+        string pattern_text
     }
 
-    BAN_LIST {
-        BIGINT ban_id PK
-        BIGINT setting_id FK UK
+    ban_list {
+        uuid ban_id PK
+        uuid setting_id FK,UK
     }
 
-    BAN_LIST_WORDS {
-        BIGINT ban_word_id PK
-        BIGINT ban_id FK
-        VARCHAR word
+    ban_list_words {
+        uuid ban_word_id PK
+        uuid ban_id FK
+        string word
     }
-
 ```
+
 ### Tables
 
 1.  **`users`**
