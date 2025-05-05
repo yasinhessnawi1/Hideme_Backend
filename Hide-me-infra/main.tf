@@ -41,7 +41,7 @@ provider "google-beta" {
 
 # VPC Module
 module "vpc" {
-  source       = "./modules/vpc"
+  source       = "modules/vpc"
   project      = var.project
   region       = var.region
   network_name = var.network_name
@@ -50,7 +50,7 @@ module "vpc" {
 
 # Security Module
 module "security" {
-  source                = "./modules/security"
+  source                = "modules/security"
   project               = var.project
   network_id            = module.vpc.network_id
   environment           = var.environment
@@ -66,7 +66,7 @@ module "security" {
 
 # Database Module
 module "database" {
-  source                 = "./modules/database"
+  source                 = "modules/database"
   project                = var.project
   region                 = var.region
   environment            = var.environment
@@ -85,7 +85,7 @@ module "database" {
 
 # Compute Module
 module "compute" {
-  source                = "./modules/compute"
+  source                = "modules/compute"
   project               = var.project
   region                = var.region
   environment           = var.environment
@@ -122,7 +122,7 @@ module "compute" {
 
 # Load Balancer Module
 module "load_balancer" {
-  source               = "./modules/load_balancer"
+  source               = "modules/load_balancer"
   project              = var.project
   environment          = var.environment
   instance_group       = module.compute.instance_group
@@ -138,7 +138,7 @@ module "load_balancer" {
 
 # DNS Module (New)
 module "dns" {
-  source           = "./modules/dns"
+  source           = "modules/dns"
   project          = var.project
   environment      = var.environment
   domain_name      = var.domain_name # Using root domain variable for DNS zone
