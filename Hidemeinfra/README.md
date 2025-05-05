@@ -990,5 +990,3 @@ echo "Setup complete."
 *   **Phase 5: Firewall Config:** Configures the `ufw` firewall on the instance to allow necessary ports (SSH, HTTP, HTTPS, application ports).
 *   **Phase 6: Verification:** Creates a basic health check script (`/opt/hide-me/health-check.sh`) to verify service status.
 
-Remember to review the security implications of passing secrets via metadata and consider fetching them directly from Secret Manager within the script for enhanced security in production environments.
-
