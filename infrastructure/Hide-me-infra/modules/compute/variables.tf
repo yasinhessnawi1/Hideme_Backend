@@ -148,13 +148,13 @@ variable "gemini_api_key" {
 variable "github_repo" {
   description = "GitHub repository URL for the backend code"
   type        = string
-  default     = "git@github.com:yasinhessnawi1/Hideme_Backend.git"
+  default     = ""
 }
 
 variable "go_github_repo" {
   description = "GitHub repository URL for the Go backend code"
   type        = string
-  default     = "git@github.com:yasinhessnawi1/Hideme_Backend.git"
+  default     = ""
 }
 
 variable "github_branch" {
@@ -166,25 +166,25 @@ variable "github_branch" {
 variable "repo_name" {
   description = "Name of the GitHub repository"
   type        = string
-  default     = "Hideme_Backend"
+  default     = ""
 }
 
 variable "repo_owner" {
   description = "Owner of the GitHub repository"
   type        = string
-  default     = "yasinhessnawi1"
+  default     = ""
 }
 
 variable "domain" {
   description = "Domain name for the application"
   type        = string
-  default = "api.hidemeai.com"
+  default = ""
 }
 
 variable "go_domain" {
   description = "Domain name for the Go application"
   type        = string
-  default     = "goapi.hidemeai.com"
+  default     = ""
 }
 
 variable "ssl_email" {

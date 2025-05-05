@@ -1,0 +1,51 @@
+# --- GCP Configuration ---
+project          = "your-gcp-project-id" # Replace with your Project ID
+region           = "us-central1"
+zone             = "us-central1-a"
+credentials_file = "./your-credentials-file.json" # Replace with your key file name/path
+
+# --- Environment ---
+environment = "dev" # Or "staging", "prod"
+
+# --- Networking ---
+network_name = "hide-me-vpc"
+
+# --- Compute ---
+instance_name = "hide-me-app"
+machine_type  = "e2-medium" # Adjust as needed
+disk_size     = 20
+min_instances = 1
+max_instances = 3
+backend_port  = 8000
+go_backend_port = 8080
+
+# --- Database ---
+db_instance_name       = "hide-me-db"
+db_version             = "POSTGRES_14"
+db_tier                = "db-f1-micro" # Adjust as needed, consider higher tiers for prod
+db_name                = "hide-me-db-ea7a2c79" # Or your preferred DB name
+db_user                = "hidemedba"
+db_password            = "YOUR_SECURE_DB_PASSWORD" # Replace with a strong password, manage securely!
+db_deletion_protection = false # Set to true for production
+db_host                = "10.45.0.2" # This seems hardcoded, review if it should be dynamic
+db_port                = 5432
+
+# --- Load Balancer & DNS ---
+static_ip_name = "hide-me-lb-static-ip"
+domain_name    = "hidemeai.com" # Your root domain
+domain         = "api.hidemeai.com" # Your API subdomain
+go_domain      = "goapi.hidemeai.com" # Your Go API subdomain
+ssl_email      = "your-email@example.com" # For SSL certificate notifications
+
+# --- Application & Deployment ---
+github_repo    = "git@github.com:yasinhessnawi1/Hideme_Backend.git"
+go_github_repo = "git@github.com:yasinhessnawi1/Hideme_Backend.git" # Adjust if Go code is separate
+github_branch  = "main"
+repo_owner     = "yasinhessnawi1"
+repo_name      = "Hideme_Backend"
+github_ssh_key = "-----BEGIN OPENSSH PRIVATE KEY-----\nYOUR_SSH_PRIVATE_KEY_CONTENT\n-----END OPENSSH PRIVATE KEY-----" # Replace, manage securely!
+github_token   = "YOUR_GITHUB_PAT" # Optional fallback, manage securely!
+gemini_api_key = "YOUR_GEMINI_API_KEY" # Replace, manage securely!
+
+# --- Monitoring (Optional) ---
+# alert_email = "your-alert-email@example.com"
