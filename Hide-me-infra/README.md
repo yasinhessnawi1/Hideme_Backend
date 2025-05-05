@@ -1,4 +1,4 @@
-# Hide Me Application - Terraform Infrastructure (Revised)
+# Hide Me Application - Terraform Infrastructure 
 
 ## Project Overview
 
@@ -10,7 +10,7 @@ This README provides a comprehensive guide to understanding the infrastructure c
 
 
 
-## Infrastructure Breakdown (Revised)
+## Infrastructure Breakdown 
 
 This Terraform configuration, organized into modules, provisions the following core components within your Google Cloud Platform project for the Hide Me application:
 
@@ -104,7 +104,7 @@ This Terraform configuration, organized into modules, provisions the following c
 
 
 
-## Infrastructure Logic and Implementation (Revised)
+## Infrastructure Logic and Implementation 
 
 This section details the reasoning behind the design choices and how the different components are implemented and interact within the Terraform configuration.
 
@@ -184,7 +184,7 @@ This section details the reasoning behind the design choices and how the differe
 
 
 
-## Package Structure and Best Practices (Revised)
+## Package Structure and Best Practices 
 
 ### Package Structure
 
@@ -264,7 +264,7 @@ Several best practices are evident in this Terraform configuration:
 
 
 
-## Example Usage (Revised)
+## Example Usage 
 
 This section provides guidance on how to deploy the Hide Me infrastructure using this Terraform configuration.
 
