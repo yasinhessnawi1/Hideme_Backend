@@ -41,20 +41,20 @@ The HideMe Go Backend is designed using a **Clean Architecture** approach, empha
 *Diagram illustrating the layered architecture:*
 ```mermaid
 graph TD
-    A[User/Client] --> B(API Layer / Handlers);
-    B --> C{Service Layer};
-    C --> D{Repository Layer};
-    D --> E[Database (PostgreSQL)];
-    B --> F(Middleware);
-    F --> B;
-    C --> G(Models);
-    D --> G;
-    H(Config) --> B;
-    H --> C;
-    H --> D;
-    I(Utils) --> B;
-    I --> C;
-    I --> D;
+    A[User/Client] --> B[API Layer / Handlers]
+    B --> C[Service Layer]
+    C --> D[Repository Layer]
+    D --> E[Database PostgreSQL]
+    B --> F[Middleware]
+    F --> B
+    C --> G[Models]
+    D --> G
+    H[Config] --> B
+    H --> C
+    H --> D
+    I[Utils] --> B
+    I --> C
+    I --> D
 
     subgraph Application Core
         C
