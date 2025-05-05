@@ -104,7 +104,7 @@ gobackend/
 ├── Dockerfile                # Docker container definition
 ├── docker-compose.yml        # Docker Compose for development environment
 ├── go.mod                    # Go module dependencies
-└── README.md                 # This file
+└── README-Golang.md                 # This file
 ```
 
 ### Layers Explained
