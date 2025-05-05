@@ -1,7 +1,7 @@
 # HideMe Go Backend
 
 [![Build Status](https://img.shields.io/badge/Status-In%20Testing-blue)]()
-[![Test Coverage](https://img.shields.io/badge/Coverage-75%25-brightgreen)]()
+[![Test Coverage](https://img.shields.io/badge/Coverage-76.2%25-brightgreen)]()
 [![Go Version](https://img.shields.io/badge/Go-1.23%2B-blue)]()
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)]()
 
@@ -1284,17 +1284,22 @@ Testing is a crucial part of the development process for the HideMe Go Backend, 
 
 The project maintains high test coverage across its codebase:
 
-[![Test Coverage](https://img.shields.io/badge/Coverage-75%25-brightgreen)]()
+[![Test Coverage](https://img.shields.io/badge/Coverage-76.2%25-brightgreen)]()
 
 Current coverage statistics per package:
-- Overall: 75% statement coverage
-- Models: 100% coverage
-- Middleware: 93.7% coverage
-- Repository: 93.3% coverage
-- Handlers: 85.6% coverage
-- Config: 85.6% coverage
-- Utils: 81.5% coverage
-- Migrations: 84.4% coverage
+- Overall: 76.2% statement coverage
+- auth: 76.2% coverage
+- config: 85.6% coverage
+- database: 59.3% coverage
+- handlers: 85.6% coverage
+- middleware: 93.7% coverage
+- models: 100% coverage
+- repository: 93.3% coverage
+- server: 21.5% coverage
+- service: 54.6% coverage
+- utils: 81.5% coverage
+- migrations: 84.4% coverage
+- scripts: 79.2% coverage
 
 Several key utility files have 100% statement coverage, including error handling utilities, providing confidence in the reliability of core components.
 
