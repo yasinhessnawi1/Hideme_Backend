@@ -1486,7 +1486,3 @@ Contributions to the HideMe Go Backend are welcome! Please follow these guidelin
 1.  PRs will be reviewed by maintainers.
 2.  Feedback may be provided, requiring further changes.
 3.  Once approved and all checks pass, the PR will be merged.
-
-## License
-
-to be updated...
