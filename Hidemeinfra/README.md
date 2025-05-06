@@ -1,4 +1,7 @@
 # Hide Me Application - Terraform Infrastructure 
+[![Build Status](https://img.shields.io/badge/Status-development-yellow)]()
+[![Terraform Version](https://img.shields.io/badge/1.0.0%2B-blue)]()
+[![hashicorp/google Version](https://img.shields.io/badge/4.0%2B-blue)]()
 
 ## Project Overview
 
