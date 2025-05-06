@@ -1641,13 +1641,4 @@ For a complete list of dependencies and versions, see `requirements.txt`.
 
 ### Copyright and License
 
-© 2025 HideMeAI. All Rights Reserved.
-
-This software is proprietary and confidential. Unauthorized copying, transfer, or use of this software, its
-documentation, or any related materials, via any medium, is strictly prohibited without prior written permission from
-HideMeAI.
-
-This software contains trade secrets and confidential information of HideMeAI. Distribution of modified versions of this
-software is prohibited unless explicitly authorized by HideMeAI.
-
-For licensing inquiries, please contact: licensing@hidemeai.com
+to be updated...
