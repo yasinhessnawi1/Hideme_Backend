@@ -3,7 +3,6 @@
 [![Build Status](https://img.shields.io/badge/Status-In%20Testing-blue)]()
 [![Test Coverage](https://img.shields.io/badge/Coverage-76.2%25-brightgreen)]()
 [![Go Version](https://img.shields.io/badge/Go-1.23%2B-blue)]()
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)]()
 
 ## Table of Contents
 
