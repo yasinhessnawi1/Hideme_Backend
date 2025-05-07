@@ -1,0 +1,2587 @@
+basePath: /api
+definitions:
+  models.APIKey:
+    properties:
+      created_at:
+        description: CreatedAt records when this API key was created
+        type: string
+      expires_at:
+        description: ExpiresAt defines when this API key will no longer be valid
+        type: string
+      id:
+        description: ID is the unique identifier for this API key
+        type: string
+      name:
+        description: Name is a user-friendly identifier for this API key
+        type: string
+      user_id:
+        description: UserID references the user who owns this API key
+        type: integer
+    type: object
+  models.APIKeyCreationRequest:
+    properties:
+      duration:
+        description: |-
+          Duration specifies how long the API key should remain valid
+          Must be one of the predefined durations (30d, 90d, 180d, 365d)
+        enum:
+        - 30d
+        - 90d
+        - 180d
+        - 365d
+        type: string
+      name:
+        description: |-
+          Name is a user-friendly identifier for the API key
+          Must be between 1 and 100 characters
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - duration
+    - name
+    type: object
+  models.APIKeyResponse:
+    properties:
+      created_at:
+        description: CreatedAt records when this API key was created
+        type: string
+      expires_at:
+        description: ExpiresAt defines when this API key will no longer be valid
+        type: string
+      id:
+        description: ID is the unique identifier for this API key
+        type: string
+      key:
+        description: |-
+          Key is the actual API key value
+          This is only returned once at creation time and should be securely stored by the client
+        type: string
+      name:
+        description: Name is the user-friendly identifier for this API key
+        type: string
+    type: object
+  models.ActiveSessionInfo:
+    properties:
+      created_at:
+        description: CreatedAt records when this session was initiated
+        type: string
+      expires_at:
+        description: ExpiresAt defines when this session will automatically expire
+        type: string
+      id:
+        description: ID is the unique identifier for this session
+        type: string
+    type: object
+  models.BanListWithWords:
+    properties:
+      id:
+        description: ID is the unique identifier for this ban list
+        type: integer
+      words:
+        description: Words is a slice of banned words associated with this ban list
+        items:
+          type: string
+        type: array
+    type: object
+  models.BanListWordBatch:
+    properties:
+      words:
+        description: |-
+          Words is a slice of strings to be added to or removed from a ban list
+          Each word must be non-empty and the slice must contain at least one word
+        items:
+          type: string
+        minItems: 1
+        type: array
+    required:
+    - words
+    type: object
+  models.ModelEntity:
+    properties:
+      entity_text:
+        description: |-
+          EntityText contains the actual text to be detected by the specified method
+          This might include names, terms, or patterns specific to the user's needs
+        type: string
+      id:
+        description: ID is the unique identifier for this model entity
+        type: integer
+      method_id:
+        description: MethodID references the detection method associated with this
+          entity
+        type: integer
+      setting_id:
+        description: SettingID references the user settings to which this entity belongs
+        type: integer
+    type: object
+  models.ModelEntityBatch:
+    properties:
+      entity_texts:
+        description: |-
+          EntityTexts contains the texts to be detected by the specified method
+          Must contain at least one entity text
+        items:
+          type: string
+        minItems: 1
+        type: array
+      method_id:
+        description: MethodID is the detection method to be used for all entities
+          in this batch
+        type: integer
+    required:
+    - entity_texts
+    - method_id
+    type: object
+  models.ModelEntityWithMethod:
+    properties:
+      entity_text:
+        description: |-
+          EntityText contains the actual text to be detected by the specified method
+          This might include names, terms, or patterns specific to the user's needs
+        type: string
+      id:
+        description: ID is the unique identifier for this model entity
+        type: integer
+      method_id:
+        description: MethodID references the detection method associated with this
+          entity
+        type: integer
+      method_name:
+        description: MethodName is the name of the detection method associated with
+          this entity
+        type: string
+      setting_id:
+        description: SettingID references the user settings to which this entity belongs
+        type: integer
+    type: object
+  models.PatternType:
+    enum:
+    - ai_search
+    - normal
+    - case_sensitive
+    type: string
+    x-enum-varnames:
+    - AISearch
+    - Normal
+    - CaseSensitive
+  models.SearchPattern:
+    properties:
+      id:
+        description: ID is the unique identifier for this search pattern
+        type: integer
+      pattern_text:
+        description: PatternText contains the actual text or pattern to search for
+        type: string
+      pattern_type:
+        allOf:
+        - $ref: '#/definitions/models.PatternType'
+        description: PatternType defines the search strategy to use for this pattern
+      setting_id:
+        description: SettingID references the user settings to which this pattern
+          belongs
+        type: integer
+    type: object
+  models.SearchPatternCreate:
+    properties:
+      pattern_text:
+        description: |-
+          PatternText contains the actual text or pattern to search for
+          Must be non-empty
+        minLength: 1
+        type: string
+      pattern_type:
+        description: |-
+          PatternType defines the search strategy to use
+          Must be one of: "ai_search", "normal", or "case_sensitive"
+        enum:
+        - ai_search
+        - normal
+        - case_sensitive
+        type: string
+    required:
+    - pattern_text
+    - pattern_type
+    type: object
+  models.SearchPatternUpdate:
+    properties:
+      pattern_text:
+        description: |-
+          PatternText contains the actual text or pattern to search for
+          If provided, must be non-empty
+        minLength: 1
+        type: string
+      pattern_type:
+        description: |-
+          PatternType defines the search strategy to use
+          If provided, must be one of: "ai_search", "normal", or "case_sensitive"
+        enum:
+        - ai_search
+        - normal
+        - case_sensitive
+        type: string
+    type: object
+  models.User:
+    properties:
+      created_at:
+        description: CreatedAt records when this user account was created
+        type: string
+      email:
+        description: |-
+          Email is the user's email address for communications and recovery
+          Must be a valid email format
+        type: string
+      id:
+        description: ID is the unique identifier for this user
+        type: integer
+      updated_at:
+        description: UpdatedAt records when this user account was last modified
+        type: string
+      username:
+        description: |-
+          Username is the user's chosen display name
+          Must be between 3 and 50 characters
+        maxLength: 50
+        minLength: 3
+        type: string
+    required:
+    - email
+    - username
+    type: object
+  models.UserCredentials:
+    properties:
+      email:
+        description: |-
+          Email is the user's email address
+          Either Email or Username must be provided
+        type: string
+      password:
+        description: |-
+          Password is the user's plain text password for authentication
+          Must be at least 8 characters
+        minLength: 8
+        type: string
+      username:
+        description: |-
+          Username is the user's chosen display name
+          Either Username or Email must be provided
+        maxLength: 50
+        minLength: 3
+        type: string
+    required:
+    - password
+    type: object
+  models.UserRegistration:
+    properties:
+      confirm_password:
+        description: |-
+          ConfirmPassword must match Password exactly
+          This ensures the user has entered their intended password correctly
+        type: string
+      email:
+        description: |-
+          Email is the user's email address
+          Must be a valid email format
+        type: string
+      password:
+        description: |-
+          Password is the user's plain text password
+          Must be at least 8 characters
+        minLength: 8
+        type: string
+      username:
+        description: |-
+          Username is the user's chosen display name
+          Must be between 3 and 50 characters
+        maxLength: 50
+        minLength: 3
+        type: string
+    required:
+    - confirm_password
+    - email
+    - password
+    - username
+    type: object
+  models.UserSetting:
+    properties:
+      auto_processing:
+        description: |-
+          AutoProcessing enables automatic detection of sensitive information
+          when documents are uploaded without requiring explicit user action
+        type: boolean
+      created_at:
+        description: CreatedAt records when these settings were initially created
+        type: string
+      detection_threshold:
+        description: |-
+          DetectionThreshold defines the confidence level required for AI/ML detection
+          Higher values increase precision but may miss some sensitive information
+          Lower values increase recall but may produce more false positives
+          Valid values range from 0.0 to 1.0, with 0.5 being the default
+        type: number
+      id:
+        description: ID is the unique identifier for these settings
+        type: integer
+      remove_images:
+        description: |-
+          RemoveImages determines whether images should be removed from processed documents
+          This enhances privacy by eliminating potentially sensitive visual information
+        type: boolean
+      theme:
+        description: Theme stores the user's preferred UI theme (e.g., "light", "dark",
+          "system")
+        type: string
+      updated_at:
+        description: UpdatedAt records when these settings were last modified
+        type: string
+      use_banlist_for_detection:
+        description: |-
+          UseBanlistForDetection determines whether the ban list should be
+          applied during detection to exclude specified terms
+        type: boolean
+      user_id:
+        description: UserID references the user who owns these settings
+        type: integer
+    type: object
+  models.UserSettingsUpdate:
+    properties:
+      auto_processing:
+        description: AutoProcessing enables automatic detection of sensitive information
+        type: boolean
+      detection_threshold:
+        description: |-
+          DetectionThreshold defines the confidence level required for AI/ML detection
+          Valid values range from 0.0 to 1.0
+        type: number
+      remove_images:
+        description: RemoveImages determines whether images should be removed from
+          processed documents
+        type: boolean
+      theme:
+        description: Theme stores the user's preferred UI theme
+        type: string
+      use_banlist_for_detection:
+        description: UseBanlistForDetection determines whether the ban list should
+          be applied during detection
+        type: boolean
+    type: object
+  models.UserUpdate:
+    properties:
+      email:
+        description: |-
+          Email is the user's email address
+          If provided, must be a valid email format
+        type: string
+      password:
+        description: |-
+          Password is the user's new plain text password
+          If provided, must be at least 8 characters
+        minLength: 8
+        type: string
+      username:
+        description: |-
+          Username is the user's chosen display name
+          If provided, must be between 3 and 50 characters
+        maxLength: 50
+        minLength: 3
+        type: string
+    type: object
+  utils.ErrorInfo:
+    properties:
+      code:
+        description: A machine-readable error code
+        type: string
+      details:
+        additionalProperties:
+          type: string
+        description: Additional details about the error (e.g., validation errors)
+        type: object
+      message:
+        description: A human-readable error message
+        type: string
+    type: object
+  utils.MetaInfo:
+    properties:
+      page:
+        description: The current page number
+        type: integer
+      page_size:
+        description: The number of items per page
+        type: integer
+      total_items:
+        description: The total number of items
+        type: integer
+      total_pages:
+        description: The total number of pages
+        type: integer
+    type: object
+  utils.Response:
+    properties:
+      data:
+        description: The response data (omitted for error responses)
+      error:
+        allOf:
+        - $ref: '#/definitions/utils.ErrorInfo'
+        description: Error information (omitted for successful responses)
+      meta:
+        allOf:
+        - $ref: '#/definitions/utils.MetaInfo'
+        description: Metadata such as pagination information
+      success:
+        description: Whether the request was successful
+        type: boolean
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@hidemeai.com
+    name: API Support
+    url: http://www.hidemeai.com/support
+  description: Main function that starts the HideMe API Server
+  license:
+    name: Proprietary
+    url: http://www.hidemeai.com/license
+  termsOfService: http://www.hidemeai.com/terms/
+  title: HideMe API
+  version: 1.0.0
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user and issues JWT tokens
+      parameters:
+      - description: User credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/models.UserCredentials'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Authentication successful with tokens
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "400":
+          description: Invalid request data
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: Invalid credentials
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      summary: Authenticate user
+      tags:
+      - Authentication
+  /auth/logout:
+    post:
+      description: Invalidates the current session and clears refresh token cookie
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Logout successful
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      summary: Logout user
+      tags:
+      - Authentication
+  /auth/logout-all:
+    post:
+      description: Invalidates all refresh tokens for the current user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: All sessions invalidated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Logout from all sessions
+      tags:
+      - Authentication
+  /auth/refresh:
+    post:
+      description: Uses a refresh token to generate new access and refresh tokens
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Tokens refreshed successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "401":
+          description: Invalid or missing refresh token
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      summary: Refresh access token
+      tags:
+      - Authentication
+  /auth/signup:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user account with the provided registration information
+      parameters:
+      - description: User registration data
+        in: body
+        name: registration
+        required: true
+        schema:
+          $ref: '#/definitions/models.UserRegistration'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User created successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.User'
+              type: object
+        "400":
+          description: Invalid request data
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "409":
+          description: Username or email already in use
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      summary: Register a new user
+      tags:
+      - Authentication
+  /auth/validate-key:
+    post:
+      description: Validates an API key and returns user information
+      parameters:
+      - description: API key to validate
+        in: header
+        name: X-API-Key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: API key is valid with user information
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "401":
+          description: API key is invalid, expired, or missing
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      summary: Validate API key
+      tags:
+      - Authentication
+  /auth/verify:
+    get:
+      description: Checks if the current access token is valid
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token is valid with user information
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "401":
+          description: Token is invalid or expired
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Verify token
+      tags:
+      - Authentication
+  /auth/verify-key:
+    get:
+      description: Verifies an API key without returning detailed user information
+      parameters:
+      - description: API key to verify
+        in: header
+        name: X-API-Key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: API key is valid
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: boolean
+                  type: object
+              type: object
+        "401":
+          description: API key is invalid, expired, or missing
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      summary: Simple API key verification
+      tags:
+      - Authentication
+  /db/{table}:
+    get:
+      description: Returns all records from a table with optional filtering
+      parameters:
+      - description: Table name
+        in: path
+        name: table
+        required: true
+        type: string
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Records per page (default: 10)'
+        in: query
+        name: page_size
+        type: integer
+      - description: Filter parameters (column names and values)
+        in: query
+        name: filter
+        type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Data retrieved successfully with pagination
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid table name or parameters
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "403":
+          description: Table access not allowed
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get table data
+      tags:
+      - Database
+    post:
+      consumes:
+      - application/json
+      description: Creates a new record in a table
+      parameters:
+      - description: Table name
+        in: path
+        name: table
+        required: true
+        type: string
+      - description: Record data
+        in: body
+        name: record
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Record created successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "400":
+          description: Invalid table name or request body
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "403":
+          description: Table access not allowed
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Create record
+      tags:
+      - Database
+  /db/{table}/{id}:
+    delete:
+      description: Deletes a record from a table
+      parameters:
+      - description: Table name
+        in: path
+        name: table
+        required: true
+        type: string
+      - description: Record ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Record deleted successfully
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid table name or ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "403":
+          description: Table access not allowed
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "404":
+          description: Record not found
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Delete record
+      tags:
+      - Database
+    get:
+      description: Returns a single record from a table by its ID
+      parameters:
+      - description: Table name
+        in: path
+        name: table
+        required: true
+        type: string
+      - description: Record ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Record retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "400":
+          description: Invalid table name or ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "403":
+          description: Table access not allowed
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "404":
+          description: Record not found
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get record by ID
+      tags:
+      - Database
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing record in a table
+      parameters:
+      - description: Table name
+        in: path
+        name: table
+        required: true
+        type: string
+      - description: Record ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Record data to update
+        in: body
+        name: record
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Record updated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "400":
+          description: Invalid table name, ID, or request body
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "403":
+          description: Table access not allowed
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "404":
+          description: Record not found
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Update record
+      tags:
+      - Database
+  /db/{table}/schema:
+    get:
+      description: Returns the schema for a table
+      parameters:
+      - description: Table name
+        in: path
+        name: table
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Schema retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    additionalProperties: true
+                    type: object
+                  type: array
+              type: object
+        "400":
+          description: Invalid table name
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "403":
+          description: Table access not allowed
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get table schema
+      tags:
+      - Database
+  /keys:
+    get:
+      description: Returns a list of all API keys for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of API keys
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.APIKey'
+                  type: array
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: List API keys
+      tags:
+      - API Keys
+    post:
+      consumes:
+      - application/json
+      description: Generates a new API key for the authenticated user
+      parameters:
+      - description: API key creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.APIKeyCreationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: API key created successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.APIKeyResponse'
+              type: object
+        "400":
+          description: Invalid request data
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Create API key
+      tags:
+      - API Keys
+  /keys/{keyID}:
+    delete:
+      description: Revokes an API key for the authenticated user
+      parameters:
+      - description: API key ID
+        in: path
+        name: keyID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: API key revoked successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid key ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "404":
+          description: API key not found
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Delete API key
+      tags:
+      - API Keys
+  /keys/{keyID}/decode:
+    get:
+      description: Retrieves the original value of an API key
+      parameters:
+      - description: API key ID
+        in: path
+        name: keyID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: API key details with original value
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "400":
+          description: Invalid key ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "404":
+          description: API key not found
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get decoded API key
+      tags:
+      - API Keys
+  /settings:
+    get:
+      description: Returns the current user's settings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Settings retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.UserSetting'
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get user settings
+      tags:
+      - Settings
+    put:
+      consumes:
+      - application/json
+      description: Updates the current user's settings
+      parameters:
+      - description: Settings to update
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/models.UserSettingsUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Settings updated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.UserSetting'
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Update user settings
+      tags:
+      - Settings
+  /settings/ban-list:
+    get:
+      description: Returns the current user's ban list
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Ban list retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.BanListWithWords'
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get ban list
+      tags:
+      - Settings/Ban List
+  /settings/ban-list/words:
+    delete:
+      consumes:
+      - application/json
+      description: Removes words from the current user's ban list
+      parameters:
+      - description: Words to remove from ban list
+        in: body
+        name: words
+        required: true
+        schema:
+          $ref: '#/definitions/models.BanListWordBatch'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Words removed successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.BanListWithWords'
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Remove ban list words
+      tags:
+      - Settings/Ban List
+    post:
+      consumes:
+      - application/json
+      description: Adds words to the current user's ban list
+      parameters:
+      - description: Words to add to ban list
+        in: body
+        name: words
+        required: true
+        schema:
+          $ref: '#/definitions/models.BanListWordBatch'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Words added successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.BanListWithWords'
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Add ban list words
+      tags:
+      - Settings/Ban List
+  /settings/entities:
+    post:
+      consumes:
+      - application/json
+      description: Adds entities for a specific detection method
+      parameters:
+      - description: Batch of entities to add
+        in: body
+        name: batch
+        required: true
+        schema:
+          $ref: '#/definitions/models.ModelEntityBatch'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Entities added successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.ModelEntity'
+                  type: array
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Add model entities
+      tags:
+      - Settings/Entities
+  /settings/entities/{entityID}:
+    delete:
+      description: Deletes a model entity
+      parameters:
+      - description: ID of the entity to delete
+        in: path
+        name: entityID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Entity deleted successfully
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid entity ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "404":
+          description: Entity not found
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Delete model entity
+      tags:
+      - Settings/Entities
+  /settings/entities/{methodID}:
+    get:
+      description: Returns the model entities for a specific method
+      parameters:
+      - description: ID of the method to get entities for
+        in: path
+        name: methodID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Entities retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.ModelEntityWithMethod'
+                  type: array
+              type: object
+        "400":
+          description: Invalid method ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get model entities
+      tags:
+      - Settings/Entities
+  /settings/entities/delete_entities_by_method_id/{methodID}:
+    delete:
+      description: Deletes all model entities for a specific method
+      parameters:
+      - description: ID of the method to delete entities for
+        in: path
+        name: methodID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Entities deleted successfully
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid method ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Delete model entities by method
+      tags:
+      - Settings/Entities
+  /settings/export:
+    get:
+      description: Exports all user settings as a JSON file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Settings exported successfully as a downloadable JSON file
+          schema:
+            type: file
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Export settings
+      tags:
+      - Settings
+  /settings/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Imports user settings from a JSON file
+      parameters:
+      - description: JSON file with settings to import
+        in: formData
+        name: settings
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Settings imported successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid file format or content
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Import settings
+      tags:
+      - Settings
+  /settings/patterns:
+    get:
+      description: Returns the current user's search patterns
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Search patterns retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.SearchPattern'
+                  type: array
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get search patterns
+      tags:
+      - Settings/Patterns
+    post:
+      consumes:
+      - application/json
+      description: Creates a new search pattern for the current user
+      parameters:
+      - description: Search pattern to create
+        in: body
+        name: pattern
+        required: true
+        schema:
+          $ref: '#/definitions/models.SearchPatternCreate'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Search pattern created successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.SearchPattern'
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Create search pattern
+      tags:
+      - Settings/Patterns
+  /settings/patterns/{patternID}:
+    delete:
+      description: Deletes a search pattern
+      parameters:
+      - description: ID of the pattern to delete
+        in: path
+        name: patternID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Search pattern deleted successfully
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid pattern ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "404":
+          description: Pattern not found
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Delete search pattern
+      tags:
+      - Settings/Patterns
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing search pattern
+      parameters:
+      - description: ID of the pattern to update
+        in: path
+        name: patternID
+        required: true
+        type: integer
+      - description: Search pattern updates
+        in: body
+        name: pattern
+        required: true
+        schema:
+          $ref: '#/definitions/models.SearchPatternUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Search pattern updated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.SearchPattern'
+              type: object
+        "400":
+          description: Invalid request body or pattern ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "404":
+          description: Pattern not found
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Update search pattern
+      tags:
+      - Settings/Patterns
+  /users/check/email:
+    get:
+      description: Checks if an email is available for registration
+      parameters:
+      - description: Email to check
+        in: query
+        name: email
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Check completed with availability information
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "400":
+          description: Missing email parameter
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      summary: Check email availability
+      tags:
+      - Users
+  /users/check/username:
+    get:
+      description: Checks if a username is available for registration
+      parameters:
+      - description: Username to check
+        in: query
+        name: username
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Check completed with availability information
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "400":
+          description: Missing username parameter
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      summary: Check username availability
+      tags:
+      - Users
+  /users/me:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes the account of the currently authenticated user
+      parameters:
+      - description: Account deletion request containing password and confirm fields
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Account deleted successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request body or confirmation
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated or password incorrect
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Delete account
+      tags:
+      - Users
+    get:
+      description: Returns the profile of the currently authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User profile retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.User'
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "404":
+          description: User account no longer exists
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get current user
+      tags:
+      - Users
+    put:
+      consumes:
+      - application/json
+      description: Updates the profile of the currently authenticated user
+      parameters:
+      - description: User profile updates
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/models.UserUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User profile updated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.User'
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "409":
+          description: Username or email already in use
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Update user
+      tags:
+      - Users
+  /users/me/change-password:
+    post:
+      consumes:
+      - application/json
+      description: Changes the password of the currently authenticated user
+      parameters:
+      - description: Password change request containing current_password, new_password,
+          and confirm_password fields
+        in: body
+        name: passwords
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Password changed successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request body or passwords don't match
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated or current password incorrect
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Change password
+      tags:
+      - Users
+  /users/me/sessions:
+    delete:
+      consumes:
+      - application/json
+      description: Invalidates a specific session
+      parameters:
+      - description: Session invalidation request containing session_id field
+        in: body
+        name: session
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Session invalidated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "404":
+          description: Session not found
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Invalidate session
+      tags:
+      - Users/Sessions
+    get:
+      description: Returns the current user's active sessions
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sessions retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.ActiveSessionInfo'
+                  type: array
+              type: object
+        "401":
+          description: User not authenticated
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+        "500":
+          description: Server error
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                error:
+                  type: string
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get active sessions
+      tags:
+      - Users/Sessions
+schemes:
+- http
+- https
+securityDefinitions:
+  ApiKeyAuth:
+    description: API key authentication
+    in: header
+    name: X-API-Key
+    type: apiKey
+  BearerAuth:
+    description: Type "Bearer" followed by a space and the JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

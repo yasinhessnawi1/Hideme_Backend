@@ -8,6 +8,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 
@@ -140,6 +141,8 @@ func RateLimit() func(http.Handler) http.Handler {
 //
 // Returns:
 //   - A middleware function that can be used with an HTTP handler
+//
+// SecurityHeaders adds security-related headers to all responses.
 func SecurityHeaders() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -157,8 +160,15 @@ func SecurityHeaders() func(http.Handler) http.Handler {
 			// Referrer-Policy: Controls how much referrer information is sent
 			w.Header().Set(constants.HeaderReferrerPolicy, constants.ReferrerPolicyStrictOrigin)
 
-			// Content-Security-Policy: Restricts resource loading to prevent XSS and data injection
-			w.Header().Set(constants.HeaderContentSecurityPolicy, constants.CSPDefaultSrc)
+			// Content-Security-Policy: Conditionally set based on path
+			if strings.HasPrefix(r.URL.Path, "/docs/") {
+				// Relaxed CSP for Swagger UI to allow inline scripts and styles
+				w.Header().Set(constants.HeaderContentSecurityPolicy,
+					"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:")
+			} else {
+				// Standard strict CSP for all other paths
+				w.Header().Set(constants.HeaderContentSecurityPolicy, constants.CSPDefaultSrc)
+			}
 
 			next.ServeHTTP(w, r)
 		})

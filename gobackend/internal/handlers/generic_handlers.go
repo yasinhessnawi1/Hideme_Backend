@@ -58,6 +58,21 @@ func NewGenericHandler(dbService DatabaseServiceInterface) *GenericHandler {
 //   - 400 Bad Request: Invalid table name or parameters
 //   - 403 Forbidden: Table access not allowed
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Get table data
+// @Description Returns all records from a table with optional filtering
+// @Tags Database
+// @Produce json
+// @Security BearerAuth
+// @Param table path string true "Table name"
+// @Param page query int false "Page number (default: 1)"
+// @Param page_size query int false "Records per page (default: 10)"
+// @Param filter query object false "Filter parameters (column names and values)"
+// @Success 200 {object} utils.Response "Data retrieved successfully with pagination"
+// @Failure 400 {object} utils.Response{error=string} "Invalid table name or parameters"
+// @Failure 403 {object} utils.Response{error=string} "Table access not allowed"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /db/{table} [get]
 func (h *GenericHandler) GetTableData(w http.ResponseWriter, r *http.Request) {
 	// Get the table name from the URL
 	table := chi.URLParam(r, constants.ParamTable)
@@ -119,6 +134,20 @@ func (h *GenericHandler) GetTableData(w http.ResponseWriter, r *http.Request) {
 //   - 403 Forbidden: Table access not allowed
 //   - 404 Not Found: Record not found
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Get record by ID
+// @Description Returns a single record from a table by its ID
+// @Tags Database
+// @Produce json
+// @Security BearerAuth
+// @Param table path string true "Table name"
+// @Param id path string true "Record ID"
+// @Success 200 {object} utils.Response{data=map[string]interface{}} "Record retrieved successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid table name or ID"
+// @Failure 403 {object} utils.Response{error=string} "Table access not allowed"
+// @Failure 404 {object} utils.Response{error=string} "Record not found"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /db/{table}/{id} [get]
 func (h *GenericHandler) GetRecordByID(w http.ResponseWriter, r *http.Request) {
 	// Get the table name and ID from the URL
 	table := chi.URLParam(r, constants.ParamTable)
@@ -176,6 +205,20 @@ func (h *GenericHandler) GetRecordByID(w http.ResponseWriter, r *http.Request) {
 //   - 400 Bad Request: Invalid table name or request body
 //   - 403 Forbidden: Table access not allowed
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Create record
+// @Description Creates a new record in a table
+// @Tags Database
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param table path string true "Table name"
+// @Param record body object true "Record data"
+// @Success 201 {object} utils.Response{data=map[string]interface{}} "Record created successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid table name or request body"
+// @Failure 403 {object} utils.Response{error=string} "Table access not allowed"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /db/{table} [post]
 func (h *GenericHandler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 	// Get the table name from the URL
 	table := chi.URLParam(r, constants.ParamTable)
@@ -263,6 +306,22 @@ func (h *GenericHandler) CreateRecord(w http.ResponseWriter, r *http.Request) {
 //   - 403 Forbidden: Table access not allowed
 //   - 404 Not Found: Record not found
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Update record
+// @Description Updates an existing record in a table
+// @Tags Database
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param table path string true "Table name"
+// @Param id path string true "Record ID"
+// @Param record body object true "Record data to update"
+// @Success 200 {object} utils.Response{data=map[string]interface{}} "Record updated successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid table name, ID, or request body"
+// @Failure 403 {object} utils.Response{error=string} "Table access not allowed"
+// @Failure 404 {object} utils.Response{error=string} "Record not found"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /db/{table}/{id} [put]
 func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 	// Get the table name and ID from the URL
 	table := chi.URLParam(r, constants.ParamTable)
@@ -367,6 +426,20 @@ func (h *GenericHandler) UpdateRecord(w http.ResponseWriter, r *http.Request) {
 //   - 403 Forbidden: Table access not allowed
 //   - 404 Not Found: Record not found
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Delete record
+// @Description Deletes a record from a table
+// @Tags Database
+// @Produce json
+// @Security BearerAuth
+// @Param table path string true "Table name"
+// @Param id path string true "Record ID"
+// @Success 204 {object} utils.Response "Record deleted successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid table name or ID"
+// @Failure 403 {object} utils.Response{error=string} "Table access not allowed"
+// @Failure 404 {object} utils.Response{error=string} "Record not found"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /db/{table}/{id} [delete]
 func (h *GenericHandler) DeleteRecord(w http.ResponseWriter, r *http.Request) {
 	// Get the table name and ID from the URL
 	table := chi.URLParam(r, constants.ParamTable)
@@ -434,6 +507,18 @@ func (h *GenericHandler) DeleteRecord(w http.ResponseWriter, r *http.Request) {
 //   - 400 Bad Request: Invalid table name
 //   - 403 Forbidden: Table access not allowed
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Get table schema
+// @Description Returns the schema for a table
+// @Tags Database
+// @Produce json
+// @Security BearerAuth
+// @Param table path string true "Table name"
+// @Success 200 {object} utils.Response{data=[]map[string]interface{}} "Schema retrieved successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid table name"
+// @Failure 403 {object} utils.Response{error=string} "Table access not allowed"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /db/{table}/schema [get]
 func (h *GenericHandler) GetTableSchema(w http.ResponseWriter, r *http.Request) {
 	// Get the table name from the URL
 	table := chi.URLParam(r, constants.ParamTable)

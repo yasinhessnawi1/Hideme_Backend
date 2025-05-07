@@ -74,6 +74,18 @@ func NewAuthHandler(authService AuthServiceInterface, jwtService JWTServiceInter
 //   - 400 Bad Request: Invalid request body or validation errors
 //   - 409 Conflict: Username or email already exists
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Register a new user
+// @Description Creates a new user account with the provided registration information
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param registration body models.UserRegistration true "User registration data"
+// @Success 201 {object} utils.Response{data=models.User} "User created successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request data"
+// @Failure 409 {object} utils.Response{error=string} "Username or email already in use"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /auth/signup [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	// Decode and validate the request body
 	var reg models.UserRegistration
@@ -114,6 +126,18 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 // Security:
 //   - Refresh tokens are stored in HTTP-only cookies for security
 //   - Access tokens are returned in the response body
+//
+// @Summary Authenticate user
+// @Description Authenticates a user and issues JWT tokens
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param credentials body models.UserCredentials true "User credentials"
+// @Success 200 {object} utils.Response{data=map[string]interface{}} "Authentication successful with tokens"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request data"
+// @Failure 401 {object} utils.Response{error=string} "Invalid credentials"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// Defensive programming - check for nil services
 	if h.authService == nil {
@@ -187,6 +211,15 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 // Security:
 //   - The new refresh token is stored in an HTTP-only cookie
 //   - The old refresh token is invalidated to prevent token reuse
+//
+// @Summary Refresh access token
+// @Description Uses a refresh token to generate new access and refresh tokens
+// @Tags Authentication
+// @Produce json
+// @Success 200 {object} utils.Response{data=map[string]interface{}} "Tokens refreshed successfully"
+// @Failure 401 {object} utils.Response{error=string} "Invalid or missing refresh token"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	// Get the refresh token from the cookie
 	cookie, err := r.Cookie(constants.RefreshTokenCookie)
@@ -239,6 +272,14 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 // Security:
 //   - The refresh token is invalidated on the server to prevent reuse
 //   - The refresh token cookie is cleared from the client
+//
+// @Summary Logout user
+// @Description Invalidates the current session and clears refresh token cookie
+// @Tags Authentication
+// @Produce json
+// @Success 200 {object} utils.Response{data=map[string]string} "Logout successful"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /auth/logout [post]
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// Get the refresh token from the cookie
 	cookie, err := r.Cookie(constants.RefreshTokenCookie)
@@ -285,6 +326,16 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 // Security:
 //   - All refresh tokens for the user are invalidated on the server
 //   - The current refresh token cookie is cleared from the client
+//
+// @Summary Logout from all sessions
+// @Description Invalidates all refresh tokens for the current user
+// @Tags Authentication
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.Response{data=map[string]string} "All sessions invalidated successfully"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /auth/logout-all [post]
 func (h *AuthHandler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -332,6 +383,15 @@ func (h *AuthHandler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 // Responses:
 //   - 200 OK: Token is valid, with user information
 //   - 401 Unauthorized: Token is invalid or expired
+//
+// @Summary Verify token
+// @Description Checks if the current access token is valid
+// @Tags Authentication
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.Response{data=map[string]interface{}} "Token is valid with user information"
+// @Failure 401 {object} utils.Response{error=string} "Token is invalid or expired"
+// @Router /auth/verify [get]
 func (h *AuthHandler) VerifyToken(w http.ResponseWriter, r *http.Request) {
 	// The auth middleware already verified the token
 	// Just need to get the user ID and return success
@@ -376,6 +436,19 @@ func (h *AuthHandler) VerifyToken(w http.ResponseWriter, r *http.Request) {
 // Security:
 //   - The raw API key is only returned once upon creation
 //   - Subsequent access to the API key will only show a masked version
+//
+// @Summary Create API key
+// @Description Generates a new API key for the authenticated user
+// @Tags API Keys
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body models.APIKeyCreationRequest true "API key creation request"
+// @Success 201 {object} utils.Response{data=models.APIKeyResponse} "API key created successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request data"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /keys [post]
 func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -430,6 +503,16 @@ func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 //   - 200 OK: List of API keys
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary List API keys
+// @Description Returns a list of all API keys for the authenticated user
+// @Tags API Keys
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.Response{data=[]models.APIKey} "List of API keys"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /keys [get]
 func (h *AuthHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -467,6 +550,19 @@ func (h *AuthHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 //   - 401 Unauthorized: User not authenticated
 //   - 404 Not Found: API key not found
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Delete API key
+// @Description Revokes an API key for the authenticated user
+// @Tags API Keys
+// @Produce json
+// @Security BearerAuth
+// @Param keyID path string true "API key ID"
+// @Success 200 {object} utils.Response{data=map[string]string} "API key revoked successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid key ID"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 404 {object} utils.Response{error=string} "API key not found"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /keys/{keyID} [delete]
 func (h *AuthHandler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -496,6 +592,36 @@ func (h *AuthHandler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 
 // GetAPIKeyDecoded retrieves and decodes a specific API key.
 // This endpoint allows users to retrieve their original API key values.
+//
+// HTTP Method:
+//   - GET
+//
+// URL Path:
+//   - /auth/api-keys/{key_id}/decode
+//
+// Requires:
+//   - Authentication: User must be logged in
+//   - URL Parameter: key_id - The ID of the API key to retrieve
+//
+// Responses:
+//   - 200 OK: API key retrieved with original value
+//   - 400 Bad Request: Missing or invalid key_id
+//   - 401 Unauthorized: User not authenticated
+//   - 404 Not Found: API key not found
+//   - 500 Internal Server Error: Server-side error
+//
+// @Summary Get decoded API key
+// @Description Retrieves the original value of an API key
+// @Tags API Keys
+// @Produce json
+// @Security BearerAuth
+// @Param keyID path string true "API key ID"
+// @Success 200 {object} utils.Response{data=map[string]interface{}} "API key details with original value"
+// @Failure 400 {object} utils.Response{error=string} "Invalid key ID"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 404 {object} utils.Response{error=string} "API key not found"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /keys/{keyID}/decode [get]
 func (h *AuthHandler) GetAPIKeyDecoded(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -544,6 +670,16 @@ func (h *AuthHandler) GetAPIKeyDecoded(w http.ResponseWriter, r *http.Request) {
 //   - 200 OK: API key is valid, with user information
 //   - 401 Unauthorized: API key is invalid, expired, or missing
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Validate API key
+// @Description Validates an API key and returns user information
+// @Tags Authentication
+// @Produce json
+// @Param X-API-Key header string true "API key to validate"
+// @Success 200 {object} utils.Response{data=map[string]interface{}} "API key is valid with user information"
+// @Failure 401 {object} utils.Response{error=string} "API key is invalid, expired, or missing"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /auth/validate-key [post]
 func (h *AuthHandler) ValidateAPIKey(w http.ResponseWriter, r *http.Request) {
 	// Get the API key from the header
 	apiKey := r.Header.Get(constants.HeaderXAPIKey)
@@ -584,6 +720,16 @@ func (h *AuthHandler) ValidateAPIKey(w http.ResponseWriter, r *http.Request) {
 //   - 200 OK: API key is valid with minimal response
 //   - 401 Unauthorized: API key is invalid, expired, or missing
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Simple API key verification
+// @Description Verifies an API key without returning detailed user information
+// @Tags Authentication
+// @Produce json
+// @Param X-API-Key header string true "API key to verify"
+// @Success 200 {object} utils.Response{data=map[string]bool} "API key is valid"
+// @Failure 401 {object} utils.Response{error=string} "API key is invalid, expired, or missing"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /auth/verify-key [get]
 func (h *AuthHandler) VerifyAPIKeySimple(w http.ResponseWriter, r *http.Request) {
 	// Get the API key from the header
 	apiKey := r.Header.Get(constants.HeaderXAPIKey)
