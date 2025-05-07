@@ -1499,6 +1499,32 @@
 				}
 			],
 			"description": "- `GET /version`\n    \n- `GET /health`\n    \n- `GET /api‑routes`EndFragment"
+		},
+		{
+			"name": "📄API Documentation",
+			"item": [
+				{
+					"name": "swagger",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/docs/index.html",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"docs",
+								"index.html"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "- GET /docs/index.html"
 		}
 	]
 }

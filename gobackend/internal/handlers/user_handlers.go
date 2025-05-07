@@ -46,6 +46,17 @@ func NewUserHandler(userService UserServiceInterface) *UserHandler {
 //   - 401 Unauthorized: User not authenticated
 //   - 404 Not Found: User account no longer exists
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Get current user
+// @Description Returns the profile of the currently authenticated user
+// @Tags Users
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.Response{data=models.User} "User profile retrieved successfully"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 404 {object} utils.Response{error=string} "User account no longer exists"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /users/me [get]
 func (h *UserHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -85,6 +96,20 @@ func (h *UserHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 //   - 401 Unauthorized: User not authenticated
 //   - 409 Conflict: Username or email already in use
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Update user
+// @Description Updates the profile of the currently authenticated user
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param user body models.UserUpdate true "User profile updates"
+// @Success 200 {object} utils.Response{data=models.User} "User profile updated successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request body"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 409 {object} utils.Response{error=string} "Username or email already in use"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /users/me [put]
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -135,6 +160,19 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 //   - Requires the current password to verify user identity
 //   - Validates password strength
 //   - Confirms the new password with a confirmation field
+//
+// @Summary Change password
+// @Description Changes the password of the currently authenticated user
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param passwords body object true "Password change request containing current_password, new_password, and confirm_password fields"
+// @Success 200 {object} utils.Response{data=map[string]string} "Password changed successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request body or passwords don't match"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated or current password incorrect"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /users/me/change-password [post]
 func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -194,6 +232,19 @@ func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 // Security:
 //   - Requires the current password to verify user identity
 //   - Requires explicit confirmation text to prevent accidental deletion
+//
+// @Summary Delete account
+// @Description Deletes the account of the currently authenticated user
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body object true "Account deletion request containing password and confirm fields"
+// @Success 200 {object} utils.Response{data=map[string]string} "Account deleted successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request body or confirmation"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated or password incorrect"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /users/me [delete]
 func (h *UserHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -243,6 +294,16 @@ func (h *UserHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 //   - 200 OK: Check completed with availability information
 //   - 400 Bad Request: Missing username parameter
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Check username availability
+// @Description Checks if a username is available for registration
+// @Tags Users
+// @Produce json
+// @Param username query string true "Username to check"
+// @Success 200 {object} utils.Response{data=map[string]interface{}} "Check completed with availability information"
+// @Failure 400 {object} utils.Response{error=string} "Missing username parameter"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /users/check/username [get]
 func (h *UserHandler) CheckUsername(w http.ResponseWriter, r *http.Request) {
 	// Get the username from the query
 	username := r.URL.Query().Get(constants.QueryParamUsername)
@@ -280,6 +341,16 @@ func (h *UserHandler) CheckUsername(w http.ResponseWriter, r *http.Request) {
 //   - 200 OK: Check completed with availability information
 //   - 400 Bad Request: Missing email parameter
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Check email availability
+// @Description Checks if an email is available for registration
+// @Tags Users
+// @Produce json
+// @Param email query string true "Email to check"
+// @Success 200 {object} utils.Response{data=map[string]interface{}} "Check completed with availability information"
+// @Failure 400 {object} utils.Response{error=string} "Missing email parameter"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /users/check/email [get]
 func (h *UserHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
 	// Get the email from the query
 	email := r.URL.Query().Get(constants.QueryParamEmail)
@@ -317,6 +388,16 @@ func (h *UserHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
 //   - 200 OK: Sessions retrieved successfully
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Get active sessions
+// @Description Returns the current user's active sessions
+// @Tags Users/Sessions
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.Response{data=[]models.ActiveSessionInfo} "Sessions retrieved successfully"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /users/me/sessions [get]
 func (h *UserHandler) GetActiveSessions(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -356,6 +437,20 @@ func (h *UserHandler) GetActiveSessions(w http.ResponseWriter, r *http.Request) 
 //   - 401 Unauthorized: User not authenticated
 //   - 404 Not Found: Session not found
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Invalidate session
+// @Description Invalidates a specific session
+// @Tags Users/Sessions
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param session body object true "Session invalidation request containing session_id field"
+// @Success 200 {object} utils.Response{data=map[string]string} "Session invalidated successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request body"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 404 {object} utils.Response{error=string} "Session not found"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /users/me/sessions [delete]
 func (h *UserHandler) InvalidateSession(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)

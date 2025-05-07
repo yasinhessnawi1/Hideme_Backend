@@ -8,6 +8,7 @@
 package server
 
 import (
+	httpSwagger "github.com/swaggo/http-swagger"
 	"net/http"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog/log"
+	_ "github.com/yasinhessnawi1/Hideme_Backend/docs"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/middleware"
@@ -34,6 +36,9 @@ import (
 // - Generic database operations (admin/dev access only)
 //
 // Route protection is handled through middleware for authenticated endpoints.
+// SetupRoutes configures the routes for the application.
+// It creates a router hierarchy with middleware and grouped routes
+// according to functionality for organized API structure.
 func (s *Server) SetupRoutes() {
 	// Create router
 	r := chi.NewRouter()
@@ -51,8 +56,9 @@ func (s *Server) SetupRoutes() {
 	r.Use(chimiddleware.RealIP)
 	r.Use(middleware.SecurityHeaders())
 
-	// Health check and version routes (unprotected)
+	// Health check, version routes, and Swagger documentation (unprotected)
 	r.Group(func(r chi.Router) {
+		// Health check endpoint
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			// Check database connection
 			err := s.Db.HealthCheck(r.Context())
@@ -68,14 +74,24 @@ func (s *Server) SetupRoutes() {
 			})
 		})
 
+		// Version information endpoint
 		r.Get("/version", func(w http.ResponseWriter, r *http.Request) {
 			utils.JSON(w, http.StatusOK, map[string]string{
 				"version":     s.Config.App.Version,
 				"environment": s.Config.App.Environment,
 			})
 		})
-		// Inside the SetupRoutes function, add this line:
+
+		// Self-documenting API routes
 		r.Get("/api/routes", s.GetAPIRoutes)
+
+		// Swagger documentation endpoint
+		r.Get("/docs/*", httpSwagger.Handler(
+			httpSwagger.URL("doc.json"), // Use a relative path instead of absolute
+			httpSwagger.DeepLinking(true),
+			httpSwagger.DocExpansion("list"), // Change to "list" to expand by default
+			httpSwagger.DomID("swagger-ui"),
+		))
 	})
 
 	// API routes
