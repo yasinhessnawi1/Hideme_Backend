@@ -27,6 +27,7 @@ import (
 // AppConfig represents the entire application configuration.
 // It contains all settings needed by the application, organized into logical groups
 // to maintain a clear structure as the application grows.
+// AppConfig represents the entire application configuration.
 type AppConfig struct {
 	// App contains general application metadata and environment settings
 	App AppSettings `yaml:"app"`
@@ -54,6 +55,9 @@ type AppConfig struct {
 
 	// GDPRLogging contains GDPR-compliant logging configuration
 	GDPRLogging GDPRLoggingSettings `yaml:"gdpr_logging"`
+
+	// Security contains settings for rate limiting and IP banning
+	Security SecuritySettings `yaml:"security"`
 }
 
 // GDPRLoggingSettings contains GDPR-compliant logging configuration.
@@ -208,6 +212,60 @@ type HashSettings struct {
 	KeyLength uint32 `yaml:"key_length" env:"HASH_KEY_LENGTH"`
 }
 
+// SecuritySettings contains configuration for security features.
+type SecuritySettings struct {
+	// RateLimiting configures request rate limiting
+	RateLimiting RateLimitSettings `yaml:"rate_limiting" env:"RATE_LIMITING"`
+
+	// IPBanning configures IP address banning
+	IPBanning IPBanSettings `yaml:"ip_banning" env:"IP_BANNING"`
+}
+
+// RateLimitSettings configures rate limiting behavior.
+type RateLimitSettings struct {
+	// Enabled determines if rate limiting is active
+	Enabled bool `yaml:"enabled" env:"RATE_LIMIT_ENABLED"`
+
+	// DefaultRate is the default requests per second allowed
+	DefaultRate float64 `yaml:"default_rate" env:"RATE_LIMIT_DEFAULT_RATE"`
+
+	// DefaultBurst is the default maximum burst allowed
+	DefaultBurst int `yaml:"default_burst" env:"RATE_LIMIT_DEFAULT_BURST"`
+
+	// AuthRate is the rate limit for authentication endpoints
+	AuthRate float64 `yaml:"auth_rate" env:"RATE_LIMIT_AUTH_RATE"`
+
+	// AuthBurst is the burst limit for authentication endpoints
+	AuthBurst int `yaml:"auth_burst" env:"RATE_LIMIT_AUTH_BURST"`
+
+	// APIRate is the rate limit for API endpoints
+	APIRate float64 `yaml:"api_rate" env:"RATE_LIMIT_API_RATE"`
+
+	// APIBurst is the burst limit for API endpoints
+	APIBurst int `yaml:"api_burst" env:"RATE_LIMIT_API_BURST"`
+}
+
+// IPBanSettings configures IP address banning behavior.
+type IPBanSettings struct {
+	// Enabled determines if IP banning is active
+	Enabled bool `yaml:"enabled" env:"IP_BAN_ENABLED"`
+
+	// CacheRefreshInterval is how often to refresh the ban cache
+	CacheRefreshInterval time.Duration `yaml:"cache_refresh_interval" env:"IP_BAN_CACHE_REFRESH"`
+
+	// AutoBanEnabled enables automatic banning of suspicious IPs
+	AutoBanEnabled bool `yaml:"auto_ban_enabled" env:"IP_BAN_AUTO_ENABLED"`
+
+	// AutoBanThreshold is the number of suspicious activities before ban
+	AutoBanThreshold int `yaml:"auto_ban_threshold" env:"IP_BAN_AUTO_THRESHOLD"`
+
+	// AutoBanWindow is the time window to consider for suspicious activities
+	AutoBanWindow time.Duration `yaml:"auto_ban_window" env:"IP_BAN_AUTO_WINDOW"`
+
+	// AutoBanDuration is how long automatic bans last
+	AutoBanDuration time.Duration `yaml:"auto_ban_duration" env:"IP_BAN_AUTO_DURATION"`
+}
+
 // ConnectionString returns the database connection string formatted for the database driver.
 // It properly escapes and formats all connection parameters for MariaDB/MySQL.
 //
@@ -340,6 +398,12 @@ func Get() *AppConfig {
 //
 // Parameters:
 //   - config: The configuration to set defaults for
+//
+// setDefaults sets default values for any missing configuration settings.
+// This allows the application to run with minimal explicit configuration.
+//
+// Parameters:
+//   - config: The configuration to set defaults for
 func setDefaults(config *AppConfig) {
 	// App defaults
 	if config.App.Environment == "" {
@@ -446,6 +510,63 @@ func setDefaults(config *AppConfig) {
 	}
 	if config.GDPRLogging.LogSanitizationLevel == "" {
 		config.GDPRLogging.LogSanitizationLevel = "medium"
+	}
+
+	// Security defaults - Rate Limiting
+	if !config.App.IsProduction() {
+		// Enable rate limiting by default in production
+		config.Security.RateLimiting.Enabled = true
+	}
+
+	if config.Security.RateLimiting.DefaultRate == 0 {
+		config.Security.RateLimiting.DefaultRate = 10 // 10 requests per second
+	}
+
+	if config.Security.RateLimiting.DefaultBurst == 0 {
+		config.Security.RateLimiting.DefaultBurst = 30 // Burst of 30 requests
+	}
+
+	if config.Security.RateLimiting.AuthRate == 0 {
+		config.Security.RateLimiting.AuthRate = 3 // 3 requests per second for auth
+	}
+
+	if config.Security.RateLimiting.AuthBurst == 0 {
+		config.Security.RateLimiting.AuthBurst = 5 // Burst of 5 for auth
+	}
+
+	if config.Security.RateLimiting.APIRate == 0 {
+		config.Security.RateLimiting.APIRate = 20 // 20 requests per second for API
+	}
+
+	if config.Security.RateLimiting.APIBurst == 0 {
+		config.Security.RateLimiting.APIBurst = 50 // Burst of 50 for API
+	}
+
+	// Security defaults - IP Banning
+	if !config.App.IsProduction() {
+		// Enable IP banning by default in production
+		config.Security.IPBanning.Enabled = true
+	}
+
+	if config.Security.IPBanning.CacheRefreshInterval == 0 {
+		config.Security.IPBanning.CacheRefreshInterval = 5 * time.Minute
+	}
+
+	if config.Security.IPBanning.AutoBanEnabled == false {
+		// Auto-ban is enabled by default in production
+		config.Security.IPBanning.AutoBanEnabled = config.App.IsProduction()
+	}
+
+	if config.Security.IPBanning.AutoBanThreshold == 0 {
+		config.Security.IPBanning.AutoBanThreshold = 5 // Ban after 5 suspicious activities
+	}
+
+	if config.Security.IPBanning.AutoBanWindow == 0 {
+		config.Security.IPBanning.AutoBanWindow = 5 * time.Minute // Within 5 minutes
+	}
+
+	if config.Security.IPBanning.AutoBanDuration == 0 {
+		config.Security.IPBanning.AutoBanDuration = 24 * time.Hour // Ban for 24 hours
 	}
 }
 

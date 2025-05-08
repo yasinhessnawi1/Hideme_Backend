@@ -129,28 +129,6 @@ func CSRF() func(http.Handler) http.Handler {
 	}
 }
 
-// RateLimit is a middleware that limits the rate of requests from a single client.
-// This is a placeholder implementation that will be replaced with a more sophisticated rate limiting solution.
-//
-// Returns:
-//   - A middleware function that can be used with an HTTP handler
-func RateLimit() func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Get the client IP address
-			clientIP := r.RemoteAddr
-
-			// Here we would check if the client has exceeded their rate limit
-			// For now, just log and pass through
-			log.Debug().
-				Str("client_ip", clientIP).
-				Msg("Rate limit check would happen here")
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 // SecurityHeaders adds security-related HTTP headers to responses.
 // These headers help protect against common web vulnerabilities.
 //

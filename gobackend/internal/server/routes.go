@@ -9,9 +9,13 @@ package server
 
 import (
 	httpSwagger "github.com/swaggo/http-swagger"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/handlers"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -36,25 +40,41 @@ import (
 // - Generic database operations (admin/dev access only)
 //
 // Route protection is handled through middleware for authenticated endpoints.
-// SetupRoutes configures the routes for the application.
-// It creates a router hierarchy with middleware and grouped routes
-// according to functionality for organized API structure.
 func (s *Server) SetupRoutes() {
+	// Create security service for rate limiting and IP banning
+	securityService := service.NewSecurityService(
+		repository.NewIPBanRepository(s.Db),
+		5*time.Minute, // Cache refresh interval
+	)
+
+	// Create security handlers
+	securityHandler := handlers.NewSecurityHandler(securityService)
+
 	// Create router
 	r := chi.NewRouter()
 
 	// Get allowed origins from environment or use default values
 	allowedOrigins := getAllowedOrigins()
 
-	// Custom CORS middleware that applies to all routes
-	// This ensures CORS headers are applied properly and consistently
-	r.Use(corsMiddleware(allowedOrigins))
-
 	// Base middleware
 	r.Use(chimiddleware.RequestID)
 	r.Use(middleware.Recovery())
 	r.Use(chimiddleware.RealIP)
 	r.Use(middleware.SecurityHeaders())
+
+	// Add IP ban check as early as possible in the chain
+	r.Use(middleware.IPBanCheck(securityService))
+
+	// Basic rate limit for all endpoints
+	r.Use(middleware.RateLimit(securityService, "default"))
+
+	// Add auto-ban middleware that monitors for suspicious requests
+	// Ban for 24 hours after 5 suspicious activities within 5 minutes
+	r.Use(middleware.AutoBan(securityService, 5, 5*time.Minute, 24*time.Hour))
+
+	// Custom CORS middleware that applies to all routes
+	// This ensures CORS headers are applied properly and consistently
+	r.Use(corsMiddleware(allowedOrigins))
 
 	// Health check, version routes, and Swagger documentation (unprotected)
 	r.Group(func(r chi.Router) {
@@ -98,6 +118,9 @@ func (s *Server) SetupRoutes() {
 	r.Route("/api", func(r chi.Router) {
 		// Authentication routes
 		r.Route("/auth", func(r chi.Router) {
+			// Apply stricter rate limit for auth endpoints to prevent brute force
+			r.Use(middleware.RateLimit(securityService, "auth"))
+
 			// Public auth endpoints
 			r.Group(func(r chi.Router) {
 				r.Post("/signup", s.Handlers.AuthHandler.Register)
@@ -113,11 +136,10 @@ func (s *Server) SetupRoutes() {
 				r.Get("/verify", s.Handlers.AuthHandler.VerifyToken)
 			})
 
-			//TODO
 			// Protected auth endpoints
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.JWTAuth(s.authProviders.JWTService))
-				r.Use(middleware.AddRoleToContext(s.authProviders.JWTService)) // Add this line
+				r.Use(middleware.AddRoleToContext(s.authProviders.JWTService))
 				// verify JWT tokens used for user sessions
 				r.Get("/verify", s.Handlers.AuthHandler.VerifyToken)
 				// security feature to log out all sessions - admin only
@@ -167,6 +189,9 @@ func (s *Server) SetupRoutes() {
 		r.Route("/settings", func(r chi.Router) {
 			r.Use(middleware.JWTAuth(s.authProviders.JWTService))
 
+			// Apply appropriate rate limit for API endpoints
+			r.Use(middleware.RateLimit(securityService, "api"))
+
 			r.Get("/", s.Handlers.SettingsHandler.GetSettings)
 			r.Put("/", s.Handlers.SettingsHandler.UpdateSettings)
 
@@ -195,6 +220,23 @@ func (s *Server) SetupRoutes() {
 				r.Post("/", s.Handlers.SettingsHandler.AddModelEntities)
 				r.Delete("/{entityID}", s.Handlers.SettingsHandler.DeleteModelEntity)
 				r.Delete("/delete_entities_by_method_id/{methodID}", s.Handlers.SettingsHandler.DeleteModelEntityByMethodID)
+			})
+		})
+
+		// Admin routes (require admin role)
+		r.Route("/admin", func(r chi.Router) {
+			// Apply JWT authentication and admin role check middleware
+			r.Use(middleware.JWTAuth(s.authProviders.JWTService))
+			r.Use(middleware.AddRoleToContext(s.authProviders.JWTService))
+			r.Use(middleware.RequireRole(constants.RoleAdmin))
+
+			// Security management
+			r.Route("/security", func(r chi.Router) {
+				r.Route("/bans", func(r chi.Router) {
+					r.Get("/", securityHandler.ListBannedIPs)
+					r.Post("/", securityHandler.BanIP)
+					r.Delete("/{id}", securityHandler.UnbanIP)
+				})
 			})
 		})
 	})

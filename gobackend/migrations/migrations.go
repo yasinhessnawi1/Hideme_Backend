@@ -425,5 +425,50 @@ func GetMigrations() []Migration {
 		createBanListWordsTable(),
 		createSessionsTable(),
 		createAPIKeysTable(),
+		createIPBansTable(), // TODO added this
+	}
+}
+
+// createIPBansTable creates the ip_bans table.
+// This table stores banned IP addresses and CIDR ranges.
+//
+// Returns:
+//   - Migration: A migration that creates the ip_bans table
+func createIPBansTable() Migration {
+	return Migration{
+		Name:        "create_ip_bans_table",
+		Description: "Creates the ip_bans table",
+		TableName:   "ip_bans",
+		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
+			query := `
+				CREATE TABLE IF NOT EXISTS ip_bans (
+					ban_id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+					ip_address VARCHAR(50) NOT NULL,
+					reason TEXT NOT NULL,
+					expires_at TIMESTAMP,
+					created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					created_by VARCHAR(100) NOT NULL
+				)
+			`
+			_, err := tx.ExecContext(ctx, query)
+			if err != nil {
+				return err
+			}
+
+			// Create indexes
+			indexes := []string{
+				`CREATE INDEX IF NOT EXISTS idx_ip_address ON ip_bans(ip_address)`,
+				`CREATE INDEX IF NOT EXISTS idx_expires_at ON ip_bans(expires_at)`,
+			}
+
+			for _, idx := range indexes {
+				_, err = tx.ExecContext(ctx, idx)
+				if err != nil {
+					return err
+				}
+			}
+
+			return nil
+		},
 	}
 }
