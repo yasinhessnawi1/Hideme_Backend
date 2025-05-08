@@ -195,18 +195,6 @@ func (s *Server) SetupRoutes() {
 				r.Delete("/delete_entities_by_method_id/{methodID}", s.Handlers.SettingsHandler.DeleteModelEntityByMethodID)
 			})
 		})
-
-		// Generic database operations (protected)
-		r.Route("/db", func(r chi.Router) {
-			r.Use(middleware.JWTAuth(s.authProviders.JWTService))
-
-			r.Get("/{table}", s.Handlers.GenericHandler.GetTableData)
-			r.Post("/{table}", s.Handlers.GenericHandler.CreateRecord)
-			r.Get("/{table}/{id}", s.Handlers.GenericHandler.GetRecordByID)
-			r.Put("/{table}/{id}", s.Handlers.GenericHandler.UpdateRecord)
-			r.Delete("/{table}/{id}", s.Handlers.GenericHandler.DeleteRecord)
-			r.Get("/{table}/schema", s.Handlers.GenericHandler.GetTableSchema)
-		})
 	})
 
 	// Set the router
