@@ -7,6 +7,8 @@
 package middleware
 
 import (
+	"context"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/handlers"
 	"net/http"
 	"strings"
 
@@ -54,11 +56,11 @@ func APIKeyAuth( /* apiKeyRepo repository.APIKeyRepository */ ) func(http.Handle
 	}
 }
 
-// RequireRole is a middleware that requires a user to have a specific role.
-// This is a placeholder implementation that will be completed when role-based access control is added.
+// RequireRole is middleware that requires a user to have a specific role.
+// It checks if the authenticated user has the required role to access the endpoint.
 //
 // Parameters:
-//   - role: The role that a user must have to access the endpoint
+//   - role: The role that a user must have to access the endpoint (e.g., "admin")
 //
 // Returns:
 //   - A middleware function that can be used with an HTTP handler
@@ -72,13 +74,26 @@ func RequireRole(role string) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Here we would check if the user has the required role
-			// For now, just log and pass through
-			log.Debug().
-				Int64("user_id", userID).
-				Str("role", role).
-				Msg("Role check would happen here")
+			// Get user role from context
+			userRole, ok := handlers.GetUserRole(r)
+			if !ok {
+				log.Error().Int64("user_id", userID).Msg("User role not found in context")
+				utils.Forbidden(w, constants.MsgAccessDenied)
+				return
+			}
 
+			// Check if the user has the required role
+			if userRole != role {
+				log.Warn().
+					Int64("user_id", userID).
+					Str("user_role", userRole).
+					Str("required_role", role).
+					Msg("Access denied: insufficient permissions")
+				utils.Forbidden(w, constants.MsgAccessDenied)
+				return
+			}
+
+			// User has the required role, proceed to the handler
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -108,28 +123,6 @@ func CSRF() func(http.Handler) http.Handler {
 				utils.Forbidden(w, "Invalid or missing CSRF token")
 				return
 			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-// RateLimit is a middleware that limits the rate of requests from a single client.
-// This is a placeholder implementation that will be replaced with a more sophisticated rate limiting solution.
-//
-// Returns:
-//   - A middleware function that can be used with an HTTP handler
-func RateLimit() func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Get the client IP address
-			clientIP := r.RemoteAddr
-
-			// Here we would check if the client has exceeded their rate limit
-			// For now, just log and pass through
-			log.Debug().
-				Str("client_ip", clientIP).
-				Msg("Rate limit check would happen here")
 
 			next.ServeHTTP(w, r)
 		})
@@ -171,6 +164,38 @@ func SecurityHeaders() func(http.Handler) http.Handler {
 			}
 
 			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// TODO
+// AddRoleToContext extracts the JWT token from the Authorization header,
+// validates it, and adds the user role to the request context
+func AddRoleToContext(jwtService auth.JWTValidator) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Get the token from the Authorization header
+			authHeader := r.Header.Get("Authorization")
+			if authHeader == "" || !strings.HasPrefix(authHeader, constants.BearerTokenPrefix) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Extract the token
+			tokenString := strings.TrimPrefix(authHeader, constants.BearerTokenPrefix)
+
+			// Validate the token and get claims
+			claims, err := jwtService.ValidateToken(tokenString, constants.TokenTypeAccess)
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Add role to context
+			ctx := context.WithValue(r.Context(), handlers.GetContextKeyUserRole(), claims.Role)
+
+			// Call the next handler with the updated context
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

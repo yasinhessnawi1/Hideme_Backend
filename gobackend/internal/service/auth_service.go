@@ -116,7 +116,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, reg *models.UserRegistra
 	}
 
 	// Create the user
-	user := models.NewUser(reg.Username, reg.Email)
+	user := models.NewUser(reg.Username, reg.Email, constants.RoleUser)
 	user.PasswordHash = passwordHash
 	user.Salt = salt
 
@@ -184,12 +184,12 @@ func (s *AuthService) AuthenticateUser(ctx context.Context, creds *models.UserCr
 	}
 
 	// Generate JWT tokens
-	accessToken, _, err := s.jwtService.GenerateAccessToken(user.ID, user.Username, user.Email)
+	accessToken, _, err := s.jwtService.GenerateAccessToken(user.ID, user.Username, user.Email, user.Role)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, refreshJWTID, err := s.jwtService.GenerateRefreshToken(user.ID, user.Username, user.Email)
+	refreshToken, refreshJWTID, err := s.jwtService.GenerateRefreshToken(user.ID, user.Username, user.Email, user.Role)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("failed to generate refresh token: %w", err)
 	}
@@ -265,12 +265,12 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (s
 	}
 
 	// Generate new tokens
-	accessToken, _, err := s.jwtService.GenerateAccessToken(user.ID, user.Username, user.Email)
+	accessToken, _, err := s.jwtService.GenerateAccessToken(user.ID, user.Username, user.Email, user.Role)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	newRefreshToken, refreshJWTID, err := s.jwtService.GenerateRefreshToken(user.ID, user.Username, user.Email)
+	newRefreshToken, refreshJWTID, err := s.jwtService.GenerateRefreshToken(user.ID, user.Username, user.Email, user.Role)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
 	}

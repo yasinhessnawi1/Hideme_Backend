@@ -206,11 +206,12 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *models.User) 
 	user.UpdatedAt = now
 
 	// Define the query with RETURNING for PostgreSQL
+	// Define the query with RETURNING for PostgreSQL
 	query := `
-        INSERT INTO users (username, email, password_hash, salt, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING user_id
-    `
+    INSERT INTO users (username, email, password_hash, salt, role, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING user_id
+`
 
 	// Execute the query
 	err := r.db.QueryRowContext(
@@ -220,6 +221,7 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *models.User) 
 		user.Email,
 		user.PasswordHash,
 		user.Salt,
+		user.Role,
 		user.CreatedAt,
 		user.UpdatedAt,
 	).Scan(&user.ID)
@@ -227,7 +229,7 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *models.User) 
 	// Log the query execution with sensitive data redacted
 	utils.LogDBQuery(
 		query,
-		[]interface{}{user.Username, user.Email, "[REDACTED]", "[REDACTED]", user.CreatedAt, user.UpdatedAt},
+		[]interface{}{user.Username, user.Email, "[REDACTED]", "[REDACTED]", user.Role, user.CreatedAt, user.UpdatedAt},
 		time.Since(startTime),
 		err,
 	)
@@ -286,10 +288,10 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id int64) (*models
 
 	// Define the query
 	query := `
-        SELECT user_id, username, email, password_hash, salt, created_at, updated_at
-        FROM users
-        WHERE user_id = $1
-    `
+    SELECT user_id, username, email, password_hash, salt, role, created_at, updated_at
+    FROM users
+    WHERE user_id = $1
+`
 
 	// Execute the query
 	user := &models.User{}
@@ -299,6 +301,7 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id int64) (*models
 		&user.Email,
 		&user.PasswordHash,
 		&user.Salt,
+		&user.Role,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -338,7 +341,7 @@ func (r *PostgresUserRepository) GetByUsername(ctx context.Context, username str
 
 	// Define the query with case-insensitive comparison for PostgreSQL
 	query := `
-        SELECT user_id, username, email, password_hash, salt, created_at, updated_at
+        SELECT user_id, username, email, password_hash, salt, role, created_at, updated_at
         FROM users
         WHERE LOWER(username) = LOWER($1)
     `
@@ -351,6 +354,7 @@ func (r *PostgresUserRepository) GetByUsername(ctx context.Context, username str
 		&user.Email,
 		&user.PasswordHash,
 		&user.Salt,
+		&user.Role,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -392,7 +396,7 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 
 	// Define the query with case-insensitive comparison for PostgreSQL
 	query := `
-        SELECT user_id, username, email, password_hash, salt, created_at, updated_at
+        SELECT user_id, username, email, password_hash, salt, role, created_at, updated_at
         FROM users
         WHERE LOWER(email) = LOWER($1)
     `
@@ -405,6 +409,7 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 		&user.Email,
 		&user.PasswordHash,
 		&user.Salt,
+		&user.Role,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -449,10 +454,10 @@ func (r *PostgresUserRepository) Update(ctx context.Context, user *models.User) 
 
 	// Define the query
 	query := `
-        UPDATE users
-        SET username = $1, email = $2, updated_at = $3
-        WHERE user_id = $4
-    `
+    UPDATE users
+    SET username = $1, email = $2, role = $3, updated_at = $4
+    WHERE user_id = $5
+`
 
 	// Execute the query
 	result, err := r.db.ExecContext(
@@ -460,6 +465,7 @@ func (r *PostgresUserRepository) Update(ctx context.Context, user *models.User) 
 		query,
 		user.Username,
 		user.Email,
+		user.Role,
 		user.UpdatedAt,
 		user.ID,
 	)

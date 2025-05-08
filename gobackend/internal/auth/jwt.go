@@ -42,6 +42,9 @@ type CustomClaims struct {
 	// Email is the email address of the authenticated user.
 	Email string `json:"email"`
 
+	// Role is the user's role ("user", "admin")
+	Role string `json:"role"`
+
 	// TokenType indicates whether this is an "access" or "refresh" token.
 	TokenType string `json:"token_type"`
 
@@ -95,13 +98,17 @@ func (s *JWTService) GetConfig() *config.JWTSettings {
 //   - userID: The unique identifier for the user
 //   - username: The username of the user
 //   - email: The email address of the user
+//   - role: The role of the user (default to "user" if empty)
 //
 // Returns:
 //   - tokenString: The signed JWT token string
 //   - jwtID: The unique identifier for this token (useful for token revocation)
 //   - error: Any error that occurred during token generation
-func (s *JWTService) GenerateAccessToken(userID int64, username, email string) (string, string, error) {
-	return s.generateToken(userID, username, email, constants.TokenTypeAccess, s.Config.Expiry)
+func (s *JWTService) GenerateAccessToken(userID int64, username, email string, role string) (string, string, error) {
+	if role == "" {
+		role = constants.RoleUser // Default to user role if not specified
+	}
+	return s.generateToken(userID, username, email, role, constants.TokenTypeAccess, s.Config.Expiry)
 }
 
 // GenerateRefreshToken generates a new JWT refresh token for a user.
@@ -111,13 +118,17 @@ func (s *JWTService) GenerateAccessToken(userID int64, username, email string) (
 //   - userID: The unique identifier for the user
 //   - username: The username of the user
 //   - email: The email address of the user
+//   - role: The role of the user (default to "user" if empty)
 //
 // Returns:
 //   - tokenString: The signed JWT token string
 //   - jwtID: The unique identifier for this token (useful for token revocation)
 //   - error: Any error that occurred during token generation
-func (s *JWTService) GenerateRefreshToken(userID int64, username, email string) (string, string, error) {
-	return s.generateToken(userID, username, email, constants.TokenTypeRefresh, s.Config.RefreshExpiry)
+func (s *JWTService) GenerateRefreshToken(userID int64, username, email string, role string) (string, string, error) {
+	if role == "" {
+		role = constants.RoleUser // Default to user role if not specified
+	}
+	return s.generateToken(userID, username, email, role, constants.TokenTypeRefresh, s.Config.RefreshExpiry)
 }
 
 // generateToken creates a new JWT token with the provided parameters.
@@ -127,6 +138,7 @@ func (s *JWTService) GenerateRefreshToken(userID int64, username, email string) 
 //   - userID: The unique identifier for the user
 //   - username: The username of the user
 //   - email: The email address of the user
+//   - role: The role of the user (e.g., "user", "admin")
 //   - tokenType: The type of token ("access" or "refresh")
 //   - expiry: How long the token should be valid
 //
@@ -134,7 +146,7 @@ func (s *JWTService) GenerateRefreshToken(userID int64, username, email string) 
 //   - tokenString: The signed JWT token string
 //   - jwtID: The unique identifier for this token
 //   - error: Any error that occurred during token generation
-func (s *JWTService) generateToken(userID int64, username, email, tokenType string, expiry time.Duration) (string, string, error) {
+func (s *JWTService) generateToken(userID int64, username, email, role, tokenType string, expiry time.Duration) (string, string, error) {
 	// Generate a unique token ID to enable token revocation
 	jwtID := uuid.New().String()
 
@@ -144,6 +156,7 @@ func (s *JWTService) generateToken(userID int64, username, email, tokenType stri
 		UserID:    userID,
 		Username:  username,
 		Email:     email,
+		Role:      role,
 		TokenType: tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.Config.Issuer,
@@ -282,13 +295,13 @@ func (s *JWTService) RefreshTokens(refreshToken, userID int64, username, email s
 	}
 
 	// Generate new access token
-	accessToken, accessJWTID, err := s.GenerateAccessToken(userID, username, email)
+	accessToken, accessJWTID, err := s.GenerateAccessToken(userID, username, email, claims.Role)
 	if err != nil {
 		return "", "", "", "", err
 	}
 
 	// Generate new refresh token
-	newRefreshToken, refreshJWTID, err := s.GenerateRefreshToken(userID, username, email)
+	newRefreshToken, refreshJWTID, err := s.GenerateRefreshToken(userID, username, email, claims.Role)
 	if err != nil {
 		return "", "", "", "", err
 	}
