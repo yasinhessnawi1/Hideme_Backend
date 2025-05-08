@@ -113,13 +113,15 @@ func (s *Server) SetupRoutes() {
 				r.Get("/verify", s.Handlers.AuthHandler.VerifyToken)
 			})
 
+			//TODO
 			// Protected auth endpoints
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.JWTAuth(s.authProviders.JWTService))
+				r.Use(middleware.AddRoleToContext(s.authProviders.JWTService)) // Add this line
 				// verify JWT tokens used for user sessions
 				r.Get("/verify", s.Handlers.AuthHandler.VerifyToken)
-				// security feature to log out all sessions
-				r.Post("/logout-all", s.Handlers.AuthHandler.LogoutAll)
+				// security feature to log out all sessions - admin only
+				r.With(middleware.RequireRole(constants.RoleAdmin)).Post("/logout-all", s.Handlers.AuthHandler.LogoutAll)
 			})
 		})
 

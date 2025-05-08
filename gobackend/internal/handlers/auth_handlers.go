@@ -32,6 +32,18 @@ type AuthHandler struct {
 	jwtService  JWTServiceInterface
 }
 
+// Context key names for user-related data
+const (
+	contextKeyUserRole = "user_role"
+)
+
+// GetUserRole extracts the user role from the request context.
+// Returns the role and a boolean indicating whether it was found.
+func GetUserRole(r *http.Request) (string, bool) {
+	role, ok := r.Context().Value(contextKeyUserRole).(string)
+	return role, ok
+}
+
 // NewAuthHandler creates a new AuthHandler with the provided services.
 // It performs nil checks on the required services to prevent runtime panics.
 //
@@ -750,4 +762,10 @@ func (h *AuthHandler) VerifyAPIKeySimple(w http.ResponseWriter, r *http.Request)
 	utils.JSON(w, constants.StatusOK, map[string]interface{}{
 		"valid": true,
 	})
+}
+
+// TODO
+// GetContextKeyUserRole returns the context key for user role
+func GetContextKeyUserRole() string {
+	return contextKeyUserRole
 }

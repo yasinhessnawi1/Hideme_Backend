@@ -131,6 +131,10 @@ func (m *Migrator) RunMigrations(ctx context.Context) error {
 		log.Error().Err(err).Msg("Failed to ensure user_settings columns")
 		// Don't return error to avoid breaking existing migrations
 	}
+	if err := m.ensureUserRoleColumn(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to ensure user role column")
+		// Don't return error to avoid breaking existing migrations
+	}
 
 	return nil
 }
@@ -356,6 +360,48 @@ func (m *Migrator) ensureUserSettingsColumns(ctx context.Context) error {
 		}
 
 		log.Info().Msg("Successfully added use_banlist_for_detection column")
+	}
+
+	return nil
+}
+
+// ensureUserRoleColumn ensures that the users table has a role column.
+// This handles schema evolution without requiring a full migration for minor column additions.
+//
+// Parameters:
+//   - ctx: Context for database operations and cancellation
+//
+// Returns:
+//   - error: Any error encountered while ensuring columns exist, nil if successful
+func (m *Migrator) ensureUserRoleColumn(ctx context.Context) error {
+	// Check if the role column exists
+	var columnExists bool
+	query := `
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'users'
+            AND column_name = 'role'
+        )
+    `
+
+	err := m.db.QueryRowContext(ctx, query).Scan(&columnExists)
+	if err != nil {
+		return fmt.Errorf("failed to check if role column exists: %w", err)
+	}
+
+	// Add the column if it doesn't exist
+	if !columnExists {
+		log.Info().Msg("Adding missing role column to users table")
+
+		// TODO check
+		alterQuery := `ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user' NOT NULL`
+		_, err = m.db.ExecContext(ctx, alterQuery)
+		if err != nil {
+			return fmt.Errorf("failed to add role column: %w", err)
+		}
+
+		log.Info().Msg("Successfully added role column to users table")
 	}
 
 	return nil
