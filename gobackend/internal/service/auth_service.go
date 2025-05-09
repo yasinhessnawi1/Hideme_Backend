@@ -479,7 +479,7 @@ func (s *AuthService) VerifyAPIKey(ctx context.Context, apiKeyString string) (*m
 		// Check if the stored key is encrypted
 		if auth.IsEncrypted(apiKey.APIKeyHash) {
 			// Try to decrypt
-			decryptedKey, err := auth.DecryptAPIKey(apiKey.APIKeyHash, encryptionKey)
+			decryptedKey, err := utils.DecryptKey(apiKey.APIKeyHash, encryptionKey)
 			if err == nil && decryptedKey == apiKeyString {
 				// Found a match
 				user, err := s.userRepo.GetByID(ctx, apiKey.UserID)
@@ -547,7 +547,7 @@ func (s *AuthService) GetDecryptedAPIKey(ctx context.Context, userID int64, keyI
 	var originalKey string
 	if auth.IsEncrypted(apiKey.APIKeyHash) {
 		// API key is encrypted with AES-256-GCM
-		originalKey, err = auth.DecryptAPIKey(apiKey.APIKeyHash, encryptionKey)
+		originalKey, err = utils.DecryptKey(apiKey.APIKeyHash, encryptionKey)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to decrypt API key: %w", err)
 		}

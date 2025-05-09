@@ -239,6 +239,16 @@ func (s *Server) SetupRoutes() {
 				})
 			})
 		})
+
+		// Document routes (protected)
+		r.Route("/documents", func(r chi.Router) {
+			r.Use(middleware.JWTAuth(s.authProviders.JWTService))
+			r.Get("/", s.Handlers.DocumentHandler.ListDocuments)
+			r.Post("/", s.Handlers.DocumentHandler.UploadDocument)
+			r.Get("/{id}", s.Handlers.DocumentHandler.GetDocumentByID)
+			r.Delete("/{id}", s.Handlers.DocumentHandler.DeleteDocumentByID)
+			r.Get("/{id}/summary", s.Handlers.DocumentHandler.GetDocumentSummary)
+		})
 	})
 
 	// Set the router
@@ -971,6 +981,104 @@ func (s *Server) GetAPIRoutes(w http.ResponseWriter, r *http.Request) {
 			"response": map[string]interface{}{
 				"success": true,
 				"data":    "This document you're viewing right now",
+			},
+		},
+	}
+
+	// Document routes
+	routes["documents"] = map[string]interface{}{
+		"GET /api/documents": map[string]interface{}{
+			"description": "List all documents for the current user (paginated)",
+			"headers": map[string]string{
+				"Authorization": "Bearer {access_token}",
+			},
+			"query_params": map[string]string{
+				"page":     "Page number (optional, default 1)",
+				"pageSize": "Page size (optional, default 10)",
+			},
+			"response": map[string]interface{}{
+				"success": true,
+				"data": []map[string]interface{}{
+					{
+						"id":               1,
+						"hashed_name":      "encrypted-filename-string",
+						"upload_timestamp": "2023-01-01T12:00:00Z",
+						"last_modified":    "2023-01-01T12:00:00Z",
+						"entity_count":     5,
+					},
+				},
+				"total_count": 42,
+			},
+		},
+		"POST /api/documents": map[string]interface{}{
+			"description": "Upload a new document (expects a file and/or metadata)",
+			"headers": map[string]string{
+				"Authorization": "Bearer {access_token}",
+				"Content-Type":  "multipart/form-data",
+			},
+			"body": map[string]interface{}{
+				"file":     "The document file to upload",
+				"metadata": "Optional JSON metadata (e.g., original filename)",
+			},
+			"response": map[string]interface{}{
+				"success": true,
+				"data": map[string]interface{}{
+					"id":               1,
+					"hashed_name":      "encrypted-filename-string",
+					"upload_timestamp": "2023-01-01T12:00:00Z",
+					"last_modified":    "2023-01-01T12:00:00Z",
+				},
+			},
+		},
+		"GET /api/documents/{id}": map[string]interface{}{
+			"description": "Get a document's metadata by ID",
+			"headers": map[string]string{
+				"Authorization": "Bearer {access_token}",
+			},
+			"path_params": map[string]string{
+				"id": "ID of the document",
+			},
+			"response": map[string]interface{}{
+				"success": true,
+				"data": map[string]interface{}{
+					"id":               1,
+					"hashed_name":      "encrypted-filename-string",
+					"upload_timestamp": "2023-01-01T12:00:00Z",
+					"last_modified":    "2023-01-01T12:00:00Z",
+				},
+			},
+		},
+		"DELETE /api/documents/{id}": map[string]interface{}{
+			"description": "Delete a document by ID",
+			"headers": map[string]string{
+				"Authorization": "Bearer {access_token}",
+			},
+			"path_params": map[string]string{
+				"id": "ID of the document",
+			},
+			"response": map[string]interface{}{
+				"success":     true,
+				"status_code": 204,
+				"no_content":  true,
+			},
+		},
+		"GET /api/documents/{id}/summary": map[string]interface{}{
+			"description": "Get a summary of a document (with entity count, etc.)",
+			"headers": map[string]string{
+				"Authorization": "Bearer {access_token}",
+			},
+			"path_params": map[string]string{
+				"id": "ID of the document",
+			},
+			"response": map[string]interface{}{
+				"success": true,
+				"data": map[string]interface{}{
+					"id":               1,
+					"hashed_name":      "encrypted-filename-string",
+					"upload_timestamp": "2023-01-01T12:00:00Z",
+					"last_modified":    "2023-01-01T12:00:00Z",
+					"entity_count":     5,
+				},
 			},
 		},
 	}

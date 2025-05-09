@@ -44,6 +44,9 @@ type Handlers struct {
 
 	// SettingsHandler manages user settings and preferences endpoints
 	SettingsHandler *handlers.SettingsHandler
+
+	// DocumentHandler manages document endpoints
+	DocumentHandler *handlers.DocumentHandler
 }
 
 // AuthProviders contains all authentication providers for the application.
@@ -338,6 +341,7 @@ func (s *Server) setupHandlers() error {
 		UserHandler: handlers.NewUserHandler(services.userService),
 		// services.settingsService implicitly implements handlers.SettingsServiceInterface
 		SettingsHandler: handlers.NewSettingsHandler(services.settingsService),
+		DocumentHandler: handlers.NewDocumentHandler(nil), // TODO: wire real service
 	}
 
 	// Validate that services are properly initialized

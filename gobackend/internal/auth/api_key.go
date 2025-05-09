@@ -4,15 +4,9 @@
 package auth
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"errors"
-	"fmt"
-	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -96,77 +90,6 @@ func (s *APIKeyService) GenerateAPIKey(userID int64, name string, duration time.
 	return apiKeyModel, apiKey, nil
 }
 
-// EncryptAPIKey encrypts an API key using AES-256-GCM.
-// This provides authenticated encryption for maximum security.
-//
-// Parameters:
-//   - apiKey: The plaintext API key to encrypt
-//   - encryptionKey: The key to use for encryption (must be at least 32 bytes)
-//
-// Returns:
-//   - The base64-encoded encrypted API key
-//   - An error if encryption fails
-func EncryptAPIKey(apiKey string, encryptionKey []byte) (string, error) {
-	block, err := aes.NewCipher(encryptionKey[:32])
-	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM: %w", err)
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", fmt.Errorf("failed to create nonce: %w", err)
-	}
-
-	ciphertext := gcm.Seal(nonce, nonce, []byte(apiKey), nil)
-
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
-}
-
-// DecryptAPIKey decrypts an API key that was encrypted with EncryptAPIKey.
-//
-// Parameters:
-//   - encryptedAPIKey: The base64-encoded encrypted API key
-//   - encryptionKey: The key used for encryption (must be at least 32 bytes)
-//
-// Returns:
-//   - The decrypted plaintext API key
-//   - An error if decryption fails
-func DecryptAPIKey(encryptedAPIKey string, encryptionKey []byte) (string, error) {
-	ciphertext, err := base64.StdEncoding.DecodeString(encryptedAPIKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode base64: %w", err)
-	}
-
-	block, err := aes.NewCipher(encryptionKey[:32])
-	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM: %w", err)
-	}
-
-	nonceSize := gcm.NonceSize()
-	if len(ciphertext) < nonceSize {
-		return "", errors.New("ciphertext too short")
-	}
-
-	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
-
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt: %w", err)
-	}
-
-	return string(plaintext), nil
-}
-
 // IsEncrypted determines if a secured API key is encrypted or hashed.
 // It checks if the string is valid base64 and long enough to be an encrypted key.
 //
@@ -196,7 +119,7 @@ func IsEncrypted(securedAPIKey string) bool {
 //   - The secured API key (either encrypted or hashed)
 func HashAPIKey(apiKey string, encryptionKey []byte) string {
 	if encryptionKey != nil && len(encryptionKey) >= 32 {
-		encrypted, err := EncryptAPIKey(apiKey, encryptionKey)
+		encrypted, err := utils.EncryptKey(apiKey, encryptionKey)
 		if err == nil {
 			return encrypted
 		}
