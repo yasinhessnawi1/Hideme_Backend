@@ -36,7 +36,7 @@ func TestNewDocument(t *testing.T) {
 
 	// Create a new document
 	now := time.Now()
-	document := models.NewDocument(userID, originalFilename)
+	document := models.NewDocument(userID, originalFilename, []byte("my-secret-key"))
 
 	// Verify the document was created correctly
 	assert.NotNil(t, document, "NewDocument should return a non-nil Document")

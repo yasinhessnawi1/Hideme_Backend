@@ -89,7 +89,7 @@ func TestGenerateAccessToken(t *testing.T) {
 	username := "testuser"
 	email := "test@example.com"
 
-	token, jwtID, err := service.GenerateAccessToken(userID, username, email)
+	token, jwtID, err := service.GenerateAccessToken(userID, username, email, "user")
 
 	// Check for errors
 	if err != nil {
@@ -169,7 +169,7 @@ func TestGenerateRefreshToken(t *testing.T) {
 	username := "testuser"
 	email := "test@example.com"
 
-	token, jwtID, err := service.GenerateRefreshToken(userID, username, email)
+	token, jwtID, err := service.GenerateRefreshToken(userID, username, email, "user")
 
 	// Check for errors
 	if err != nil {
@@ -229,7 +229,7 @@ func TestValidateToken(t *testing.T) {
 	service := auth.NewJWTService(cfg)
 
 	// Generate valid token
-	validToken, _, err := service.GenerateAccessToken(123, "testuser", "test@example.com")
+	validToken, _, err := service.GenerateAccessToken(123, "testuser", "test@example.com", "user")
 	if err != nil {
 		t.Fatalf("Failed to generate test token: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestValidateToken(t *testing.T) {
 	}
 
 	// Generate token with wrong type
-	wrongTypeToken, _, err := service.GenerateRefreshToken(789, "wrongtype", "wrong@example.com")
+	wrongTypeToken, _, err := service.GenerateRefreshToken(789, "wrongtype", "wrong@example.com", "user")
 	if err != nil {
 		t.Fatalf("Failed to generate wrong type test token: %v", err)
 	}
@@ -391,7 +391,7 @@ func TestParseTokenWithoutValidation(t *testing.T) {
 		{
 			name: "Valid token",
 			setupToken: func() string {
-				token, _, _ := service.GenerateAccessToken(123, "testuser", "test@example.com")
+				token, _, _ := service.GenerateAccessToken(123, "testuser", "test@example.com", "user")
 				return token
 			},
 			expectedError: false,
@@ -463,7 +463,7 @@ func TestExtractUserIDFromToken(t *testing.T) {
 
 	// Generate token
 	expectedUserID := int64(123)
-	token, _, err := service.GenerateAccessToken(expectedUserID, "testuser", "test@example.com")
+	token, _, err := service.GenerateAccessToken(expectedUserID, "testuser", "test@example.com", "user")
 	if err != nil {
 		t.Fatalf("Failed to generate test token: %v", err)
 	}

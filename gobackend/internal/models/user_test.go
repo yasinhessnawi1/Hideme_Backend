@@ -32,7 +32,7 @@ func TestNewUser(t *testing.T) {
 
 	// Create a new user
 	now := time.Now()
-	user := models.NewUser(username, email)
+	user := models.NewUser(username, email, "user")
 
 	// Verify the user was created correctly
 	assert.NotNil(t, user, "NewUser should return a non-nil User")

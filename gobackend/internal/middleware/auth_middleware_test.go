@@ -6,6 +6,7 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/middleware"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 	"net/http"
 	"net/http/httptest"
@@ -478,7 +479,8 @@ func TestRateLimit(t *testing.T) {
 			mockHandler := &MockHandler{}
 
 			// Create the middleware
-			middleware := middleware.RateLimit()(mockHandler)
+			mockSecurityService := &service.SecurityService{}
+			middleware := middleware.RateLimit(mockSecurityService, "auth")(mockHandler)
 
 			// Create a test request
 			req, err := http.NewRequest("GET", "/test", nil)

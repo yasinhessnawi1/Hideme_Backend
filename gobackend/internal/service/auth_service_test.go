@@ -636,7 +636,7 @@ func TestAuthService_LogoutAll(t *testing.T) {
 
 	// Create multiple sessions for the user
 	for i := 0; i < 3; i++ {
-		_, refreshJWTID, err := jwtService.GenerateRefreshToken(user.ID, user.Username, user.Email)
+		_, refreshJWTID, err := jwtService.GenerateRefreshToken(user.ID, user.Username, user.Email, "user")
 		if err != nil {
 			t.Fatalf("Failed to generate refresh token: %v", err)
 		}
