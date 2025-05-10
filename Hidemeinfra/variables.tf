@@ -99,7 +99,6 @@ variable "health_check_port" {
 variable "enable_ssl" {
   description = "Whether to enable HTTPS with SSL certificates"
   type        = bool
-  default     = false
 }
 
 
@@ -227,3 +226,18 @@ variable "domain_name" {
   type        = string
   default     = "hidemeai.com"
 }
+
+variable "SENDGRID_API_KEY" {
+  description = "api key for sandgrid password reset"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "API_KEY_ENCRYPTION_KEY" {
+  description = "api key for encryption"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+

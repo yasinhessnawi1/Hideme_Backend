@@ -65,16 +65,16 @@ output "static_ip_name" {
 output "ssl_certificates" {
   description = "The IDs of the Google-managed SSL certificates"
   value = {
-    api     = google_compute_managed_ssl_certificate.api_certificate.id
-    go_api  = google_compute_managed_ssl_certificate.go_api_certificate.id
+    api    = google_compute_managed_ssl_certificate.api_certificate.id
+    go_api = google_compute_managed_ssl_certificate.go_api_certificate.id
   }
 }
 
 output "ssl_certificate_domains" {
   description = "The domains configured for SSL certificates"
   value = {
-    api     = google_compute_managed_ssl_certificate.api_certificate.managed[0].domains
-    go_api  = google_compute_managed_ssl_certificate.go_api_certificate.managed[0].domains
+    api    = google_compute_managed_ssl_certificate.api_certificate.managed[0].domains
+    go_api = google_compute_managed_ssl_certificate.go_api_certificate.managed[0].domains
   }
 }
 
@@ -91,9 +91,9 @@ output "domain_name" {
 output "lb_urls" {
   description = "The URLs for accessing the application"
   value = {
-    http_api      = "http://api.${var.domain_name}"
-    https_api     = "https://api.${var.domain_name}"
-    http_go_api   = "http://goapi.${var.domain_name}"
-    https_go_api  = "https://goapi.${var.domain_name}"
+    http_api     = "http://api.${var.domain_name}"
+    https_api    = "https://api.${var.domain_name}"
+    http_go_api  = "http://goapi.${var.domain_name}"
+    https_go_api = "https://goapi.${var.domain_name}"
   }
 }

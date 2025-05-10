@@ -178,7 +178,7 @@ variable "repo_owner" {
 variable "domain" {
   description = "Domain name for the application"
   type        = string
-  default = ""
+  default     = ""
 }
 
 variable "go_domain" {
@@ -190,4 +190,18 @@ variable "go_domain" {
 variable "ssl_email" {
   description = "Email address for SSL certificate notifications"
   type        = string
+}
+
+variable "SENDGRID_API_KEY" {
+  description = "api key for sandgrid password reset"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "API_KEY_ENCRYPTION_KEY" {
+  description = "api key for encryption"
+  type        = string
+  sensitive   = true
+  default     = ""
 }

@@ -4,6 +4,11 @@
  * Variables for the database module of the Hide Me application.
  */
 
+variable "enable_ssl" {
+  description = "Whether to enable SSL for the database"
+  type        = bool
+}
+
 variable "project" {
   description = "The GCP project ID"
   type        = string

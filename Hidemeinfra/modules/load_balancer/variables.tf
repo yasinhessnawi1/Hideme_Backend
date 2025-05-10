@@ -19,13 +19,13 @@ variable "environment" {
 variable "lb_timeout_sec" {
   description = "Timeout in seconds for the load balancer backend service"
   type        = number
-  default     = 1800  # 30 minutes for long-running requests
+  default     = 1800 # 30 minutes for long-running requests
 }
 
 variable "lb_connection_draining_timeout_sec" {
   description = "Connection draining timeout in seconds for the load balancer backend service"
   type        = number
-  default     = 600   # 10 minutes for connection draining
+  default     = 600 # 10 minutes for connection draining
 }
 
 variable "instance_group" {
@@ -48,7 +48,7 @@ variable "static_ip_name" {
 variable "domain_name" {
   description = "Root domain name without trailing dot (e.g., hidemeai.com)"
   type        = string
-  default = ""
+  default     = ""
 }
 
 

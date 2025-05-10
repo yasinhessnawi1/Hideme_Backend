@@ -50,25 +50,22 @@ resource "google_project_iam_member" "db_service_account_roles" {
 }
 
 # Create a firewall rule to allow health checks - SECURED
-# These are Google's official health check IP ranges
 resource "google_compute_firewall" "allow_health_checks" {
   name        = "hide-me-allow-health-checks-${var.environment}"
   project     = var.project
   network     = var.network_id
   description = "Allow health checks from Google Cloud health checking systems"
-
+  
   allow {
     protocol = "tcp"
     ports    = [var.health_check_port]
   }
 
-  # Health check systems - use Google's documented ranges only
-  source_ranges = var.health_check_ip_ranges # Now using variable with Google's health check ranges
+  source_ranges = var.health_check_ip_ranges
 
   target_tags = ["hide-me-app", "${var.environment}-app"]
 
-  # Mark this as an acceptable risk if using tfsec
-  # tfsec:ignore:google-compute-no-public-ingress
+  #tfsec:ignore:google-compute-no-public-ingress
 }
 
 # Create a firewall rule to allow internal communication
@@ -90,7 +87,6 @@ resource "google_compute_firewall" "allow_internal" {
     protocol = "icmp"
   }
 
-  # Private subnet ranges
   source_ranges = var.private_subnet_ranges
 }
 
@@ -106,12 +102,10 @@ resource "google_compute_firewall" "allow_ssh" {
     ports    = ["22"]
   }
 
-  # IAP IP ranges for SSH - these are Google's documented ranges
-  source_ranges = var.iap_ip_ranges # Now using variable with Google's IAP ranges
+  source_ranges = var.iap_ip_ranges
 
   target_tags = ["hide-me-app", "${var.environment}-app"]
 
-  # Mark this as an acceptable risk if using tfsec
   # tfsec:ignore:google-compute-no-public-ingress
 }
 
@@ -127,12 +121,10 @@ resource "google_compute_firewall" "allow_backend" {
     ports    = [var.backend_port, var.go_backend_port]
   }
 
-  # Load balancer IP ranges - using Google's documented LB ranges
-  source_ranges = var.load_balancer_ip_ranges # Now using variable with Google's LB ranges
+  source_ranges = var.load_balancer_ip_ranges
 
   target_tags = ["hide-me-app", "${var.environment}-app"]
 
-  # Mark this as an acceptable risk if using tfsec
   # tfsec:ignore:google-compute-no-public-ingress
 }
 
@@ -149,12 +141,10 @@ resource "google_compute_firewall" "allow_specific_egress" {
     ports    = ["443"]
   }
 
-  # Google APIs and services - using Google's documented API ranges
-  destination_ranges = var.google_api_ranges # Now using variable
+  destination_ranges = var.google_api_ranges
 
   target_tags = ["hide-me-app", "${var.environment}-app"]
 
-  # Mark this as an acceptable risk if using tfsec
   # tfsec:ignore:google-compute-no-public-egress
 }
 
@@ -165,16 +155,14 @@ resource "google_compute_firewall" "deny_all_egress" {
   network     = var.network_id
   description = "Deny all egress traffic not explicitly allowed"
   direction   = "EGRESS"
-  priority    = 65534 # Just above the default allow all
+  priority    = 65534
 
   deny {
     protocol = "all"
   }
 
-  # All destinations
   destination_ranges = ["0.0.0.0/0"]
 
-  # Apply to all instances except those with allow tags
   target_tags = ["${var.environment}-deny-egress"]
 }
 
@@ -201,13 +189,12 @@ resource "google_secret_manager_secret_version" "db_credentials_version" {
     database = var.db_name
   })
 }
-/*
+
 # Create a Cloud Armor security policy with enhanced rules
 resource "google_compute_security_policy" "security_policy" {
   name        = "hide-me-security-policy-${var.environment}"
   project     = var.project
   description = "Security policy for Hide Me application"
-
 
   # Default rule (deny all)
   rule {
@@ -229,7 +216,7 @@ resource "google_compute_security_policy" "security_policy" {
     match {
       versioned_expr = "SRC_IPS_V1"
       config {
-        src_ip_ranges = var.allowed_ip_ranges # Now using a variable for allowed IPs
+        src_ip_ranges = var.allowed_ip_ranges
       }
     }
     description = "Allow legitimate traffic"
@@ -254,7 +241,7 @@ resource "google_compute_security_policy" "security_policy" {
         count        = 100
         interval_sec = 60
       }
-      ban_duration_sec = 300 # 5 minutes ban duration
+      ban_duration_sec = 300
     }
   }
 
@@ -305,5 +292,3 @@ resource "google_compute_security_policy" "security_policy" {
     description = "Local File Inclusion protection"
   }
 }
-
- */

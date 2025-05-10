@@ -20,7 +20,11 @@ resource "google_compute_subnetwork" "public_subnet" {
   ip_cidr_range = var.public_subnet_cidr
   region        = var.region
   network       = google_compute_network.vpc.id
-
+  log_config {
+    aggregation_interval = "INTERVAL_10_MIN"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
+  }
   # Enable Private Google Access for services
   private_ip_google_access = true
 }
@@ -32,7 +36,11 @@ resource "google_compute_subnetwork" "private_subnet" {
   ip_cidr_range = var.private_subnet_cidr
   region        = var.region
   network       = google_compute_network.vpc.id
-
+  log_config {
+    aggregation_interval = "INTERVAL_10_MIN"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
+  }
   # Enable Private Google Access for services
   private_ip_google_access = true
 }
