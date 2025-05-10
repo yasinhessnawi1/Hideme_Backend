@@ -121,7 +121,7 @@ resource "google_compute_region_instance_group_manager" "app_instance_group" {
   # Configure auto-healing with the health check
   auto_healing_policies {
     health_check      = google_compute_health_check.app_health_check.id
-    initial_delay_sec = 1200
+    initial_delay_sec = 600
   }
 
   # Configure update policy for rolling updates
@@ -185,10 +185,7 @@ resource "google_compute_region_autoscaler" "app_autoscaler" {
     }
   }
 }
-# Generate a random suffix for globally unique bucket names
-resource "random_id" "bucket_suffix" {
-  byte_length = 4
-}
+
 
 # Create a Secret Manager secret for GitHub SSH key
 resource "google_secret_manager_secret" "github_ssh_key" {
