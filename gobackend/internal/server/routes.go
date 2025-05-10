@@ -134,6 +134,10 @@ func (s *Server) SetupRoutes() {
 				// Explicitly handle OPTIONS preflight request for /verify endpoint
 				r.Options("/verify", handlePreflight(allowedOrigins))
 				r.Get("/verify", s.Handlers.AuthHandler.VerifyToken)
+
+				// Add forgot-password and reset-password routes
+				r.Post("/forgot-password", s.Handlers.PasswordResetHandler.ForgotPassword)
+				r.Post("/reset-password", s.Handlers.PasswordResetHandler.ResetPassword)
 			})
 
 			// Protected auth endpoints
@@ -1011,14 +1015,15 @@ func (s *Server) GetAPIRoutes(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 		"POST /api/documents": map[string]interface{}{
-			"description": "Upload a new document (expects a file and/or metadata)",
+			"description": "Upload a new document (expects a file, metadata, and redaction schema)",
 			"headers": map[string]string{
 				"Authorization": "Bearer {access_token}",
 				"Content-Type":  "multipart/form-data",
 			},
 			"body": map[string]interface{}{
-				"file":     "The document file to upload",
-				"metadata": "Optional JSON metadata (e.g., original filename)",
+				"file":             "The document file to upload",
+				"metadata":         "Optional JSON metadata (e.g., original filename)",
+				"redaction_schema": "JSON object representing the redaction schema",
 			},
 			"response": map[string]interface{}{
 				"success": true,

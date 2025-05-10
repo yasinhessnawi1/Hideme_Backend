@@ -425,7 +425,8 @@ func GetMigrations() []Migration {
 		createBanListWordsTable(),
 		createSessionsTable(),
 		createAPIKeysTable(),
-		createIPBansTable(), // TODO added this
+		createIPBansTable(),              // TODO added this
+		createPasswordResetTokensTable(), // Added new migration
 	}
 }
 

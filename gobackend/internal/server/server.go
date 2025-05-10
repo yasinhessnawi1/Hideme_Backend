@@ -47,6 +47,9 @@ type Handlers struct {
 
 	// DocumentHandler manages document endpoints
 	DocumentHandler *handlers.DocumentHandler
+
+	// PasswordResetHandler manages password reset endpoints
+	PasswordResetHandler *handlers.PasswordResetHandler
 }
 
 // AuthProviders contains all authentication providers for the application.
@@ -242,13 +245,15 @@ func (s *Server) setupAuthProviders() error {
 // repositories holds all repositories used by the server.
 // These provide data access abstraction for different domain entities.
 var repositories struct {
-	userRepo        repository.UserRepository
-	sessionRepo     repository.SessionRepository
-	apiKeyRepo      repository.APIKeyRepository
-	settingsRepo    repository.SettingsRepository
-	banListRepo     repository.BanListRepository
-	patternRepo     repository.PatternRepository
-	modelEntityRepo repository.ModelEntityRepository
+	userRepo          repository.UserRepository
+	sessionRepo       repository.SessionRepository
+	apiKeyRepo        repository.APIKeyRepository
+	settingsRepo      repository.SettingsRepository
+	banListRepo       repository.BanListRepository
+	patternRepo       repository.PatternRepository
+	modelEntityRepo   repository.ModelEntityRepository
+	passwordResetRepo repository.PasswordResetRepository
+	documentRepo      repository.DocumentRepository
 }
 
 // setupRepositories initializes all data repositories.
@@ -268,6 +273,9 @@ func (s *Server) setupRepositories() error {
 	repositories.banListRepo = repository.NewBanListRepository(s.Db)
 	repositories.patternRepo = repository.NewPatternRepository(s.Db)
 	repositories.modelEntityRepo = repository.NewModelEntityRepository(s.Db)
+	repositories.passwordResetRepo = repository.NewPasswordResetRepository(s.Db)
+	//needs an secrete witch is in the env or in the config
+	repositories.documentRepo = repository.NewDocumentRepository(s.Db, []byte(os.Getenv("API_KEY_ENCRYPTION_KEY")))
 
 	return nil
 }
@@ -279,6 +287,8 @@ var services struct {
 	userService     *service.UserService
 	settingsService *service.SettingsService
 	dbService       *service.DatabaseService
+	emailService    *service.EmailService
+	documentService *service.DocumentService
 }
 
 // setupServices initializes all business services.
@@ -323,6 +333,16 @@ func (s *Server) setupServices() error {
 
 	services.dbService = service.NewDatabaseService(s.Db)
 
+	// Initialize the new EmailService
+	emailService, err := service.NewEmailService()
+	if err != nil {
+		return fmt.Errorf("failed to initialize EmailService: %w", err)
+	}
+	services.emailService = emailService
+
+	// Initialize the new DocumentService
+	services.documentService = service.NewDocumentService(repositories.documentRepo)
+
 	return nil
 }
 
@@ -341,7 +361,9 @@ func (s *Server) setupHandlers() error {
 		UserHandler: handlers.NewUserHandler(services.userService),
 		// services.settingsService implicitly implements handlers.SettingsServiceInterface
 		SettingsHandler: handlers.NewSettingsHandler(services.settingsService),
-		DocumentHandler: handlers.NewDocumentHandler(nil), // TODO: wire real service
+		DocumentHandler: handlers.NewDocumentHandler(services.documentService),
+
+		PasswordResetHandler: handlers.NewPasswordResetHandler(repositories.userRepo, &repositories.passwordResetRepo, services.emailService, s.authProviders.PasswordCfg),
 	}
 
 	// Validate that services are properly initialized

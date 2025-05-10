@@ -29,6 +29,9 @@ type Document struct {
 
 	// LastModified records when this document was last modified
 	LastModified time.Time `json:"last_modified" db:"last_modified"`
+
+	// RedactionSchema stores the redaction mapping for the document as a JSON string
+	RedactionSchema string `json:"redaction_schema" db:"redaction_schema"`
 }
 
 // NewDocument creates a new Document instance with the given original filename and user ID.
@@ -89,4 +92,53 @@ type DocumentSummary struct {
 
 	// EntityCount indicates how many sensitive entities were detected in this document
 	EntityCount int `json:"entity_count"`
+}
+
+// RedactionMapping represents the structure for redaction data
+// It includes a list of file results
+type RedactionMapping struct {
+	FileResults []FileResult `json:"file_results"`
+}
+
+// FileResult represents the result of processing a file
+type FileResult struct {
+	File    string `json:"file"`
+	Status  string `json:"status"`
+	Results struct {
+		RedactionMapping struct {
+			Pages []Page `json:"pages"`
+		} `json:"redaction_mapping"`
+		FileInfo FileInfo `json:"file_info"`
+	} `json:"results"`
+}
+
+// FileInfo represents information about a file
+type FileInfo struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	Size        string `json:"size"`
+}
+
+// Page represents a single page in the document with sensitive information
+type Page struct {
+	PageNumber int         `json:"page"`
+	Sensitive  []Sensitive `json:"sensitive"`
+}
+
+// Sensitive represents sensitive information detected on a page
+type Sensitive struct {
+	OriginalText string  `json:"original_text"`
+	EntityType   string  `json:"entity_type"`
+	Score        float64 `json:"score"`
+	Start        int     `json:"start"`
+	End          int     `json:"end"`
+	BBox         BBox    `json:"bbox"`
+}
+
+// BBox represents a bounding box for sensitive information
+type BBox struct {
+	X0 float64 `json:"x0"`
+	Y0 float64 `json:"y0"`
+	X1 float64 `json:"x1"`
+	Y1 float64 `json:"y1"`
 }

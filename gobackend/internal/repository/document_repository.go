@@ -194,8 +194,8 @@ func (r *PostgresDocumentRepository) Create(ctx context.Context, document *model
 	}
 	// Define the query with RETURNING for PostgreSQL
 	query := `
-        INSERT INTO ` + constants.TableDocuments + ` (` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO ` + constants.TableDocuments + ` (` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified, redaction_schema)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING ` + constants.ColumnDocumentID + `
     `
 
@@ -207,12 +207,13 @@ func (r *PostgresDocumentRepository) Create(ctx context.Context, document *model
 		encryptedName,
 		document.UploadTimestamp,
 		document.LastModified,
+		document.RedactionSchema,
 	).Scan(&document.ID)
 
 	// Log the query execution
 	utils.LogDBQuery(
 		query,
-		[]interface{}{document.UserID, encryptedName, document.UploadTimestamp, document.LastModified},
+		[]interface{}{document.UserID, encryptedName, document.UploadTimestamp, document.LastModified, document.RedactionSchema},
 		time.Since(startTime),
 		err,
 	)
@@ -245,7 +246,7 @@ func (r *PostgresDocumentRepository) GetByID(ctx context.Context, id int64) (*mo
 
 	// Define the query
 	query := `
-        SELECT ` + constants.ColumnDocumentID + `, ` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified
+        SELECT ` + constants.ColumnDocumentID + `, ` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified, redaction_schema
         FROM ` + constants.TableDocuments + `
         WHERE ` + constants.ColumnDocumentID + ` = $1
     `
@@ -258,6 +259,7 @@ func (r *PostgresDocumentRepository) GetByID(ctx context.Context, id int64) (*mo
 		&document.HashedDocumentName,
 		&document.UploadTimestamp,
 		&document.LastModified,
+		&document.RedactionSchema,
 	)
 
 	// Log the query execution

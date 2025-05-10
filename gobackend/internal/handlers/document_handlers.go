@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 	"net/http"
 	"strconv"
 
@@ -16,7 +18,7 @@ import (
 // DocumentServiceInterface defines the service methods required for document operations.
 type DocumentServiceInterface interface {
 	ListDocuments(userID int64, page, pageSize int) ([]*models.Document, int, error)
-	UploadDocument(userID int64, filename string) (*models.Document, error)
+	UploadDocument(userID int64, filename string, redactionSchema models.RedactionMapping) (*models.Document, error)
 	GetDocumentByID(id int64) (*models.Document, error)
 	DeleteDocumentByID(id int64) error
 	GetDocumentSummary(id int64) (*models.DocumentSummary, error)
@@ -52,7 +54,19 @@ func (h *DocumentHandler) ListDocuments(w http.ResponseWriter, r *http.Request) 
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
 	}
-	utils.Paginated(w, constants.StatusOK, docs, params.Page, params.PageSize, total)
+
+	// Exclude redaction schema from the response
+	responseDocs := make([]*models.DocumentSummary, len(docs))
+	for i, doc := range docs {
+		responseDocs[i] = &models.DocumentSummary{
+			ID:              doc.ID,
+			HashedName:      doc.HashedDocumentName,
+			UploadTimestamp: doc.UploadTimestamp,
+			LastModified:    doc.LastModified,
+			EntityCount:     0, // Placeholder for entity count
+		}
+	}
+	utils.Paginated(w, constants.StatusOK, responseDocs, params.Page, params.PageSize, total)
 }
 
 // UploadDocument handles POST /api/documents
@@ -63,16 +77,21 @@ func (h *DocumentHandler) UploadDocument(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var req struct {
-		Filename string `json:"filename" validate:"required"`
+		Filename        string                  `json:"filename" validate:"required"`
+		RedactionSchema models.RedactionMapping `json:"redaction_schema" validate:"required"`
 	}
 	if err := utils.DecodeAndValidate(r, &req); err != nil {
-		utils.ErrorFromAppError(w, utils.ParseError(err))
+		utils.BadRequest(w, "Invalid request data required filename and redaction schema", nil)
 		return
 	}
+	log.Info().Interface("request_body", req).Msg("Received upload document request")
 	log.Info().Int64("user_id", userID).Str("filename", req.Filename).Msg("Uploading document")
-	doc, err := h.documentService.UploadDocument(userID, req.Filename)
+	doc, err := h.documentService.UploadDocument(userID, req.Filename, req.RedactionSchema)
 	if err != nil {
-		log.Error().Err(err).Int64("user_id", userID).Str("filename", req.Filename).Msg("Failed to upload document")
+		if errors.Is(err, service.ErrInvalidDocumentID) {
+			utils.BadRequest(w, "Invalid document ID", nil)
+			return
+		}
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
 	}
@@ -95,10 +114,14 @@ func (h *DocumentHandler) GetDocumentByID(w http.ResponseWriter, r *http.Request
 	log.Info().Int64("user_id", userID).Int64("document_id", id).Msg("Getting document by ID")
 	doc, err := h.documentService.GetDocumentByID(id)
 	if err != nil {
-		log.Error().Err(err).Int64("user_id", userID).Int64("document_id", id).Msg("Failed to get document by ID")
+		if errors.Is(err, service.ErrDocumentNotFound) {
+			utils.NotFound(w, "Document not found")
+			return
+		}
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
 	}
+	// Include redaction schema in the response
 	utils.JSON(w, constants.StatusOK, doc)
 }
 
@@ -117,7 +140,10 @@ func (h *DocumentHandler) DeleteDocumentByID(w http.ResponseWriter, r *http.Requ
 	}
 	log.Info().Int64("user_id", userID).Int64("document_id", id).Msg("Deleting document by ID")
 	if err := h.documentService.DeleteDocumentByID(id); err != nil {
-		log.Error().Err(err).Int64("user_id", userID).Int64("document_id", id).Msg("Failed to delete document by ID")
+		if errors.Is(err, service.ErrDocumentNotFound) {
+			utils.NotFound(w, "Document not found")
+			return
+		}
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
 	}
