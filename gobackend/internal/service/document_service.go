@@ -36,14 +36,23 @@ func (s *DocumentService) ListDocuments(userID int64, page, pageSize int) ([]*mo
 		return nil, 0, err
 	}
 
-	// Decrypt document names for display
 	encryptionKey := []byte(os.Getenv("API_KEY_ENCRYPTION_KEY"))
 	for _, doc := range docs {
+		// Decrypt document names for display
 		originalFilename, err := doc.DecryptDocumentName(encryptionKey)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to decrypt document name: %w", err)
 		}
 		doc.HashedDocumentName = originalFilename
+
+		// Decrypt redaction schema if it exists
+		if doc.RedactionSchema != "" && doc.RedactionSchema != "{}" {
+			decryptedSchema, err := doc.DecryptRedactionSchema(encryptionKey)
+			if err != nil {
+				return nil, 0, fmt.Errorf("failed to decrypt redaction schema: %w", err)
+			}
+			doc.RedactionSchema = decryptedSchema
+		}
 	}
 
 	return docs, total, nil
@@ -60,19 +69,27 @@ func (s *DocumentService) UploadDocument(userID int64, filename string, redactio
 	// Log the redaction schema
 	log.Info().RawJSON("redaction_schema", redactionSchemaJSON).Msg("Processing redaction schema")
 
-	doc := models.NewDocument(userID, filename, []byte(os.Getenv("API_KEY_ENCRYPTION_KEY")))
-	doc.RedactionSchema = string(redactionSchemaJSON) // Store as JSON string
+	encryptionKey := []byte(os.Getenv("API_KEY_ENCRYPTION_KEY"))
+	doc := models.NewDocument(userID, filename, encryptionKey)
+
+	// Encrypt the redaction schema before storing
+	if err := doc.EncryptRedactionSchema(string(redactionSchemaJSON), encryptionKey); err != nil {
+		return nil, fmt.Errorf("failed to encrypt redaction schema: %w", err)
+	}
 
 	if err := s.docRepo.Create(context.Background(), doc); err != nil {
 		return nil, err
 	}
 
 	// Decrypt the document name before returning
-	originalFilename, err := doc.DecryptDocumentName([]byte(os.Getenv("API_KEY_ENCRYPTION_KEY")))
+	originalFilename, err := doc.DecryptDocumentName(encryptionKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt document name: %w", err)
 	}
 	doc.HashedDocumentName = originalFilename
+
+	// We'll return the unencrypted schema in the response
+	doc.RedactionSchema = string(redactionSchemaJSON)
 
 	return doc, nil
 }
@@ -87,32 +104,41 @@ func (s *DocumentService) GetDocumentByID(id int64) (*models.Document, error) {
 		return nil, err
 	}
 
+	encryptionKey := []byte(os.Getenv("API_KEY_ENCRYPTION_KEY"))
+
 	// Check if redaction_schema is empty
 	if doc.RedactionSchema == "" {
 		doc.RedactionSchema = "{}" // Set to empty JSON object if empty
+	} else {
+		// Decrypt the redaction schema
+		decryptedSchema, err := doc.DecryptRedactionSchema(encryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt redaction schema: %w", err)
+		}
+		doc.RedactionSchema = decryptedSchema
 	}
 
-	// Unmarshal the redaction_schema JSON string into a RedactionMapping struct
+	// Verify the decrypted schema is valid JSON
 	var redactionMapping models.RedactionMapping
 	if err := json.Unmarshal([]byte(doc.RedactionSchema), &redactionMapping); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal redaction schema: %w", err)
 	}
 
 	// Make sure the document name is decrypted
-	originalFilename, err := doc.DecryptDocumentName([]byte(os.Getenv("API_KEY_ENCRYPTION_KEY")))
+	originalFilename, err := doc.DecryptDocumentName(encryptionKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt document name: %w", err)
 	}
 	doc.HashedDocumentName = originalFilename
 
-	// Return the document with the computed entity_count
+	// Return the document with the decrypted data
 	return &models.Document{
 		ID:                 doc.ID,
 		UserID:             doc.UserID,
 		HashedDocumentName: doc.HashedDocumentName,
 		UploadTimestamp:    doc.UploadTimestamp,
 		LastModified:       doc.LastModified,
-		RedactionSchema:    doc.RedactionSchema, // Keep as string for storage
+		RedactionSchema:    doc.RedactionSchema, // Return the decrypted schema
 	}, nil
 }
 

@@ -6,6 +6,8 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 	"time"
 
+	"encoding/json"
+	"fmt"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
@@ -31,6 +33,7 @@ type Document struct {
 	LastModified time.Time `json:"last_modified" db:"last_modified"`
 
 	// RedactionSchema stores the redaction mapping for the document as a JSON string
+	// This is stored encrypted in the database for added security
 	RedactionSchema string `json:"redaction_schema" db:"redaction_schema"`
 }
 
@@ -73,6 +76,61 @@ func (d *Document) DecryptDocumentName(encryptionKey []byte) (string, error) {
 // This should be called whenever the document or its related entities are modified.
 func (d *Document) UpdateLastModified() {
 	d.LastModified = time.Now()
+}
+
+// EncryptRedactionSchema encrypts the redaction schema JSON string using the provided key.
+// This ensures the redaction schema is stored securely in the database.
+//
+// Parameters:
+//   - schemaJSON: The JSON string representation of the redaction schema
+//   - encryptionKey: The key to use for encryption (must be at least 32 bytes)
+//
+// Returns:
+//   - The encrypted redaction schema
+//   - An error if encryption fails
+func (d *Document) EncryptRedactionSchema(schemaJSON string, encryptionKey []byte) error {
+	encrypted, err := utils.EncryptKey(schemaJSON, encryptionKey)
+	if err != nil {
+		return err
+	}
+
+	// Wrap the encrypted string in a JSON object to make it valid for JSONB storage
+	wrappedJSON := fmt.Sprintf(`{"file_results": "%s"}`, encrypted)
+	d.RedactionSchema = wrappedJSON
+	return nil
+}
+
+// DecryptRedactionSchema decrypts the redaction schema using the provided key.
+//
+// Parameters:
+//   - encryptionKey: The key used for encryption (must be at least 32 bytes)
+//
+// Returns:
+//   - The decrypted redaction schema JSON string
+//   - An error if decryption fails
+func (d *Document) DecryptRedactionSchema(encryptionKey []byte) (string, error) {
+	// If schema is empty or empty JSON, return it as is
+	if d.RedactionSchema == "" || d.RedactionSchema == "{}" {
+		return d.RedactionSchema, nil
+	}
+
+	// Parse the JSON wrapper to extract the encrypted data
+	var wrapper struct {
+		EncryptedData string `json:"encrypted_data"`
+	}
+
+	if err := json.Unmarshal([]byte(d.RedactionSchema), &wrapper); err != nil {
+		// If it's not in our wrapper format, assume it's already plaintext JSON
+		return d.RedactionSchema, nil
+	}
+
+	// If we have encrypted data, decrypt it
+	if wrapper.EncryptedData != "" {
+		return utils.DecryptKey(wrapper.EncryptedData, encryptionKey)
+	}
+
+	// Otherwise return as-is
+	return d.RedactionSchema, nil
 }
 
 // DocumentSummary represents a summary of document information returned to the client.

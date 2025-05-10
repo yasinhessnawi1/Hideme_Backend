@@ -570,8 +570,8 @@ func (r *PostgresDocumentRepository) DeleteByUserID(ctx context.Context, userID 
 	})
 }
 
-// GetDetectedEntities retrieves all detected entities for a document with method information.
-// The entities are joined with their detection methods to include method-specific information.
+// GetDetectedEntities retrieves all detected entities for a document.
+// It also decrypts the redaction schemas before returning.
 //
 // Parameters:
 //   - ctx: Context for transaction and cancellation control
@@ -633,6 +633,12 @@ func (r *PostgresDocumentRepository) GetDetectedEntities(ctx context.Context, do
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan detected entity row: %w", err)
 		}
+
+		// Decrypt the redaction schema
+		if err := entity.DecryptRedactionSchema(r.encryptionKey); err != nil {
+			return nil, fmt.Errorf("failed to decrypt redaction schema for entity %d: %w", entity.ID, err)
+		}
+
 		entities = append(entities, entity)
 	}
 
@@ -658,6 +664,11 @@ func (r *PostgresDocumentRepository) GetDetectedEntities(ctx context.Context, do
 func (r *PostgresDocumentRepository) AddDetectedEntity(ctx context.Context, entity *models.DetectedEntity) error {
 	// Start query timer
 	startTime := time.Now()
+
+	// Encrypt the redaction schema before storing
+	if err := entity.EncryptRedactionSchema(r.encryptionKey); err != nil {
+		return fmt.Errorf("failed to encrypt redaction schema: %w", err)
+	}
 
 	// Define the query with RETURNING for PostgreSQL
 	query := `

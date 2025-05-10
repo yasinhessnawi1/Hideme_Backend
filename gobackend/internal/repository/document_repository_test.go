@@ -25,8 +25,11 @@ func setupDocumentRepositoryTest(t *testing.T) (*repository.PostgresDocumentRepo
 	// Create a database pool with the mock database
 	dbPool := &database.Pool{DB: db}
 
-	// Create a new repository with the mocked database
-	repo := repository.NewDocumentRepository(dbPool).(*repository.PostgresDocumentRepository)
+	// Create a test encryption key (32 bytes for AES-256)
+	encryptionKey := []byte("test-encryption-key-for-unit-tests")
+
+	// Create a new repository with the mocked database and encryption key
+	repo := repository.NewDocumentRepository(dbPool, encryptionKey).(*repository.PostgresDocumentRepository)
 
 	// Return the repository, mock and a cleanup function
 	return repo, mock, func() {
