@@ -121,7 +121,7 @@ resource "google_compute_region_instance_group_manager" "app_instance_group" {
   # Configure auto-healing with the health check
   auto_healing_policies {
     health_check      = google_compute_health_check.app_health_check.id
-    initial_delay_sec = 1200
+    initial_delay_sec = 600
   }
 
   # Configure update policy for rolling updates
