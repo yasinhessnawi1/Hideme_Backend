@@ -117,6 +117,7 @@ module "compute" {
   repo_owner             = var.repo_owner
   repo_name              = var.repo_name
   domain                 = var.domain
+  go_domain              = var.go_domain
   ssl_email              = var.ssl_email
   SENDGRID_API_KEY       = var.SENDGRID_API_KEY
   API_KEY_ENCRYPTION_KEY = var.API_KEY_ENCRYPTION_KEY

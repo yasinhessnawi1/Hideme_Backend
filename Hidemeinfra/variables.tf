@@ -201,6 +201,8 @@ variable "domain" {
   type        = string
 }
 
+
+
 variable "db_host" {
   description = "Database IP address to associate with the database"
   type        = string
@@ -208,7 +210,7 @@ variable "db_host" {
 variable "go_domain" {
   description = "Domain name for the Go application"
   type        = string
-  default     = "goapi.hidemeai.com"
+  default     = ""
 }
 
 variable "ssl_email" {
