@@ -58,6 +58,7 @@ func (h *DocumentHandler) ListDocuments(w http.ResponseWriter, r *http.Request) 
 	// Exclude redaction schema from the response
 	responseDocs := make([]*models.DocumentSummary, len(docs))
 	for i, doc := range docs {
+		// The HashedDocumentName should already be decrypted by the service
 		responseDocs[i] = &models.DocumentSummary{
 			ID:              doc.ID,
 			HashedName:      doc.HashedDocumentName,

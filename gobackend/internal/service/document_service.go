@@ -31,8 +31,22 @@ func NewDocumentService(docRepo repository.DocumentRepository) *DocumentService 
 
 // ListDocuments retrieves documents for a user with pagination.
 func (s *DocumentService) ListDocuments(userID int64, page, pageSize int) ([]*models.Document, int, error) {
+	docs, total, err := s.docRepo.GetByUserID(context.Background(), userID, page, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
 
-	return s.docRepo.GetByUserID(context.Background(), userID, page, pageSize)
+	// Decrypt document names for display
+	encryptionKey := []byte(os.Getenv("API_KEY_ENCRYPTION_KEY"))
+	for _, doc := range docs {
+		originalFilename, err := doc.DecryptDocumentName(encryptionKey)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to decrypt document name: %w", err)
+		}
+		doc.HashedDocumentName = originalFilename
+	}
+
+	return docs, total, nil
 }
 
 // UploadDocument uploads a new document for a user.
@@ -52,6 +66,14 @@ func (s *DocumentService) UploadDocument(userID int64, filename string, redactio
 	if err := s.docRepo.Create(context.Background(), doc); err != nil {
 		return nil, err
 	}
+
+	// Decrypt the document name before returning
+	originalFilename, err := doc.DecryptDocumentName([]byte(os.Getenv("API_KEY_ENCRYPTION_KEY")))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt document name: %w", err)
+	}
+	doc.HashedDocumentName = originalFilename
+
 	return doc, nil
 }
 
@@ -75,6 +97,13 @@ func (s *DocumentService) GetDocumentByID(id int64) (*models.Document, error) {
 	if err := json.Unmarshal([]byte(doc.RedactionSchema), &redactionMapping); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal redaction schema: %w", err)
 	}
+
+	// Make sure the document name is decrypted
+	originalFilename, err := doc.DecryptDocumentName([]byte(os.Getenv("API_KEY_ENCRYPTION_KEY")))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt document name: %w", err)
+	}
+	doc.HashedDocumentName = originalFilename
 
 	// Return the document with the computed entity_count
 	return &models.Document{
@@ -101,5 +130,24 @@ func (s *DocumentService) DeleteDocumentByID(id int64) error {
 
 // GetDocumentSummary retrieves a summary of a document.
 func (s *DocumentService) GetDocumentSummary(id int64) (*models.DocumentSummary, error) {
-	return s.docRepo.GetDocumentSummary(context.Background(), id)
+	summary, err := s.docRepo.GetDocumentSummary(context.Background(), id)
+	if err != nil {
+		return nil, err
+	}
+
+	// The HashedName should already be decrypted by the repository
+	// Double-check to ensure it's using the original filename
+	encryptionKey := []byte(os.Getenv("API_KEY_ENCRYPTION_KEY"))
+	doc, err := s.docRepo.GetByID(context.Background(), id)
+	if err != nil {
+		return nil, err
+	}
+
+	originalFilename, err := doc.DecryptDocumentName(encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt document name: %w", err)
+	}
+	summary.HashedName = originalFilename
+
+	return summary, nil
 }
