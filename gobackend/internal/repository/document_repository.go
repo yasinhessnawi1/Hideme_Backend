@@ -282,8 +282,8 @@ func (r *PostgresDocumentRepository) GetByID(ctx context.Context, id int64) (*mo
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt document name: %w", err)
 	}
-	document.HashedDocumentName = decryptedName
 
+	document.HashedDocumentName = decryptedName
 	return document, nil
 }
 
@@ -315,7 +315,7 @@ func (r *PostgresDocumentRepository) GetByUserID(ctx context.Context, userID int
 
 	// Define the query
 	query := `
-        SELECT ` + constants.ColumnDocumentID + `, ` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified
+        SELECT ` + constants.ColumnDocumentID + `, ` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified, redaction_schema
         FROM ` + constants.TableDocuments + `
         WHERE ` + constants.ColumnUserID + ` = $1
         ORDER BY upload_timestamp DESC
@@ -352,6 +352,7 @@ func (r *PostgresDocumentRepository) GetByUserID(ctx context.Context, userID int
 			&document.HashedDocumentName,
 			&document.UploadTimestamp,
 			&document.LastModified,
+			&document.RedactionSchema,
 		); err != nil {
 			return nil, 0, fmt.Errorf("failed to scan document row: %w", err)
 		}
