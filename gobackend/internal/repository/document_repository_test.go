@@ -202,7 +202,6 @@ func TestDocumentRepository_GetByID_OtherError(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestDocumentRepository_GetByUserID tests the GetByUserID method
 func TestDocumentRepository_GetByUserID(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupDocumentRepositoryTest(t)
@@ -244,6 +243,7 @@ func TestDocumentRepository_GetByUserID(t *testing.T) {
 			HashedDocumentName: encryptedName1,
 			UploadTimestamp:    now,
 			LastModified:       now,
+			RedactionSchema:    "{}", // Add this field
 		},
 		{
 			ID:                 2,
@@ -251,16 +251,17 @@ func TestDocumentRepository_GetByUserID(t *testing.T) {
 			HashedDocumentName: encryptedName2,
 			UploadTimestamp:    now.Add(-time.Hour),
 			LastModified:       now.Add(-time.Hour),
+			RedactionSchema:    "{}", // Add this field
 		},
 	}
 
-	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified"})
+	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified", "redaction_schema"}) // Include redaction_schema
 	for _, doc := range docs {
-		rows.AddRow(doc.ID, doc.UserID, doc.HashedDocumentName, doc.UploadTimestamp, doc.LastModified)
+		rows.AddRow(doc.ID, doc.UserID, doc.HashedDocumentName, doc.UploadTimestamp, doc.LastModified, doc.RedactionSchema) // Add redaction_schema value
 	}
 
-	// Expected query with pagination parameters
-	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
+	// Expected query with pagination parameters - include redaction_schema
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified, redaction_schema FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
 		WithArgs(userID, pageSize, offset).
 		WillReturnRows(rows)
 
@@ -323,8 +324,8 @@ func TestDocumentRepository_GetByUserID_QueryError(t *testing.T) {
 		WithArgs(userID).
 		WillReturnRows(countRows)
 
-	// Mock main query error
-	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
+	// Mock main query error - update to include redaction_schema
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified, redaction_schema FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
 		WithArgs(userID, pageSize, offset).
 		WillReturnError(errors.New("query error"))
 
@@ -357,11 +358,11 @@ func TestDocumentRepository_GetByUserID_ScanError(t *testing.T) {
 		WithArgs(userID).
 		WillReturnRows(countRows)
 
-	// Setup for main query with invalid data to cause scan error
-	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified"}).
-		AddRow("invalid_id", userID, "doc1", time.Now(), time.Now()) // invalid_id will cause scan error
+	// Setup for main query with invalid data to cause scan error - update to include redaction_schema
+	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified", "redaction_schema"}).
+		AddRow("invalid_id", userID, "doc1", time.Now(), time.Now(), "{}") // invalid_id will cause scan error
 
-	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified, redaction_schema FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
 		WithArgs(userID, pageSize, offset).
 		WillReturnRows(rows)
 
@@ -394,12 +395,12 @@ func TestDocumentRepository_GetByUserID_RowsError(t *testing.T) {
 		WithArgs(userID).
 		WillReturnRows(countRows)
 
-	// Setup for main query with row error
-	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified"}).
-		AddRow(1, userID, "doc1", time.Now(), time.Now()).
+	// Setup for main query with row error - update to include redaction_schema
+	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified", "redaction_schema"}).
+		AddRow(1, userID, "doc1", time.Now(), time.Now(), "{}").
 		RowError(0, errors.New("row error"))
 
-	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified, redaction_schema FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
 		WithArgs(userID, pageSize, offset).
 		WillReturnRows(rows)
 
