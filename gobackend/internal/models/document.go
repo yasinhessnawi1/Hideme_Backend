@@ -3,11 +3,13 @@
 package models
 
 import (
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 	"time"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 
 	"encoding/json"
 	"fmt"
+
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 )
 
@@ -155,26 +157,7 @@ type DocumentSummary struct {
 // RedactionMapping represents the structure for redaction data
 // It includes a list of file results
 type RedactionMapping struct {
-	FileResults []FileResult `json:"file_results"`
-}
-
-// FileResult represents the result of processing a file
-type FileResult struct {
-	File    string `json:"file"`
-	Status  string `json:"status"`
-	Results struct {
-		RedactionMapping struct {
-			Pages []Page `json:"pages"`
-		} `json:"redaction_mapping"`
-		FileInfo FileInfo `json:"file_info"`
-	} `json:"results"`
-}
-
-// FileInfo represents information about a file
-type FileInfo struct {
-	Filename    string `json:"filename"`
-	ContentType string `json:"content_type"`
-	Size        string `json:"size"`
+	Pages []Page `json:"pages"`
 }
 
 // Page represents a single page in the document with sensitive information

@@ -180,7 +180,7 @@ func TestIsEncrypted(t *testing.T) {
 
 	// Create a real encrypted key for the first test case
 	encryptionKey := []byte("12345678901234567890123456789012")
-	encryptedKey, err := utils.DecryptKey("secretuihiuhwiughiurhiuetrhgutih", encryptionKey)
+	encryptedKey, err := utils.EncryptKey("secretuihiuhwiughiurhiuetrhgutih", encryptionKey)
 	if err != nil {
 		t.Fatalf("Failed to create encrypted key for test: %v", err)
 	}
