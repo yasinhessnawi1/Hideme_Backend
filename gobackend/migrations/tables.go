@@ -93,6 +93,7 @@ func createDocumentsTable() Migration {
 					hashed_document_name VARCHAR(255) NOT NULL,
 					upload_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 					last_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+					redaction_schema JSONB NOT NULL DEFAULT '{}',
 					CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 				)
 			`
@@ -415,6 +416,48 @@ func createAPIKeysTable() Migration {
 				}
 			}
 
+			return nil
+		},
+	}
+}
+
+// createPasswordResetTokensTable creates the password_reset_tokens table.
+// This table stores tokens for password reset requests.
+//
+// Returns:
+//   - Migration: A migration that creates the password_reset_tokens table
+func createPasswordResetTokensTable() Migration {
+	return Migration{
+		Name:        "create_password_reset_tokens_table",
+		Description: "Creates the password_reset_tokens table",
+		TableName:   constants.TablePasswordResetTokens, // Assuming you'll add TablePasswordResetTokens to constants
+		RunSQL: func(ctx context.Context, tx *sql.Tx) error {
+			query := `
+				CREATE TABLE IF NOT EXISTS password_reset_tokens (
+					token_hash VARCHAR(255) PRIMARY KEY,
+					user_id BIGINT NOT NULL,
+					expires_at TIMESTAMP NOT NULL,
+					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+					CONSTRAINT fk_user_reset FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+				)
+			`
+			_, err := tx.ExecContext(ctx, query)
+			if err != nil {
+				return err
+			}
+
+			// Create indexes separately
+			indexes := []string{
+				`CREATE INDEX IF NOT EXISTS idx_user_id_reset_token ON password_reset_tokens(user_id)`,
+				`CREATE INDEX IF NOT EXISTS idx_expires_at_reset_token ON password_reset_tokens(expires_at)`,
+			}
+
+			for _, idx := range indexes {
+				_, err = tx.ExecContext(ctx, idx)
+				if err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 	}

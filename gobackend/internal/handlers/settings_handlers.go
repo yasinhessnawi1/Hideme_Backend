@@ -50,6 +50,16 @@ func NewSettingsHandler(settingsService SettingsServiceInterface) *SettingsHandl
 //   - 200 OK: Settings retrieved successfully
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Get user settings
+// @Description Returns the current user's settings
+// @Tags Settings
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.Response{data=models.UserSetting} "Settings retrieved successfully"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings [get]
 func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -88,6 +98,19 @@ func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 //   - 400 Bad Request: Invalid request body
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Update user settings
+// @Description Updates the current user's settings
+// @Tags Settings
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param settings body models.UserSettingsUpdate true "Settings to update"
+// @Success 200 {object} utils.Response{data=models.UserSetting} "Settings updated successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request body"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings [put]
 func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -129,6 +152,16 @@ func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request)
 //   - 200 OK: Ban list retrieved successfully
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Get ban list
+// @Description Returns the current user's ban list
+// @Tags Settings/Ban List
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.Response{data=models.BanListWithWords} "Ban list retrieved successfully"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/ban-list [get]
 func (h *SettingsHandler) GetBanList(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -167,6 +200,19 @@ func (h *SettingsHandler) GetBanList(w http.ResponseWriter, r *http.Request) {
 //   - 400 Bad Request: Invalid request body
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Add ban list words
+// @Description Adds words to the current user's ban list
+// @Tags Settings/Ban List
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param words body models.BanListWordBatch true "Words to add to ban list"
+// @Success 200 {object} utils.Response{data=models.BanListWithWords} "Words added successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request body"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/ban-list/words [post]
 func (h *SettingsHandler) AddBanListWords(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -217,6 +263,19 @@ func (h *SettingsHandler) AddBanListWords(w http.ResponseWriter, r *http.Request
 //   - 400 Bad Request: Invalid request body
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Remove ban list words
+// @Description Removes words from the current user's ban list
+// @Tags Settings/Ban List
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param words body models.BanListWordBatch true "Words to remove from ban list"
+// @Success 200 {object} utils.Response{data=models.BanListWithWords} "Words removed successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request body"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/ban-list/words [delete]
 func (h *SettingsHandler) RemoveBanListWords(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -263,6 +322,16 @@ func (h *SettingsHandler) RemoveBanListWords(w http.ResponseWriter, r *http.Requ
 //   - 200 OK: Search patterns retrieved successfully
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Get search patterns
+// @Description Returns the current user's search patterns
+// @Tags Settings/Patterns
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.Response{data=[]models.SearchPattern} "Search patterns retrieved successfully"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/patterns [get]
 func (h *SettingsHandler) GetSearchPatterns(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -301,6 +370,19 @@ func (h *SettingsHandler) GetSearchPatterns(w http.ResponseWriter, r *http.Reque
 //   - 400 Bad Request: Invalid request body
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Create search pattern
+// @Description Creates a new search pattern for the current user
+// @Tags Settings/Patterns
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param pattern body models.SearchPatternCreate true "Search pattern to create"
+// @Success 201 {object} utils.Response{data=models.SearchPattern} "Search pattern created successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request body"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/patterns [post]
 func (h *SettingsHandler) CreateSearchPattern(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -350,6 +432,21 @@ func (h *SettingsHandler) CreateSearchPattern(w http.ResponseWriter, r *http.Req
 //   - 401 Unauthorized: User not authenticated
 //   - 404 Not Found: Pattern not found
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Update search pattern
+// @Description Updates an existing search pattern
+// @Tags Settings/Patterns
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param patternID path int true "ID of the pattern to update"
+// @Param pattern body models.SearchPatternUpdate true "Search pattern updates"
+// @Success 200 {object} utils.Response{data=models.SearchPattern} "Search pattern updated successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request body or pattern ID"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 404 {object} utils.Response{error=string} "Pattern not found"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/patterns/{patternID} [put]
 func (h *SettingsHandler) UpdateSearchPattern(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -404,6 +501,19 @@ func (h *SettingsHandler) UpdateSearchPattern(w http.ResponseWriter, r *http.Req
 //   - 401 Unauthorized: User not authenticated
 //   - 404 Not Found: Pattern not found
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Delete search pattern
+// @Description Deletes a search pattern
+// @Tags Settings/Patterns
+// @Produce json
+// @Security BearerAuth
+// @Param patternID path int true "ID of the pattern to delete"
+// @Success 204 {object} utils.Response "Search pattern deleted successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid pattern ID"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 404 {object} utils.Response{error=string} "Pattern not found"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/patterns/{patternID} [delete]
 func (h *SettingsHandler) DeleteSearchPattern(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -449,6 +559,18 @@ func (h *SettingsHandler) DeleteSearchPattern(w http.ResponseWriter, r *http.Req
 //   - 400 Bad Request: Invalid method ID
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Get model entities
+// @Description Returns the model entities for a specific method
+// @Tags Settings/Entities
+// @Produce json
+// @Security BearerAuth
+// @Param methodID path int true "ID of the method to get entities for"
+// @Success 200 {object} utils.Response{data=[]models.ModelEntityWithMethod} "Entities retrieved successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid method ID"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/entities/{methodID} [get]
 func (h *SettingsHandler) GetModelEntities(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -495,6 +617,19 @@ func (h *SettingsHandler) GetModelEntities(w http.ResponseWriter, r *http.Reques
 //   - 400 Bad Request: Invalid request body
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Add model entities
+// @Description Adds entities for a specific detection method
+// @Tags Settings/Entities
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param batch body models.ModelEntityBatch true "Batch of entities to add"
+// @Success 201 {object} utils.Response{data=[]models.ModelEntity} "Entities added successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid request body"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/entities [post]
 func (h *SettingsHandler) AddModelEntities(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -541,6 +676,19 @@ func (h *SettingsHandler) AddModelEntities(w http.ResponseWriter, r *http.Reques
 //   - 401 Unauthorized: User not authenticated
 //   - 404 Not Found: Entity not found
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Delete model entity
+// @Description Deletes a model entity
+// @Tags Settings/Entities
+// @Produce json
+// @Security BearerAuth
+// @Param entityID path int true "ID of the entity to delete"
+// @Success 204 {object} utils.Response "Entity deleted successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid entity ID"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 404 {object} utils.Response{error=string} "Entity not found"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/entities/{entityID} [delete]
 func (h *SettingsHandler) DeleteModelEntity(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -586,6 +734,18 @@ func (h *SettingsHandler) DeleteModelEntity(w http.ResponseWriter, r *http.Reque
 //   - 400 Bad Request: Invalid method ID
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Delete model entities by method
+// @Description Deletes all model entities for a specific method
+// @Tags Settings/Entities
+// @Produce json
+// @Security BearerAuth
+// @Param methodID path int true "ID of the method to delete entities for"
+// @Success 204 {object} utils.Response "Entities deleted successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid method ID"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/entities/delete_entities_by_method_id/{methodID} [delete]
 func (h *SettingsHandler) DeleteModelEntityByMethodID(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -628,6 +788,16 @@ func (h *SettingsHandler) DeleteModelEntityByMethodID(w http.ResponseWriter, r *
 //   - 200 OK: Settings exported successfully as a downloadable JSON file
 //   - 401 Unauthorized: User not authenticated
 //   - 500 Internal Server Error: Server-side error
+//
+// @Summary Export settings
+// @Description Exports all user settings as a JSON file
+// @Tags Settings
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {file} byte[] "Settings exported successfully as a downloadable JSON file"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/export [get]
 func (h *SettingsHandler) ExportSettings(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)
@@ -690,6 +860,19 @@ func (h *SettingsHandler) ExportSettings(w http.ResponseWriter, r *http.Request)
 //   - The file size is limited to prevent denial of service attacks
 //   - The file type is validated to ensure only JSON files are accepted
 //   - The imported settings are validated before being applied
+//
+// @Summary Import settings
+// @Description Imports user settings from a JSON file
+// @Tags Settings
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param settings formData file true "JSON file with settings to import"
+// @Success 200 {object} utils.Response{data=map[string]string} "Settings imported successfully"
+// @Failure 400 {object} utils.Response{error=string} "Invalid file format or content"
+// @Failure 401 {object} utils.Response{error=string} "User not authenticated"
+// @Failure 500 {object} utils.Response{error=string} "Server error"
+// @Router /settings/import [post]
 func (h *SettingsHandler) ImportSettings(w http.ResponseWriter, r *http.Request) {
 	// Get the user ID from the context
 	userID, ok := auth.GetUserID(r)

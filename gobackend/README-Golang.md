@@ -1358,7 +1358,7 @@ Security is a primary concern for the HideMe Go Backend, especially given its ro
     -   The plain text key is shown to the user only once upon creation.
     -   API key validation (`/api/auth/validate-key`) involves hashing the provided key and comparing it against the stored hash.
     -   Keys have configurable expiration dates.
--   **Role-Based Access Control (RBAC):** While not explicitly detailed in the provided files, consider implementing RBAC if different user roles require different permissions (e.g., admin access to generic DB endpoints).
+
 
 ### Password Security
 

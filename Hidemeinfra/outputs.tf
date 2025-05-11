@@ -36,13 +36,13 @@ output "db_service_account_email" {
   description = "Email address of the database service account"
   value       = module.security.db_service_account_email
 }
-/*
+
 output "security_policy_name" {
   description = "Name of the Cloud Armor security policy"
   value       = module.security.security_policy_name
 }
 
- */
+
 
 output "db_credentials_secret_id" {
   description = "ID of the secret containing database credentials"

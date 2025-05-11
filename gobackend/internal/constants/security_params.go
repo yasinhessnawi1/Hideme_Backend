@@ -1,6 +1,6 @@
 // Package constants provides shared constant values used throughout the application.
 //
-// The securityparams.go file defines security-related constants and parameters
+// The security_params.go file defines security-related constants and parameters
 // used for authentication, authorization, and data privacy. These values
 // ensure consistent security behavior across the application and should be
 // modified with caution, as changes may affect user access, authentication,
@@ -86,4 +86,14 @@ const (
 
 	// DefaultSensitiveLogPath is the default path for logs containing sensitive personal data.
 	DefaultSensitiveLogPath = "./logs/sensitive"
+)
+
+// User Roles define the permission levels in the application.
+// These values control access to restricted functionality.
+const (
+	// RoleUser is the standard role for normal users.
+	RoleUser = "user"
+
+	// RoleAdmin is the elevated role for administrative users.
+	RoleAdmin = "admin"
 )

@@ -12,10 +12,9 @@ resource "google_compute_instance_template" "app_template" {
   project      = var.project
   machine_type = var.machine_type
   region       = var.region
-
   # Use a service account with minimal permissions
   service_account {
-    email = var.service_account_email
+    email  = var.service_account_email
     scopes = ["cloud-platform"]
   }
 
@@ -42,26 +41,28 @@ resource "google_compute_instance_template" "app_template" {
   # Metadata for startup script and SSH keys
   metadata = {
     startup-script = templatefile("${path.module}/scripts/startup.sh", {
-      port           = var.app_port
-      go_port        = var.go_port
-      env            = var.environment
-      repo           = var.github_repo
-      go_repo        = var.go_github_repo
-      branch         = var.github_branch
-      dbuser         = var.db_user
-      dbpass         = var.db_password
-      dbname         = var.db_name
-      dbport         = var.db_port
-      dbhost         = var.db_host
-      dbconn         = var.db_connection_name
-      gemini_api_key = var.gemini_api_key
-      GITHUB_TOKEN   = var.github_token
-      REPO_PATH      = var.github_repo
-      REPO_OWNER     = var.repo_owner
-      REPO_NAME      = var.repo_name
-      domain         = var.domain
-      go_domain      = var.go_domain
-      ssl_email      = var.ssl_email
+      port                   = var.app_port
+      go_port                = var.go_port
+      env                    = var.environment
+      repo                   = var.github_repo
+      go_repo                = var.go_github_repo
+      branch                 = var.github_branch
+      dbuser                 = var.db_user
+      dbpass                 = var.db_password
+      dbname                 = var.db_name
+      dbport                 = var.db_port
+      dbhost                 = var.db_host
+      dbconn                 = var.db_connection_name
+      gemini_api_key         = var.gemini_api_key
+      GITHUB_TOKEN           = var.github_token
+      REPO_PATH              = var.github_repo
+      REPO_OWNER             = var.repo_owner
+      REPO_NAME              = var.repo_name
+      domain                 = var.domain
+      go_domain              = var.go_domain
+      ssl_email              = var.ssl_email
+      SENDGRID_API_KEY       = var.SENDGRID_API_KEY
+      API_KEY_ENCRYPTION_KEY = var.API_KEY_ENCRYPTION_KEY
     })
     enable-oslogin = "TRUE"
   }
@@ -85,7 +86,7 @@ resource "google_compute_instance_template" "app_template" {
 
   # Set a short lifecycle to recreate templates when changed
   lifecycle {
-    create_before_destroy = true
+    create_before_destroy = false
   }
 }
 
@@ -95,8 +96,8 @@ resource "google_compute_health_check" "app_health_check" {
   project             = var.project
   check_interval_sec  = 5
   timeout_sec         = 5
-  healthy_threshold   = 2
-  unhealthy_threshold = 2
+  healthy_threshold   = 3
+  unhealthy_threshold = 3
 
   http_health_check {
     port         = var.app_port
@@ -119,7 +120,7 @@ resource "google_compute_region_instance_group_manager" "app_instance_group" {
   # Configure auto-healing with the health check
   auto_healing_policies {
     health_check      = google_compute_health_check.app_health_check.id
-    initial_delay_sec = 300
+    initial_delay_sec = 600
   }
 
   # Configure update policy for rolling updates
@@ -183,10 +184,7 @@ resource "google_compute_region_autoscaler" "app_autoscaler" {
     }
   }
 }
-# Generate a random suffix for globally unique bucket names
-resource "random_id" "bucket_suffix" {
-  byte_length = 4
-}
+
 
 # Create a Secret Manager secret for GitHub SSH key
 resource "google_secret_manager_secret" "github_ssh_key" {

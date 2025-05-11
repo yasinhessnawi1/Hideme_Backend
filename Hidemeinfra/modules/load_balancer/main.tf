@@ -50,12 +50,12 @@ resource "google_compute_health_check" "lb_health_check" {
 
 # Create a backend service for the load balancer
 resource "google_compute_backend_service" "lb_backend_service" {
-  name      = "hide-me-backend-service-${var.environment}"
-  project   = var.project
-  protocol  = "HTTP"
-  port_name = "http"
-  timeout_sec = 1800  # 30 minutes for long-running requests
-  health_checks = [google_compute_health_check.lb_health_check.id]
+  name                  = "hide-me-backend-service-${var.environment}"
+  project               = var.project
+  protocol              = "HTTP"
+  port_name             = "http"
+  timeout_sec           = 1800 # 30 minutes for long-running requests
+  health_checks         = [google_compute_health_check.lb_health_check.id]
   load_balancing_scheme = "EXTERNAL_MANAGED"
 
   # Attach security policy if provided
@@ -70,16 +70,16 @@ resource "google_compute_backend_service" "lb_backend_service" {
   }
 
   # Configure connection draining with longer timeout
-  connection_draining_timeout_sec = 1200  # 10 minutes
+  connection_draining_timeout_sec = 1200 # 10 minutes
 }
 # Create a backend service for the Go API
 resource "google_compute_backend_service" "go_backend_service" {
   name                  = "hide-me-go-backend-service-${var.environment}"
   project               = var.project
   protocol              = "HTTP"
-  port_name = "gohttp"  # This needs to match the named port in your instance group
+  port_name             = "gohttp" # This needs to match the named port in your instance group
   timeout_sec           = 300
-  health_checks = [google_compute_health_check.lb_health_check.id]
+  health_checks         = [google_compute_health_check.lb_health_check.id]
   load_balancing_scheme = "EXTERNAL_MANAGED"
 
   security_policy = var.security_policy_name != "" ? var.security_policy_name : null
@@ -102,13 +102,13 @@ resource "google_compute_url_map" "lb_url_map" {
 
   # Host rule for the API subdomain
   host_rule {
-    hosts = ["api.${var.domain_name}"]
+    hosts        = ["api.${var.domain_name}"]
     path_matcher = "api-paths"
   }
 
   # Host rule for the Go API subdomain
   host_rule {
-    hosts = ["goapi.${var.domain_name}"]
+    hosts        = ["goapi.${var.domain_name}"]
     path_matcher = "go-api-paths"
   }
 

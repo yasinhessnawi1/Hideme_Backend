@@ -159,19 +159,16 @@ type DocumentRepository interface {
 // It implements all required methods using PostgreSQL-specific features
 // and error handling.
 type PostgresDocumentRepository struct {
-	db *database.Pool
+	db            *database.Pool
+	encryptionKey []byte
 }
 
 // NewDocumentRepository creates a new DocumentRepository implementation for PostgreSQL.
-//
-// Parameters:
-//   - db: A connection pool for PostgreSQL database access
-//
-// Returns:
-//   - An implementation of the DocumentRepository interface
-func NewDocumentRepository(db *database.Pool) DocumentRepository {
+// Accepts an encryption key for document name encryption.
+func NewDocumentRepository(db *database.Pool, encryptionKey []byte) DocumentRepository {
 	return &PostgresDocumentRepository{
-		db: db,
+		db:            db,
+		encryptionKey: encryptionKey,
 	}
 }
 
@@ -190,27 +187,33 @@ func (r *PostgresDocumentRepository) Create(ctx context.Context, document *model
 	// Start query timer
 	startTime := time.Now()
 
+	// Encrypt the document name before saving
+	encryptedName, err := utils.EncryptKey(document.HashedDocumentName, r.encryptionKey)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt document name: %w", err)
+	}
 	// Define the query with RETURNING for PostgreSQL
 	query := `
-        INSERT INTO ` + constants.TableDocuments + ` (` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO ` + constants.TableDocuments + ` (` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified, redaction_schema)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING ` + constants.ColumnDocumentID + `
     `
 
 	// Execute the query
-	err := r.db.QueryRowContext(
+	err = r.db.QueryRowContext(
 		ctx,
 		query,
 		document.UserID,
-		document.HashedDocumentName,
+		encryptedName,
 		document.UploadTimestamp,
 		document.LastModified,
+		document.RedactionSchema,
 	).Scan(&document.ID)
 
 	// Log the query execution
 	utils.LogDBQuery(
 		query,
-		[]interface{}{document.UserID, document.HashedDocumentName, document.UploadTimestamp, document.LastModified},
+		[]interface{}{document.UserID, encryptedName, document.UploadTimestamp, document.LastModified, document.RedactionSchema},
 		time.Since(startTime),
 		err,
 	)
@@ -243,7 +246,7 @@ func (r *PostgresDocumentRepository) GetByID(ctx context.Context, id int64) (*mo
 
 	// Define the query
 	query := `
-        SELECT ` + constants.ColumnDocumentID + `, ` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified
+        SELECT ` + constants.ColumnDocumentID + `, ` + constants.ColumnUserID + `, hashed_document_name, upload_timestamp, last_modified, redaction_schema
         FROM ` + constants.TableDocuments + `
         WHERE ` + constants.ColumnDocumentID + ` = $1
     `
@@ -256,6 +259,7 @@ func (r *PostgresDocumentRepository) GetByID(ctx context.Context, id int64) (*mo
 		&document.HashedDocumentName,
 		&document.UploadTimestamp,
 		&document.LastModified,
+		&document.RedactionSchema,
 	)
 
 	// Log the query execution
@@ -272,6 +276,13 @@ func (r *PostgresDocumentRepository) GetByID(ctx context.Context, id int64) (*mo
 		}
 		return nil, fmt.Errorf("failed to get document by ID: %w", err)
 	}
+
+	// Decrypt the document name before returning
+	decryptedName, err := utils.DecryptKey(document.HashedDocumentName, r.encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt document name: %w", err)
+	}
+	document.HashedDocumentName = decryptedName
 
 	return document, nil
 }
@@ -344,6 +355,14 @@ func (r *PostgresDocumentRepository) GetByUserID(ctx context.Context, userID int
 		); err != nil {
 			return nil, 0, fmt.Errorf("failed to scan document row: %w", err)
 		}
+
+		// Decrypt the document name before returning
+		decryptedName, err := utils.DecryptKey(document.HashedDocumentName, r.encryptionKey)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to decrypt document name: %w", err)
+		}
+		document.HashedDocumentName = decryptedName
+
 		documents = append(documents, document)
 	}
 
@@ -778,6 +797,13 @@ func (r *PostgresDocumentRepository) GetDocumentSummary(ctx context.Context, doc
 		}
 		return nil, fmt.Errorf("failed to get document summary: %w", err)
 	}
+
+	// Decrypt the document name before returning
+	decryptedName, err := utils.DecryptKey(summary.HashedName, r.encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt document name: %w", err)
+	}
+	summary.HashedName = decryptedName
 
 	return summary, nil
 }

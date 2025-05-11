@@ -5,6 +5,7 @@
 package models
 
 import (
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"time"
 )
 
@@ -23,6 +24,9 @@ type User struct {
 	// Email is the user's email address for communications and recovery
 	// Must be a valid email format
 	Email string `json:"email" db:"email" validate:"required,email"`
+
+	// Role defines the user's permission level (e.g., "user", "admin")
+	Role string `json:"role" db:"role"`
 
 	// PasswordHash stores the hashed version of the user's password
 	// This field is excluded from JSON serialization for security
@@ -45,17 +49,23 @@ type User struct {
 // Parameters:
 //   - username: The user's chosen display name (3-50 characters)
 //   - email: The user's email address (must be valid format)
+//   - role: The user's role (defaults to "user" if not provided)
 //
 // Returns:
 //   - A new User pointer with basic fields populated and timestamps initialized
 //
 // The password hash and salt fields must be set separately after proper
 // cryptographic processing of the user's password.
-func NewUser(username, email string) *User {
+func NewUser(username, email string, role string) *User {
+	if role == "" {
+		role = constants.RoleUser // Default role
+	}
+
 	now := time.Now()
 	return &User{
 		Username:  username,
 		Email:     email,
+		Role:      role,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

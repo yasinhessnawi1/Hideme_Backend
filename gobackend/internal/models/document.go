@@ -3,8 +3,7 @@
 package models
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 	"time"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
@@ -30,25 +29,30 @@ type Document struct {
 
 	// LastModified records when this document was last modified
 	LastModified time.Time `json:"last_modified" db:"last_modified"`
+
+	// RedactionSchema stores the redaction mapping for the document as a JSON string
+	RedactionSchema string `json:"redaction_schema" db:"redaction_schema"`
 }
 
 // NewDocument creates a new Document instance with the given original filename and user ID.
-// It generates a hashed version of the document name for privacy.
+// It encrypts the document name for privacy.
 //
 // Parameters:
 //   - userID: The ID of the user who owns this document
 //   - originalFilename: The original name of the uploaded file
+//   - encryptionKey: The key to use for encryption (must be at least 32 bytes)
 //
 // Returns:
 //   - A new Document pointer with initialized fields and timestamps
 //
-// The document's name is securely hashed to comply with privacy principles.
+// The document's name is securely encrypted to comply with privacy principles.
 // Both UploadTimestamp and LastModified are set to the current time.
-func NewDocument(userID int64, originalFilename string) *Document {
+func NewDocument(userID int64, originalFilename string, encryptionKey []byte) *Document {
+	encryptedName, _ := utils.EncryptKey(originalFilename, encryptionKey) // ignore error for now, handle in repo
 	now := time.Now()
 	return &Document{
 		UserID:             userID,
-		HashedDocumentName: hashDocumentName(originalFilename),
+		HashedDocumentName: encryptedName,
 		UploadTimestamp:    now,
 		LastModified:       now,
 	}
@@ -60,20 +64,9 @@ func (d *Document) TableName() string {
 	return constants.TableDocuments
 }
 
-// hashDocumentName creates a SHA-256 hash of the original document name to protect
-// potentially sensitive information in filenames.
-//
-// Parameters:
-//   - originalName: The original name of the document to hash
-//
-// Returns:
-//   - A hexadecimal string representation of the SHA-256 hash
-//
-// This function helps maintain privacy by avoiding storage of potentially
-// sensitive information that might be contained in document names.
-func hashDocumentName(originalName string) string {
-	hash := sha256.Sum256([]byte(originalName))
-	return hex.EncodeToString(hash[:])
+// DecryptDocumentName decrypts the encrypted document name using the provided key.
+func (d *Document) DecryptDocumentName(encryptionKey []byte) (string, error) {
+	return utils.DecryptKey(d.HashedDocumentName, encryptionKey)
 }
 
 // UpdateLastModified updates the last modified timestamp to the current time.
@@ -99,4 +92,53 @@ type DocumentSummary struct {
 
 	// EntityCount indicates how many sensitive entities were detected in this document
 	EntityCount int `json:"entity_count"`
+}
+
+// RedactionMapping represents the structure for redaction data
+// It includes a list of file results
+type RedactionMapping struct {
+	FileResults []FileResult `json:"file_results"`
+}
+
+// FileResult represents the result of processing a file
+type FileResult struct {
+	File    string `json:"file"`
+	Status  string `json:"status"`
+	Results struct {
+		RedactionMapping struct {
+			Pages []Page `json:"pages"`
+		} `json:"redaction_mapping"`
+		FileInfo FileInfo `json:"file_info"`
+	} `json:"results"`
+}
+
+// FileInfo represents information about a file
+type FileInfo struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	Size        string `json:"size"`
+}
+
+// Page represents a single page in the document with sensitive information
+type Page struct {
+	PageNumber int         `json:"page"`
+	Sensitive  []Sensitive `json:"sensitive"`
+}
+
+// Sensitive represents sensitive information detected on a page
+type Sensitive struct {
+	OriginalText string  `json:"original_text"`
+	EntityType   string  `json:"entity_type"`
+	Score        float64 `json:"score"`
+	Start        int     `json:"start"`
+	End          int     `json:"end"`
+	BBox         BBox    `json:"bbox"`
+}
+
+// BBox represents a bounding box for sensitive information
+type BBox struct {
+	X0 float64 `json:"x0"`
+	Y0 float64 `json:"y0"`
+	X1 float64 `json:"x1"`
+	Y1 float64 `json:"y1"`
 }

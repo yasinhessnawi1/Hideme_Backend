@@ -8,13 +8,19 @@
 package server
 
 import (
+	httpSwagger "github.com/swaggo/http-swagger"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/handlers"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog/log"
+	_ "github.com/yasinhessnawi1/Hideme_Backend/docs"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/middleware"
@@ -35,15 +41,20 @@ import (
 //
 // Route protection is handled through middleware for authenticated endpoints.
 func (s *Server) SetupRoutes() {
+	// Create security service for rate limiting and IP banning
+	securityService := service.NewSecurityService(
+		repository.NewIPBanRepository(s.Db),
+		5*time.Minute, // Cache refresh interval
+	)
+
+	// Create security handlers
+	securityHandler := handlers.NewSecurityHandler(securityService)
+
 	// Create router
 	r := chi.NewRouter()
 
 	// Get allowed origins from environment or use default values
 	allowedOrigins := getAllowedOrigins()
-
-	// Custom CORS middleware that applies to all routes
-	// This ensures CORS headers are applied properly and consistently
-	r.Use(corsMiddleware(allowedOrigins))
 
 	// Base middleware
 	r.Use(chimiddleware.RequestID)
@@ -51,8 +62,23 @@ func (s *Server) SetupRoutes() {
 	r.Use(chimiddleware.RealIP)
 	r.Use(middleware.SecurityHeaders())
 
-	// Health check and version routes (unprotected)
+	// Add IP ban check as early as possible in the chain
+	r.Use(middleware.IPBanCheck(securityService))
+
+	// Basic rate limit for all endpoints
+	r.Use(middleware.RateLimit(securityService, "default"))
+
+	// Add auto-ban middleware that monitors for suspicious requests
+	// Ban for 24 hours after 5 suspicious activities within 5 minutes
+	r.Use(middleware.AutoBan(securityService, 5, 5*time.Minute, 24*time.Hour))
+
+	// Custom CORS middleware that applies to all routes
+	// This ensures CORS headers are applied properly and consistently
+	r.Use(corsMiddleware(allowedOrigins))
+
+	// Health check, version routes, and Swagger documentation (unprotected)
 	r.Group(func(r chi.Router) {
+		// Health check endpoint
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			// Check database connection
 			err := s.Db.HealthCheck(r.Context())
@@ -68,20 +94,33 @@ func (s *Server) SetupRoutes() {
 			})
 		})
 
+		// Version information endpoint
 		r.Get("/version", func(w http.ResponseWriter, r *http.Request) {
 			utils.JSON(w, http.StatusOK, map[string]string{
 				"version":     s.Config.App.Version,
 				"environment": s.Config.App.Environment,
 			})
 		})
-		// Inside the SetupRoutes function, add this line:
+
+		// Self-documenting API routes
 		r.Get("/api/routes", s.GetAPIRoutes)
+
+		// Swagger documentation endpoint
+		r.Get("/docs/*", httpSwagger.Handler(
+			httpSwagger.URL("doc.json"), // Use a relative path instead of absolute
+			httpSwagger.DeepLinking(true),
+			httpSwagger.DocExpansion("list"), // Change to "list" to expand by default
+			httpSwagger.DomID("swagger-ui"),
+		))
 	})
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		// Authentication routes
 		r.Route("/auth", func(r chi.Router) {
+			// Apply stricter rate limit for auth endpoints to prevent brute force
+			r.Use(middleware.RateLimit(securityService, "auth"))
+
 			// Public auth endpoints
 			r.Group(func(r chi.Router) {
 				r.Post("/signup", s.Handlers.AuthHandler.Register)
@@ -95,15 +134,20 @@ func (s *Server) SetupRoutes() {
 				// Explicitly handle OPTIONS preflight request for /verify endpoint
 				r.Options("/verify", handlePreflight(allowedOrigins))
 				r.Get("/verify", s.Handlers.AuthHandler.VerifyToken)
+
+				// Add forgot-password and reset-password routes
+				r.Post("/forgot-password", s.Handlers.PasswordResetHandler.ForgotPassword)
+				r.Post("/reset-password", s.Handlers.PasswordResetHandler.ResetPassword)
 			})
 
 			// Protected auth endpoints
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.JWTAuth(s.authProviders.JWTService))
+				r.Use(middleware.AddRoleToContext(s.authProviders.JWTService))
 				// verify JWT tokens used for user sessions
 				r.Get("/verify", s.Handlers.AuthHandler.VerifyToken)
-				// security feature to log out all sessions
-				r.Post("/logout-all", s.Handlers.AuthHandler.LogoutAll)
+				// security feature to log out all sessions - admin only
+				r.With(middleware.RequireRole(constants.RoleAdmin)).Post("/logout-all", s.Handlers.AuthHandler.LogoutAll)
 			})
 		})
 
@@ -149,6 +193,9 @@ func (s *Server) SetupRoutes() {
 		r.Route("/settings", func(r chi.Router) {
 			r.Use(middleware.JWTAuth(s.authProviders.JWTService))
 
+			// Apply appropriate rate limit for API endpoints
+			r.Use(middleware.RateLimit(securityService, "api"))
+
 			r.Get("/", s.Handlers.SettingsHandler.GetSettings)
 			r.Put("/", s.Handlers.SettingsHandler.UpdateSettings)
 
@@ -180,16 +227,31 @@ func (s *Server) SetupRoutes() {
 			})
 		})
 
-		// Generic database operations (protected)
-		r.Route("/db", func(r chi.Router) {
+		// Admin routes (require admin role)
+		r.Route("/admin", func(r chi.Router) {
+			// Apply JWT authentication and admin role check middleware
 			r.Use(middleware.JWTAuth(s.authProviders.JWTService))
+			r.Use(middleware.AddRoleToContext(s.authProviders.JWTService))
+			r.Use(middleware.RequireRole(constants.RoleAdmin))
 
-			r.Get("/{table}", s.Handlers.GenericHandler.GetTableData)
-			r.Post("/{table}", s.Handlers.GenericHandler.CreateRecord)
-			r.Get("/{table}/{id}", s.Handlers.GenericHandler.GetRecordByID)
-			r.Put("/{table}/{id}", s.Handlers.GenericHandler.UpdateRecord)
-			r.Delete("/{table}/{id}", s.Handlers.GenericHandler.DeleteRecord)
-			r.Get("/{table}/schema", s.Handlers.GenericHandler.GetTableSchema)
+			// Security management
+			r.Route("/security", func(r chi.Router) {
+				r.Route("/bans", func(r chi.Router) {
+					r.Get("/", securityHandler.ListBannedIPs)
+					r.Post("/", securityHandler.BanIP)
+					r.Delete("/{id}", securityHandler.UnbanIP)
+				})
+			})
+		})
+
+		// Document routes (protected)
+		r.Route("/documents", func(r chi.Router) {
+			r.Use(middleware.JWTAuth(s.authProviders.JWTService))
+			r.Get("/", s.Handlers.DocumentHandler.ListDocuments)
+			r.Post("/", s.Handlers.DocumentHandler.UploadDocument)
+			r.Get("/{id}", s.Handlers.DocumentHandler.GetDocumentByID)
+			r.Delete("/{id}", s.Handlers.DocumentHandler.DeleteDocumentByID)
+			r.Get("/{id}/summary", s.Handlers.DocumentHandler.GetDocumentSummary)
 		})
 	})
 
@@ -923,6 +985,105 @@ func (s *Server) GetAPIRoutes(w http.ResponseWriter, r *http.Request) {
 			"response": map[string]interface{}{
 				"success": true,
 				"data":    "This document you're viewing right now",
+			},
+		},
+	}
+
+	// Document routes
+	routes["documents"] = map[string]interface{}{
+		"GET /api/documents": map[string]interface{}{
+			"description": "List all documents for the current user (paginated)",
+			"headers": map[string]string{
+				"Authorization": "Bearer {access_token}",
+			},
+			"query_params": map[string]string{
+				"page":     "Page number (optional, default 1)",
+				"pageSize": "Page size (optional, default 10)",
+			},
+			"response": map[string]interface{}{
+				"success": true,
+				"data": []map[string]interface{}{
+					{
+						"id":               1,
+						"hashed_name":      "encrypted-filename-string",
+						"upload_timestamp": "2023-01-01T12:00:00Z",
+						"last_modified":    "2023-01-01T12:00:00Z",
+						"entity_count":     5,
+					},
+				},
+				"total_count": 42,
+			},
+		},
+		"POST /api/documents": map[string]interface{}{
+			"description": "Upload a new document (expects a file, metadata, and redaction schema)",
+			"headers": map[string]string{
+				"Authorization": "Bearer {access_token}",
+				"Content-Type":  "multipart/form-data",
+			},
+			"body": map[string]interface{}{
+				"file":             "The document file to upload",
+				"metadata":         "Optional JSON metadata (e.g., original filename)",
+				"redaction_schema": "JSON object representing the redaction schema",
+			},
+			"response": map[string]interface{}{
+				"success": true,
+				"data": map[string]interface{}{
+					"id":               1,
+					"hashed_name":      "encrypted-filename-string",
+					"upload_timestamp": "2023-01-01T12:00:00Z",
+					"last_modified":    "2023-01-01T12:00:00Z",
+				},
+			},
+		},
+		"GET /api/documents/{id}": map[string]interface{}{
+			"description": "Get a document's metadata by ID",
+			"headers": map[string]string{
+				"Authorization": "Bearer {access_token}",
+			},
+			"path_params": map[string]string{
+				"id": "ID of the document",
+			},
+			"response": map[string]interface{}{
+				"success": true,
+				"data": map[string]interface{}{
+					"id":               1,
+					"hashed_name":      "encrypted-filename-string",
+					"upload_timestamp": "2023-01-01T12:00:00Z",
+					"last_modified":    "2023-01-01T12:00:00Z",
+				},
+			},
+		},
+		"DELETE /api/documents/{id}": map[string]interface{}{
+			"description": "Delete a document by ID",
+			"headers": map[string]string{
+				"Authorization": "Bearer {access_token}",
+			},
+			"path_params": map[string]string{
+				"id": "ID of the document",
+			},
+			"response": map[string]interface{}{
+				"success":     true,
+				"status_code": 204,
+				"no_content":  true,
+			},
+		},
+		"GET /api/documents/{id}/summary": map[string]interface{}{
+			"description": "Get a summary of a document (with entity count, etc.)",
+			"headers": map[string]string{
+				"Authorization": "Bearer {access_token}",
+			},
+			"path_params": map[string]string{
+				"id": "ID of the document",
+			},
+			"response": map[string]interface{}{
+				"success": true,
+				"data": map[string]interface{}{
+					"id":               1,
+					"hashed_name":      "encrypted-filename-string",
+					"upload_timestamp": "2023-01-01T12:00:00Z",
+					"last_modified":    "2023-01-01T12:00:00Z",
+					"entity_count":     5,
+				},
 			},
 		},
 	}

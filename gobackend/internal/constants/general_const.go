@@ -55,3 +55,7 @@ const (
 	// QueryParamEmail is the query parameter for filtering by email.
 	QueryParamEmail = "email"
 )
+
+const (
+	TablePasswordResetTokens = "password_reset_tokens"
+)

@@ -99,7 +99,6 @@ variable "health_check_port" {
 variable "enable_ssl" {
   description = "Whether to enable HTTPS with SSL certificates"
   type        = bool
-  default     = false
 }
 
 
@@ -202,6 +201,8 @@ variable "domain" {
   type        = string
 }
 
+
+
 variable "db_host" {
   description = "Database IP address to associate with the database"
   type        = string
@@ -209,7 +210,7 @@ variable "db_host" {
 variable "go_domain" {
   description = "Domain name for the Go application"
   type        = string
-  default     = "goapi.hidemeai.com"
+  default     = ""
 }
 
 variable "ssl_email" {
@@ -227,3 +228,18 @@ variable "domain_name" {
   type        = string
   default     = "hidemeai.com"
 }
+
+variable "SENDGRID_API_KEY" {
+  description = "api key for sandgrid password reset"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "API_KEY_ENCRYPTION_KEY" {
+  description = "api key for encryption"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+

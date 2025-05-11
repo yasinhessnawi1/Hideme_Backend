@@ -2,9 +2,31 @@
 // secure backend services for the HideMe application. This server handles
 // authentication, API authorization, and core business logic.
 //
-// The server loads configuration from files, initializes logging, sets up
-// middleware, and manages application lifecycle. It's designed to be secure,
-// maintainable, and scalable for production environments.
+// @title HideMe API
+// @version 1.0.0
+// @description HideMe API Server - User authentication, API authorization, and document processing.
+// @termsOfService http://www.hidemeai.com/terms/
+
+// @contact.name API Support
+// @contact.url http://www.hidemeai.com/support
+// @contact.email support@hidemeai.com
+
+// @license.name Proprietary
+// @license.url http://www.hidemeai.com/license
+
+// @host localhost:8080
+// @BasePath /api
+// @schemes http https
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and the JWT token.
+
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name X-API-Key
+// @description API key authentication
 package main
 
 import (
@@ -14,6 +36,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"os"
+
+	_ "github.com/yasinhessnawi1/Hideme_Backend/docs"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/server"
@@ -45,6 +69,7 @@ func init() {
 
 // main is the entry point for the application. It initializes configuration,
 // sets up logging, creates and starts the server, and handles graceful shutdown.
+// @Description Main function that starts the HideMe API Server
 func main() {
 	// Define command-line flags for configuration path and version display
 	var (

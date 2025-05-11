@@ -17,7 +17,7 @@ variable "environment" {
 variable "domain_name" {
   description = "The root domain name without trailing dot (e.g., hidemeai.com)"
   type        = string
-  default = ""
+  default     = ""
 }
 
 variable "load_balancer_ip" {

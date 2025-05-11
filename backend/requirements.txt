@@ -30,3 +30,4 @@ psutil
 redis
 aiofiles
 pytest
+aiohttp
