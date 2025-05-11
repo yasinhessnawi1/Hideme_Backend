@@ -10,6 +10,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 	"time"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
@@ -34,6 +36,7 @@ type DetectedEntity struct {
 	EntityName string `json:"entity_name" db:"entity_name"`
 
 	// RedactionSchema contains positional and styling information for redaction.
+	// This is stored in an encrypted format in the database.
 	RedactionSchema RedactionSchema `json:"redaction_schema" db:"redaction_schema"`
 
 	// DetectedTimestamp records when this entity was detected.
@@ -67,10 +70,75 @@ func NewDetectedEntity(documentID, methodID int64, entityName string, schema Red
 	}
 }
 
+// EncryptRedactionSchema encrypts the current redaction schema using the provided encryption key.
+// This should be called before storing the entity in the database.
+//
+// Parameters:
+//   - encryptionKey: The key to use for encryption (must be at least 32 bytes)
+//
+// Returns:
+//   - An error if encryption fails
+func (de *DetectedEntity) EncryptRedactionSchema(encryptionKey []byte) error {
+	// Convert the schema to JSON first
+	schemaJSON, err := json.Marshal(de.RedactionSchema)
+	if err != nil {
+		return fmt.Errorf("failed to marshal redaction schema: %w", err)
+	}
+
+	// Encrypt the JSON string
+	encrypted, err := utils.EncryptKey(string(schemaJSON), encryptionKey)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt redaction schema: %w", err)
+	}
+
+	// Store in a JSON-compatible format for database storage
+	encryptedSchema := RedactionSchema{
+		EncryptedData: encrypted,
+		IsEncrypted:   true,
+	}
+
+	de.RedactionSchema = encryptedSchema
+	return nil
+}
+
+// DecryptRedactionSchema decrypts the redaction schema if it's encrypted.
+// This should be called after retrieving the entity from the database.
+//
+// Parameters:
+//   - encryptionKey: The key used for encryption (must be at least 32 bytes)
+//
+// Returns:
+//   - An error if decryption fails
+func (de *DetectedEntity) DecryptRedactionSchema(encryptionKey []byte) error {
+	// Check if the schema is encrypted
+	if !de.RedactionSchema.IsEncrypted {
+		return nil // Not encrypted, nothing to do
+	}
+
+	// Decrypt the schema
+	decrypted, err := utils.DecryptKey(de.RedactionSchema.EncryptedData, encryptionKey)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt redaction schema: %w", err)
+	}
+
+	// Parse the decrypted JSON into a RedactionSchema
+	var schema RedactionSchema
+	if err := json.Unmarshal([]byte(decrypted), &schema); err != nil {
+		return fmt.Errorf("failed to unmarshal decrypted schema: %w", err)
+	}
+
+	de.RedactionSchema = schema
+	return nil
+}
+
 // RedactionSchema represents structured information about entity position and redaction details.
 // It is stored as JSON in the database to provide flexibility for different document types.
 // This structure enables precise redaction across various document formats.
 type RedactionSchema struct {
+	// Fields for encrypted storage
+	EncryptedData string `json:"encrypted_data,omitempty"`
+	IsEncrypted   bool   `json:"is_encrypted,omitempty"`
+
 	// Page number where the entity appears (for multi-page documents)
 	Page int `json:"page"`
 
