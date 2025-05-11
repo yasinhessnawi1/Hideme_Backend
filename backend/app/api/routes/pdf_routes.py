@@ -68,7 +68,7 @@ async def pdf_redact(
 @router.post("/extract")
 @limiter.limit("15/minute")
 @memory_optimized(threshold_mb=50)
-async def pdf_extract(request: Request, file: UploadFile = File(...)) -> JSONResponse:
+async def pdf_extract(request: Request, file: UploadFile = File(...)) -> Response:
     """
     Extract text with positions from a PDF file with performance metrics and memory optimization.
 
@@ -80,7 +80,7 @@ async def pdf_extract(request: Request, file: UploadFile = File(...)) -> JSONRes
         file (UploadFile): The PDF file uploaded by the client.
 
     Returns:
-        JSONResponse: A JSON response containing the extracted text and positional information,
+        Response: A response containing the extracted text and positional information,
                       or a secure error response if an exception occurs.
     """
     # Initialize the DocumentExtractService instance.
@@ -94,7 +94,7 @@ async def pdf_extract(request: Request, file: UploadFile = File(...)) -> JSONRes
             return result
         else:
             # Otherwise, wrap the result in a JSONResponse.
-            return JSONResponse(content=result)
+            return JSONResponse(content=result.model_dump(exclude_none=True))
     except Exception as e:
         # If an exception occurs, generate a secure error response.
         error_response = SecurityAwareErrorHandler.handle_safe_error(

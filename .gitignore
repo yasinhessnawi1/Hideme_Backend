@@ -226,6 +226,7 @@ flow/**.jsonl
 
 backend/app/logs/
 pkg
+hideme_wiki
 
 #
 # Binaries for programs and plugins

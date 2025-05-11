@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from fastapi import HTTPException, Response
 from backend.app.api.main import create_app
 from backend.app.utils.security.caching_middleware import response_cache
@@ -100,7 +100,11 @@ class TestPdfRoutes:
     async def test_pdf_extract_success(self, mock_extract):
         response_cache.clear()
 
-        mock_extract.return_value = {"text": "Extracted text", "positions": [[0, 0], [10, 10]]}
+        mock_result = MagicMock()
+
+        mock_result.model_dump.return_value = {"text": "Extracted text", "positions": [[0, 0], [10, 10]]}
+
+        mock_extract.return_value = mock_result
 
         files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
 

@@ -16,6 +16,7 @@ from fastapi import UploadFile, BackgroundTasks
 from starlette.responses import JSONResponse, StreamingResponse
 
 from backend.app.document_processing.pdf_redactor import PDFRedactionService
+from backend.app.domain.models import RedactBatchSummary, BatchRedactResponse, RedactFileResult
 from backend.app.utils.constant.constant import MAX_FILES_COUNT, DEFAULT_CONTENT_TYPE, CHUNK_SIZE
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
@@ -71,20 +72,32 @@ class BatchRedactService:
 
         # Verify if the uploaded file count exceeds the maximum allowed.
         if len(files) > MAX_FILES_COUNT:
-            # Return a JSON response indicating too many files.
-            return JSONResponse(
-                status_code=400,
-                content={"detail": f"Too many files uploaded. Maximum allowed is {MAX_FILES_COUNT}."}
+            summary = RedactBatchSummary(
+                batch_id=batch_id,
+                total_files=len(files),
+                successful=0,
+                failed=len(files),
+                total_redactions=0,
+                total_time=time.time() - start_time
             )
+            # no individual file_results
+            resp = BatchRedactResponse(batch_summary=summary, file_results=[])
+            return JSONResponse(status_code=400, content=resp.model_dump())
 
         # Parse the provided redaction mappings from JSON string to dictionary.
         file_mappings = BatchRedactService._parse_redaction_mappings(redaction_mappings)
         # Check if valid mappings were parsed, else return an error.
         if not file_mappings:
-            return JSONResponse(
-                status_code=400,
-                content={"detail": "No valid redaction mappings found in the provided JSON"}
+            summary = RedactBatchSummary(
+                batch_id=batch_id,
+                total_files=len(files),
+                successful=0,
+                failed=len(files),
+                total_redactions=0,
+                total_time=time.time() - start_time
             )
+            resp = BatchRedactResponse(batch_summary=summary, file_results=[])
+            return JSONResponse(status_code=400, content=resp.model_dump())
 
         # Create a secure temporary output directory for redacted files.
         output_dir = await SecureTempFileManager.create_secure_temp_dir_async(f"batch_redact_{batch_id}_")
@@ -96,19 +109,25 @@ class BatchRedactService:
                                                                                            batch_id)
         # If no valid files were found, return a detailed error response.
         if not valid_files:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "detail": "No valid files to process",
-                    "batch_summary": {
-                        "batch_id": batch_id,
-                        "total_files": len(files),
-                        "successful": 0,
-                        "failed": len(files),
-                        "total_time": time.time() - start_time
-                    }
-                }
+            summary = RedactBatchSummary(
+                batch_id=batch_id,
+                total_files=len(files),
+                successful=0,
+                failed=len(files),
+                total_redactions=0,
+                total_time=time.time() - start_time
             )
+            # build one FileResult per original file
+            file_results = [
+                RedactFileResult(
+                    file=meta["original_name"],
+                    status="error",
+                    error=meta.get("error", "No valid files to process")
+                )
+                for meta in file_metadata
+            ]
+            resp = BatchRedactResponse(batch_summary=summary, file_results=file_results)
+            return JSONResponse(status_code=400, content=resp.model_dump())
 
         # Prepare redaction items from the valid files and file metadata.
         redaction_items = BatchRedactService._prepare_redaction_items(valid_files, file_metadata, output_dir)

@@ -335,7 +335,7 @@ class TestBaseDetectionService(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(ents, [{'s': 1}])
 
-    # Test final JSON response preparation with debug info
+    # Test final response preparation with debug info
     @patch('backend.app.services.base_detect_service.BaseDetectionService.apply_threshold_filter',
            return_value=([1], {'pages': []}))
     @patch('backend.app.services.base_detect_service.sanitize_detection_output', return_value={'out': 1})
@@ -346,16 +346,33 @@ class TestBaseDetectionService(unittest.IsolatedAsyncioTestCase):
 
         content = b'data'
 
-        resp = BaseDetectionService.prepare_final_response(file, content, [], {'pages': []}, {'t': 1}, 0.5, 'ENG')
+        resp = BaseDetectionService.prepare_final_response(
+            file=file,
+            file_content=content,
+            entities=[],
+            redaction_mapping={'pages': []},
+            processing_times={'t': 1},
+            threshold=0.5,
+            engine_name='ENG',
+            batch_id='test-batch-id',
+            operation_id='test-op-id'
+        )
 
-        parsed = json.loads(resp.body.decode())
+        parsed = resp.model_dump()
 
-        self.assertIn('file_info', parsed)
+        file_result = parsed["file_results"][0]
 
-        self.assertEqual(parsed['file_info']['filename'], 'f.pdf')
+        results = file_result["results"]
 
-        self.assertEqual(parsed['model_info']['engine'], 'ENG')
+        debug_info = parsed["_debug"] if "_debug" in parsed else parsed["debug"]
 
-        self.assertIn('memory_usage', parsed['_debug'])
+        # Assertions
+        assert "file_info" in results
 
-        self.assertEqual(parsed['_debug']['memory_usage'], 10)
+        assert results["file_info"]["filename"] == "f.pdf"
+
+        assert results["model_info"]["engine"] == "ENG"
+
+        assert "memory_usage" in debug_info
+
+        assert debug_info["memory_usage"] == 10

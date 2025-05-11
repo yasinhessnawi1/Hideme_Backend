@@ -2,6 +2,7 @@ import json
 import unittest
 from unittest.mock import patch, AsyncMock
 from fastapi.responses import JSONResponse
+from fastapi import HTTPException
 
 from backend.app.services.ai_detect_service import AIDetectService
 
@@ -68,32 +69,58 @@ class TestAIDetectService(unittest.IsolatedAsyncioTestCase):
         mock_response.assert_called_once()
 
     @patch('backend.app.services.ai_detect_service.BaseDetectionService.prepare_detection_context')
-    async def test_detect_preparation_error(self, mock_context):
-        # Test detection returns prep error JSONResponse when preparation fails
+    @patch('backend.app.services.ai_detect_service.SecurityAwareErrorHandler.handle_safe_error')
+    async def test_detect_preparation_error(self, mock_safe_error, mock_context):
         file = DummyUploadFile()
 
-        mock_context.return_value = (None, None, None, None, JSONResponse(content={'error': 'prep'}))
+        prep_exception = HTTPException(status_code=400, detail='prep error')
 
-        response = await AIDetectService().detect(file, requested_entities=None)
+        mock_context.return_value = (None, None, None, None, prep_exception)
 
-        self.assertEqual(json.loads(response.body), {'error': 'prep'})
+        mock_safe_error.return_value = {
+            "error": "prep error",
+            "error_type": "HTTPException",
+            "error_id": "mock-id",
+            "trace_id": "mock-trace",
+            "timestamp": 123
+        }
+
+        with self.assertRaises(HTTPException) as cm:
+            await AIDetectService().detect(file, requested_entities=None)
+
+        assert cm.exception.status_code == 500
+
+        assert cm.exception.detail["error"] == "prep error"
 
     @patch('backend.app.services.ai_detect_service.BaseDetectionService.prepare_detection_context')
     @patch('backend.app.services.ai_detect_service.minimize_extracted_data', return_value='minimized')
     @patch('backend.app.services.ai_detect_service.initialization_service',
            new_callable=lambda: DummyInitializationService())
     @patch('backend.app.services.ai_detect_service.AIDetectService.perform_detection', new_callable=AsyncMock)
-    async def test_detect_detection_error(self, mock_detect, mock_init, mock_min, mock_context):
-        # Test detection returns detection error JSONResponse when perform_detection fails
+    @patch('backend.app.services.ai_detect_service.SecurityAwareErrorHandler.handle_safe_error')
+    async def test_detect_detection_error(self, mock_safe_error, mock_detect, mock_init, mock_min, mock_context):
         file = DummyUploadFile()
 
         mock_context.return_value = ({'pages': []}, b'b', ['EMAIL'], {}, None)
 
-        mock_detect.return_value = (None, JSONResponse(content={'error': 'detection'}))
+        detection_exception = HTTPException(status_code=500, detail='detection failed')
 
-        response = await AIDetectService().detect(file, requested_entities=None)
+        mock_detect.return_value = (None, detection_exception)
 
-        self.assertEqual(json.loads(response.body), {'error': 'detection'})
+        mock_safe_error.return_value = {
+            "error": "detection failed",
+            "error_type": "HTTPException",
+            "error_id": "mock-id",
+            "trace_id": "mock-trace",
+            "timestamp": 123
+        }
+
+        with self.assertRaises(HTTPException) as cm:
+            await AIDetectService().detect(file, requested_entities=None)
+
+        assert cm.exception.status_code == 500
+
+        assert cm.exception.detail["error"] == "detection failed"
 
     @patch('backend.app.services.ai_detect_service.BaseDetectionService.prepare_detection_context')
     @patch('backend.app.services.ai_detect_service.minimize_extracted_data', return_value='minimized')
@@ -108,11 +135,12 @@ class TestAIDetectService(unittest.IsolatedAsyncioTestCase):
 
         mock_detect.return_value = (None, None)
 
-        response = await AIDetectService().detect(file, requested_entities=None)
+        with self.assertRaises(HTTPException) as cm:
+            await AIDetectService().detect(file, requested_entities=None)
 
-        self.assertEqual(response.status_code, 500)
+        detail = cm.exception.detail
 
-        self.assertIn('Detection failed to return results', response.body.decode())
+        assert 'Detection returned no results' in str(detail) or 'error' in detail
 
     @patch('backend.app.services.ai_detect_service.BaseDetectionService.prepare_detection_context')
     @patch('backend.app.services.ai_detect_service.minimize_extracted_data', return_value='minimized')
@@ -139,21 +167,18 @@ class TestAIDetectService(unittest.IsolatedAsyncioTestCase):
             mock_min,
             mock_context
     ):
-        # Test detection returns safe error JSONResponse when statistics computation fails
+        # Test detection returns safe error HTTPException when statistics computation fails
         file = DummyUploadFile()
 
         mock_context.return_value = ({'pages': [{'words': []}]}, b'b', ['EMAIL'], {}, None)
 
         mock_detect.return_value = (([{'text': 'John'}], {'pages': []}), None)
 
-        response = await AIDetectService().detect(file, requested_entities='["EMAIL"]')
+        with self.assertRaises(HTTPException) as cm:
+            await AIDetectService().detect(file, requested_entities='["EMAIL"]')
 
-        self.assertEqual(response.status_code, 500)
+        self.assertEqual(cm.exception.status_code, 500)
 
-        content = response.body.decode()
+        self.assertIn("error_type", cm.exception.detail)
 
-        self.assertIn('"error_type":"Exception"', content)
-
-        self.assertIn('"error_id":"fake-id"', content)
-
-        self.assertIn('"trace_id":"trace_123"', content)
+        self.assertEqual(cm.exception.detail["error_id"], "fake-id")

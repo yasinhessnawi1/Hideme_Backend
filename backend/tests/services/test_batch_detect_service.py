@@ -3,6 +3,7 @@ from unittest.mock import patch, AsyncMock
 
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.batch_detect_service import BatchDetectService
+from fastapi import HTTPException
 
 
 # Dummy file object for filename and MIME type tests
@@ -66,11 +67,12 @@ class TestBatchDetectService(unittest.IsolatedAsyncioTestCase):
     async def test_exceeds_max_files(self):
         files = [DummyFile() for _ in range(4)]
 
-        result = await BatchDetectService.detect_entities_in_files(files)
+        with self.assertRaises(HTTPException) as cm:
+            await BatchDetectService.detect_entities_in_files(files)
 
-        self.assertIn("detail", result)
+        self.assertEqual(cm.exception.status_code, 400)
 
-        self.assertIn("operation_id", result)
+        self.assertIn("Too many files", str(cm.exception.detail))
 
     # Test handling when requested entities validation fails
     @patch("backend.app.services.batch_detect_service.validate_all_engines_requested_entities",
@@ -116,7 +118,7 @@ class TestBatchDetectService(unittest.IsolatedAsyncioTestCase):
     async def test_invalid_file_skips_detection(self, mock_read, mock_init, mock_val):
         result = await BatchDetectService.detect_entities_in_files([DummyFile()])
 
-        self.assertEqual(result["file_results"][0]["status"], "error")
+        self.assertEqual(result.file_results[0].status, "error")
 
     # Test successful batch detection path
     @patch("backend.app.services.batch_detect_service.validate_all_engines_requested_entities", return_value=["EMAIL"])
@@ -131,11 +133,9 @@ class TestBatchDetectService(unittest.IsolatedAsyncioTestCase):
     async def test_successful_batch_detection(self, mock_extract, mock_read, mock_init, mock_val):
         result = await BatchDetectService.detect_entities_in_files([DummyFile()])
 
-        self.assertEqual(result["file_results"][0]["status"], "success")
+        self.assertEqual(result.file_results[0].status, "success")
 
-        self.assertIn("batch_summary", result)
-
-        self.assertIn("file_info", result["file_results"][0]["results"])
+        self.assertIn("file_info", result.file_results[0].results)
 
     # Test processing a single file detection end-to-end
     @patch("backend.app.services.batch_detect_service.minimize_extracted_data",

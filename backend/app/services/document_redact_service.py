@@ -12,11 +12,12 @@ import json
 import time
 from typing import Optional, Tuple, Union
 
-from fastapi import UploadFile
+from fastapi import UploadFile, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
 # Import custom modules for PDF redaction, logging, error handling, etc.
 from backend.app.document_processing.pdf_redactor import PDFRedactionService
+from backend.app.domain.models import RedactFileResult, RedactBatchSummary, BatchRedactResponse
 from backend.app.utils.constant.constant import CHUNK_SIZE
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
@@ -78,7 +79,11 @@ class DocumentRedactionService:
             contents, error, _ = await read_and_validate_file(file, operation_id)
             if error:
                 # If file validation fails, return the error response immediately.
-                return error
+                return self._build_error_response(
+                    filename=file.filename,
+                    operation_id=operation_id,
+                    http_status=error.status_code
+                )
 
             # Parse the redaction mapping JSON string to get the mapping data and count of redactions.
             mapping_data, total_redactions, mapping_error = self._parse_redaction_mapping(
@@ -86,7 +91,11 @@ class DocumentRedactionService:
             )
             if mapping_error:
                 # If parsing the redaction mapping fails, return the error response.
-                return mapping_error
+                return self._build_error_response(
+                    filename=file.filename,
+                    operation_id=operation_id,
+                    http_status=mapping_error.status_code
+                )
 
             # Override or set the remove_images flag in the mapping based on the provided parameter.
             mapping_data["remove_images"] = remove_images
@@ -108,7 +117,11 @@ class DocumentRedactionService:
                 error_response = SecurityAwareErrorHandler.handle_safe_error(
                     e, "file_redaction_service", file.filename
                 )
-                return JSONResponse(content=error_response)
+                return self._build_error_response(
+                    filename=file.filename,
+                    operation_id=operation_id,
+                    http_status=error_response["status_code"]
+                )
 
             # Calculate the elapsed time for redaction and the total processing time.
             redact_time = time.time() - redact_start
@@ -167,7 +180,7 @@ class DocumentRedactionService:
 
     @staticmethod
     def _parse_redaction_mapping(redaction_mapping: Optional[str], filename: str, operation_id: str) -> Tuple[
-        dict, int, Optional[JSONResponse]]:
+        dict, int, Optional[HTTPException]]:
         """
         Parse the redaction mapping JSON string.
 
@@ -184,7 +197,7 @@ class DocumentRedactionService:
             A tuple containing:
                 - mapping_data: The parsed JSON object as a dictionary.
                 - total_redactions: The total count of redactions specified in the mapping.
-                - error_response: A JSONResponse with error details if parsing fails, otherwise None.
+                - error_response: A HTTPException with error details if parsing fails, otherwise None.
         """
         if redaction_mapping:
             try:
@@ -201,8 +214,66 @@ class DocumentRedactionService:
                 error_response = SecurityAwareErrorHandler.handle_safe_error(
                     e, "file_mapping_parse", filename
                 )
-                return {}, 0, JSONResponse(content=error_response)
+                return {}, 0, HTTPException(
+                    status_code=error_response["status_code"],
+                    detail=error_response["detail"]
+                )
         else:
             # If no redaction mapping is provided, log that an empty mapping will be used.
             log_info(f"[SECURITY] No redaction mapping provided; using empty mapping [operation_id={operation_id}]")
             return {"pages": []}, 0, None
+
+    @staticmethod
+    def _build_error_response(
+            filename: str,
+            operation_id: str,
+            http_status: int,
+            total_redactions: int = 0
+    ) -> JSONResponse:
+        """
+        Construct a standardized error response for a single-file redaction failure.
+
+        This helper creates a `BatchRedactResponse` containing:
+          - A `RedactFileResult` marking the file as an error.
+          - A `RedactBatchSummary` summarizing the batch (always a single-file batch).
+          - Wrapped in a FastAPI `JSONResponse` with the given HTTP status code.
+
+        Parameters:
+            filename (str): The original name of the file being redacted.
+            operation_id (str): A unique identifier for this redaction operation (e.g. "pdf_redact_<timestamp>").
+            http_status (int): The HTTP status code to return (e.g. 400, 500).
+            total_redactions (int, optional): Number of redactions that had been applied before the failure occurred.
+                Defaults to 0.
+
+        Returns:
+            JSONResponse:
+                A FastAPI JSONResponse whose body is the serialized `BatchRedactResponse`.
+        """
+        # Build the per-file result indicating an error.
+        file_result = RedactFileResult(
+            file=filename,
+            status="error"
+        )
+
+        # Build the batch summary for a single-file batch.
+        start_ts = float(operation_id.split("_", 1)[1])
+        summary = RedactBatchSummary(
+            batch_id=operation_id,
+            total_files=1,
+            successful=0,
+            failed=1,
+            total_redactions=total_redactions,
+            total_time=time.time() - start_ts
+        )
+
+        # Combine into the full batch response model.
+        model = BatchRedactResponse(
+            batch_summary=summary,
+            file_results=[file_result]
+        )
+
+        # Serialize the Pydantic model, dropping any None fields
+        return JSONResponse(
+            content=model.model_dump(exclude_none=True),
+            status_code=http_status
+        )

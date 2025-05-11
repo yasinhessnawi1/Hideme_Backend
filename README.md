@@ -208,6 +208,7 @@ The generated report (as of **2025-05-02**) shows an overall test coverage of **
 | backend/app/document\_processing/pdf\_searcher.py         |        227 |      35 |        0 |      85% |
 | backend/app/domain/**init**.py                            |          2 |       0 |        0 |     100% |
 | backend/app/domain/interfaces.py                          |         23 |       6 |        0 |      74% |
+| backend/app/domain/models.py                              |         55 |       0 |        0 |     100% |
 | backend/app/entity\_detection/**init**.py                 |          8 |       0 |        0 |     100% |
 | backend/app/entity\_detection/base.py                     |        203 |      21 |        0 |      90% |
 | backend/app/entity\_detection/engines.py                  |          7 |       0 |        0 |     100% |
@@ -290,7 +291,8 @@ backend/
 │   │   └── recognizers-config.yml
 │   ├── domain/                           # Domain interfaces and models
 │   │   ├── __init__.py
-│   │   └── interfaces.py
+│   │   ├──interfaces.py
+│   │   └──models.py
 │   ├── document_processing/              # PDF processing utilities
 │   │   ├── __init__.py
 │   │   ├── detection_updater.py

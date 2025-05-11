@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch, AsyncMock, MagicMock
+from fastapi import HTTPException
 
 from backend.app.services.batch_search_service import BatchSearchService
 
@@ -21,11 +22,12 @@ class TestBatchSearchService(unittest.IsolatedAsyncioTestCase):
     async def test_batch_search_too_many_files(self):
         files = [DummyUploadFile(), DummyUploadFile()]
 
-        result = await BatchSearchService.batch_search_text(files, search_terms="test")
+        with self.assertRaises(HTTPException) as ctx:
+            await BatchSearchService.batch_search_text(files, search_terms="test")
 
-        self.assertIn("detail", result)
+        self.assertEqual(ctx.exception.status_code, 400)
 
-        self.assertEqual(result["detail"], "Too many files uploaded. Maximum allowed is 1.")
+        self.assertIn("Too many files", str(ctx.exception.detail))
 
     # Test handling validation error when reading files
     @patch("backend.app.services.batch_search_service.read_and_validate_file", new_callable=AsyncMock)
@@ -104,9 +106,11 @@ class TestBatchSearchService(unittest.IsolatedAsyncioTestCase):
 
         result = await BatchSearchService.batch_search_text([DummyUploadFile()], "test")
 
-        self.assertEqual(result["batch_summary"]["successful"], 1)
+        parsed = result.model_dump()
 
-        self.assertEqual(result["batch_summary"]["total_matches"], 1)
+        self.assertEqual(parsed["batch_summary"]["successful"], 1)
+
+        self.assertEqual(parsed["batch_summary"]["total_matches"], 1)
 
     # Test finding words by bounding box when extraction and search succeed
     @patch("backend.app.services.batch_search_service.read_and_validate_file", new_callable=AsyncMock)
@@ -138,8 +142,11 @@ class TestBatchSearchService(unittest.IsolatedAsyncioTestCase):
                 "bbox-op"
             )
 
-        self.assertEqual(result["batch_summary"]["successful"], 1)
-        self.assertEqual(result["batch_summary"]["total_matches"], 3)
+        parsed = result.model_dump()
+
+        self.assertEqual(parsed["batch_summary"]["successful"], 1)
+
+        self.assertEqual(parsed["batch_summary"]["total_matches"], 3)
 
     # Test handling validation failure in bounding box search
 
@@ -150,9 +157,10 @@ class TestBatchSearchService(unittest.IsolatedAsyncioTestCase):
 
         result = await BatchSearchService.find_words_by_bbox([DummyUploadFile()], {}, "op-id")
 
-        # when all files fail validation, file_results is empty
-        self.assertEqual(result["file_results"], [])
+        parsed = result.model_dump()
 
-        # batch_summary should report 0 successful, 1 failed
-        self.assertEqual(result["batch_summary"]["successful"], 0)
-        self.assertEqual(result["batch_summary"]["failed"], 1)
+        self.assertEqual(parsed["file_results"], [])
+
+        self.assertEqual(parsed["batch_summary"]["successful"], 0)
+
+        self.assertEqual(parsed["batch_summary"]["failed"], 1)

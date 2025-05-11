@@ -15,9 +15,9 @@ to the threshold are retained. Both the flat list of entities and the nested red
 import time
 from typing import Optional
 
-from fastapi import UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import UploadFile, HTTPException
 
+from backend.app.domain.models import BatchDetectionResponse
 from backend.app.services.base_detect_service import BaseDetectionService
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.logging.logger import log_info, log_error
@@ -53,7 +53,7 @@ class MashinLearningService(BaseDetectionService):
 
     async def detect(self, file: UploadFile, requested_entities: Optional[str],
                      operation_id: str, remove_words: Optional[str] = None,
-                     threshold: Optional[float] = None) -> JSONResponse:
+                     threshold: Optional[float] = None) -> BatchDetectionResponse:
         """
         Asynchronously detects sensitive data in the uploaded file using a machine learning detector.
 
@@ -80,24 +80,27 @@ class MashinLearningService(BaseDetectionService):
                                          detection results. If not provided, a default of 0.85 is used.
 
         Returns:
-            JSONResponse: A JSON response containing the sanitized detection output along with file and engine metadata
+            BatchDetectionResponse containing the sanitized detection output along with file and engine metadata
                           and additional debug information.
         """
         # Record the start time of the detection operation.
         start_time = time.time()
         log_info(f"[ML] Starting {self.detector_type} detection operation [operation_id={operation_id}]")
         try:
-            # STEP 1: Prepare the detection context (e.g., file validation, text extraction).
+            # Prepare the detection context (e.g., file validation, text extraction).
             extracted_data, file_content, entity_list, processing_times, error = await self.prepare_detection_context(
                 file, requested_entities, operation_id, start_time
             )
             if error:
-                return error
+                raise HTTPException(
+                    status_code=error.status_code,
+                    detail=error.body.decode()
+                )
 
-            # STEP 2: Minimize the extracted data for efficient processing.
+            # Minimize the extracted data for efficient processing.
             minimized_data = minimize_extracted_data(extracted_data)
 
-            # STEP 3: Initialize the appropriate detector based on the detector type.
+            # Initialize the appropriate detector based on the detector type.
             if self.detector_type == "presidio" and hasattr(initialization_service, "get_presidio_detector"):
                 detector = initialization_service.get_presidio_detector()
             elif self.detector_type == "gliner" and hasattr(initialization_service, "get_gliner_detector"):
@@ -105,55 +108,59 @@ class MashinLearningService(BaseDetectionService):
             elif self.detector_type == "hideme" and hasattr(initialization_service, "get_hideme_detector"):
                 detector = initialization_service.get_hideme_detector(entity_list)
             else:
-                return JSONResponse(
-                    status_code=400,
-                    content={"detail": f"Unsupported detector type: {self.detector_type}"}
+                raise HTTPException(
+                    status_code=error.status_code,
+                    detail=error.body.decode()
                 )
 
-            # STEP 4: Perform detection using the selected detector with a timeout.
+            # Perform detection using the selected detector with a timeout.
             detection_start = time.time()
             detection_result, detection_error = await self.perform_detection(
                 detector, minimized_data, entity_list, detection_timeout=600, operation_id=operation_id
             )
             if detection_error:
-                return detection_error
+                raise HTTPException(
+                    status_code=detection_error.status_code,
+                    detail=detection_error.body.decode()
+                )
             processing_times["detection_time"] = time.time() - detection_start
 
-            # STEP 5: Validate and unpack the detection results.
+            # Validate and unpack the detection results.
             if detection_result is None:
                 log_error(f"[ML] {self.detector_type} detection returned no results [operation_id={operation_id}]")
-                return JSONResponse(
+                raise HTTPException(
                     status_code=500,
-                    content={"detail": f"{self.detector_type} detection failed to return results",
-                             "operation_id": operation_id}
+                    detail=f"Detection returned no results [op={operation_id}]"
                 )
             entities, redaction_mapping = detection_result
 
         except Exception as e:
             # Handle exceptions in the detection pipeline.
             error_response = SecurityAwareErrorHandler.handle_safe_error(e, "detection_ml_detect")
-            status = error_response.get("status_code", 500)
-            return JSONResponse(status_code=status, content=error_response)
+            raise HTTPException(
+                status_code=error_response.get("status_code", 500),
+                detail=error_response
+            )
 
         try:
-            # STEP 6: Compute total processing time.
+            # Compute total processing time.
             total_time = time.time() - start_time
             processing_times["total_time"] = total_time
             log_info(f"[ML] {self.detector_type} detection completed in {processing_times['detection_time']:.3f}s. "
                      f"Found {len(entities)} entities [operation_id={operation_id}]")
 
-            # STEP 7: Optionally apply removal words if provided.
+            # Optionally apply removal words if provided.
             if remove_words:
                 entities, redaction_mapping = self.apply_removal_words(extracted_data, detection_result, remove_words)
 
-            # STEP 8: Compute additional statistics and update processing metrics.
+            # Compute additional statistics and update processing metrics.
             stats = self.compute_statistics(extracted_data, entities)
             processing_times.update(stats)
             if "entity_density" in stats:
                 log_info(f"[ML] Entity density: {stats['entity_density']:.2f} entities per 1000 words "
                          f"[operation_id={operation_id}]")
 
-            # STEP 9: Record processing details for auditing.
+            # Record processing details for auditing.
             record_keeper.record_processing(
                 operation_type=f"{self.detector_type}_detection",
                 document_type=file.content_type,
@@ -163,10 +170,10 @@ class MashinLearningService(BaseDetectionService):
                 success=True
             )
 
-            # STEP 10: Update the redaction mapping with engine-specific markers.
+            # Update the redaction mapping with engine-specific markers.
             redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name=self.detector_type)
 
-            # STEP 11-13: Use the centralized helper method to apply threshold filtering,
+            # Use the centralized helper method to apply threshold filtering,
             # sanitize the detection output, and append file and engine metadata.
             final_response = BaseDetectionService.prepare_final_response(
                 file=file,
@@ -175,7 +182,9 @@ class MashinLearningService(BaseDetectionService):
                 redaction_mapping=redaction_mapping,
                 processing_times=processing_times,
                 threshold=threshold,
-                engine_name=self.detector_type
+                engine_name=self.detector_type,
+                batch_id=operation_id,
+                operation_id=operation_id
             )
             # Log the successful completion before returning.
             log_info(f"[ML] {self.detector_type} detection operation completed successfully in {total_time:.3f}s "
@@ -184,5 +193,7 @@ class MashinLearningService(BaseDetectionService):
         except Exception as e:
             # Handle errors during post-detection processing.
             error_response = SecurityAwareErrorHandler.handle_safe_error(e, "detection_post_processing")
-            status = error_response.get("status_code", 500)
-            return JSONResponse(status_code=status, content=error_response)
+            raise HTTPException(
+                status_code=error_response.get("status_code", 500),
+                detail=error_response
+            )

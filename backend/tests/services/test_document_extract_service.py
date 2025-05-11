@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.responses import JSONResponse
+from fastapi import HTTPException
 
 from backend.app.services.document_extract_service import DocumentExtractService
 
@@ -27,13 +28,12 @@ class TestDocumentExtractService(unittest.IsolatedAsyncioTestCase):
 
         mock_validate.return_value = (None, JSONResponse(content={"error": "Invalid file"}), 0.1)
 
-        response = await service.extract(DummyUploadFile())
+        with self.assertRaises(HTTPException) as cm:
+            await service.extract(DummyUploadFile())
 
-        self.assertIsInstance(response, JSONResponse)
+        self.assertEqual(cm.exception.status_code, 200)
 
-        self.assertEqual(response.status_code, 200)
-
-        self.assertIn("error", response.body.decode())
+        self.assertIn("Invalid file", cm.exception.detail.decode())
 
     # Test extract method successful flow returns performance and debug info
     @patch("backend.app.services.document_extract_service.read_and_validate_file", new_callable=AsyncMock)
@@ -53,15 +53,13 @@ class TestDocumentExtractService(unittest.IsolatedAsyncioTestCase):
 
         response = await service.extract(DummyUploadFile())
 
-        data = response.body.decode()
+        parsed = response.model_dump()
 
-        self.assertIsInstance(response, JSONResponse)
+        self.assertIn("performance", parsed["file_results"][0]["results"])
 
-        self.assertIn("performance", data)
+        self.assertIn("file_info", parsed["file_results"][0]["results"])
 
-        self.assertIn("file_info", data)
-
-        self.assertIn("_debug", data)
+        self.assertIn("debug", parsed)
 
     # Test internal _extract_text returns data and no error on success
     def test_extract_text_success(self):
@@ -87,9 +85,11 @@ class TestDocumentExtractService(unittest.IsolatedAsyncioTestCase):
 
             self.assertIsNone(data)
 
-            self.assertIsInstance(error, JSONResponse)
+            self.assertIsInstance(error, HTTPException)
 
-            self.assertIn("error", error.body.decode())
+            self.assertEqual(error.status_code, 500)
+
+            self.assertIn("Reference ID", str(error.detail))
 
     # Test removing text fields leaves only position in words
     def test_remove_text_from_extracted_data(self):

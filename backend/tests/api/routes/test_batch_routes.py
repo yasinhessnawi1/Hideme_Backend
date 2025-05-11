@@ -6,7 +6,7 @@ import pytest
 
 from fastapi import UploadFile, HTTPException
 from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from starlette.responses import Response as StarletteResponse, StreamingResponse
 from backend.app.api.main import create_app
@@ -93,7 +93,11 @@ class TestBatchEncryptedRoutes:
             DUMMY_API_KEY
         )
 
-        mock_detect.return_value = {"status": "ok", "count": 2}
+        mock_result = MagicMock()
+
+        mock_result.model_dump.return_value = {"status": "ok", "count": 2}
+
+        mock_detect.return_value = mock_result
 
         b64_req = base64.urlsafe_b64encode(enc_req_entities).decode()
 
@@ -214,7 +218,11 @@ class TestBatchEncryptedRoutes:
             DUMMY_API_KEY
         )
 
-        mock_detect.return_value = {"ok": True}
+        mock_result = MagicMock()
+
+        mock_result.model_dump.return_value = {"ok": True}
+
+        mock_detect.return_value = mock_result
 
         b64_req = base64.urlsafe_b64encode(enc_req_entities).decode()
 
@@ -276,7 +284,11 @@ class TestBatchEncryptedRoutes:
             DUMMY_API_KEY
         )
 
-        mock_search.return_value = {"found": 3}
+        mock_result = MagicMock()
+
+        mock_result.model_dump.return_value = {"found": 3}
+
+        mock_search.return_value = mock_result
 
         b64_terms = base64.urlsafe_b64encode(enc_search_terms).decode()
 
@@ -333,7 +345,11 @@ class TestBatchEncryptedRoutes:
             DUMMY_API_KEY
         )
 
-        mock_find.return_value = {"words": ["a", "b"]}
+        mock_result = MagicMock()
+
+        mock_result.model_dump.return_value = {"words": ["a", "b"]}
+
+        mock_find.return_value = mock_result
 
         b64_bbox = base64.urlsafe_b64encode(enc_bbox).decode()
 
