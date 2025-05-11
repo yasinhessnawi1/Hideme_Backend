@@ -58,6 +58,24 @@ func (s *DocumentService) ListDocuments(userID int64, page, pageSize int) ([]*mo
 	return docs, total, nil
 }
 
+func (s *DocumentService) CalculateEntityCount(redactionSchema string) int {
+	if redactionSchema == "" || redactionSchema == "{}" {
+		return 0
+	}
+
+	var redactionMapping models.RedactionMapping
+	if err := json.Unmarshal([]byte(redactionSchema), &redactionMapping); err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, page := range redactionMapping.Pages {
+		count += len(page.Sensitive)
+	}
+
+	return count
+}
+
 // UploadDocument uploads a new document for a user.
 func (s *DocumentService) UploadDocument(userID int64, filename string, redactionSchema models.RedactionMapping) (*models.Document, error) {
 	// Convert redactionSchema to JSON

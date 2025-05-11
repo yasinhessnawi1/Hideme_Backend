@@ -118,7 +118,7 @@ func (d *Document) DecryptRedactionSchema(encryptionKey []byte) (string, error) 
 
 	// Parse the JSON wrapper to extract the encrypted data
 	var wrapper struct {
-		EncryptedData string `json:"encrypted_data"`
+		FileResults string `json:"file_results"` // Changed from "encrypted_data" to "file_results"
 	}
 
 	if err := json.Unmarshal([]byte(d.RedactionSchema), &wrapper); err != nil {
@@ -127,8 +127,8 @@ func (d *Document) DecryptRedactionSchema(encryptionKey []byte) (string, error) 
 	}
 
 	// If we have encrypted data, decrypt it
-	if wrapper.EncryptedData != "" {
-		return utils.DecryptKey(wrapper.EncryptedData, encryptionKey)
+	if wrapper.FileResults != "" {
+		return utils.DecryptKey(wrapper.FileResults, encryptionKey)
 	}
 
 	// Otherwise return as-is

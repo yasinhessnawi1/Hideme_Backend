@@ -22,6 +22,7 @@ type DocumentServiceInterface interface {
 	GetDocumentByID(id int64) (*models.Document, error)
 	DeleteDocumentByID(id int64) error
 	GetDocumentSummary(id int64) (*models.DocumentSummary, error)
+	CalculateEntityCount(redactionSchema string) int
 }
 
 // DocumentService implements DocumentServiceInterface using a DocumentRepository.
@@ -64,7 +65,7 @@ func (h *DocumentHandler) ListDocuments(w http.ResponseWriter, r *http.Request) 
 			HashedName:      doc.HashedDocumentName,
 			UploadTimestamp: doc.UploadTimestamp,
 			LastModified:    doc.LastModified,
-			EntityCount:     0, // Placeholder for entity count
+			EntityCount:     h.documentService.CalculateEntityCount(doc.RedactionSchema), // Placeholder for entity count
 		}
 	}
 	utils.Paginated(w, constants.StatusOK, responseDocs, params.Page, params.PageSize, total)
