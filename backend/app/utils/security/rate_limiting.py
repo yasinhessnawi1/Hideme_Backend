@@ -41,10 +41,10 @@ class RateLimitConfig:
 
     def __init__(
             self,
-            requests_per_minute: int = 60,
-            admin_requests_per_minute: int = 120,
-            anonymous_requests_per_minute: int = 30,
-            burst_allowance: int = 30,
+            requests_per_minute: int = 30,
+            admin_requests_per_minute: int = 60,
+            anonymous_requests_per_minute: int = 15,
+            burst_allowance: int = 15,
             redis_url: Optional[str] = None
     ):
         # Set the standard requests per minute limit.
@@ -76,14 +76,14 @@ def get_rate_limit_config() -> RateLimitConfig:
     """
     # Create and return a RateLimitConfig object with parameters from environment variables.
     return RateLimitConfig(
-        # Convert RATE_LIMIT_RPM environment variable to an integer (default 60).
-        requests_per_minute=int(os.getenv("RATE_LIMIT_RPM", "60")),
-        # Convert ADMIN_RATE_LIMIT_RPM environment variable to an integer (default 120).
-        admin_requests_per_minute=int(os.getenv("ADMIN_RATE_LIMIT_RPM", "120")),
-        # Convert ANON_RATE_LIMIT_RPM environment variable to an integer (default 30).
-        anonymous_requests_per_minute=int(os.getenv("ANON_RATE_LIMIT_RPM", "30")),
-        # Convert RATE_LIMIT_BURST environment variable to an integer (default 30).
-        burst_allowance=int(os.getenv("RATE_LIMIT_BURST", "30")),
+        # Convert RATE_LIMIT_RPM environment variable to an integer (default 30).
+        requests_per_minute=int(os.getenv("RATE_LIMIT_RPM", "30")),
+        # Convert ADMIN_RATE_LIMIT_RPM environment variable to an integer (default 60).
+        admin_requests_per_minute=int(os.getenv("ADMIN_RATE_LIMIT_RPM", "60")),
+        # Convert ANON_RATE_LIMIT_RPM environment variable to an integer (default 15).
+        anonymous_requests_per_minute=int(os.getenv("ANON_RATE_LIMIT_RPM", "15")),
+        # Convert RATE_LIMIT_BURST environment variable to an integer (default 15).
+        burst_allowance=int(os.getenv("RATE_LIMIT_BURST", "15")),
         # Retrieve the Redis URL from environment variables.
         redis_url=os.getenv("REDIS_URL")
     )

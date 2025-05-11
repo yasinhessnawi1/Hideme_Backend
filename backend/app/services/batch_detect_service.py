@@ -12,10 +12,11 @@ import time
 import uuid
 from typing import List, Dict, Any, Optional, Tuple
 
-from fastapi import UploadFile
+from fastapi import UploadFile, HTTPException
 
 # Import PDF extraction and entity detection modules.
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
+from backend.app.domain.models import BatchDetectionResponse, BatchSummary, FileResult, BatchDetectionDebugInfo
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.base_detect_service import BaseDetectionService
 from backend.app.services.initialization_service import initialization_service
@@ -53,7 +54,7 @@ class BatchDetectService(BaseDetectionService):
             use_hideme: bool = False,
             remove_words: Optional[str] = None,
             threshold: Optional[float] = None
-    ) -> Dict[str, Any]:
+    ) -> BatchDetectionResponse:
         """
         Process a batch of PDF files for entity detection.
 
@@ -70,7 +71,7 @@ class BatchDetectService(BaseDetectionService):
             threshold (Optional[float]): A numeric threshold (0.00 to 1.00) for filtering the detection results.
 
         Returns:
-            A dictionary containing the batch summary, individual file results, and debug information.
+            A BatchDetectionResponse containing the batch summary, individual file results, and debug information.
 
         Raises:
             Exception: Exceptions are logged and processed using SecurityAwareErrorHandler.
@@ -85,7 +86,7 @@ class BatchDetectService(BaseDetectionService):
         if len(files) > MAX_FILES_COUNT:
             error_message = f"Too many files uploaded. Maximum allowed is {MAX_FILES_COUNT}."
             log_error(f"[SECURITY] {error_message} [operation_id={batch_id}]")
-            return {"detail": error_message, "operation_id": batch_id}
+            raise HTTPException(status_code=400, detail=error_message)
 
         # Validate and prepare the list of requested entities.
         try:
@@ -180,16 +181,16 @@ class BatchDetectService(BaseDetectionService):
                              for d in detection_results if d["status"] == "success"),
             success=(batch_summary["successful"] > 0)
         )
-        # Build the final response including debug information.
-        return {
-            "batch_summary": batch_summary,
-            "file_results": detection_results,
-            "_debug": {
-                "memory_usage": memory_monitor.get_memory_stats().get("current_usage"),
-                "peak_memory": memory_monitor.get_memory_stats().get("peak_usage"),
-                "operation_id": batch_id
-            }
-        }
+        # Construct and return a structured Pydantic response
+        return BatchDetectionResponse(
+            batch_summary=BatchSummary(**batch_summary),
+            file_results=[FileResult(**res) for res in detection_results],
+            debug=BatchDetectionDebugInfo(
+                memory_usage=memory_monitor.get_memory_stats().get("current_usage"),
+                peak_memory=memory_monitor.get_memory_stats().get("peak_usage"),
+                operation_id=batch_id
+            )
+        )
 
     @staticmethod
     async def _read_pdf_files(
@@ -220,8 +221,10 @@ class BatchDetectService(BaseDetectionService):
         # Iterate over each file in the input list.
         for file in files:
             try:
+                start_time = time.time()
                 # Validate and read the file.
-                content, error_response, read_time = await read_and_validate_file(file, operation_id)
+                content, error_response, _ = await read_and_validate_file(file, operation_id)
+                read_time = time.time() - start_time
                 # If validation fails, log an error and append None as the file content.
                 if error_response:
                     log_error(f"[SECURITY] Validation failed for file {file.filename} [operation_id={operation_id}]")
@@ -264,12 +267,18 @@ class BatchDetectService(BaseDetectionService):
             A mapping from file index to its extraction result (dictionary).
         """
         try:
+            start = time.time()
             # Call the batch extraction method from PDFTextExtractor using the specified number of workers.
             extraction_results: List[Tuple[int, Dict[str, Any]]] = await PDFTextExtractor.extract_batch_text(
                 valid_pdf_files, max_workers=optimal_workers
             )
-            # Convert the list of tuples into a dictionary for easy access.
-            return {idx: result for idx, result in extraction_results}
+            total_extraction_time = time.time() - start
+
+            # attach that same extraction_time to each file’s result
+            return {
+                idx: {**pages, "extraction_time": total_extraction_time}
+                for idx, pages in extraction_results
+            }
         except Exception as e:
             # Log extraction errors securely and propagate the exception.
             log_error(f"[SECURITY] Error in batch text extraction: {str(e)}")
@@ -318,6 +327,19 @@ class BatchDetectService(BaseDetectionService):
             # Minimize the extracted data to remove redundant or sensitive information.
             minimized_extracted = minimize_extracted_data(extracted)
 
+            # file_read_time from metadata
+            file_read_time = file_meta.get("read_time", 0.0)
+
+            # extraction_time from the extractor result
+            extraction_time = extracted.get("extraction_time", 0.0)
+
+            processing_times = {
+                "file_read_time": file_read_time,
+                "extraction_time": extraction_time,
+            }
+
+            # detection_time around detector call
+            det_start = time.time()
             # Depending on the detection engine type, choose hybrid or single detection.
             if detection_engine == EntityDetectionEngine.HYBRID:
                 combined_entities, combined_redaction_mapping = await BatchDetectService._process_hybrid_detection(
@@ -327,16 +349,22 @@ class BatchDetectService(BaseDetectionService):
                 combined_entities, combined_redaction_mapping = await BatchDetectService._process_single_detection(
                     minimized_extracted, entity_list, detector, remove_words
                 )
+            detection_time = time.time() - det_start
+            processing_times["detection_time"] = detection_time
 
             # Calculate total words and page count for performance metrics.
             total_words = sum(len(page.get("words", [])) for page in minimized_extracted.get("pages", []))
             pages_count = len(minimized_extracted.get("pages", []))
-            processing_times = {
+            density = (len(combined_entities) / total_words * 1000) if total_words else 0
+
+            processing_times.update({
                 "words_count": total_words,
                 "pages_count": pages_count,
-                "entity_density": (len(combined_entities) / total_words * 1000) if total_words > 0 else 0
-            }
+                "entity_density": density,
+            })
 
+            # sanitize_time and total_time
+            san_start = time.time()
             # Apply threshold filtering ---
             # Use the centralized method from BaseDetectionService to filter the detection results.
             filtered_entities, filtered_redaction_mapping = BaseDetectionService.apply_threshold_filter(
@@ -345,6 +373,19 @@ class BatchDetectService(BaseDetectionService):
 
             # Sanitize the detection output using the filtered results.
             sanitized = sanitize_detection_output(filtered_entities, filtered_redaction_mapping, processing_times)
+
+            sanitize_time = time.time() - san_start
+            processing_times["sanitize_time"] = sanitize_time
+
+            # now compute total_time as the sum of the pieces
+            processing_times["total_time"] = (
+                    file_read_time
+                    + extraction_time
+                    + detection_time
+                    + sanitize_time
+            )
+
+            sanitized["performance"] = processing_times
 
             # Append file metadata.
             sanitized["file_info"] = {

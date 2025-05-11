@@ -75,8 +75,11 @@ async def ai_detect_sensitive(
     try:
         # Delegate file processing to the AI detection service, passing all relevant parameters.
         result = await service.detect(file, requested_entities, remove_words, threshold)
-        # Return the processing result.
-        return result
+        # Wrap the model dump in JSONResponse:
+        return JSONResponse(
+            content=result.model_dump(exclude_none=True),
+            media_type=JSON_MEDIA_TYPE
+        )
     except Exception as e:
         # Securely handle any exceptions during AI detection.
         error_info = SecurityAwareErrorHandler.handle_safe_error(

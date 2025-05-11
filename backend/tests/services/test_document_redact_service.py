@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import HTTPException
 
 from backend.app.services.document_redact_service import DocumentRedactionService
 
@@ -80,17 +81,24 @@ class TestDocumentRedactionService(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(err)
 
-    # Test parsing invalid JSON mapping returns error JSONResponse
-    def test_parse_redaction_mapping_invalid(self):
+    @patch("backend.app.services.document_redact_service.SecurityAwareErrorHandler.handle_safe_error")
+    def test_parse_redaction_mapping_invalid(self, mock_safe_error):
+        mock_safe_error.return_value = {
+            "status_code": 400,
+            "detail": "Invalid JSON"
+        }
+
         result, count, err = DocumentRedactionService._parse_redaction_mapping(
-
             "not-json", "file.pdf", "op2"
-
         )
 
         self.assertEqual(count, 0)
 
-        self.assertIsInstance(err, JSONResponse)
+        self.assertIsInstance(err, HTTPException)
+
+        self.assertEqual(err.status_code, 400)
+
+        self.assertIn("Invalid JSON", err.detail)
 
     # Test parsing None mapping returns empty pages and no error
     def test_parse_redaction_mapping_none(self):

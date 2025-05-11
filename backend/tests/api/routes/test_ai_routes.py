@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from fastapi import HTTPException
 from backend.app.api.main import create_app
 
@@ -15,7 +15,12 @@ class TestAIDetectRouter:
     @patch("backend.app.api.routes.ai_routes.validate_threshold_score")
     async def test_ai_detect_sensitive_success(self, mock_validate_threshold_score, mock_detect):
         mock_validate_threshold_score.return_value = None
-        mock_detect.return_value = {"status": "success", "data": "mock data"}
+
+        mock_result = MagicMock()
+
+        mock_result.model_dump.return_value = {"status": "success", "data": "mock data"}
+
+        mock_detect.return_value = mock_result
 
         files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
 

@@ -24,7 +24,7 @@ import json
 import time
 from typing import Optional, List
 
-from fastapi import APIRouter,File,UploadFile,Form,Header,BackgroundTasks,Request,Response,HTTPException
+from fastapi import APIRouter, File, UploadFile, Form, Header, BackgroundTasks, Request, Response, HTTPException
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse, StreamingResponse
@@ -141,7 +141,7 @@ async def batch_detect_sensitive(
             threshold=threshold,
         )
         # Wrap the result, encrypting if an AES key is present
-        return session_manager.wrap_response(result, api_key)
+        return session_manager.wrap_response(result.model_dump(exclude_none=True), api_key)
 
     except Exception as e:
         # Log unexpected exceptions for debugging/audit
@@ -248,7 +248,7 @@ async def batch_hybrid_detect_sensitive(
             threshold=threshold,
         )
         # Step 5: wrap and encrypt response if an AES key is present
-        return session_manager.wrap_response(result, api_key)
+        return session_manager.wrap_response(result.model_dump(exclude_none=True), api_key)
 
     except Exception as e:
         # Log any unexpected exceptions
@@ -327,7 +327,7 @@ async def batch_search_text(
             ai_search=ai_search,
         )
         # Wrap the result in a JSONResponse, encrypting if an AES key is present
-        return session_manager.wrap_response(result, api_key)
+        return session_manager.wrap_response(result.model_dump(exclude_none=True), api_key)
 
     except Exception as e:
         # Log any unhandled exceptions for debugging
@@ -414,7 +414,7 @@ async def batch_find_words_by_bbox(
             operation_id=operation_id
         )
         # wrap and optionally encrypt the response
-        return session_manager.wrap_response(result, api_key)
+        return session_manager.wrap_response(result.model_dump(exclude_none=True), api_key)
 
     except Exception as e:
         # log any unexpected exceptions

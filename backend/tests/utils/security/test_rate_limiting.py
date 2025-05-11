@@ -28,13 +28,13 @@ class TestRateLimitConfig(unittest.TestCase):
     def test_init_with_defaults(self):
         config = RateLimitConfig()
 
-        self.assertEqual(config.requests_per_minute, 60)
+        self.assertEqual(config.requests_per_minute, 30)
 
-        self.assertEqual(config.admin_requests_per_minute, 120)
+        self.assertEqual(config.admin_requests_per_minute, 60)
 
-        self.assertEqual(config.anonymous_requests_per_minute, 30)
+        self.assertEqual(config.anonymous_requests_per_minute, 15)
 
-        self.assertEqual(config.burst_allowance, 30)
+        self.assertEqual(config.burst_allowance, 15)
 
         self.assertEqual(config.redis_url, os.getenv("REDIS_URL"))
 
@@ -93,13 +93,13 @@ class TestGetRateLimitConfig(unittest.TestCase):
 
         config = get_rate_limit_config()
 
-        self.assertEqual(config.requests_per_minute, 60)
+        self.assertEqual(config.requests_per_minute, 30)
 
-        self.assertEqual(config.admin_requests_per_minute, 120)
+        self.assertEqual(config.admin_requests_per_minute, 60)
 
-        self.assertEqual(config.anonymous_requests_per_minute, 30)
+        self.assertEqual(config.anonymous_requests_per_minute, 15)
 
-        self.assertEqual(config.burst_allowance, 30)
+        self.assertEqual(config.burst_allowance, 15)
 
         self.assertIsNone(config.redis_url)
 

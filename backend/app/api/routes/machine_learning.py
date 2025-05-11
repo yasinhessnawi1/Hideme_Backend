@@ -19,6 +19,7 @@ from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
 from backend.app.services.machine_learning_service import MashinLearningService
+from backend.app.utils.constant.constant import JSON_MEDIA_TYPE
 from backend.app.utils.logging.logger import log_info, log_warning
 from backend.app.utils.system_utils.memory_management import memory_optimized, memory_monitor
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
@@ -74,8 +75,11 @@ async def presidio_detect_sensitive(
     try:
         # Call the detection service's asynchronous detect method with the provided parameters.
         result = await service.detect(file, requested_entities, operation_id, remove_words, threshold)
-        # Return the detection result.
-        return result
+        # Wrap the model dump in JSONResponse:
+        return JSONResponse(
+            content=result.model_dump(exclude_none=True),
+            media_type=JSON_MEDIA_TYPE
+        )
     except Exception as e:
         # Log a warning if an exception occurs during the detection process.
         log_warning(f"[ML] Exception in Presidio detection: {str(e)} [operation_id={operation_id}]")
@@ -139,8 +143,11 @@ async def gliner_detect_sensitive_entities(
         service = MashinLearningService(detector_type="gliner")
         # Call the detection service's asynchronous detect method with the provided parameters.
         result = await service.detect(file, requested_entities, operation_id, remove_words, threshold)
-        # Return the detection result.
-        return result
+        # Wrap the model dump in JSONResponse:
+        return JSONResponse(
+            content=result.model_dump(exclude_none=True),
+            media_type=JSON_MEDIA_TYPE
+        )
     except Exception as e:
         # Log a warning if an exception occurs during the detection process.
         log_warning(f"[ML] Exception in GLiNER detection: {str(e)} [operation_id={operation_id}]")
@@ -204,8 +211,11 @@ async def hideme_detect_sensitive_entities(
         service = MashinLearningService(detector_type="hideme")
         # Call the detection service's asynchronous detect method with the provided parameters.
         result = await service.detect(file, requested_entities, operation_id, remove_words, threshold)
-        # Return the detection result.
-        return result
+        # Wrap the model dump in JSONResponse:
+        return JSONResponse(
+            content=result.model_dump(exclude_none=True),
+            media_type=JSON_MEDIA_TYPE
+        )
     except Exception as e:
         # Log a warning if an exception occurs during HIDEME detection.
         log_warning(f"[ML] Exception in HIDEME detection: {str(e)} [operation_id={operation_id}]")

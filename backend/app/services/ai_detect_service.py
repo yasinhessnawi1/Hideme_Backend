@@ -19,9 +19,9 @@ import time
 import uuid
 from typing import Optional
 
-from fastapi import UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import UploadFile, HTTPException
 
+from backend.app.domain.models import BatchDetectionResponse
 from backend.app.services.base_detect_service import BaseDetectionService
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.logging.logger import log_info, log_error
@@ -54,7 +54,34 @@ class AIDetectService(BaseDetectionService):
 
     async def detect(self, file: UploadFile, requested_entities: Optional[str],
                      remove_words: Optional[str] = None,
-                     threshold: Optional[float] = None) -> JSONResponse:
+                     threshold: Optional[float] = None) -> BatchDetectionResponse:
+        """
+                Asynchronously detects sensitive data in the uploaded file using ai detector.
+
+                The method performs the following steps:
+                  1. Records the start time and logs the beginning of the operation.
+                  2. Prepares the detection context by extracting necessary data from the file.
+                  3. Minimizes the extracted data.
+                  4. Performs detection with a timeout and unpacks the raw results.
+                  5. Computes total processing time and logs detection metrics.
+                  6. Optionally applies removal words to update the detection results.
+                  7. Computes additional statistics and records processing metrics.
+                  8. Updates the redaction mapping with engine-specific markers.
+                  9. Filters the detection results based on the provided threshold.
+                 10. Prepares the final sanitized JSON response using a centralized helper method.
+                 11. Returns the final JSON response.
+
+                Parameters:
+                    file (UploadFile): The uploaded file for processing.
+                    requested_entities (Optional[str]): Specific entities to detect (as a string or JSON).
+                    remove_words (Optional[str]): Optional words/phrases to remove from the detection output.
+                    threshold (Optional[float]): A numeric threshold (expected between 0.00 and 1.00) used for filtering
+                                                 detection results. If not provided, a default of 0.85 is used.
+
+                Returns:
+                    BatchDetectionResponse containing the sanitized detection output along with file and engine metadata
+                                  and additional debug information.
+                """
         # Record the start time of the detection operation.
         start_time = time.time()
         # Generate a unique operation ID for logging and tracing.
@@ -64,60 +91,68 @@ class AIDetectService(BaseDetectionService):
         log_info(f"[SECURITY] Starting Gemini AI detection operation [operation_id={operation_id}]")
 
         try:
-            # STEP 1: Prepare the detection context (validate file, extract text, etc.).
+            # Prepare the detection context (validate file, extract text, etc.).
             extracted_data, file_content, entity_list, processing_times, error = await self.prepare_detection_context(
                 file, requested_entities, operation_id, start_time
             )
             if error:
-                return error
+                raise HTTPException(
+                    status_code=error.status_code,
+                    detail=error.body.decode()
+                )
 
-            # STEP 2: Minimize the extracted data for more efficient processing.
+            # Minimize the extracted data for more efficient processing.
             minimized_data = minimize_extracted_data(extracted_data)
 
-            # STEP 3: Retrieve the Gemini detector using the initialization service.
+            # Retrieve the Gemini detector using the initialization service.
             detector = initialization_service.get_gemini_detector()
 
-            # STEP 4: Execute detection with a timeout.
+            # Execute detection with a timeout.
             detection_start = time.time()
             detection_result, detection_error = await self.perform_detection(
                 detector, minimized_data, entity_list, detection_timeout, operation_id
             )
             if detection_error:
-                return detection_error
+                raise HTTPException(
+                    status_code=detection_error.status_code,
+                    detail=detection_error.body.decode()
+                )
             processing_times["detection_time"] = time.time() - detection_start
 
-            # STEP 5: Check and unpack the detection results.
+            # Check and unpack the detection results.
             if detection_result is None:
                 log_error(f"[SECURITY] Gemini detection returned no results [operation_id={operation_id}]")
-                return JSONResponse(
+                raise HTTPException(
                     status_code=500,
-                    content={"detail": "Detection failed to return results", "operation_id": operation_id}
+                    detail=f"Detection returned no results [op={operation_id}]"
                 )
             entities, redaction_mapping = detection_result
 
         except Exception as e:
             error_response = SecurityAwareErrorHandler.handle_safe_error(e, "detection_ai_detect")
-            status = error_response.get("status_code", 500)
-            return JSONResponse(status_code=status, content=error_response)
+            raise HTTPException(
+                status_code=error_response.get("status_code", 500),
+                detail=error_response
+            )
 
         try:
-            # STEP 6: Calculate the total processing time.
+            # Calculate the total processing time.
             processing_times["total_time"] = time.time() - start_time
 
-            # STEP 7: Optionally apply removal words to the detection result.
+            # Optionally apply removal words to the detection result.
             if remove_words:
                 entities, redaction_mapping = self.apply_removal_words(
                     extracted_data, detection_result, remove_words
                 )
 
-            # STEP 8: Compute additional statistics and update processing metrics.
+            # Compute additional statistics and update processing metrics.
             stats = self.compute_statistics(extracted_data, entities)
             processing_times.update(stats)
             if "entity_density" in stats:
                 log_info(f"[SECURITY] Entity density: {stats['entity_density']:.2f} entities per 1000 words "
                          f"[operation_id={operation_id}]")
 
-            # STEP 9: Record processing details for auditing.
+            # Record processing details for auditing.
             record_keeper.record_processing(
                 operation_type="gemini_detection",
                 document_type=file.content_type,
@@ -127,12 +162,11 @@ class AIDetectService(BaseDetectionService):
                 success=True
             )
 
-            # STEP 10: Update the redaction mapping with engine-specific markers.
+            # Update the redaction mapping with engine-specific markers.
             redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name="gemini")
 
-            # STEPS 11-13: Prepare final JSON response using the centralized helper.
+            # Prepare final JSON response using the centralized helper.
             # This helper applies threshold filtering, sanitizes output, and appends metadata.
-            # Note: The helper method returns a JSONResponse for consistency.
             final_response = BaseDetectionService.prepare_final_response(
                 file=file,
                 file_content=file_content,
@@ -140,7 +174,9 @@ class AIDetectService(BaseDetectionService):
                 redaction_mapping=redaction_mapping,
                 processing_times=processing_times,
                 threshold=threshold,
-                engine_name="gemini"
+                engine_name="gemini",
+                batch_id=operation_id,
+                operation_id=operation_id
             )
             # Log successful operation details immediately before returning.
             log_info(
@@ -149,5 +185,7 @@ class AIDetectService(BaseDetectionService):
 
         except Exception as e:
             error_response = SecurityAwareErrorHandler.handle_safe_error(e, "detection_post_processing")
-            status = error_response.get("status_code", 500)
-            return JSONResponse(status_code=status, content=error_response)
+            raise HTTPException(
+                status_code=error_response.get("status_code", 500),
+                detail=error_response
+            )

@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse
 
 from backend.app.document_processing.detection_updater import DetectionResultUpdater
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
+from backend.app.domain.models import BatchDetectionResponse, FileResult, BatchSummary, BatchDetectionDebugInfo
 from backend.app.entity_detection import BaseEntityDetector
 from backend.app.utils.helpers.json_helper import validate_all_engines_requested_entities
 from backend.app.utils.logging.logger import log_warning, log_error
@@ -389,7 +390,8 @@ class BaseDetectionService:
     @staticmethod
     def prepare_final_response(file, file_content: bytes, entities: List[Dict[str, Any]],
                                redaction_mapping: Dict[str, Any], processing_times: dict,
-                               threshold: Optional[float], engine_name: str) -> JSONResponse:
+                               threshold: Optional[float], engine_name: str,
+                               batch_id: str, operation_id: str) -> BatchDetectionResponse:
         """
         Prepares the final JSON response for detection output by applying threshold filtering,
         sanitizing the detection output, and appending file and engine metadata along with debug info.
@@ -402,9 +404,11 @@ class BaseDetectionService:
             processing_times: Dictionary containing processing timing metrics.
             threshold: Optional numeric threshold for filtering (default 0.85 if not provided).
             engine_name: The name of the detection engine (e.g., "gemini", "presidio", "gliner").
+            batch_id: unique ID for this run (Note here is not batch just one file, but I need it for the model)
+            operation_id: unique ID for this run
 
         Returns:
-            A JSONResponse containing the sanitized output with appended metadata.
+            A BatchDetectionResponse containing the sanitized output with appended metadata.
         """
         # Apply the threshold filter.
         filtered_entities, filtered_redaction_mapping = BaseDetectionService.apply_threshold_filter(
@@ -418,12 +422,35 @@ class BaseDetectionService:
             "content_type": file.content_type,
             "size": f"{round(len(file_content) / (1024 * 1024), 2)} MB"
         }
-        # Append engine/model metadata.
         sanitized_response["model_info"] = {"engine": engine_name}
-        # Retrieve memory statistics for debugging and append.
-        mem_stats = memory_monitor.get_memory_stats()
-        sanitized_response["_debug"] = {
-            "memory_usage": mem_stats["current_usage"],
-            "peak_memory": mem_stats["peak_usage"]
-        }
-        return JSONResponse(content=sanitized_response)
+
+        # build the single FileResult
+        file_result = FileResult(
+            file=file.filename,
+            status="success",
+            results=sanitized_response
+        )
+
+        # build the batch summary
+        summary = BatchSummary(
+            batch_id=batch_id,
+            total_files=1,
+            successful=1,
+            failed=0,
+            total_time=processing_times.get("total_time", 0.0)
+        )
+
+        # debug info
+        mem = memory_monitor.get_memory_stats()
+        debug = BatchDetectionDebugInfo(
+            memory_usage=mem["current_usage"],
+            peak_memory=mem["peak_usage"],
+            operation_id=operation_id
+        )
+
+        # return the Pydantic wrapper
+        return BatchDetectionResponse(
+            batch_summary=summary,
+            file_results=[file_result],
+            debug=debug
+        )

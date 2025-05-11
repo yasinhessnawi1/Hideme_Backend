@@ -11,11 +11,11 @@ SecurityAwareErrorHandler.
 import time
 from typing import Optional, Tuple, Any
 
-from fastapi import UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import UploadFile, HTTPException
 
 # Import custom modules for PDF extraction, logging, error handling, memory monitoring, and data minimization.
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
+from backend.app.domain.models import BatchDetectionResponse, BatchSummary, BatchDetectionDebugInfo, FileResult
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.security.processing_records import record_keeper
@@ -40,7 +40,7 @@ class DocumentExtractService:
             Extracts text from the provided PDF file and returns the extracted data along with performance metrics.
     """
 
-    async def extract(self, file: UploadFile) -> JSONResponse:
+    async def extract(self, file: UploadFile) -> BatchDetectionResponse:
         """
         Extract text with positional information from a PDF file.
 
@@ -51,13 +51,13 @@ class DocumentExtractService:
         4. Removes the actual text content from the extracted words for privacy.
         5. Records performance statistics and memory usage.
         6. Logs sensitive operations and records processing for compliance.
-        7. Returns a JSONResponse containing the extracted data and performance metrics.
+        7. Returns a BatchDetectionResponse containing the extracted data and performance metrics.
 
         Args:
             file: The PDF file to be processed for text extraction.
 
         Returns:
-            JSONResponse: A response containing the extracted data along with performance and debug information,
+            BatchDetectionResponse: A response containing the extracted data along with performance and debug information,
             or an error response if any error occurs during processing.
         """
         # Record the start time for overall processing
@@ -66,17 +66,18 @@ class DocumentExtractService:
         operation_id = f"pdf_extract_{time.time()}"
         log_info(f"[SECURITY] Starting PDF extraction [operation_id={operation_id}]")
 
-        # Validate and read the file; measure file reading time along with validation
-        content, error, file_read_time = await read_and_validate_file(file, operation_id)
+        # Validate the file; measure file reading time along with validation
+        content, error, _ = await read_and_validate_file(file, operation_id)
+        file_read_time = time.time() - start_time
         if error:
-            # Return the error response immediately if file validation fails
-            return error
+            # Raise the error response immediately if file validation fails
+            raise HTTPException(status_code=error.status_code, detail=error.body)
 
         # Extract text from the PDF using the helper method _extract_text
         extracted_data, extraction_error = self._extract_text(content, file.filename, operation_id)
         if extraction_error:
-            # Return the error response if text extraction fails
-            return extraction_error
+            # Raise the error response if text extraction fails
+            raise extraction_error
 
         # Calculate extraction time excluding the file reading duration
         extract_time = time.time() - start_time - file_read_time
@@ -129,19 +130,39 @@ class DocumentExtractService:
             extraction_time=extract_time
         )
 
+        file_result = FileResult(
+            file=file.filename,
+            status="success",
+            results=extracted_data
+        )
+
+        summary = BatchSummary(
+            batch_id=operation_id,
+            total_files=1,
+            successful=1,
+            failed=0,
+            total_time=total_time
+        )
+
         # Retrieve current memory usage statistics after processing
-        mem_stats = memory_monitor.get_memory_stats()
-        # Include debug information for memory usage
-        extracted_data["_debug"] = {
-            "memory_usage": mem_stats["current_usage"],
-            "peak_memory": mem_stats["peak_usage"]
-        }
+        mem = memory_monitor.get_memory_stats()
+
+        debug = BatchDetectionDebugInfo(
+            memory_usage=mem.get("current_usage"),
+            peak_memory=mem.get("peak_usage"),
+            operation_id=operation_id
+        )
 
         log_info(f"[SECURITY] PDF extraction completed successfully [operation_id={operation_id}]")
-        return JSONResponse(content=extracted_data)
+        return BatchDetectionResponse(
+            batch_summary=summary,
+            file_results=[file_result],
+            debug=debug
+        )
 
     @staticmethod
-    def _extract_text(content: bytes, filename: str, operation_id: str) -> Tuple[Optional[Any], Optional[JSONResponse]]:
+    def _extract_text(content: bytes, filename: str, operation_id: str) -> Tuple[
+        Optional[Any], Optional[HTTPException]]:
         """
         Extract text from the PDF file content using PDFTextExtractor.
 
@@ -158,7 +179,7 @@ class DocumentExtractService:
         Returns:
             A tuple containing:
                 - extracted_data: The extracted text data (or None if extraction fails).
-                - error_response: A JSONResponse containing an error message if extraction fails, otherwise None.
+                - error_response: A HTTPException containing an error message if extraction fails, otherwise None.
         """
         log_info(f"[SECURITY] Starting PDF text extraction [operation_id={operation_id}]")
         try:
@@ -176,7 +197,7 @@ class DocumentExtractService:
             error_response = SecurityAwareErrorHandler.handle_safe_error(
                 e, "file_text_extraction", filename
             )
-            return None, JSONResponse(content=error_response)
+            return None, HTTPException(status_code=error_response.get("status_code", 500), detail=error_response)
 
     @staticmethod
     def _remove_text_from_extracted_data(extracted_data: dict) -> dict:

@@ -8,10 +8,11 @@ import time
 import uuid
 from typing import List, Dict, Any, Optional, Tuple, Union
 
-from fastapi import UploadFile
+from fastapi import UploadFile, HTTPException
 
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.document_processing.pdf_searcher import PDFSearcher
+from backend.app.domain.models import BatchDetectionResponse, BatchSummary, BatchDetectionDebugInfo, FileResult
 from backend.app.utils.constant.constant import MAX_FILES_COUNT
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_batch_operation
@@ -38,7 +39,7 @@ class BatchSearchService:
             max_parallel_files: Optional[int] = None,
             case_sensitive: bool = False,
             ai_search: bool = False
-    ) -> Dict[str, Any]:
+    ) -> BatchDetectionResponse:
         """
         Extract text from multiple PDF files and search for the specified terms.
 
@@ -58,7 +59,7 @@ class BatchSearchService:
             ai_search: Whether to use AI-powered search enhancements.
 
         Returns:
-            A dictionary containing:
+            A BatchDetectionResponse containing:
               - batch_summary: Summary information for the batch operation.
               - file_results: List of dictionaries with individual file results.
               - _debug: Debug information including memory statistics and the batch operation ID.
@@ -76,8 +77,7 @@ class BatchSearchService:
             error_message = f"Too many files uploaded. Maximum allowed is {MAX_FILES_COUNT}."
             # Log the error message with security context.
             log_error(f"[SECURITY] {error_message} [operation_id={batch_id}]")
-            # Return an error dictionary with the detail and operation id.
-            return {"detail": error_message, "operation_id": batch_id}
+            raise HTTPException(status_code=400, detail=error_message)
 
         # Set optimal number of parallel workers (default to 4 if not provided).
         optimal_workers = max_parallel_files if max_parallel_files is not None else 4
@@ -93,23 +93,22 @@ class BatchSearchService:
         # If there are no valid PDF files, prepare and return an error summary.
         if not valid_pdf_files:
             # Return a summary with no successful files.
-            return {
-                "batch_summary": {
-                    "batch_id": batch_id,
-                    "total_files": len(files),
-                    "successful": 0,
-                    "failed": len(files),
-                    "total_matches": 0,
-                    "search_term": ", ".join(search_words),
-                    "query_time": round(time.time() - start_time, 2)
-                },
-                "file_results": [],
-                "_debug": {
-                    "memory_usage": memory_monitor.get_memory_stats().get("current_usage"),
-                    "peak_memory": memory_monitor.get_memory_stats().get("peak_usage"),
-                    "operation_id": batch_id
-                }
-            }
+            summary = BatchSummary(
+                batch_id=batch_id,
+                total_files=len(files),
+                successful=0,
+                failed=len(files),
+                total_time=round(time.time() - start_time, 2),
+                workers=optimal_workers,
+                total_matches=0,
+                search_term=", ".join(search_words),
+            )
+            debug = BatchDetectionDebugInfo(
+                memory_usage=memory_monitor.get_memory_stats().get("current_usage"),
+                peak_memory=memory_monitor.get_memory_stats().get("peak_usage"),
+                operation_id=batch_id,
+            )
+            return BatchDetectionResponse(batch_summary=summary, file_results=[], debug=debug)
 
         # Extract text from valid PDF files in parallel using PDFTextExtractor.
         extraction_results = await PDFTextExtractor.extract_batch_text(valid_pdf_files, max_workers=optimal_workers)
@@ -117,7 +116,7 @@ class BatchSearchService:
         extraction_map = {idx: result for idx, result in extraction_results}
 
         # Initialize an empty list to hold individual file results.
-        file_results: List[Dict[str, Any]] = []
+        file_results: List[FileResult] = []
         # Initialize counters for successful and failed file processing.
         successful = 0
         failed = 0
@@ -131,11 +130,13 @@ class BatchSearchService:
             # Check if the file validation failed based on its metadata status.
             if metadata.get("status") == "error":
                 # Append the error result for this file.
-                file_results.append({
-                    "file": metadata.get("original_name"),
-                    "status": "error",
-                    "error": metadata.get("error", "File validation failed.")
-                })
+                file_results.append(
+                    FileResult(
+                        file=metadata.get("original_name"),
+                        status="error",
+                        error=metadata.get("error", "File validation failed.")
+                    )
+                )
                 # Increment the failure counter.
                 failed += 1
                 # Continue to the next file.
@@ -152,7 +153,7 @@ class BatchSearchService:
                     metadata, extraction_result, search_words, case_sensitive, ai_search
                 )
                 # Append the processed result data to the file results.
-                file_results.append(result_data)
+                file_results.append(FileResult(**result_data))
                 # Update success and failure counters accordingly.
                 successful += success_flag
                 failed += fail_flag
@@ -163,26 +164,33 @@ class BatchSearchService:
                 log_error(
                     f"[SECURITY] Error processing file {metadata.get('original_name')}: {str(e)} [operation_id={batch_id}]")
                 # Append an error result for this file.
-                file_results.append({
-                    "file": metadata.get("original_name", f"file_{i}"),
-                    "status": "error",
-                    "error": f"Unhandled processing error: {str(e)}"
-                })
+                file_results.append(FileResult(
+                    file=metadata.get("original_name", f"file_{i}"),
+                    status="error",
+                    error=f"Unhandled processing error: {str(e)}"
+                )
+                )
                 # Increment the failure counter.
                 failed += 1
 
         # Calculate the total query time for processing the batch.
         query_time = time.time() - start_time
-        # Build the batch summary dictionary.
-        batch_summary = {
-            "batch_id": batch_id,
-            "total_files": len(files),
-            "successful": successful,
-            "failed": failed,
-            "total_matches": total_matches,
-            "search_term": ", ".join(search_words),
-            "query_time": round(query_time, 2)
-        }
+        # Build the batch summary dictionary and memory statistics for debugging purposes.
+        summary = BatchSummary(
+            batch_id=batch_id,
+            total_files=len(files),
+            successful=successful,
+            failed=failed,
+            total_time=query_time,
+            workers=optimal_workers,
+            total_matches=total_matches,
+            search_term=", ".join(search_words),
+        )
+        debug = BatchDetectionDebugInfo(
+            memory_usage=memory_monitor.get_memory_stats().get("current_usage"),
+            peak_memory=memory_monitor.get_memory_stats().get("peak_usage"),
+            operation_id=batch_id,
+        )
         # Log the overall batch operation details.
         log_batch_operation("Batch Text Search", len(files), successful, query_time)
 
@@ -197,20 +205,7 @@ class BatchSearchService:
             success=(successful > 0)
         )
 
-        # Retrieve memory statistics for debugging purposes.
-        mem_stats = memory_monitor.get_memory_stats()
-        # Prepare the complete response object with batch summary, file results, and debug info.
-        response = {
-            "batch_summary": batch_summary,
-            "file_results": file_results,
-            "_debug": {
-                "memory_usage": mem_stats.get("current_usage"),
-                "peak_memory": mem_stats.get("peak_usage"),
-                "operation_id": batch_id
-            }
-        }
-        # Return the complete response.
-        return response
+        return BatchDetectionResponse(batch_summary=summary, file_results=file_results, debug=debug)
 
     @staticmethod
     async def _read_files_for_extraction(files: List[UploadFile], operation_id: str) -> Tuple[
@@ -386,7 +381,7 @@ class BatchSearchService:
             files: List[UploadFile],
             bounding_box: Dict[str, float],
             operation_id: str
-    ) -> Dict[str, Any]:
+    ) -> BatchDetectionResponse:
         """
         Combines all extracted PDF pages into one logical document and finds the phrase
         defined by `bounding_box` across all PDFs.
@@ -401,7 +396,7 @@ class BatchSearchService:
           6. Audit the batch operation via record_keeper.
 
         Returns:
-            A dict containing:
+            A BatchDetectionResponse containing:
               - batch_summary: metrics and the target_bbox used (as a string)
               - file_results: list of per-file results (pages + match_count)
               - _debug: memory usage and operation_id for diagnostics
@@ -423,16 +418,27 @@ class BatchSearchService:
                 f"[SECURITY] Error reading files in find_words_by_bbox: {e} "
                 f"[operation_id={operation_id}]"
             )
-            # Return an error payload if reading fails
-            return {"detail": "Error reading files", "operation_id": operation_id}
+            raise HTTPException(status_code=400, detail="Error reading files")
 
         # Filter out any that failed validation (None content)
         valid_pdf_files = [content for content in pdf_files if content is not None]
         if not valid_pdf_files:
             # Early return if no valid PDFs remain
-            return BatchSearchService._build_empty_bbox_response(
-                files, operation_id, start_time
+            summary = BatchSummary(
+                batch_id=operation_id,
+                total_files=len(files),
+                successful=0,
+                failed=len(files),
+                total_time=round(time.time() - start_time, 2),
+                target_bbox=str(bounding_box),
+                total_matches=0,
             )
+            debug = BatchDetectionDebugInfo(
+                memory_usage=memory_monitor.get_memory_stats().get("current_usage"),
+                peak_memory=memory_monitor.get_memory_stats().get("peak_usage"),
+                operation_id=operation_id,
+            )
+            return BatchDetectionResponse(batch_summary=summary, file_results=[], debug=debug)
 
         # Extract pages/text from valid PDFs in parallel
         extraction_results = await PDFTextExtractor.extract_batch_text(valid_pdf_files)
@@ -468,25 +474,22 @@ class BatchSearchService:
                 f"[SECURITY] Error running phrase detection: {e} "
                 f"[operation_id={operation_id}]"
             )
-            # Return an error payload if phrase detection fails
-            return {"detail": "Error during phrase detection", "operation_id": operation_id}
+            raise HTTPException(status_code=500, detail="Error during phrase detection")
 
         # Step 4: Group each matched page result by its original file
-        file_results_map: Dict[str, Dict[str, Any]] = {}
+        file_results_map: Dict[str, FileResult] = {}
         for idx, page_result in enumerate(phrase_result.get("pages", [])):
             source_file = page_to_file_map.get(idx, "unknown")
             if source_file not in file_results_map:
                 # Initialize a new entry for this file
-                file_results_map[source_file] = {
-                    "file": source_file,
-                    "status": "success",
-                    "results": {"pages": [], "match_count": 0}
-                }
+                file_results_map[source_file] = FileResult(
+                    file=source_file,
+                    status="success",
+                    results={"pages": [], "match_count": 0}
+                )
             # Add this page's matches to the file's results
-            file_results_map[source_file]["results"]["pages"].append(page_result)
-            file_results_map[source_file]["results"]["match_count"] += len(
-                page_result.get("matches", [])
-            )
+            file_results_map[source_file].results["pages"].append(page_result)
+            file_results_map[source_file].results["match_count"] += len(page_result.get("matches", []))
 
         # Convert the map of file->results into a list for the response
         file_results = list(file_results_map.values())
@@ -504,59 +507,18 @@ class BatchSearchService:
         )
 
         # Construct and return the final payload
-        return {
-            "batch_summary": {
-                "batch_id": operation_id,
-                "total_files": len(files),
-                "successful": successful,
-                "failed": failed,
-                "total_matches": total_matches,
-                "target_bbox": str(bounding_box),
-                "query_time": query_time
-            },
-            "file_results": file_results,
-            "_debug": {
-                "memory_usage": memory_monitor.get_memory_stats().get("current_usage"),
-                "peak_memory": memory_monitor.get_memory_stats().get("peak_usage"),
-                "operation_id": operation_id
-            }
-        }
-
-    @staticmethod
-    def _build_empty_bbox_response(
-            files: List[UploadFile],
-            operation_id: str,
-            start_time: float
-    ) -> Dict[str, Any]:
-        """
-        Helper method to build a standardized, empty response when no valid PDFs are available.
-
-        Args:
-            files: Original list of uploaded PDF files.
-            operation_id: Unique ID for this batch.
-            start_time: Timestamp when processing began.
-
-        Returns:
-            A response dict mirroring the normal structure but with zeroed-out metrics
-            and an empty `target_bbox`.
-        """
-        # Calculate how long we tried before giving up
-        elapsed = round(time.time() - start_time, 2)
-
-        return {
-            "batch_summary": {
-                "batch_id": operation_id,
-                "total_files": len(files),
-                "successful": 0,
-                "failed": len(files),
-                "total_matches": 0,
-                "target_bbox": "",
-                "query_time": elapsed
-            },
-            "file_results": [],
-            "_debug": {
-                "memory_usage": memory_monitor.get_memory_stats().get("current_usage"),
-                "peak_memory": memory_monitor.get_memory_stats().get("peak_usage"),
-                "operation_id": operation_id
-            }
-        }
+        summary = BatchSummary(
+            batch_id=operation_id,
+            total_files=len(files),
+            successful=successful,
+            failed=failed,
+            total_time=query_time,
+            target_bbox=str(bounding_box),
+            total_matches=total_matches,
+        )
+        debug = BatchDetectionDebugInfo(
+            memory_usage=memory_monitor.get_memory_stats().get("current_usage"),
+            peak_memory=memory_monitor.get_memory_stats().get("peak_usage"),
+            operation_id=operation_id,
+        )
+        return BatchDetectionResponse(batch_summary=summary, file_results=file_results, debug=debug)

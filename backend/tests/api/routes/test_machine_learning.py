@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from fastapi import HTTPException
 from backend.app.api.main import create_app
 
@@ -16,7 +16,11 @@ class TestMachineLearningRouter:
     async def test_presidio_detect_success(self, mock_validate_threshold_score, mock_detect):
         mock_validate_threshold_score.return_value = None
 
-        mock_detect.return_value = {"status": "success", "data": "mock data"}
+        mock_result = MagicMock()
+
+        mock_result.model_dump.return_value = {"status": "success", "data": "mock data"}
+
+        mock_detect.return_value = mock_result
 
         files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
 
@@ -112,7 +116,11 @@ class TestMachineLearningRouter:
     @pytest.mark.asyncio
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
     async def test_gliner_detect_success(self, mock_detect):
-        mock_detect.return_value = {"status": "success", "data": "mock data"}
+        mock_result = MagicMock()
+
+        mock_result.model_dump.return_value = {"status": "success", "data": "mock data"}
+
+        mock_detect.return_value = mock_result
 
         files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
 
@@ -181,7 +189,11 @@ class TestMachineLearningRouter:
     @pytest.mark.asyncio
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
     async def test_hideme_detect_success(self, mock_detect):
-        mock_detect.return_value = {"status": "success", "data": "mock data"}
+        mock_result = MagicMock()
+
+        mock_result.model_dump.return_value = {"status": "success", "data": "mock data"}
+
+        mock_detect.return_value = mock_result
 
         files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
 

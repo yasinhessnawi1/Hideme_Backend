@@ -308,9 +308,15 @@ class TestBatchRedactService(unittest.IsolatedAsyncioTestCase):
 
         )
 
-        self.assertEqual(result.status_code, 400)
+        parsed = json.loads(result.body.decode())
 
-        self.assertIn("Too many files", result.body.decode())
+        self.assertEqual(parsed["batch_summary"]["failed"], 2)
+
+        self.assertEqual(parsed["batch_summary"]["successful"], 0)
+
+        self.assertEqual(parsed["batch_summary"]["total_files"], 2)
+
+        self.assertEqual(result.status_code, 400)
 
     # Test batch_redact_documents errors on invalid mappings JSON
     async def test_invalid_redaction_mappings(self):
@@ -323,9 +329,15 @@ class TestBatchRedactService(unittest.IsolatedAsyncioTestCase):
 
         )
 
-        self.assertEqual(result.status_code, 400)
+        parsed = json.loads(result.body.decode())
 
-        self.assertIn("No valid redaction mappings", result.body.decode())
+        self.assertEqual(parsed["batch_summary"]["failed"], 1)
+
+        self.assertEqual(parsed["batch_summary"]["successful"], 0)
+
+        self.assertEqual(parsed["file_results"], [])
+
+        self.assertEqual(result.status_code, 400)
 
     # Test batch_redact_documents handles no valid files case
     @patch("backend.app.services.batch_redact_service.SecureTempFileManager.create_secure_temp_dir_async",
@@ -353,7 +365,13 @@ class TestBatchRedactService(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.status_code, 400)
 
-        self.assertIn("No valid files", result.body.decode())
+        parsed = json.loads(result.body.decode())
+
+        self.assertEqual(parsed["batch_summary"]["failed"], 1)
+
+        self.assertEqual(parsed["batch_summary"]["successful"], 0)
+
+        self.assertEqual(parsed["file_results"], [])
 
     # Test successful batch redaction end-to-end
     @patch("backend.app.services.batch_redact_service.SecureTempFileManager.create_secure_temp_file_async",
