@@ -65,7 +65,7 @@ resource "google_compute_firewall" "allow_health_checks" {
 
   target_tags = ["hide-me-app", "${var.environment}-app"]
 
-  #tfsec:ignore:google-compute-no-public-ingress
+  tfsec:ignore:google-compute-no-public-ingress
 }
 
 # Create a firewall rule to allow internal communication
