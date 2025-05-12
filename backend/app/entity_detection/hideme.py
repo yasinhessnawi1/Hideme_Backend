@@ -9,7 +9,11 @@ leverage HIDEME's dedicated JSON validation helper for incoming entity requests.
 
 from typing import List
 
-from backend.app.configs.hideme_config import HIDEME_MODEL_NAME, HIDEME_AVAILABLE_ENTITIES, HIDEME_MODEL_PATH
+from backend.app.configs.hideme_config import (
+    HIDEME_MODEL_NAME,
+    HIDEME_AVAILABLE_ENTITIES,
+    HIDEME_MODEL_PATH,
+)
 from backend.app.entity_detection.glinerbase import GenericEntityDetector
 from backend.app.utils.constant.constant import GLINER_CONFIG_FILENAME
 

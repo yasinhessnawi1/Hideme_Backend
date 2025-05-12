@@ -10,23 +10,23 @@ from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHand
 
 # Define test constants.
 TEST_ERROR_TYPE_MESSAGES = {
-    'ValueError': 'Invalid value provided',
-    'TypeError': 'Invalid type provided',
-    'FileNotFoundError': 'File not found',
-    'Exception': 'An unexpected error occurred'
+    "ValueError": "Invalid value provided",
+    "TypeError": "Invalid type provided",
+    "FileNotFoundError": "File not found",
+    "Exception": "An unexpected error occurred",
 }
 
-TEST_SAFE_MESSAGE = 'Error details have been logged'
+TEST_SAFE_MESSAGE = "Error details have been logged"
 
-TEST_ERROR_LOG_PATH = '/var/log/app/errors.log'
+TEST_ERROR_LOG_PATH = "/var/log/app/errors.log"
 
-TEST_SERVICE_NAME = 'test-service'
+TEST_SERVICE_NAME = "test-service"
 
-TEST_SENSITIVE_KEYWORDS = ['password', 'secret', 'token', 'key', 'credential']
+TEST_SENSITIVE_KEYWORDS = ["password", "secret", "token", "key", "credential"]
 
-TEST_URL_PATTERNS = [r'https?://[^\s]+', r'ftp://[^\s]+']
+TEST_URL_PATTERNS = [r"https?://[^\s]+", r"ftp://[^\s]+"]
 
-TEST_EMAIL_PATTERN = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
+TEST_EMAIL_PATTERN = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
 
 
 class TestSecurityAwareErrorHandler(unittest.TestCase):
@@ -35,54 +35,49 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
     def setUp(self):
         # Patch uuid.uuid4 to return a predictable UUID.
         self.uuid_patcher = patch(
-            'uuid.uuid4',
-            return_value=uuid.UUID('12345678-1234-5678-1234-567812345678')
+            "uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")
         )
 
         self.mock_uuid = self.uuid_patcher.start()
 
         # Patch time.time to return a predictable timestamp.
-        self.time_patcher = patch(
-            'time.time',
-            return_value=1617235678.0
-        )
+        self.time_patcher = patch("time.time", return_value=1617235678.0)
 
         self.mock_time = self.time_patcher.start()
 
         # Patch logging functions.
         self.log_error_patcher = patch(
-            'backend.app.utils.system_utils.error_handling.log_error'
+            "backend.app.utils.system_utils.error_handling.log_error"
         )
 
         self.mock_log_error = self.log_error_patcher.start()
 
         self.log_warning_patcher = patch(
-            'backend.app.utils.system_utils.error_handling.log_warning'
+            "backend.app.utils.system_utils.error_handling.log_warning"
         )
 
         self.mock_log_warning = self.log_warning_patcher.start()
 
         # Patch os.makedirs so no actual directories are created.
-        self.makedirs_patcher = patch('os.makedirs')
+        self.makedirs_patcher = patch("os.makedirs")
 
         self.mock_makedirs = self.makedirs_patcher.start()
 
         # Patch builtins.open (for file logging in _log_detailed_error).
-        self.open_patcher = patch('builtins.open', mock_open())
+        self.open_patcher = patch("builtins.open", mock_open())
 
         self.mock_open = self.open_patcher.start()
 
         # Patch traceback.format_exc to return a fixed string.
         self.format_exc_patcher = patch(
-            'traceback.format_exc',
-            return_value="Traceback: test stack trace"
+            "traceback.format_exc", return_value="Traceback: test stack trace"
         )
 
         self.mock_format_exc = self.format_exc_patcher.start()
 
         # Patch constants via patch.multiple using the module path.
         self.constants_patcher = patch.multiple(
-            'backend.app.utils.system_utils.error_handling',
+            "backend.app.utils.system_utils.error_handling",
             ERROR_TYPE_MESSAGES=TEST_ERROR_TYPE_MESSAGES,
             SAFE_MESSAGE=TEST_SAFE_MESSAGE,
             ERROR_LOG_PATH=TEST_ERROR_LOG_PATH,
@@ -91,7 +86,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
             ENABLE_DISTRIBUTED_TRACING=False,
             SENSITIVE_KEYWORDS=TEST_SENSITIVE_KEYWORDS,
             URL_PATTERNS=TEST_URL_PATTERNS,
-            EMAIL_PATTERN=TEST_EMAIL_PATTERN
+            EMAIL_PATTERN=TEST_EMAIL_PATTERN,
         )
 
         self.constants = self.constants_patcher.__enter__()
@@ -99,25 +94,22 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         # Patch _sanitize_error_message to produce predictable output.
         self.sanitize_error_message_patcher = patch.object(
             SecurityAwareErrorHandler,
-            '_sanitize_error_message',
-            side_effect=lambda msg: f"sanitized: {msg}"
+            "_sanitize_error_message",
+            side_effect=lambda msg: f"sanitized: {msg}",
         )
 
         self.mock_sanitize_error_message = self.sanitize_error_message_patcher.start()
 
         # Patch is_error_sensitive to return False by default.
         self.is_error_sensitive_patcher = patch.object(
-            SecurityAwareErrorHandler,
-            'is_error_sensitive',
-            return_value=False
+            SecurityAwareErrorHandler, "is_error_sensitive", return_value=False
         )
 
         self.mock_is_error_sensitive = self.is_error_sensitive_patcher.start()
 
         # Patch _log_detailed_error to record that it was called.
         self.log_detailed_error_patcher = patch.object(
-            SecurityAwareErrorHandler,
-            '_log_detailed_error'
+            SecurityAwareErrorHandler, "_log_detailed_error"
         )
 
         self.mock_log_detailed_error = self.log_detailed_error_patcher.start()
@@ -153,10 +145,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         trace_id = "provided_trace"
 
         returned_trace = SecurityAwareErrorHandler.log_processing_error(
-            test_exception,
-            "op_type",
-            "resource123",
-            trace_id
+            test_exception, "op_type", "resource123", trace_id
         )
 
         self.assertEqual(returned_trace, trace_id)
@@ -175,9 +164,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         test_exception = ValueError("Another test error")
 
         returned_trace = SecurityAwareErrorHandler.log_processing_error(
-            test_exception,
-            "op_type",
-            "resource456"
+            test_exception, "op_type", "resource456"
         )
 
         self.assertTrue(returned_trace.startswith("trace_"))
@@ -243,11 +230,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
             return x + y
 
         success, result, err_msg = SecurityAwareErrorHandler.safe_execution(
-            add,
-            "test_operation",
-            default=0,
-            x=3,
-            y=4
+            add, "test_operation", default=0, x=3, y=4
         )
 
         self.assertTrue(success)
@@ -261,9 +244,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
             raise ValueError("Failure occurred")
 
         success, result, err_msg = SecurityAwareErrorHandler.safe_execution(
-            failing_func,
-            "test_operation",
-            default="default"
+            failing_func, "test_operation", default="default"
         )
 
         self.assertFalse(success)
@@ -308,7 +289,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
             error_message,
             operation_type,
             stack_trace,
-            additional_info
+            additional_info,
         )
 
         # Assert that open was called with the ERROR_LOG_PATH in append mode.
@@ -323,13 +304,12 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
 
         self.assertTrue(
             any(header_line in s for s in written_calls),
-            "Expected header line not found in written output."
+            "Expected header line not found in written output.",
         )
 
         # Re-patch _log_detailed_error.
         self.log_detailed_error_patcher = patch.object(
-            SecurityAwareErrorHandler,
-            '_log_detailed_error'
+            SecurityAwareErrorHandler, "_log_detailed_error"
         )
 
         self.mock_log_detailed_error = self.log_detailed_error_patcher.start()
@@ -337,8 +317,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
     def test_log_detailed_error_json_logging_enabled(self):
         # Enable JSON logging by patching USE_JSON_LOGGING to True.
         with patch.multiple(
-                'backend.app.utils.system_utils.error_handling',
-                USE_JSON_LOGGING=True
+            "backend.app.utils.system_utils.error_handling", USE_JSON_LOGGING=True
         ):
 
             # Unpatch _log_detailed_error so that the real implementation runs.
@@ -366,7 +345,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
                 error_message,
                 operation_type,
                 stack_trace,
-                additional_info
+                additional_info,
             )
 
             # Verify that open was called with the expected path and mode.
@@ -392,8 +371,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
 
             # Re-patch _log_detailed_error.
             self.log_detailed_error_patcher = patch.object(
-                SecurityAwareErrorHandler,
-                '_log_detailed_error'
+                SecurityAwareErrorHandler, "_log_detailed_error"
             )
 
             self.mock_log_detailed_error = self.log_detailed_error_patcher.start()
@@ -416,13 +394,12 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
             "Error occurred",
             "op_fail",
             "Stack trace",
-            {"foo": "bar"}
+            {"foo": "bar"},
         )
 
         # Assert that log_warning was called at least once.
         self.assertTrue(
-            self.mock_log_warning.called,
-            "log_warning was not called on OSError"
+            self.mock_log_warning.called, "log_warning was not called on OSError"
         )
 
         last_call_msg = self.mock_log_warning.call_args[0][0]
@@ -431,8 +408,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
 
         # Re-patch _log_detailed_error so that subsequent tests are not affected.
         self.log_detailed_error_patcher = patch.object(
-            SecurityAwareErrorHandler,
-            '_log_detailed_error'
+            SecurityAwareErrorHandler, "_log_detailed_error"
         )
 
         self.mock_log_detailed_error = self.log_detailed_error_patcher.start()
@@ -452,8 +428,12 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
 
     def test_capture_env_info(self):
         with patch.dict(
-                os.environ,
-                {"ENVIRONMENT": "production", "SERVICE_NAME": "myservice", "HOSTNAME": "host1"}
+            os.environ,
+            {
+                "ENVIRONMENT": "production",
+                "SERVICE_NAME": "myservice",
+                "HOSTNAME": "host1",
+            },
         ):
             env_info = SecurityAwareErrorHandler._capture_env_info()
 
@@ -487,9 +467,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
 
     def test_sanitize_error_message_sensitive(self):
         with patch.object(
-                SecurityAwareErrorHandler,
-                'is_error_sensitive',
-                return_value=True
+            SecurityAwareErrorHandler, "is_error_sensitive", return_value=True
         ):
             self.sanitize_error_message_patcher.stop()
 
@@ -505,9 +483,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         message = "Error in /var/log/app.log occurred."
 
         with patch.object(
-                SecurityAwareErrorHandler,
-                'is_error_sensitive',
-                return_value=False
+            SecurityAwareErrorHandler, "is_error_sensitive", return_value=False
         ):
             self.sanitize_error_message_patcher.stop()
 
@@ -524,11 +500,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
             return a * b
 
         success, result, err = SecurityAwareErrorHandler.safe_execution(
-            multiply,
-            "multiply_op",
-            default=0,
-            a=5,
-            b=6
+            multiply, "multiply_op", default=0, a=5, b=6
         )
 
         self.assertTrue(success)
@@ -542,9 +514,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
             raise ValueError("Failure occurred")
 
         success, result, err = SecurityAwareErrorHandler.safe_execution(
-            failing_func,
-            "divide_op",
-            default="error"
+            failing_func, "divide_op", default="error"
         )
 
         self.assertFalse(success)
@@ -567,9 +537,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         default_value = {"status": "default"}
 
         result = SecurityAwareErrorHandler.handle_safe_error(
-            test_exception,
-            "unknown_operation",
-            default_return=default_value
+            test_exception, "unknown_operation", default_return=default_value
         )
 
         self.assertEqual(result, default_value)
@@ -578,8 +546,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         test_exception = ValueError("Test generic error")
 
         result = SecurityAwareErrorHandler.handle_safe_error(
-            test_exception,
-            "generic_operation"
+            test_exception, "generic_operation"
         )
 
         self.assertEqual(result["error_type"], "ValueError")
@@ -596,7 +563,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
             "batch_process",
             10,
             {"test_key": "test_value"},
-            "test_trace_id"
+            "test_trace_id",
         )
 
         batch_summary = result.get("batch_summary")
@@ -610,8 +577,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         self.assertIn("test_key", batch_summary)
 
         self.assertIn(
-            TEST_ERROR_TYPE_MESSAGES["ValueError"],
-            batch_summary.get("error")
+            TEST_ERROR_TYPE_MESSAGES["ValueError"], batch_summary.get("error")
         )
 
         self.mock_log_detailed_error.assert_called()
@@ -626,7 +592,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
             "api_call",
             "https://api.example.com/data",
             {"test_key": "test_value"},
-            "test_trace_id"
+            "test_trace_id",
         )
 
         self.assertEqual(result["error_type"], "ValueError")
@@ -639,10 +605,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
 
         self.assertEqual(result["test_key"], "test_value")
 
-        self.assertIn(
-            TEST_ERROR_TYPE_MESSAGES["ValueError"],
-            result["error"]
-        )
+        self.assertIn(TEST_ERROR_TYPE_MESSAGES["ValueError"], result["error"])
 
         self.mock_log_detailed_error.assert_called()
 
@@ -650,9 +613,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         test_exception = TimeoutError("Request timed out")
 
         result = SecurityAwareErrorHandler.handle_api_gateway_error(
-            test_exception,
-            "api_call",
-            "https://api.example.com/data"
+            test_exception, "api_call", "https://api.example.com/data"
         )
 
         self.assertEqual(result["status_code"], 504)
@@ -661,9 +622,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         test_exception = ConnectionError("Failed to connect")
 
         result = SecurityAwareErrorHandler.handle_api_gateway_error(
-            test_exception,
-            "api_call",
-            "https://api.example.com/data"
+            test_exception, "api_call", "https://api.example.com/data"
         )
 
         self.assertEqual(result["status_code"], 502)
@@ -672,9 +631,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         test_exception = HTTPException(status_code=403, detail="Forbidden access")
 
         result = SecurityAwareErrorHandler.handle_api_gateway_error(
-            test_exception,
-            "api_call",
-            "https://api.example.com/data"
+            test_exception, "api_call", "https://api.example.com/data"
         )
 
         self.assertEqual(result["status_code"], 403)
@@ -687,9 +644,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         test_exception = ValueError("Test detection error")
 
         result = SecurityAwareErrorHandler.handle_safe_error(
-            test_exception,
-            "detection_operation",
-            resource_id="test_resource"
+            test_exception, "detection_operation", resource_id="test_resource"
         )
 
         self.assertEqual(result["error_type"], "ValueError")
@@ -704,9 +659,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         test_exception = ValueError("Test file error")
 
         result = SecurityAwareErrorHandler.handle_safe_error(
-            test_exception,
-            "file_operation",
-            filename="test.pdf"
+            test_exception, "file_operation", filename="test.pdf"
         )
 
         self.assertEqual(result["error_type"], "ValueError")
@@ -721,9 +674,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         test_exception = ValueError("Test batch error")
 
         result = SecurityAwareErrorHandler.handle_safe_error(
-            test_exception,
-            "batch_operation",
-            additional_info={"files_count": 5}
+            test_exception, "batch_operation", additional_info={"files_count": 5}
         )
 
         batch_summary = result.get("batch_summary")
@@ -740,9 +691,7 @@ class TestSecurityAwareErrorHandler(unittest.TestCase):
         test_exception = ValueError("Test API error")
 
         result = SecurityAwareErrorHandler.handle_safe_error(
-            test_exception,
-            "api_operation",
-            endpoint="https://api.example.com/data"
+            test_exception, "api_operation", endpoint="https://api.example.com/data"
         )
 
         self.assertEqual(result["error_type"], "ValueError")

@@ -6,7 +6,7 @@ import pytest
 
 from backend.app.utils.helpers.gemini_usage_manager import (
     GeminiUsageManager,
-    _gemini_locks
+    _gemini_locks,
 )
 
 
@@ -41,7 +41,7 @@ class TestGeminiUsageManagerInit(unittest.TestCase):
             max_daily_requests=5000,
             max_concurrent_requests=5,
             request_delay=0.2,
-            text_truncation_limit=5000
+            text_truncation_limit=5000,
         )
 
         self.assertEqual(manager.daily_requests, 0)
@@ -145,9 +145,13 @@ class TestGeminiUsageManagerManagePageProcessing:
     async def test_manage_page_processing_with_acquisition_error(self):
         manager = GeminiUsageManager()
 
-        manager._check_and_acquire_request_slot = AsyncMock(side_effect=ValueError("Rate limit exceeded"))
+        manager._check_and_acquire_request_slot = AsyncMock(
+            side_effect=ValueError("Rate limit exceeded")
+        )
 
-        with patch('backend.app.utils.helpers.gemini_usage_manager.log_warning') as mock_log_warning:
+        with patch(
+            "backend.app.utils.helpers.gemini_usage_manager.log_warning"
+        ) as mock_log_warning:
             result = await manager.manage_page_processing("Test text", ["PERSON"], 1)
 
             assert result is None
@@ -179,7 +183,11 @@ class TestGeminiUsageManagerCheckAndAcquireRequestSlot:
         manager.last_reset_time = datetime.now() - timedelta(days=1, minutes=5)
 
         manager.request_history = [
-            {"timestamp": datetime.now() - timedelta(days=1), "page_number": 1, "daily_requests": 50}
+            {
+                "timestamp": datetime.now() - timedelta(days=1),
+                "page_number": 1,
+                "daily_requests": 50,
+            }
         ]
 
         await manager._check_and_acquire_request_slot(1)
@@ -232,7 +240,7 @@ class TestGeminiUsageManagerCheckAndAcquireRequestSlot:
 
         manager._last_request_time = datetime.now()
 
-        with patch('asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             await manager._check_and_acquire_request_slot(1)
 
             mock_sleep.assert_called_once()
@@ -303,7 +311,7 @@ class TestGeminiUsageManagerTruncateText(unittest.TestCase):
 
         expected = text[:20]
 
-        last_space = expected.rfind(' ')
+        last_space = expected.rfind(" ")
 
         if last_space != -1:
             expected = expected[:last_space]

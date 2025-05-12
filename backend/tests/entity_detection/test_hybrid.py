@@ -4,7 +4,10 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 from backend.app.domain import EntityDetector
 from backend.app.entity_detection.hybrid import HybridEntityDetector
-from backend.app.utils.system_utils.synchronization_utils import AsyncTimeoutLock, LockPriority
+from backend.app.utils.system_utils.synchronization_utils import (
+    AsyncTimeoutLock,
+    LockPriority,
+)
 
 import time
 
@@ -18,7 +21,7 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
             "use_gemini": True,
             "use_gliner": True,
             "use_hideme": True,
-            "entities": ["email", "phone_number"]
+            "entities": ["email", "phone_number"],
         }
 
     # _get_detector_lock should create an AsyncTimeoutLock
@@ -38,9 +41,7 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
         lock = await self.detector._get_detector_lock()
 
         mock_AsyncTimeoutLock.assert_called_once_with(
-            name="hybrid_detector_lock",
-            priority=LockPriority.MEDIUM,
-            timeout=30.0
+            name="hybrid_detector_lock", priority=LockPriority.MEDIUM, timeout=30.0
         )
 
         self.assertEqual(lock, mock_lock)
@@ -66,9 +67,13 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # _run_all_detectors_in_parallel should task each detector
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.__init__")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._process_single_detector")
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._process_single_detector"
+    )
     @patch("backend.app.entity_detection.hybrid.asyncio.create_task")
-    async def test_run_all_detectors_in_parallel(self, mock_create_task, mock_process_single_detector, mock_init):
+    async def test_run_all_detectors_in_parallel(
+        self, mock_create_task, mock_process_single_detector, mock_init
+    ):
         mock_init.return_value = None
 
         self.detector = HybridEntityDetector(self.config)
@@ -76,19 +81,28 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
         self.detector.detectors = [MagicMock(), MagicMock()]
 
         mock_process_single_detector.return_value = {
-            "success": True, "entities": [], "mapping": {}, "time": 1.0
+            "success": True,
+            "entities": [],
+            "mapping": {},
+            "time": 1.0,
         }
 
         mock_task_1 = AsyncMock()
 
         mock_task_1.return_value = {
-            "success": True, "entities": [], "mapping": {}, "time": 1.0
+            "success": True,
+            "entities": [],
+            "mapping": {},
+            "time": 1.0,
         }
 
         mock_task_2 = AsyncMock()
 
         mock_task_2.return_value = {
-            "success": True, "entities": [], "mapping": {}, "time": 1.0
+            "success": True,
+            "entities": [],
+            "mapping": {},
+            "time": 1.0,
         }
 
         mock_create_task.side_effect = [mock_task_1(), mock_task_2()]
@@ -101,8 +115,12 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # _process_single_detector handles both async and sync detectors
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.__init__")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._run_async_detector")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._run_sync_detector")
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._run_async_detector"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._run_sync_detector"
+    )
     async def test_process_single_detector(self, mock_sync, mock_async, mock_init):
         mock_init.return_value = None
 
@@ -128,9 +146,15 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # detect_sensitive_data_async returns defaults on no results
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.__init__")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._run_all_detectors_in_parallel")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._process_detection_results")
-    async def test_detect_sensitive_data_async(self, mock_process_results, mock_run_all, mock_init):
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._run_all_detectors_in_parallel"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._process_detection_results"
+    )
+    async def test_detect_sensitive_data_async(
+        self, mock_process_results, mock_run_all, mock_init
+    ):
         mock_init.return_value = None
 
         self.detector = HybridEntityDetector(self.config)
@@ -139,7 +163,9 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
         mock_process_results.return_value = ([], [], 1, 0)
 
-        final_entities, final_mapping = await self.detector.detect_sensitive_data_async({}, [])
+        final_entities, final_mapping = await self.detector.detect_sensitive_data_async(
+            {}, []
+        )
 
         self.assertEqual(final_entities, [])
 
@@ -147,7 +173,9 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
         mock_run_all.return_value = []
 
-        final_entities, final_mapping = await self.detector.detect_sensitive_data_async({}, [])
+        final_entities, final_mapping = await self.detector.detect_sensitive_data_async(
+            {}, []
+        )
 
         self.assertEqual(final_entities, [])
 
@@ -155,7 +183,9 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # detect_sensitive_data wraps async and handles timeout
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.__init__")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.detect_sensitive_data_async")
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector.detect_sensitive_data_async"
+    )
     @patch("backend.app.entity_detection.hybrid.time.time")
     async def test_detect_sensitive_data(self, mock_time, mock_async, mock_init):
         mock_init.return_value = None
@@ -182,16 +212,33 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # Full async flow success logs and returns entities
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.__init__")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._prepare_data_and_check_detectors")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._increment_usage_metrics")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._run_all_detectors_in_parallel")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._process_detection_results")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._finalize_detection")
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._prepare_data_and_check_detectors"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._increment_usage_metrics"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._run_all_detectors_in_parallel"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._process_detection_results"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._finalize_detection"
+    )
     @patch("backend.app.entity_detection.hybrid.log_error")
     @patch("backend.app.entity_detection.hybrid.log_info")
     async def test_detect_sensitive_data_async_success(
-            self, mock_info, mock_error, mock_finalize, mock_process_results,
-            mock_run_all, mock_increment, mock_prepare, mock_init
+        self,
+        mock_info,
+        mock_error,
+        mock_finalize,
+        mock_process_results,
+        mock_run_all,
+        mock_increment,
+        mock_prepare,
+        mock_init,
     ):
         mock_init.return_value = None
 
@@ -202,18 +249,25 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
         mock_increment.return_value = None
 
         mock_run_all.return_value = [
-            {"success": True, "entities": [{"entity_type": "email"}], "mapping": {"pages": []}}
+            {
+                "success": True,
+                "entities": [{"entity_type": "email"}],
+                "mapping": {"pages": []},
+            }
         ]
 
         mock_process_results.return_value = (
-            [{"entity_type": "email"}], [{"pages": []}], 1, 0
+            [{"entity_type": "email"}],
+            [{"pages": []}],
+            1,
+            0,
         )
 
-        mock_finalize.return_value = (
-            [{"entity_type": "email"}], {"pages": []}
-        )
+        mock_finalize.return_value = ([{"entity_type": "email"}], {"pages": []})
 
-        final_entities, final_mapping = await self.detector.detect_sensitive_data_async({}, [])
+        final_entities, final_mapping = await self.detector.detect_sensitive_data_async(
+            {}, []
+        )
 
         self.assertEqual(len(final_entities), 1)
 
@@ -223,15 +277,31 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # Async detection exception logs and returns defaults
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.__init__")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._prepare_data_and_check_detectors")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._increment_usage_metrics")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._run_all_detectors_in_parallel")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._process_detection_results")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._finalize_detection")
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._prepare_data_and_check_detectors"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._increment_usage_metrics"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._run_all_detectors_in_parallel"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._process_detection_results"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._finalize_detection"
+    )
     @patch("backend.app.entity_detection.hybrid.log_error")
     async def test_detect_sensitive_data_async_exception(
-            self, mock_error, mock_finalize, mock_process_results,
-            mock_run_all, mock_increment, mock_prepare, mock_init
+        self,
+        mock_error,
+        mock_finalize,
+        mock_process_results,
+        mock_run_all,
+        mock_increment,
+        mock_prepare,
+        mock_init,
     ):
         mock_init.return_value = None
 
@@ -243,7 +313,9 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
         mock_run_all.side_effect = Exception("Unexpected error")
 
-        final_entities, final_mapping = await self.detector.detect_sensitive_data_async({}, [])
+        final_entities, final_mapping = await self.detector.detect_sensitive_data_async(
+            {}, []
+        )
 
         self.assertEqual(final_entities, [])
 
@@ -257,14 +329,24 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
     @patch("backend.app.entity_detection.hybrid.log_sensitive_operation")
     def test_process_detection_results_success(self, mock_log):
         parallel_results = [
-            {"success": True, "engine": "Presidio", "entities": [{"entity_type": "email"}], "mapping": {"pages": []},
-             "time": 1.0},
-            {"success": True, "engine": "Gemini", "entities": [{"entity_type": "phone_number"}],
-             "mapping": {"pages": []}, "time": 1.2}
+            {
+                "success": True,
+                "engine": "Presidio",
+                "entities": [{"entity_type": "email"}],
+                "mapping": {"pages": []},
+                "time": 1.0,
+            },
+            {
+                "success": True,
+                "engine": "Gemini",
+                "entities": [{"entity_type": "phone_number"}],
+                "mapping": {"pages": []},
+                "time": 1.2,
+            },
         ]
 
-        all_entities, all_mappings, success_count, failure_count = HybridEntityDetector._process_detection_results(
-            parallel_results
+        all_entities, all_mappings, success_count, failure_count = (
+            HybridEntityDetector._process_detection_results(parallel_results)
         )
 
         self.assertEqual(len(all_entities), 2)
@@ -281,15 +363,31 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
     @patch("backend.app.entity_detection.hybrid.log_sensitive_operation")
     def test_process_detection_results_failure(self, mock_log):
         parallel_results = [
-            {"success": True, "engine": "Presidio", "entities": [{"entity_type": "email"}], "mapping": {"pages": []},
-             "time": 1.0},
-            {"success": False, "engine": "Gemini", "entities": [], "mapping": {}, "time": 1.2},
-            {"success": True, "engine": "GLiNER", "entities": [{"entity_type": "address"}], "mapping": {"pages": []},
-             "time": 1.5}
+            {
+                "success": True,
+                "engine": "Presidio",
+                "entities": [{"entity_type": "email"}],
+                "mapping": {"pages": []},
+                "time": 1.0,
+            },
+            {
+                "success": False,
+                "engine": "Gemini",
+                "entities": [],
+                "mapping": {},
+                "time": 1.2,
+            },
+            {
+                "success": True,
+                "engine": "GLiNER",
+                "entities": [{"entity_type": "address"}],
+                "mapping": {"pages": []},
+                "time": 1.5,
+            },
         ]
 
-        all_entities, all_mappings, success_count, failure_count = HybridEntityDetector._process_detection_results(
-            parallel_results
+        all_entities, all_mappings, success_count, failure_count = (
+            HybridEntityDetector._process_detection_results(parallel_results)
         )
 
         self.assertEqual(len(all_entities), 2)
@@ -307,8 +405,8 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
     def test_process_detection_results_empty(self, mock_log):
         parallel_results = []
 
-        all_entities, all_mappings, success_count, failure_count = HybridEntityDetector._process_detection_results(
-            parallel_results
+        all_entities, all_mappings, success_count, failure_count = (
+            HybridEntityDetector._process_detection_results(parallel_results)
         )
 
         self.assertEqual(len(all_entities), 0)
@@ -322,16 +420,32 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
         mock_log.assert_not_called()
 
     # _finalize_detection computes performance and logs summary
-    @patch("backend.app.entity_detection.hybrid.initialization_service.get_presidio_detector")
-    @patch("backend.app.entity_detection.hybrid.initialization_service.get_gemini_detector")
-    @patch("backend.app.entity_detection.hybrid.initialization_service.get_gliner_detector")
-    @patch("backend.app.entity_detection.hybrid.initialization_service.get_hideme_detector")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._get_detector_lock")
+    @patch(
+        "backend.app.entity_detection.hybrid.initialization_service.get_presidio_detector"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.initialization_service.get_gemini_detector"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.initialization_service.get_gliner_detector"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.initialization_service.get_hideme_detector"
+    )
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._get_detector_lock"
+    )
     @patch("backend.app.entity_detection.hybrid.log_info")
     @patch("backend.app.entity_detection.hybrid.time.time")
     async def test_finalize_detection_success(
-            self, mock_time, mock_log_info, mock_lock,
-            mock_hideme, mock_gliner, mock_gemini, mock_presidio
+        self,
+        mock_time,
+        mock_log_info,
+        mock_lock,
+        mock_hideme,
+        mock_gliner,
+        mock_gemini,
+        mock_presidio,
     ):
         mock_time.return_value = 1609459200
 
@@ -357,11 +471,15 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(final_entities), 1)
 
-        mock_log_info.assert_called_with("[PERF] Total 1 entities detected across 0 pages")
+        mock_log_info.assert_called_with(
+            "[PERF] Total 1 entities detected across 0 pages"
+        )
 
     # _finalize_detection handles absence of detectors gracefully
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.__init__")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._get_detector_lock")
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._get_detector_lock"
+    )
     async def test_finalize_detection_failure(self, mock_lock, mock_init):
         mock_init.return_value = None
 
@@ -389,7 +507,9 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # get_status logs runtime error if lock fails
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.__init__")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector._get_detector_lock")
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector._get_detector_lock"
+    )
     @patch("backend.app.entity_detection.hybrid.log_warning")
     async def test_get_status_runtime_error(self, mock_warn, mock_lock, mock_init):
         mock_init.return_value = None
@@ -400,7 +520,9 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
         lock = MagicMock()
 
-        lock.acquire_timeout.return_value.__aenter__.side_effect = RuntimeError("Event loop error")
+        lock.acquire_timeout.return_value.__aenter__.side_effect = RuntimeError(
+            "Event loop error"
+        )
 
         mock_lock.return_value = lock
 
@@ -418,7 +540,9 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # detect_sensitive_data integrates minimization and async call
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.__init__")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.detect_sensitive_data_async")
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector.detect_sensitive_data_async"
+    )
     @patch("backend.app.entity_detection.hybrid.minimize_extracted_data")
     async def test_detect_sensitive_data_success(self, mock_min, mock_async, mock_init):
         mock_init.return_value = None
@@ -439,10 +563,16 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # detect_sensitive_data handles runtime error from async
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.__init__")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.detect_sensitive_data_async")
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector.detect_sensitive_data_async"
+    )
     @patch("backend.app.entity_detection.hybrid.minimize_extracted_data")
-    @patch("backend.app.entity_detection.hybrid.SecurityAwareErrorHandler.log_processing_error")
-    async def test_detect_sensitive_data_runtime_error(self, mock_log, mock_min, mock_async, mock_init):
+    @patch(
+        "backend.app.entity_detection.hybrid.SecurityAwareErrorHandler.log_processing_error"
+    )
+    async def test_detect_sensitive_data_runtime_error(
+        self, mock_log, mock_min, mock_async, mock_init
+    ):
         mock_init.return_value = None
 
         self.detector = HybridEntityDetector(self.config)
@@ -461,10 +591,16 @@ class TestHybridEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # detect_sensitive_data handles generic exceptions
     @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.__init__")
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector.detect_sensitive_data_async")
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector.detect_sensitive_data_async"
+    )
     @patch("backend.app.entity_detection.hybrid.minimize_extracted_data")
-    @patch("backend.app.entity_detection.hybrid.SecurityAwareErrorHandler.log_processing_error")
-    async def test_detect_sensitive_data_generic_error(self, mock_log, mock_min, mock_async, mock_init):
+    @patch(
+        "backend.app.entity_detection.hybrid.SecurityAwareErrorHandler.log_processing_error"
+    )
+    async def test_detect_sensitive_data_generic_error(
+        self, mock_log, mock_min, mock_async, mock_init
+    ):
         mock_init.return_value = None
 
         self.detector = HybridEntityDetector(self.config)

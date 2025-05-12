@@ -28,14 +28,16 @@ class TestEntityDetectionEngine(unittest.TestCase):
 
     # Access members by name correctly
     def test_enum_name_access(self):
-        self.assertEqual(EntityDetectionEngine['PRESIDIO'], EntityDetectionEngine.PRESIDIO)
+        self.assertEqual(
+            EntityDetectionEngine["PRESIDIO"], EntityDetectionEngine.PRESIDIO
+        )
 
-        self.assertEqual(EntityDetectionEngine['GEMINI'], EntityDetectionEngine.GEMINI)
+        self.assertEqual(EntityDetectionEngine["GEMINI"], EntityDetectionEngine.GEMINI)
 
     # Invalid name access raises KeyError
     def test_enum_invalid_name_access_raises(self):
         with self.assertRaises(KeyError):
-            _ = EntityDetectionEngine['INVALID_ENGINE']
+            _ = EntityDetectionEngine["INVALID_ENGINE"]
 
     # Iterating over enum yields all members
     def test_enum_iteration(self):

@@ -20,7 +20,16 @@ class TestGenericEntityDetector(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__()
                 self._total_calls = 0
-                self.norwegian_pronouns = {"jeg", "du", "han", "hun", "det", "vi", "dere", "de"}
+                self.norwegian_pronouns = {
+                    "jeg",
+                    "du",
+                    "han",
+                    "hun",
+                    "det",
+                    "vi",
+                    "dere",
+                    "de",
+                }
                 self._is_initialized = True
                 self._initialization_time = time.time()
                 self._last_used = time.time()
@@ -35,7 +44,9 @@ class TestGenericEntityDetector(unittest.IsolatedAsyncioTestCase):
                 self._global_initialization_time = 0
                 self._model_analyzer_lock = MagicMock()
 
-        with patch("backend.app.entity_detection.glinerbase.GenericEntityDetector.__init__") as mock_init:
+        with patch(
+            "backend.app.entity_detection.glinerbase.GenericEntityDetector.__init__"
+        ) as mock_init:
             mock_init.return_value = None
 
             self.detector = TestDetector()
@@ -43,15 +54,21 @@ class TestGenericEntityDetector(unittest.IsolatedAsyncioTestCase):
             self.detector.model = MagicMock()
 
     # Positive test: process text and cache result
-    @patch("backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cache_key", return_value="mock_key")
-    @patch("backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cached_result", return_value=None)
+    @patch(
+        "backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cache_key",
+        return_value="mock_key",
+    )
+    @patch(
+        "backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cached_result",
+        return_value=None,
+    )
     @patch("backend.app.utils.helpers.gliner_helper.GLiNERHelper.set_cached_result")
     def test_process_text_positive(self, mock_set_cache, mock_get_cached, mock_key):
-        self.detector.model.predict_entities = MagicMock(return_value=[
-
-            {"label": "TEST", "start": 0, "end": 4, "score": 0.9, "text": "text"}
-
-        ])
+        self.detector.model.predict_entities = MagicMock(
+            return_value=[
+                {"label": "TEST", "start": 0, "end": 4, "score": 0.9, "text": "text"}
+            ]
+        )
 
         result = self.detector._process_text("text example", ["TEST"])
 
@@ -99,8 +116,10 @@ class TestGenericEntityDetector(unittest.IsolatedAsyncioTestCase):
     def test_prepare_page_data_with_words(self):
         pages = [{"page": 1, "words": [{"text": "hi"}]}]
 
-        with patch("backend.app.utils.helpers.text_utils.TextUtils.reconstruct_text_and_mapping",
-                   return_value=("hi", [({}, 0, 2)])):
+        with patch(
+            "backend.app.utils.helpers.text_utils.TextUtils.reconstruct_text_and_mapping",
+            return_value=("hi", [({}, 0, 2)]),
+        ):
             mapping, redaction = self.detector._prepare_page_data(pages)
 
             self.assertIn(1, mapping)
@@ -119,11 +138,11 @@ class TestGenericEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # Extract entities for group when lock acquired
     def test_extract_entities_for_group_success(self):
-        self.detector.model.predict_entities = MagicMock(return_value=[
-
-            {"label": "TEST", "start": 0, "end": 4, "score": 0.9, "text": "test"}
-
-        ])
+        self.detector.model.predict_entities = MagicMock(
+            return_value=[
+                {"label": "TEST", "start": 0, "end": 4, "score": 0.9, "text": "test"}
+            ]
+        )
 
         lock = MagicMock()
 
@@ -149,7 +168,9 @@ class TestGenericEntityDetector(unittest.IsolatedAsyncioTestCase):
 
     # Async detection with empty pages returns empty mapping
     async def test_detect_sensitive_data_async_empty_pages(self):
-        result, mapping = await self.detector.detect_sensitive_data_async({"pages": []}, ["TEST"])
+        result, mapping = await self.detector.detect_sensitive_data_async(
+            {"pages": []}, ["TEST"]
+        )
 
         self.assertEqual(result, [])
 
@@ -172,22 +193,23 @@ class TestGenericEntityDetector(unittest.IsolatedAsyncioTestCase):
         self.assertIn("model_available", status)
 
     # Async single-page processing uses parallel core
-    @patch("backend.app.utils.parallel.core.ParallelProcessingCore.process_entities_in_parallel",
-           new_callable=AsyncMock)
+    @patch(
+        "backend.app.utils.parallel.core.ParallelProcessingCore.process_entities_in_parallel",
+        new_callable=AsyncMock,
+    )
     async def test_process_single_page_async_positive(self, mock_parallel):
         def fake_process_text(text, entities):
-            return [{"entity_type": "email", "start": 0, "end": 5, "original_text": "test"}]
+            return [
+                {"entity_type": "email", "start": 0, "end": 5, "original_text": "test"}
+            ]
 
         self.detector._process_text = fake_process_text
 
         self.detector.model = MagicMock()
 
         mock_parallel.return_value = (
-
             [{"entity_type": "email"}],
-
-            {"page": 1, "sensitive": [{"entity_type": "email"}]}
-
+            {"page": 1, "sensitive": [{"entity_type": "email"}]},
         )
 
         page_data = {"page": 1, "words": [{"text": "test", "start": 0, "end": 4}]}
@@ -196,7 +218,9 @@ class TestGenericEntityDetector(unittest.IsolatedAsyncioTestCase):
 
         entities = ["email"]
 
-        result = await self.detector._process_single_page_async(page_data, mapping, entities)
+        result = await self.detector._process_single_page_async(
+            page_data, mapping, entities
+        )
 
         self.assertEqual(result[0]["page"], 1)
 
@@ -205,32 +229,54 @@ class TestGenericEntityDetector(unittest.IsolatedAsyncioTestCase):
         mock_parallel.assert_awaited()
 
     # Async detection validation failure yields empty lists
-    @patch("backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cache_key", return_value="mock_key")
-    @patch("backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cached_result", return_value=None)
-    async def test_detect_sensitive_data_async_validation_failure(self, mock_get_cached, mock_key):
-        self.detector.validate_requested_entities = MagicMock(side_effect=Exception("Validation failed"))
+    @patch(
+        "backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cache_key",
+        return_value="mock_key",
+    )
+    @patch(
+        "backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cached_result",
+        return_value=None,
+    )
+    async def test_detect_sensitive_data_async_validation_failure(
+        self, mock_get_cached, mock_key
+    ):
+        self.detector.validate_requested_entities = MagicMock(
+            side_effect=Exception("Validation failed")
+        )
 
         extracted_data = {"pages": [{"page": 1, "words": [{"text": "test"}]}]}
 
         requested_entities = ["TEST"]
 
-        result, mapping = await self.detector.detect_sensitive_data_async(extracted_data, requested_entities)
+        result, mapping = await self.detector.detect_sensitive_data_async(
+            extracted_data, requested_entities
+        )
 
         self.assertEqual(result, [])
 
         self.assertEqual(mapping, {"pages": []})
 
     # Async detection returns empty when no valid entities
-    @patch("backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cache_key", return_value="mock_key")
-    @patch("backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cached_result", return_value=None)
-    async def test_detect_sensitive_data_async_no_valid_entities(self, mock_get_cached, mock_key):
+    @patch(
+        "backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cache_key",
+        return_value="mock_key",
+    )
+    @patch(
+        "backend.app.utils.helpers.gliner_helper.GLiNERHelper.get_cached_result",
+        return_value=None,
+    )
+    async def test_detect_sensitive_data_async_no_valid_entities(
+        self, mock_get_cached, mock_key
+    ):
         self.detector.validate_requested_entities = MagicMock(return_value=[])
 
         extracted_data = {"pages": [{"page": 1, "words": [{"text": "test"}]}]}
 
         requested_entities = ["TEST"]
 
-        result, mapping = await self.detector.detect_sensitive_data_async(extracted_data, requested_entities)
+        result, mapping = await self.detector.detect_sensitive_data_async(
+            extracted_data, requested_entities
+        )
 
         self.assertEqual(result, [])
 

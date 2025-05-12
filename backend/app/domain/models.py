@@ -32,6 +32,7 @@ class FileResult(BaseModel):
         results (Optional[Dict[str, Any]]): The detection payload when status == "success".
         error (Optional[str]): Error message when status == "error".
     """
+
     file: str
     status: str
     results: Optional[Dict[str, Any]] = None
@@ -57,6 +58,7 @@ class BatchSummary(BaseModel):
         search_term (Optional[str]): Search term used (search-specific).
         target_bbox (Optional[str]): Bounding box target (bbox-specific).
     """
+
     batch_id: str
     total_files: int
     successful: int
@@ -80,6 +82,7 @@ class BatchDetectionDebugInfo(BaseModel):
         peak_memory (Optional[float]): Peak memory usage recorded.
         operation_id (str): Identifier for this specific operation run.
     """
+
     memory_usage: Optional[float]
     peak_memory: Optional[float]
     operation_id: str
@@ -97,6 +100,7 @@ class BatchDetectionResponse(BaseModel):
         file_results (List[FileResult]): Individual file results.
         debug (Optional[BatchDetectionDebugInfo]): Optional debug and memory info.
     """
+
     batch_summary: BatchSummary
     file_results: List[FileResult]
     debug: Optional[BatchDetectionDebugInfo] = None
@@ -116,6 +120,7 @@ class RedactFileResult(BaseModel):
         arcname (Optional[str]): Filename under which the redacted file is archived (ZIP only).
         error (Optional[str]): Error message when status == "error".
     """
+
     file: str
     status: str
     redactions_applied: Optional[int] = None
@@ -138,6 +143,7 @@ class RedactBatchSummary(BaseModel):
         total_redactions (int): Total redactions applied across all files.
         total_time (float): Total processing time in seconds.
     """
+
     batch_id: str
     total_files: int
     successful: int
@@ -157,6 +163,7 @@ class BatchRedactResponse(BaseModel):
         batch_summary (RedactBatchSummary): Aggregated batch redaction statistics.
         file_results (List[RedactFileResult]): Individual file redaction results.
     """
+
     batch_summary: RedactBatchSummary
     file_results: List[RedactFileResult]
 

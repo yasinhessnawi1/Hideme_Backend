@@ -10,7 +10,7 @@ from backend.app.utils.validation.sanitize_utils import (
     count_entities_per_page,
     replace_key_in_dict,
     process_item,
-    process_items_list
+    process_items_list,
 )
 
 
@@ -20,131 +20,135 @@ class TestSanitizeUtils(unittest.TestCase):
     # Setup sample data for sanitize_utils tests
     def setUp(self):
         self.sample_entities = [
-
-            {"entity_type": "PERSON", "start": 0, "end": 10, "score": 0.9, "text": "John Doe"},
-
-            {"entity_type": "PERSON", "start": 0, "end": 10, "score": 0.8, "text": "John Doe"},
-
-            {"entity_type": "EMAIL", "start": 20, "end": 40, "score": 0.95, "text": "john@example.com"},
-
-            {"entity_type": "PHONE", "start": 50, "end": 60, "score": 0.85, "text": "123-456-7890"}
-
+            {
+                "entity_type": "PERSON",
+                "start": 0,
+                "end": 10,
+                "score": 0.9,
+                "text": "John Doe",
+            },
+            {
+                "entity_type": "PERSON",
+                "start": 0,
+                "end": 10,
+                "score": 0.8,
+                "text": "John Doe",
+            },
+            {
+                "entity_type": "EMAIL",
+                "start": 20,
+                "end": 40,
+                "score": 0.95,
+                "text": "john@example.com",
+            },
+            {
+                "entity_type": "PHONE",
+                "start": 50,
+                "end": 60,
+                "score": 0.85,
+                "text": "123-456-7890",
+            },
         ]
 
         self.sample_redaction_mapping = {
-
             "pages": [
-
                 {
-
                     "page": 1,
-
                     "sensitive": [
-
-                        {"entity_type": "PERSON", "start": 0, "end": 10, "score": 0.9, "original_text": "John Doe"},
-
-                        {"entity_type": "PERSON", "start": 0, "end": 10, "score": 0.8, "original_text": "John Doe"},
-
-                        {"entity_type": "EMAIL", "start": 20, "end": 40, "score": 0.95,
-                         "original_text": "john@example.com"}
-
-                    ]
-
+                        {
+                            "entity_type": "PERSON",
+                            "start": 0,
+                            "end": 10,
+                            "score": 0.9,
+                            "original_text": "John Doe",
+                        },
+                        {
+                            "entity_type": "PERSON",
+                            "start": 0,
+                            "end": 10,
+                            "score": 0.8,
+                            "original_text": "John Doe",
+                        },
+                        {
+                            "entity_type": "EMAIL",
+                            "start": 20,
+                            "end": 40,
+                            "score": 0.95,
+                            "original_text": "john@example.com",
+                        },
+                    ],
                 },
-
                 {
-
                     "page": 2,
-
                     "sensitive": [
-
-                        {"entity_type": "PHONE", "start": 50, "end": 60, "score": 0.85,
-                         "original_text": "123-456-7890"},
-
-                        {"entity_type": "PHONE", "start": 50, "end": 60, "score": 0.95, "original_text": "123-456-7890"}
-
-                    ]
-
-                }
-
+                        {
+                            "entity_type": "PHONE",
+                            "start": 50,
+                            "end": 60,
+                            "score": 0.85,
+                            "original_text": "123-456-7890",
+                        },
+                        {
+                            "entity_type": "PHONE",
+                            "start": 50,
+                            "end": 60,
+                            "score": 0.95,
+                            "original_text": "123-456-7890",
+                        },
+                    ],
+                },
             ]
-
         }
 
         self.sample_redaction_mapping_with_bbox = {
-
             "pages": [
-
                 {
-
                     "page": 1,
-
                     "sensitive": [
-
                         {
-
                             "entity_type": "PERSON",
-
                             "start": 0,
-
                             "end": 10,
-
                             "score": 0.9,
-
                             "original_text": "John Doe",
-
-                            "bbox": {"x0": 10.1, "y0": 20.2, "x1": 30.3, "y1": 40.4}
-
+                            "bbox": {"x0": 10.1, "y0": 20.2, "x1": 30.3, "y1": 40.4},
                         },
-
                         {
-
                             "entity_type": "PERSON",
-
                             "start": 0,
-
                             "end": 10,
-
                             "score": 0.8,
-
                             "original_text": "John Doe",
-
-                            "bbox": {"x0": 10.1, "y0": 20.2, "x1": 30.3, "y1": 40.4}
-
-                        }
-
-                    ]
-
+                            "bbox": {"x0": 10.1, "y0": 20.2, "x1": 30.3, "y1": 40.4},
+                        },
+                    ],
                 }
-
             ]
-
         }
 
         self.sample_search_results = [
-
-            {"text": "John Doe", "bbox": {"x0": 10.1, "y0": 20.2, "x1": 30.3, "y1": 40.4}},
-
-            {"text": "John Doe", "bbox": {"x0": 10.1, "y0": 20.2, "x1": 30.3, "y1": 40.4}},
-
-            {"text": "Jane Smith", "bbox": {"x0": 50.5, "y0": 60.6, "x1": 70.7, "y1": 80.8}}
-
+            {
+                "text": "John Doe",
+                "bbox": {"x0": 10.1, "y0": 20.2, "x1": 30.3, "y1": 40.4},
+            },
+            {
+                "text": "John Doe",
+                "bbox": {"x0": 10.1, "y0": 20.2, "x1": 30.3, "y1": 40.4},
+            },
+            {
+                "text": "Jane Smith",
+                "bbox": {"x0": 50.5, "y0": 60.6, "x1": 70.7, "y1": 80.8},
+            },
         ]
 
     # Test sanitize_detection_output with valid inputs
-    @patch('backend.app.utils.validation.sanitize_utils.log_info')
-    @patch('time.time')
+    @patch("backend.app.utils.validation.sanitize_utils.log_info")
+    @patch("time.time")
     def test_sanitize_detection_output_positive(self, mock_time, mock_log_info):
         mock_time.side_effect = [100.0, 100.5]
 
         result = sanitize_detection_output(
-
-            self.sample_entities,
-
-            self.sample_redaction_mapping,
-
-            {"detection_time": 1.5}
-
+            self.sample_entities, self.sample_redaction_mapping, {"detection_time": 1.5}
         )
 
         self.assertIn("redaction_mapping", result)
@@ -162,17 +166,15 @@ class TestSanitizeUtils(unittest.TestCase):
         mock_log_info.assert_called_once()
 
     # Test sanitize_detection_output without processing_times
-    @patch('backend.app.utils.validation.sanitize_utils.log_info')
-    @patch('time.time')
-    def test_sanitize_detection_output_without_processing_times(self, mock_time, mock_log_info):
+    @patch("backend.app.utils.validation.sanitize_utils.log_info")
+    @patch("time.time")
+    def test_sanitize_detection_output_without_processing_times(
+        self, mock_time, mock_log_info
+    ):
         mock_time.side_effect = [100.0, 100.5]
 
         result = sanitize_detection_output(
-
-            self.sample_entities,
-
-            self.sample_redaction_mapping
-
+            self.sample_entities, self.sample_redaction_mapping
         )
 
         self.assertIn("performance", result)
@@ -213,15 +215,7 @@ class TestSanitizeUtils(unittest.TestCase):
 
     # Test deduplicate_entities handles missing fields
     def test_deduplicate_entities_missing_fields(self):
-        entities = [
-
-            {"entity_type": "PERSON"},
-
-            {"start": 0, "end": 10},
-
-            {}
-
-        ]
+        entities = [{"entity_type": "PERSON"}, {"start": 0, "end": 10}, {}]
 
         result = deduplicate_entities(entities)
 
@@ -268,11 +262,14 @@ class TestSanitizeUtils(unittest.TestCase):
     # Test deduplicate_bbox with different precision
     def test_deduplicate_bbox_different_precision(self):
         search_results = [
-
-            {"text": "John Doe", "bbox": {"x0": 10.11, "y0": 20.22, "x1": 30.33, "y1": 40.44}},
-
-            {"text": "John Doe", "bbox": {"x0": 10.11, "y0": 20.22, "x1": 30.33, "y1": 40.44}}
-
+            {
+                "text": "John Doe",
+                "bbox": {"x0": 10.11, "y0": 20.22, "x1": 30.33, "y1": 40.44},
+            },
+            {
+                "text": "John Doe",
+                "bbox": {"x0": 10.11, "y0": 20.22, "x1": 30.33, "y1": 40.44},
+            },
         ]
 
         result_p1 = deduplicate_bbox(search_results, precision=1)
@@ -286,11 +283,11 @@ class TestSanitizeUtils(unittest.TestCase):
     # Test deduplicate_bbox ignores items missing bbox
     def test_deduplicate_bbox_missing_bbox(self):
         search_results = [
-
             {"text": "John Doe"},
-
-            {"text": "Jane Smith", "bbox": {"x0": 50.5, "y0": 60.6, "x1": 70.7, "y1": 80.8}}
-
+            {
+                "text": "Jane Smith",
+                "bbox": {"x0": 50.5, "y0": 60.6, "x1": 70.7, "y1": 80.8},
+            },
         ]
 
         result = deduplicate_bbox(search_results)
@@ -315,13 +312,7 @@ class TestSanitizeUtils(unittest.TestCase):
 
     # Test organize_entities_by_type handles missing entity_type
     def test_organize_entities_by_type_missing_entity_type(self):
-        entities = [
-
-            {"start": 0, "end": 10},
-
-            {}
-
-        ]
+        entities = [{"start": 0, "end": 10}, {}]
 
         result = organize_entities_by_type(entities)
 
@@ -361,7 +352,12 @@ class TestSanitizeUtils(unittest.TestCase):
 
     # Test process_item replaces original_text with engine
     def test_process_item_with_original_text(self):
-        item = {"entity_type": "PERSON", "start": 0, "end": 10, "original_text": "John Doe"}
+        item = {
+            "entity_type": "PERSON",
+            "start": 0,
+            "end": 10,
+            "original_text": "John Doe",
+        }
 
         result = process_item(item, "ENGINE_X")
 
@@ -392,11 +388,8 @@ class TestSanitizeUtils(unittest.TestCase):
     # Test process_items_list processes all items
     def test_process_items_list_positive(self):
         items = [
-
             {"entity_type": "PERSON", "original_text": "John Doe"},
-
-            {"entity_type": "EMAIL", "text": "john@example.com"}
-
+            {"entity_type": "EMAIL", "text": "john@example.com"},
         ]
 
         result = process_items_list(items, "ENGINE_X")

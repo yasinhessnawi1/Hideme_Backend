@@ -20,7 +20,10 @@ from contextlib import contextmanager, asynccontextmanager
 from enum import Enum, auto
 from typing import Dict, List, Optional, Set, Any, Tuple, Generator, AsyncGenerator
 
-from backend.app.utils.constant.constant import DEFAULT_LOCK_TIMEOUT, DEFAULT_ASYNC_LOCK_TIMEOUT
+from backend.app.utils.constant.constant import (
+    DEFAULT_LOCK_TIMEOUT,
+    DEFAULT_ASYNC_LOCK_TIMEOUT,
+)
 
 # Configure module logger (using default logger configuration).
 logger = logging.getLogger(__name__)
@@ -33,6 +36,7 @@ class LockPriority(Enum):
     This enumeration defines various priority levels that can be assigned to locks.
     Higher priority locks should be acquired before lower priority ones to prevent circular wait conditions.
     """
+
     CRITICAL = auto()  # Highest priority: e.g., initialization and shutdown tasks.
     HIGH = auto()  # High priority: e.g., detector access.
     MEDIUM = auto()  # Medium priority: e.g., document processing.
@@ -47,6 +51,7 @@ class LockType(Enum):
     This enumeration categorizes locks into different types, such as thread-based locks,
     asyncio locks, semaphores, and read-write locks.
     """
+
     THREAD = auto()  # Represents a threading lock.
     ASYNCIO = auto()  # Represents an asyncio lock.
     SEMAPHORE = auto()  # Represents a semaphore.
@@ -77,8 +82,14 @@ class LockStatistics:
         # Count of failed lock acquisitions due to timeouts.
         self.failed_acquisitions = 0
 
-    def register_lock(self, lock_id: str, lock_name: str, lock_type: LockType,
-                      priority: LockPriority, is_instance_lock: bool = False) -> None:
+    def register_lock(
+        self,
+        lock_id: str,
+        lock_name: str,
+        lock_type: LockType,
+        priority: LockPriority,
+        is_instance_lock: bool = False,
+    ) -> None:
         """
         Register a new lock for statistics tracking.
 
@@ -106,7 +117,7 @@ class LockStatistics:
                 "contentions": 0,
                 "last_acquired": None,
                 "last_released": None,
-                "is_instance_lock": is_instance_lock
+                "is_instance_lock": is_instance_lock,
             }
             # Increment instance or global lock counter based on the type.
             if is_instance_lock:
@@ -114,8 +125,9 @@ class LockStatistics:
             else:
                 self.global_locks_count += 1
 
-    def record_acquisition(self, lock_id: str, thread_id: str, wait_time: float,
-                           acquisition_time: float) -> None:
+    def record_acquisition(
+        self, lock_id: str, thread_id: str, wait_time: float, acquisition_time: float
+    ) -> None:
         """
         Record a successful lock acquisition.
 
@@ -142,7 +154,7 @@ class LockStatistics:
                 # Register the lock as active with a composite key.
                 self.active_locks[f"{lock_id}:{thread_id}"] = {
                     "acquired_at": time.time(),
-                    "thread_id": thread_id
+                    "thread_id": thread_id,
                 }
 
     def record_release(self, lock_id: str, thread_id: str) -> None:
@@ -233,8 +245,11 @@ class LockStatistics:
                 "active_locks": len(self.active_locks),
                 "total_acquisitions": self.successful_acquisitions,
                 "failed_acquisitions": self.failed_acquisitions,
-                "success_rate": (self.successful_acquisitions / (
-                        self.successful_acquisitions + self.failed_acquisitions or 1)) * 100
+                "success_rate": (
+                    self.successful_acquisitions
+                    / (self.successful_acquisitions + self.failed_acquisitions or 1)
+                )
+                * 100,
             }
 
     def reset_stats(self, lock_id: Optional[str] = None) -> None:
@@ -250,7 +265,9 @@ class LockStatistics:
                 if lock_id in self.stats:
                     # Preserve creation time and instance lock flag while resetting numeric stats.
                     created_at = self.stats[lock_id].get("created_at", time.time())
-                    is_instance_lock = self.stats[lock_id].get("is_instance_lock", False)
+                    is_instance_lock = self.stats[lock_id].get(
+                        "is_instance_lock", False
+                    )
                     self.stats[lock_id] = {
                         **self.stats[lock_id],
                         "acquisitions": 0,
@@ -261,7 +278,7 @@ class LockStatistics:
                         "timeouts": 0,
                         "contentions": 0,
                         "created_at": created_at,
-                        "is_instance_lock": is_instance_lock
+                        "is_instance_lock": is_instance_lock,
                     }
             else:
                 self.successful_acquisitions = 0
@@ -294,7 +311,9 @@ class LockManager:
         # Dictionary mapping thread IDs to the set of instance-level locks held.
         self._instance_locks: Dict[int, Set[str]] = {}
 
-    def check_deadlock(self, lock_id: str, priority: LockPriority, is_instance_lock: bool = False) -> bool:
+    def check_deadlock(
+        self, lock_id: str, priority: LockPriority, is_instance_lock: bool = False
+    ) -> bool:
         """
         Check if acquiring this lock could cause a deadlock based on current locks held.
 
@@ -339,7 +358,9 @@ class LockManager:
             # If no violation, return False.
             return False
 
-    def register_lock_acquisition(self, lock_id: str, priority: LockPriority, is_instance_lock: bool = False) -> None:
+    def register_lock_acquisition(
+        self, lock_id: str, priority: LockPriority, is_instance_lock: bool = False
+    ) -> None:
         """
         Register that a thread has acquired a lock.
 
@@ -362,7 +383,9 @@ class LockManager:
             if is_instance_lock:
                 self._instance_locks[thread_id].add(lock_id)
 
-    def register_lock_release(self, lock_id: str, is_instance_lock: bool = False) -> None:
+    def register_lock_release(
+        self, lock_id: str, is_instance_lock: bool = False
+    ) -> None:
         """
         Register that a thread has released a lock.
 
@@ -377,7 +400,8 @@ class LockManager:
             # Filter out the released lock from the list.
             if thread_id in self._thread_locks:
                 self._thread_locks[thread_id] = [
-                    (l_id, prio) for l_id, prio in self._thread_locks[thread_id]
+                    (l_id, prio)
+                    for l_id, prio in self._thread_locks[thread_id]
                     if l_id != lock_id
                 ]
             # If it is an instance lock, remove from instance-specific tracking.
@@ -409,15 +433,17 @@ class LockManager:
 lock_manager = LockManager()
 
 
-def _prepare_lock_acquisition(timeout: Optional[float],
-                              default_timeout: float,
-                              lock,
-                              owner,
-                              lock_name: str,
-                              identifier,
-                              log,  # Logger used for logging messages.
-                              record_contention_callback,
-                              use_locked: bool = False) -> Tuple[float, float]:
+def _prepare_lock_acquisition(
+    timeout: Optional[float],
+    default_timeout: float,
+    lock,
+    owner,
+    lock_name: str,
+    identifier,
+    log,  # Logger used for logging messages.
+    record_contention_callback,
+    use_locked: bool = False,
+) -> Tuple[float, float]:
     """
     Prepare lock acquisition by determining the effective timeout and start time.
     Optionally logs contention if the lock is held by another thread or task.
@@ -444,19 +470,24 @@ def _prepare_lock_acquisition(timeout: Optional[float],
     if use_locked:
         # If the lock is already acquired and the owner does not match, log wait.
         if lock.locked() and owner != identifier:
-            log.debug(f"Task {identifier} waiting for lock '{lock_name}' currently held by {owner}")
+            log.debug(
+                f"Task {identifier} waiting for lock '{lock_name}' currently held by {owner}"
+            )
             record_contention_callback()
     else:
         # If an owner is recorded and is different, log wait.
         if owner is not None and owner != identifier:
-            log.debug(f"Thread {identifier} waiting for lock '{lock_name}' currently held by {owner}")
+            log.debug(
+                f"Thread {identifier} waiting for lock '{lock_name}' currently held by {owner}"
+            )
             record_contention_callback()
     # Return effective timeout and wait start time.
     return effective_timeout, wait_start
 
 
-async def _async_acquire_with_timeout(acquire_coro, effective_timeout: float, type_str: str, name: str) -> Tuple[
-    bool, float]:
+async def _async_acquire_with_timeout(
+    acquire_coro, effective_timeout: float, type_str: str, name: str
+) -> Tuple[bool, float]:
     """
     Helper function to acquire an async lock or semaphore with a timeout.
 
@@ -496,9 +527,14 @@ class TimeoutLock:
     detailed statistics recording, and integration with a global lock manager for deadlock prevention.
     """
 
-    def __init__(self, name: str, priority: LockPriority = LockPriority.MEDIUM,
-                 timeout: Optional[float] = None, reentrant: bool = True,
-                 is_instance_lock: bool = False):
+    def __init__(
+        self,
+        name: str,
+        priority: LockPriority = LockPriority.MEDIUM,
+        timeout: Optional[float] = None,
+        reentrant: bool = True,
+        is_instance_lock: bool = False,
+    ):
         """
         Initialize a new TimeoutLock.
 
@@ -527,11 +563,14 @@ class TimeoutLock:
         self.is_instance_lock = is_instance_lock
 
         # Register this lock in the global statistics tracker.
-        lock_statistics.register_lock(self.id, name, LockType.THREAD, priority, is_instance_lock)
+        lock_statistics.register_lock(
+            self.id, name, LockType.THREAD, priority, is_instance_lock
+        )
 
         # Log the creation of the lock.
         logger.debug(
-            f"Created lock '{name}' with ID {self.id} (priority={priority.name}, timeout={self.default_timeout}s, instance={is_instance_lock})")
+            f"Created lock '{name}' with ID {self.id} (priority={priority.name}, timeout={self.default_timeout}s, instance={is_instance_lock})"
+        )
 
     def acquire(self, blocking: bool = True, timeout: Optional[float] = None) -> bool:
         """
@@ -551,7 +590,9 @@ class TimeoutLock:
 
         # Check for potential deadlock using the global lock manager.
         if lock_manager.check_deadlock(self.id, self.priority, self.is_instance_lock):
-            logger.warning(f"Thread {thread_name} avoiding potential deadlock; not acquiring lock '{self.name}'")
+            logger.warning(
+                f"Thread {thread_name} avoiding potential deadlock; not acquiring lock '{self.name}'"
+            )
             # Record a timeout event in the statistics.
             lock_statistics.record_timeout(self.id)
             # Return False indicating lock not acquired.
@@ -567,12 +608,14 @@ class TimeoutLock:
             thread_id,
             logger,
             lambda: lock_statistics.record_contention(self.id),
-            use_locked=False
+            use_locked=False,
         )
 
         try:
             # Attempt to acquire the underlying lock with blocking and timeout.
-            acquired = self.lock.acquire(blocking=blocking, timeout=effective_timeout if blocking else None)
+            acquired = self.lock.acquire(
+                blocking=blocking, timeout=effective_timeout if blocking else None
+            )
         except Exception as e:
             # Log error if lock acquisition fails due to exception.
             logger.error(f"Error acquiring lock '{self.name}': {e}")
@@ -588,17 +631,22 @@ class TimeoutLock:
             # Increment acquisition count.
             self.acquisition_count += 1
             # Register the lock acquisition with the global manager.
-            lock_manager.register_lock_acquisition(self.id, self.priority, self.is_instance_lock)
+            lock_manager.register_lock_acquisition(
+                self.id, self.priority, self.is_instance_lock
+            )
             # Record successful acquisition in lock statistics.
             lock_statistics.record_acquisition(self.id, str(thread_id), wait_time, 0.0)
             # Log successful acquisition.
-            logger.debug(f"Thread {thread_name} acquired lock '{self.name}' after {wait_time:.6f}s wait")
+            logger.debug(
+                f"Thread {thread_name} acquired lock '{self.name}' after {wait_time:.6f}s wait"
+            )
         else:
             # Record a timeout event if lock not acquired.
             lock_statistics.record_timeout(self.id)
             # Log a warning indicating failure to acquire lock within timeout.
             logger.warning(
-                f"Thread {thread_name} failed to acquire lock '{self.name}' after {wait_time:.6f}s wait (timeout={effective_timeout}s)")
+                f"Thread {thread_name} failed to acquire lock '{self.name}' after {wait_time:.6f}s wait (timeout={effective_timeout}s)"
+            )
 
         # Return the result of acquisition.
         return acquired
@@ -631,7 +679,9 @@ class TimeoutLock:
             logger.error(f"Error releasing lock '{self.name}': {e}")
 
     @contextmanager
-    def acquire_timeout(self, timeout: Optional[float] = None) -> Generator[bool, Any, None]:
+    def acquire_timeout(
+        self, timeout: Optional[float] = None
+    ) -> Generator[bool, Any, None]:
         """
         Context manager for acquiring the lock with a timeout.
 
@@ -661,8 +711,13 @@ class AsyncTimeoutLock:
     This class provides asynchronous lock functionality similar to TimeoutLock but for asyncio-based tasks.
     """
 
-    def __init__(self, name: str, priority: LockPriority = LockPriority.MEDIUM,
-                 timeout: Optional[float] = None, is_instance_lock: bool = False):
+    def __init__(
+        self,
+        name: str,
+        priority: LockPriority = LockPriority.MEDIUM,
+        timeout: Optional[float] = None,
+        is_instance_lock: bool = False,
+    ):
         """
         Initialize a new AsyncTimeoutLock.
 
@@ -688,11 +743,14 @@ class AsyncTimeoutLock:
         self.is_instance_lock = is_instance_lock
 
         # Register this async lock in the global statistics tracker.
-        lock_statistics.register_lock(self.id, name, LockType.ASYNCIO, priority, is_instance_lock)
+        lock_statistics.register_lock(
+            self.id, name, LockType.ASYNCIO, priority, is_instance_lock
+        )
 
         # Log the creation of the async lock.
         logger.debug(
-            f"Created async lock '{name}' with ID {self.id} (priority={priority.name}, timeout={self.default_timeout}s, instance={is_instance_lock})")
+            f"Created async lock '{name}' with ID {self.id} (priority={priority.name}, timeout={self.default_timeout}s, instance={is_instance_lock})"
+        )
 
     async def acquire(self, timeout: Optional[float] = None) -> bool:
         """
@@ -707,7 +765,9 @@ class AsyncTimeoutLock:
         # Construct a unique identifier for the current async task.
         thread_id = f"{threading.get_ident()}:{id(asyncio.current_task())}"
         # Retrieve the name of the current async task.
-        task_name = asyncio.current_task().get_name() if asyncio.current_task() else "unknown"
+        task_name = (
+            asyncio.current_task().get_name() if asyncio.current_task() else "unknown"
+        )
 
         # Prepare lock acquisition by determining effective timeout and logging any contention.
         effective_timeout, _ = _prepare_lock_acquisition(
@@ -719,7 +779,7 @@ class AsyncTimeoutLock:
             thread_id,
             logger,
             lambda: lock_statistics.record_contention(self.id),
-            use_locked=True
+            use_locked=True,
         )
 
         # Attempt to acquire the lock using the helper function with timeout.
@@ -732,12 +792,15 @@ class AsyncTimeoutLock:
             self.owner = thread_id
             # Record the acquisition event in statistics.
             lock_statistics.record_acquisition(self.id, thread_id, wait_time, 0.0)
-            logger.debug(f"Task {task_name} acquired async lock '{self.name}' after {wait_time:.6f}s wait")
+            logger.debug(
+                f"Task {task_name} acquired async lock '{self.name}' after {wait_time:.6f}s wait"
+            )
         else:
             # Record a timeout event if acquisition failed.
             lock_statistics.record_timeout(self.id)
             logger.warning(
-                f"Task {task_name} failed to acquire async lock '{self.name}' after {wait_time:.6f}s wait (timeout={effective_timeout}s)")
+                f"Task {task_name} failed to acquire async lock '{self.name}' after {wait_time:.6f}s wait (timeout={effective_timeout}s)"
+            )
 
         # Return the acquisition result.
         return acquired
@@ -751,7 +814,9 @@ class AsyncTimeoutLock:
         # Build a unique identifier for the current task.
         thread_id = f"{threading.get_ident()}:{id(asyncio.current_task())}"
         # Get the name of the current async task.
-        task_name = asyncio.current_task().get_name() if asyncio.current_task() else "unknown"
+        task_name = (
+            asyncio.current_task().get_name() if asyncio.current_task() else "unknown"
+        )
 
         try:
             # Record lock release in statistics.
@@ -766,7 +831,9 @@ class AsyncTimeoutLock:
             logger.error(f"Error releasing async lock '{self.name}': {e}")
 
     @asynccontextmanager
-    async def acquire_timeout(self, timeout: Optional[float] = None) -> AsyncGenerator[bool, None]:
+    async def acquire_timeout(
+        self, timeout: Optional[float] = None
+    ) -> AsyncGenerator[bool, None]:
         """
         Async context manager for acquiring the lock with a timeout.
 
@@ -797,9 +864,13 @@ class AsyncTimeoutSemaphore:
     detailed logging, and is optimized for batch operations.
     """
 
-    def __init__(self, name: str, value: int = 1,
-                 priority: LockPriority = LockPriority.MEDIUM,
-                 timeout: Optional[float] = None):
+    def __init__(
+        self,
+        name: str,
+        value: int = 1,
+        priority: LockPriority = LockPriority.MEDIUM,
+        timeout: Optional[float] = None,
+    ):
         """
         Initialize a new AsyncTimeoutSemaphore.
 
@@ -826,11 +897,14 @@ class AsyncTimeoutSemaphore:
         self._value_lock = asyncio.Lock()
 
         # Register this semaphore in the global lock statistics (instance lock always true).
-        lock_statistics.register_lock(self.id, name, LockType.SEMAPHORE, priority, is_instance_lock=True)
+        lock_statistics.register_lock(
+            self.id, name, LockType.SEMAPHORE, priority, is_instance_lock=True
+        )
 
         # Log the creation of the async semaphore.
         logger.debug(
-            f"Created async semaphore '{name}' with ID {self.id} and value {value} (priority={priority.name}, timeout={self.default_timeout}s)")
+            f"Created async semaphore '{name}' with ID {self.id} and value {value} (priority={priority.name}, timeout={self.default_timeout}s)"
+        )
 
     async def acquire(self, timeout: Optional[float] = None) -> bool:
         """
@@ -845,7 +919,9 @@ class AsyncTimeoutSemaphore:
         # Build a unique identifier for the current async task.
         thread_id = f"{threading.get_ident()}:{id(asyncio.current_task())}"
         # Get the current async task name.
-        task_name = asyncio.current_task().get_name() if asyncio.current_task() else "unknown"
+        task_name = (
+            asyncio.current_task().get_name() if asyncio.current_task() else "unknown"
+        )
         # Determine the effective timeout.
         effective_timeout = timeout if timeout is not None else self.default_timeout
 
@@ -861,12 +937,14 @@ class AsyncTimeoutSemaphore:
             # Record the acquisition event in statistics.
             lock_statistics.record_acquisition(self.id, thread_id, wait_time, 0.0)
             logger.debug(
-                f"Task {task_name} acquired async semaphore '{self.name}' after {wait_time:.6f}s wait (remaining permits: {self.current_value})")
+                f"Task {task_name} acquired async semaphore '{self.name}' after {wait_time:.6f}s wait (remaining permits: {self.current_value})"
+            )
         else:
             # Record timeout if acquisition fails.
             lock_statistics.record_timeout(self.id)
             logger.warning(
-                f"Task {task_name} failed to acquire async semaphore '{self.name}' after {wait_time:.6f}s wait (timeout={effective_timeout}s)")
+                f"Task {task_name} failed to acquire async semaphore '{self.name}' after {wait_time:.6f}s wait (timeout={effective_timeout}s)"
+            )
 
         # Return the acquisition result.
         return acquired
@@ -880,7 +958,9 @@ class AsyncTimeoutSemaphore:
         # Build a unique identifier for the current async task.
         thread_id = f"{threading.get_ident()}:{id(asyncio.current_task())}"
         # Get the current task name.
-        task_name = asyncio.current_task().get_name() if asyncio.current_task() else "unknown"
+        task_name = (
+            asyncio.current_task().get_name() if asyncio.current_task() else "unknown"
+        )
         try:
             # Record the release in lock statistics.
             lock_statistics.record_release(self.id, thread_id)
@@ -891,13 +971,16 @@ class AsyncTimeoutSemaphore:
             if self.current_value > self.value:
                 self.current_value = self.value
             logger.debug(
-                f"Task {task_name} released async semaphore '{self.name}' (available permits: {self.current_value})")
+                f"Task {task_name} released async semaphore '{self.name}' (available permits: {self.current_value})"
+            )
         except Exception as e:
             # Log any errors encountered during release.
             logger.error(f"Error releasing async semaphore '{self.name}': {e}")
 
     @asynccontextmanager
-    async def acquire_timeout(self, timeout: Optional[float] = None) -> AsyncGenerator[bool, None]:
+    async def acquire_timeout(
+        self, timeout: Optional[float] = None
+    ) -> AsyncGenerator[bool, None]:
         """
         Async context manager for acquiring the semaphore with a timeout.
 
@@ -930,7 +1013,9 @@ def init():
         # Create a new stream handler.
         handler = logging.StreamHandler()
         # Define a formatter for log messages.
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
         # Set the formatter for the handler.
         handler.setFormatter(formatter)
         # Add the handler to the logger.

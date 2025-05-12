@@ -12,7 +12,10 @@ import time
 from typing import Dict, Any, List, Optional, Set, Union, Tuple
 
 from backend.app.configs.gdpr_config import DATA_MINIMIZATION_RULES
-from backend.app.utils.constant.constant import SENSITIVE_FIELDS, DEFAULT_METADATA_FIELDS
+from backend.app.utils.constant.constant import (
+    SENSITIVE_FIELDS,
+    DEFAULT_METADATA_FIELDS,
+)
 from backend.app.utils.security.processing_records import record_keeper
 
 # Configure module logger.
@@ -39,7 +42,9 @@ def _get_trace_id(provided: Optional[str]) -> str:
     return f"minimize_{int(now)}_{hashlib.md5(str(now).encode()).hexdigest()[:6]}"
 
 
-def _minimize_word(word: Dict[str, Any], required_fields_only: bool) -> Optional[Dict[str, Any]]:
+def _minimize_word(
+    word: Dict[str, Any], required_fields_only: bool
+) -> Optional[Dict[str, Any]]:
     """
     Process a single word entry to minimize it.
 
@@ -62,7 +67,7 @@ def _minimize_word(word: Dict[str, Any], required_fields_only: bool) -> Optional
             "x0": word.get("x0"),
             "y0": word.get("y0"),
             "x1": word.get("x1"),
-            "y1": word.get("y1")
+            "y1": word.get("y1"),
         }
     # Otherwise, make a full copy of the word.
     minimized = word.copy()
@@ -74,7 +79,9 @@ def _minimize_word(word: Dict[str, Any], required_fields_only: bool) -> Optional
     return minimized
 
 
-def _minimize_page(page: Dict[str, Any], required_fields_only: bool) -> Optional[Dict[str, Any]]:
+def _minimize_page(
+    page: Dict[str, Any], required_fields_only: bool
+) -> Optional[Dict[str, Any]]:
     """
     Process a single page by minimizing all its word entries.
 
@@ -118,7 +125,9 @@ def _estimate_data_size(data: Any) -> int:
 
     If JSON serialization fails, the function recursively estimates the size.
     """
-    import sys, json
+    import sys
+    import json
+
     try:
         # Attempt to serialize the data into JSON.
         serialized = json.dumps(data)
@@ -127,7 +136,9 @@ def _estimate_data_size(data: Any) -> int:
     except (TypeError, OverflowError):
         # If serialization fails and data is a dictionary, sum sizes of keys and values.
         if isinstance(data, dict):
-            return sum(_estimate_data_size(k) + _estimate_data_size(v) for k, v in data.items())
+            return sum(
+                _estimate_data_size(k) + _estimate_data_size(v) for k, v in data.items()
+            )
         # If data is a list, tuple, or set, sum sizes of individual elements.
         elif isinstance(data, (list, tuple, set)):
             return sum(_estimate_data_size(i) for i in data)
@@ -136,7 +147,9 @@ def _estimate_data_size(data: Any) -> int:
             return sys.getsizeof(data)
 
 
-def _extract_valid_data(data: Union[Dict[str, Any], Tuple[int, Dict[str, Any]]]) -> Dict[str, Any]:
+def _extract_valid_data(
+    data: Union[Dict[str, Any], Tuple[int, Dict[str, Any]]],
+) -> Dict[str, Any]:
     """
     Extract the dictionary from the input if valid.
 
@@ -157,7 +170,9 @@ def _extract_valid_data(data: Union[Dict[str, Any], Tuple[int, Dict[str, Any]]])
     return {}
 
 
-def _process_pages(pages: List[Dict[str, Any]], required_fields_only: bool) -> List[Dict[str, Any]]:
+def _process_pages(
+    pages: List[Dict[str, Any]], required_fields_only: bool
+) -> List[Dict[str, Any]]:
     """
     Process a list of pages by applying minimization to each page.
 
@@ -186,10 +201,10 @@ def _process_pages(pages: List[Dict[str, Any]], required_fields_only: bool) -> L
 
 
 def minimize_extracted_data(
-        extracted_data: Union[Dict[str, Any], Tuple[int, Dict[str, Any]]],
-        required_fields_only: Optional[bool] = None,
-        metadata_fields: Optional[Set[str]] = None,
-        trace_id: Optional[str] = None
+    extracted_data: Union[Dict[str, Any], Tuple[int, Dict[str, Any]]],
+    required_fields_only: Optional[bool] = None,
+    metadata_fields: Optional[Set[str]] = None,
+    trace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Minimize extracted data according to GDPR data minimization principles.
@@ -232,25 +247,34 @@ def minimize_extracted_data(
             minimized_data[field] = data[field]
 
     # Process and minimize each page.
-    minimized_data["pages"] = _process_pages(data.get("pages", []), required_fields_only)
+    minimized_data["pages"] = _process_pages(
+        data.get("pages", []), required_fields_only
+    )
 
     # Estimate the size of the original and minimized data for logging.
     original_size = _estimate_data_size(data)
     minimized_size = _estimate_data_size(minimized_data)
     # Calculate the percentage reduction in size.
-    reduction_percentage = ((original_size - minimized_size) / original_size * 100) if original_size > 0 else 0
+    reduction_percentage = (
+        ((original_size - minimized_size) / original_size * 100)
+        if original_size > 0
+        else 0
+    )
 
     # Append metadata about the minimization operation.
     minimized_data["_minimization_meta"] = {
         "applied_at": time.time(),
         "required_fields_only": required_fields_only,
-        "fields_retained": list(metadata_fields)
+        "fields_retained": list(metadata_fields),
     }
 
     # Log information about the data size reduction.
     _logger.info(
         "[GDPR] Data minimized: %.1fKB → %.1fKB (%.1f%% reduction) [trace_id=%s]",
-        original_size / 1024, minimized_size / 1024, reduction_percentage, trace_id
+        original_size / 1024,
+        minimized_size / 1024,
+        reduction_percentage,
+        trace_id,
     )
 
     # Record the processing event for auditing and GDPR compliance.
@@ -262,7 +286,7 @@ def minimize_extracted_data(
             processing_time=time.time() - start_time,
             file_count=1,
             entity_count=0,
-            success=True
+            success=True,
         )
     except Exception as e:
         # Log a warning if recording of processing fails.
@@ -272,7 +296,9 @@ def minimize_extracted_data(
     return minimized_data
 
 
-def _remove_unwanted_fields(metadata: Dict[str, Any], fields_to_remove: List[str], preserve_fields: List[str]) -> None:
+def _remove_unwanted_fields(
+    metadata: Dict[str, Any], fields_to_remove: List[str], preserve_fields: List[str]
+) -> None:
     """
     Remove fields from metadata that are not in the preserve list.
 
@@ -296,8 +322,11 @@ def _remove_unwanted_fields(metadata: Dict[str, Any], fields_to_remove: List[str
                 _logger.warning("Error removing field '%s': %s", field, e)
 
 
-def _sanitize_specific_fields(metadata: Dict[str, Any], fields_to_sanitize: Dict[str, str],
-                              preserve_fields: List[str]) -> None:
+def _sanitize_specific_fields(
+    metadata: Dict[str, Any],
+    fields_to_sanitize: Dict[str, str],
+    preserve_fields: List[str],
+) -> None:
     """
     Replace values of specific fields with predefined replacement values.
 
@@ -338,7 +367,11 @@ def _apply_sensitive_patterns(value: str, patterns: List[Tuple[str, str]]) -> st
     return value
 
 
-def _sanitize_all_fields(metadata: Dict[str, Any], preserve_fields: List[str], patterns: List[Tuple[str, str]]) -> None:
+def _sanitize_all_fields(
+    metadata: Dict[str, Any],
+    preserve_fields: List[str],
+    patterns: List[Tuple[str, str]],
+) -> None:
     """
     Sanitize all string fields in metadata (except those preserved) using regex patterns.
 
@@ -359,9 +392,9 @@ def _sanitize_all_fields(metadata: Dict[str, Any], preserve_fields: List[str], p
 
 
 def sanitize_document_metadata(
-        metadata: Dict[str, Any],
-        sanitize_all: bool = False,
-        preserve_fields: Optional[List[str]] = None
+    metadata: Dict[str, Any],
+    sanitize_all: bool = False,
+    preserve_fields: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Sanitize document metadata to remove potentially sensitive information.
@@ -394,9 +427,30 @@ def sanitize_document_metadata(
 
     # List of fields to remove from metadata.
     fields_to_remove = [
-        "author", "creator", "producer", "keywords", "owner", "user", "email", "phone", "address",
-        "location", "gps", "coordinates", "custom", "username", "computer", "device", "software",
-        "revision", "person", "modified_by", "thumbnail", "last_modified_by", "comment", "category"
+        "author",
+        "creator",
+        "producer",
+        "keywords",
+        "owner",
+        "user",
+        "email",
+        "phone",
+        "address",
+        "location",
+        "gps",
+        "coordinates",
+        "custom",
+        "username",
+        "computer",
+        "device",
+        "software",
+        "revision",
+        "person",
+        "modified_by",
+        "thumbnail",
+        "last_modified_by",
+        "comment",
+        "category",
     ]
     # Dictionary of fields to sanitize (replace their values).
     fields_to_sanitize = {
@@ -406,15 +460,15 @@ def sanitize_document_metadata(
         "creator": "[Document Creator]",
         "creation_date": "[Creation Date Removed]",
         "mod_date": "[Modification Date Removed]",
-        "last_modified": "[Last Modified Date Removed]"
+        "last_modified": "[Last Modified Date Removed]",
     }
     # Define sensitive patterns and their replacement strings.
     sensitive_patterns = [
-        (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL]'),
-        (r'\b(?:\+\d{1,3}[-\.\s]?)?(?:\d{1,4}[-\.\s]?){2,5}\d{1,4}\b', '[PHONE]'),
-        (r'\b\d{6}\s?\d{5}\b', '[ID_NUMBER]'),
-        (r'\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b', '[MAC_ADDRESS]'),
-        (r'\b(?:\d{1,3}\.){3}\d{1,3}\b', '[IP_ADDRESS]')
+        (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]"),
+        (r"\b(?:\+\d{1,3}[-\.\s]?)?(?:\d{1,4}[-\.\s]?){2,5}\d{1,4}\b", "[PHONE]"),
+        (r"\b\d{6}\s?\d{5}\b", "[ID_NUMBER]"),
+        (r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b", "[MAC_ADDRESS]"),
+        (r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "[IP_ADDRESS]"),
     ]
 
     # Remove unwanted metadata fields.
@@ -437,7 +491,7 @@ def sanitize_document_metadata(
             processing_time=time.time() - start_time,
             file_count=1,
             entity_count=0,
-            success=True
+            success=True,
         )
     except Exception as e:
         # Log a warning if recording the processing event fails.

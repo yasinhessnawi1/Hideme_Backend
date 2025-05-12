@@ -36,8 +36,7 @@ def validate_threshold_score(threshold: Optional[float]) -> Optional[float]:
         if threshold < 0.00 or threshold > 1.00:
             # Raise an HTTPException with status code 400 if threshold is invalid.
             raise HTTPException(
-                status_code=400,
-                detail="Threshold must be between 0.00 and 1.00."
+                status_code=400, detail="Threshold must be between 0.00 and 1.00."
             )
     # Return the provided threshold if valid.
     return threshold
@@ -87,8 +86,7 @@ def check_all_option(entity_list: List[str]) -> List[str]:
 
 
 def validate_all_engines_requested_entities(
-        requested_entities: Optional[str],
-        labels: Optional[List[str]] = None
+    requested_entities: Optional[str], labels: Optional[List[str]] = None
 ) -> List[str]:
     """
     Validate and parse the requested entities for all engines.
@@ -109,8 +107,12 @@ def validate_all_engines_requested_entities(
         # Log a warning that no entities were requested.
         log_warning("[OK] No specific entities requested, using defaults")
         # Return the default merged list of entities from all engines.
-        return list(
-            GEMINI_AVAILABLE_ENTITIES.keys()) + PRESIDIO_AVAILABLE_ENTITIES + GLINER_AVAILABLE_ENTITIES + HIDEME_AVAILABLE_ENTITIES
+        return (
+            list(GEMINI_AVAILABLE_ENTITIES.keys())
+            + PRESIDIO_AVAILABLE_ENTITIES
+            + GLINER_AVAILABLE_ENTITIES
+            + HIDEME_AVAILABLE_ENTITIES
+        )
 
     try:
         # Parse the JSON string to a Python list.
@@ -128,12 +130,16 @@ def validate_all_engines_requested_entities(
                     # Raise an HTTPException for invalid entity type.
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Invalid entity type: {entity}. Available entities: {available_entities}"
+                        detail=f"Invalid entity type: {entity}. Available entities: {available_entities}",
                     )
         else:
             # Merge default available entities for all engines.
-            available_entities = list(
-                GEMINI_AVAILABLE_ENTITIES.keys()) + PRESIDIO_AVAILABLE_ENTITIES + GLINER_AVAILABLE_ENTITIES + HIDEME_AVAILABLE_ENTITIES
+            available_entities = (
+                list(GEMINI_AVAILABLE_ENTITIES.keys())
+                + PRESIDIO_AVAILABLE_ENTITIES
+                + GLINER_AVAILABLE_ENTITIES
+                + HIDEME_AVAILABLE_ENTITIES
+            )
             # Iterate through each entity to validate against the merged list.
             for entity in entity_list:
                 # Check if entity is not in the merged available entities.
@@ -141,7 +147,7 @@ def validate_all_engines_requested_entities(
                     # Raise an HTTPException for invalid entity type.
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Invalid entity type: {entity}. Available entities: {available_entities}"
+                        detail=f"Invalid entity type: {entity}. Available entities: {available_entities}",
                     )
         # Log the successfully validated entity list.
         log_info("[OK] Validated entity list")
@@ -152,7 +158,9 @@ def validate_all_engines_requested_entities(
         # Log an error for invalid JSON format.
         log_error("[OK] Invalid JSON format in requested_entities")
         # Raise an HTTPException indicating JSON format error.
-        raise HTTPException(status_code=400, detail="Invalid JSON format in ALL_requested_entities")
+        raise HTTPException(
+            status_code=400, detail="Invalid JSON format in ALL_requested_entities"
+        )
 
 
 def validate_gemini_requested_entities(requested_entities: Optional[str]) -> List[str]:
@@ -189,9 +197,17 @@ def validate_gemini_requested_entities(requested_entities: Optional[str]) -> Lis
                 # Otherwise, append the entity to the validated list.
                 validated_entities.append(entity)
         # Filter the validated entities to only those in available Gemini entities.
-        filtered_entities = [entity for entity in validated_entities if entity in GEMINI_AVAILABLE_ENTITIES]
+        filtered_entities = [
+            entity
+            for entity in validated_entities
+            if entity in GEMINI_AVAILABLE_ENTITIES
+        ]
         # Identify any invalid entities not present in Gemini available entities.
-        invalid_entities = [entity for entity in validated_entities if entity not in GEMINI_AVAILABLE_ENTITIES]
+        invalid_entities = [
+            entity
+            for entity in validated_entities
+            if entity not in GEMINI_AVAILABLE_ENTITIES
+        ]
         # If there are any invalid entities, log a warning.
         if invalid_entities:
             log_warning("[Gemini] Removing invalid entities")
@@ -204,10 +220,14 @@ def validate_gemini_requested_entities(requested_entities: Optional[str]) -> Lis
         # Log an error if JSON parsing fails.
         log_error("[Gemini] Invalid JSON format in requested_entities")
         # Raise an HTTPException to indicate the malformed JSON.
-        raise HTTPException(status_code=400, detail="Invalid JSON format in gemini requested_entities")
+        raise HTTPException(
+            status_code=400, detail="Invalid JSON format in gemini requested_entities"
+        )
 
 
-def validate_presidio_requested_entities(requested_entities: Optional[str]) -> List[str]:
+def validate_presidio_requested_entities(
+    requested_entities: Optional[str],
+) -> List[str]:
     """
     Validate and parse the requested entities for the Presidio engine.
 
@@ -241,9 +261,17 @@ def validate_presidio_requested_entities(requested_entities: Optional[str]) -> L
                 # Otherwise, append the entity as-is.
                 validated_entities.append(entity)
         # Filter the validated entities to include only valid Presidio entities.
-        filtered_entities = [entity for entity in validated_entities if entity in PRESIDIO_AVAILABLE_ENTITIES]
+        filtered_entities = [
+            entity
+            for entity in validated_entities
+            if entity in PRESIDIO_AVAILABLE_ENTITIES
+        ]
         # Identify any entities that are invalid.
-        invalid_entities = [entity for entity in validated_entities if entity not in PRESIDIO_AVAILABLE_ENTITIES]
+        invalid_entities = [
+            entity
+            for entity in validated_entities
+            if entity not in PRESIDIO_AVAILABLE_ENTITIES
+        ]
         # Log a warning if any invalid entities are found.
         if invalid_entities:
             log_warning("[Presidio] Removing invalid entities")
@@ -256,7 +284,9 @@ def validate_presidio_requested_entities(requested_entities: Optional[str]) -> L
         # Log an error message for invalid JSON.
         log_error("[Presidio] Invalid JSON format in requested_entities")
         # Raise an HTTPException indicating invalid JSON.
-        raise HTTPException(status_code=400, detail="Invalid JSON format in presidio requested_entities")
+        raise HTTPException(
+            status_code=400, detail="Invalid JSON format in presidio requested_entities"
+        )
 
 
 def validate_gliner_requested_entities(requested_entities: Optional[str]) -> List[str]:
@@ -293,9 +323,17 @@ def validate_gliner_requested_entities(requested_entities: Optional[str]) -> Lis
                 # Otherwise, append the entity to the validated list.
                 validated_entities.append(entity)
         # Filter the validated entities to include only GLiNER valid entities.
-        filtered_entities = [entity for entity in validated_entities if entity in GLINER_AVAILABLE_ENTITIES]
+        filtered_entities = [
+            entity
+            for entity in validated_entities
+            if entity in GLINER_AVAILABLE_ENTITIES
+        ]
         # Identify any entities that are invalid.
-        invalid_entities = [entity for entity in validated_entities if entity not in GLINER_AVAILABLE_ENTITIES]
+        invalid_entities = [
+            entity
+            for entity in validated_entities
+            if entity not in GLINER_AVAILABLE_ENTITIES
+        ]
         # Log a warning if there are any invalid entities.
         if invalid_entities:
             log_warning("[Gliner] Removing invalid entities")
@@ -308,7 +346,9 @@ def validate_gliner_requested_entities(requested_entities: Optional[str]) -> Lis
         # Log an error for malformed JSON.
         log_error("[Gliner] Invalid JSON format in requested_entities")
         # Raise an HTTPException indicating the JSON format error.
-        raise HTTPException(status_code=400, detail="Invalid JSON format in gliner requested_entities")
+        raise HTTPException(
+            status_code=400, detail="Invalid JSON format in gliner requested_entities"
+        )
 
 
 def validate_hideme_requested_entities(requested_entities: Optional[str]) -> List[str]:
@@ -345,9 +385,17 @@ def validate_hideme_requested_entities(requested_entities: Optional[str]) -> Lis
                 # Otherwise, append the entity as-is.
                 validated_entities.append(entity)
         # Filter out entities not present in HIDEME available entities.
-        filtered_entities = [entity for entity in validated_entities if entity in HIDEME_AVAILABLE_ENTITIES]
+        filtered_entities = [
+            entity
+            for entity in validated_entities
+            if entity in HIDEME_AVAILABLE_ENTITIES
+        ]
         # Determine any invalid HIDEME entities.
-        invalid_entities = [entity for entity in validated_entities if entity not in HIDEME_AVAILABLE_ENTITIES]
+        invalid_entities = [
+            entity
+            for entity in validated_entities
+            if entity not in HIDEME_AVAILABLE_ENTITIES
+        ]
         # Log a warning if any invalid entities are found.
         if invalid_entities:
             log_warning("[Hideme] Removing invalid entities")
@@ -360,4 +408,6 @@ def validate_hideme_requested_entities(requested_entities: Optional[str]) -> Lis
         # Log an error if JSON parsing fails.
         log_error("[Hideme] Invalid JSON format in requested_entities")
         # Raise an HTTPException to indicate invalid JSON format.
-        raise HTTPException(status_code=400, detail="Invalid JSON format in hideme requested_entities")
+        raise HTTPException(
+            status_code=400, detail="Invalid JSON format in hideme requested_entities"
+        )

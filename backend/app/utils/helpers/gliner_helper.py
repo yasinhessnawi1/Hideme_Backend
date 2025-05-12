@@ -21,6 +21,7 @@ class GLiNERHelper:
     - Build sentence groups that obey a maximum character limit.
     - Split an entire text into groups of sentences suitable for API processing.
     """
+
     # Protected cache to store processed text results.
     _gliner_cache: Dict[str, Any] = {}
     _hideme_cache: Dict[str, Any] = {}
@@ -41,9 +42,9 @@ class GLiNERHelper:
         key_data = text
         # If requested_entities is provided, sort them and append to the key data.
         if requested_entities is not None:
-            key_data += '|' + ','.join(sorted(requested_entities))
+            key_data += "|" + ",".join(sorted(requested_entities))
         # Generate an MD5 hash of the combined key data.
-        return hashlib.md5(key_data.encode('utf-8')).hexdigest()
+        return hashlib.md5(key_data.encode("utf-8")).hexdigest()
 
     @staticmethod
     def get_cached_result(key: str, cache_namespace: str = "gliner") -> Optional[Any]:
@@ -59,7 +60,9 @@ class GLiNERHelper:
             return None
 
     @staticmethod
-    def set_cached_result(key: str, value: Any, cache_namespace: str = "gliner") -> None:
+    def set_cached_result(
+        key: str, value: Any, cache_namespace: str = "gliner"
+    ) -> None:
         """
         Store a result in the cache under the specified namespace.
         """
@@ -145,8 +148,9 @@ class GLiNERHelper:
         """
         # Import the regular expressions module.
         import re
+
         # Split the text based on punctuation marks followed by whitespace.
-        raw_sentences = re.split(r'(?<=[.!?])\s+', text)
+        raw_sentences = re.split(r"(?<=[.!?])\s+", text)
         # Remove any extra whitespace from each sentence and filter out empty strings.
         return [s.strip() for s in raw_sentences if s.strip()]
 
@@ -185,7 +189,9 @@ class GLiNERHelper:
                     # Reset the current group and length.
                     current_group, current_length = [], 0
                 # Split the long sentence into manageable chunks.
-                groups.extend(GLiNERHelper.chunk_large_sentence_by_char(sent, max_chars))
+                groups.extend(
+                    GLiNERHelper.chunk_large_sentence_by_char(sent, max_chars)
+                )
                 # Continue to the next sentence.
                 continue
 

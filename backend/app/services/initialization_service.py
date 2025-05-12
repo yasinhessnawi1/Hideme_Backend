@@ -19,13 +19,25 @@ from typing import Dict, Any, Optional, List
 
 from backend.app.configs.config_singleton import get_config
 from backend.app.configs.gdpr_config import MAX_DETECTOR_CACHE_SIZE
-from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_AVAILABLE_ENTITIES, GLINER_MODEL_PATH
-from backend.app.configs.hideme_config import HIDEME_MODEL_NAME, HIDEME_AVAILABLE_ENTITIES, HIDEME_MODEL_PATH
+from backend.app.configs.gliner_config import (
+    GLINER_MODEL_NAME,
+    GLINER_AVAILABLE_ENTITIES,
+    GLINER_MODEL_PATH,
+)
+from backend.app.configs.hideme_config import (
+    HIDEME_MODEL_NAME,
+    HIDEME_AVAILABLE_ENTITIES,
+    HIDEME_MODEL_PATH,
+)
 from backend.app.entity_detection import EntityDetectionEngine, GlinerEntityDetector
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.system_utils.memory_management import memory_monitor
-from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority, AsyncTimeoutLock
+from backend.app.utils.system_utils.synchronization_utils import (
+    TimeoutLock,
+    LockPriority,
+    AsyncTimeoutLock,
+)
 
 # Configure logger for the module.
 logger = logging.getLogger(__name__)
@@ -64,18 +76,24 @@ class InitializationService:
                 Uses configuration default if not provided.
         """
         # Set max cache size from provided argument or configuration default.
-        self.max_cache_size = max_cache_size or get_config("max_detector_cache_size", MAX_DETECTOR_CACHE_SIZE)
+        self.max_cache_size = max_cache_size or get_config(
+            "max_detector_cache_size", MAX_DETECTOR_CACHE_SIZE
+        )
         # Create a synchronous lock for protecting cache operations.
-        self._lock = TimeoutLock("detector_cache_lock", priority=LockPriority.HIGH, timeout=15.0)
+        self._lock = TimeoutLock(
+            "detector_cache_lock", priority=LockPriority.HIGH, timeout=15.0
+        )
         # Create an asynchronous lock for async operations.
-        self._async_lock = AsyncTimeoutLock("detector_async_lock", priority=LockPriority.HIGH, timeout=15.0)
+        self._async_lock = AsyncTimeoutLock(
+            "detector_async_lock", priority=LockPriority.HIGH, timeout=15.0
+        )
         # Initialize the initialization status for each detector type.
         self._initialization_status: Dict[str, bool] = {
             "presidio": False,
             "gemini": False,
             "gliner": False,
             "hideme": False,
-            "hybrid": False
+            "hybrid": False,
         }
         # Initialize the Presidio detector cache.
         self._presidio_detector = None
@@ -92,10 +110,12 @@ class InitializationService:
             "presidio": {"uses": 0, "last_used": None},
             "gemini": {"uses": 0, "last_used": None},
             "gliner": {},
-            "hideme": {}
+            "hideme": {},
         }
         # Log the service startup with the set maximum cache size.
-        log_info(f"Initialization service started with max cache size: {self.max_cache_size}")
+        log_info(
+            f"Initialization service started with max cache size: {self.max_cache_size}"
+        )
 
     async def initialize_detectors_lazy(self):
         """
@@ -116,12 +136,18 @@ class InitializationService:
             # Optionally initialize HIDEME detector if conditions are met.
             await self._maybe_lazy_init_hideme()
             # Log successful completion of lazy initialization.
-            log_info("[STARTUP] Lazy initialization of detectors completed successfully.")
+            log_info(
+                "[STARTUP] Lazy initialization of detectors completed successfully."
+            )
         except Exception as exc:
             # Handle any processing error that occurs during lazy initialization.
-            SecurityAwareErrorHandler().log_processing_error(exc, "initialize_detectors_lazy")
+            SecurityAwareErrorHandler().log_processing_error(
+                exc, "initialize_detectors_lazy"
+            )
             # Log the exception message.
-            log_error(f"[STARTUP] Error during detector lazy initialization: {str(exc)}")
+            log_error(
+                f"[STARTUP] Error during detector lazy initialization: {str(exc)}"
+            )
 
     async def _lazy_init_presidio(self):
         """
@@ -131,7 +157,9 @@ class InitializationService:
         log_info("[STARTUP] Lazily initializing Presidio detector...")
         try:
             # Run the Presidio initialization in a background thread.
-            presidio_detector = await asyncio.to_thread(self._initialize_presidio_detector)
+            presidio_detector = await asyncio.to_thread(
+                self._initialize_presidio_detector
+            )
             # Store the resulting Presidio detector.
             self._presidio_detector = presidio_detector
             # Mark the Presidio detector as initialized.
@@ -142,7 +170,9 @@ class InitializationService:
             # Log any processing errors that occur.
             SecurityAwareErrorHandler().log_processing_error(exc, "_lazy_init_presidio")
             # Log the error message.
-            log_error(f"[STARTUP] Error during Presidio lazy initialization: {str(exc)}")
+            log_error(
+                f"[STARTUP] Error during Presidio lazy initialization: {str(exc)}"
+            )
 
     async def _lazy_init_gemini(self):
         """
@@ -178,7 +208,7 @@ class InitializationService:
                 gliner_detector = await asyncio.to_thread(
                     self._initialize_gliner_detector,
                     GLINER_MODEL_NAME,
-                    GLINER_AVAILABLE_ENTITIES
+                    GLINER_AVAILABLE_ENTITIES,
                 )
                 # Generate a cache key based on available entities.
                 cache_key = self._get_gliner_cache_key(GLINER_AVAILABLE_ENTITIES)
@@ -190,12 +220,18 @@ class InitializationService:
                 log_info("[STARTUP] GLiNER detector lazy initialization complete.")
             except Exception as exc:
                 # Log any processing errors that occur.
-                SecurityAwareErrorHandler().log_processing_error(exc, "_maybe_lazy_init_gliner")
+                SecurityAwareErrorHandler().log_processing_error(
+                    exc, "_maybe_lazy_init_gliner"
+                )
                 # Log the error message.
-                log_error(f"[STARTUP] Error during GLiNER lazy initialization: {str(exc)}")
+                log_error(
+                    f"[STARTUP] Error during GLiNER lazy initialization: {str(exc)}"
+                )
         else:
             # Log that the GLiNER initialization is skipped due to memory pressure.
-            log_info("[STARTUP] Skipping GLiNER lazy initialization due to memory pressure.")
+            log_info(
+                "[STARTUP] Skipping GLiNER lazy initialization due to memory pressure."
+            )
 
     async def _maybe_lazy_init_hideme(self):
         """
@@ -211,7 +247,7 @@ class InitializationService:
                 hideme_detector = await asyncio.to_thread(
                     self._initialize_hideme_detector,
                     HIDEME_MODEL_NAME,
-                    HIDEME_AVAILABLE_ENTITIES
+                    HIDEME_AVAILABLE_ENTITIES,
                 )
                 # Generate a cache key based on HIDEME's available entities.
                 cache_key = self._get_hideme_cache_key(HIDEME_AVAILABLE_ENTITIES)
@@ -223,12 +259,18 @@ class InitializationService:
                 log_info("[STARTUP] HIDEME detector lazy initialization complete.")
             except Exception as exc:
                 # Log any processing errors that occur.
-                SecurityAwareErrorHandler().log_processing_error(exc, "_maybe_lazy_init_hideme")
+                SecurityAwareErrorHandler().log_processing_error(
+                    exc, "_maybe_lazy_init_hideme"
+                )
                 # Log the error message.
-                log_error(f"[STARTUP] Error during HIDEME lazy initialization: {str(exc)}")
+                log_error(
+                    f"[STARTUP] Error during HIDEME lazy initialization: {str(exc)}"
+                )
         else:
             # Log that the HIDEME initialization is skipped due to memory pressure.
-            log_info("[STARTUP] Skipping HIDEME lazy initialization due to memory pressure.")
+            log_info(
+                "[STARTUP] Skipping HIDEME lazy initialization due to memory pressure."
+            )
 
     def _initialize_presidio_detector(self):
         """
@@ -244,19 +286,24 @@ class InitializationService:
         try:
             # Import the Presidio detector from its module.
             from backend.app.entity_detection.presidio import PresidioEntityDetector
+
             # Instantiate the Presidio detector.
             detector = PresidioEntityDetector()
             # Mark the Presidio detector as successfully initialized.
             self._initialization_status["presidio"] = True
             # Log the time taken to initialize the Presidio detector.
-            log_info(f"Presidio detector initialized in {time.time() - start_time:.2f}s")
+            log_info(
+                f"Presidio detector initialized in {time.time() - start_time:.2f}s"
+            )
             # Return the initialized detector.
             return detector
         except Exception as exc:
             # Mark the Presidio detector as not initialized.
             self._initialization_status["presidio"] = False
             # Log the processing error.
-            SecurityAwareErrorHandler().log_processing_error(exc, "_initialize_presidio_detector")
+            SecurityAwareErrorHandler().log_processing_error(
+                exc, "_initialize_presidio_detector"
+            )
             # Log the error message.
             log_error(f"Error initializing Presidio detector: {str(exc)}")
             # Propagate the exception.
@@ -276,6 +323,7 @@ class InitializationService:
         try:
             # Import the Gemini detector from its module.
             from backend.app.entity_detection.gemini import GeminiEntityDetector
+
             # Instantiate the Gemini detector.
             detector = GeminiEntityDetector()
             # Mark the Gemini detector as successfully initialized.
@@ -288,7 +336,9 @@ class InitializationService:
             # Mark the Gemini detector as not initialized.
             self._initialization_status["gemini"] = False
             # Log the processing error.
-            SecurityAwareErrorHandler().log_processing_error(exc, "_initialize_gemini_detector")
+            SecurityAwareErrorHandler().log_processing_error(
+                exc, "_initialize_gemini_detector"
+            )
             # Log the error message.
             log_error(f"Error initializing Gemini detector: {str(exc)}")
             # Propagate the exception.
@@ -314,7 +364,7 @@ class InitializationService:
             detector = GlinerEntityDetector(
                 model_name=model_name,
                 entities=entities or GLINER_AVAILABLE_ENTITIES,
-                local_model_path=GLINER_MODEL_PATH
+                local_model_path=GLINER_MODEL_PATH,
             )
             # Mark the GLiNER detector as successfully initialized.
             self._initialization_status["gliner"] = True
@@ -326,7 +376,9 @@ class InitializationService:
             # Mark the GLiNER detector as not initialized.
             self._initialization_status["gliner"] = False
             # Log the processing error.
-            SecurityAwareErrorHandler().log_processing_error(exc, "_initialize_gliner_detector")
+            SecurityAwareErrorHandler().log_processing_error(
+                exc, "_initialize_gliner_detector"
+            )
             # Log the error message.
             log_error(f"Error initializing GLiNER detector: {str(exc)}")
             # Propagate the exception.
@@ -350,11 +402,12 @@ class InitializationService:
         try:
             # Import the HIDEME detector from its module.
             from backend.app.entity_detection.hideme import HidemeEntityDetector
+
             # Instantiate the HIDEME detector.
             detector = HidemeEntityDetector(
                 model_name=HIDEME_MODEL_NAME,
                 entities=entities or HIDEME_AVAILABLE_ENTITIES,
-                local_model_path=HIDEME_MODEL_PATH
+                local_model_path=HIDEME_MODEL_PATH,
             )
             # Mark the HIDEME detector as successfully initialized.
             self._initialization_status["hideme"] = True
@@ -366,7 +419,9 @@ class InitializationService:
             # Mark the HIDEME detector as not initialized.
             self._initialization_status["hideme"] = False
             # Log the processing error.
-            SecurityAwareErrorHandler().log_processing_error(exc, "_initialize_hideme_detector")
+            SecurityAwareErrorHandler().log_processing_error(
+                exc, "_initialize_hideme_detector"
+            )
             # Log the error message.
             log_error(f"Error initializing HIDEME detector: {str(exc)}")
             # Propagate the exception.
@@ -389,6 +444,7 @@ class InitializationService:
         try:
             # Import the Hybrid detector from its module.
             from backend.app.entity_detection.hybrid import HybridEntityDetector
+
             # Instantiate the Hybrid detector.
             detector = HybridEntityDetector(config)
             # Mark the Hybrid detector as successfully initialized.
@@ -401,7 +457,9 @@ class InitializationService:
             # Mark the Hybrid detector as not initialized.
             self._initialization_status["hybrid"] = False
             # Log the processing error.
-            SecurityAwareErrorHandler().log_processing_error(exc, "_initialize_hybrid_detector")
+            SecurityAwareErrorHandler().log_processing_error(
+                exc, "_initialize_hybrid_detector"
+            )
             # Log the error message.
             log_error(f"Error initializing Hybrid detector: {str(exc)}")
             # Propagate the exception.
@@ -416,10 +474,14 @@ class InitializationService:
         """
         try:
             # If the Presidio detector supports asynchronous shutdown, call its shutdown.
-            if self._presidio_detector and hasattr(self._presidio_detector, "shutdown_async"):
+            if self._presidio_detector and hasattr(
+                self._presidio_detector, "shutdown_async"
+            ):
                 await self._presidio_detector.shutdown_async()
             # If the Gemini detector supports asynchronous shutdown, call its shutdown.
-            if self._gemini_detector and hasattr(self._gemini_detector, "shutdown_async"):
+            if self._gemini_detector and hasattr(
+                self._gemini_detector, "shutdown_async"
+            ):
                 await self._gemini_detector.shutdown_async()
             # Loop over GLiNER detectors and call asynchronous shutdown if supported.
             for detector in self._gliner_detectors.values():
@@ -504,7 +566,9 @@ class InitializationService:
         # Delegate to the generic get_detector method for the HYBRID engine.
         return self.get_detector(EntityDetectionEngine.HYBRID, config)
 
-    def get_detector(self, engine: EntityDetectionEngine, config: Optional[Dict[str, Any]] = None):
+    def get_detector(
+        self, engine: EntityDetectionEngine, config: Optional[Dict[str, Any]] = None
+    ):
         """
         Retrieve a detector instance for the specified engine using lock management.
         Performs a quick cache check and initializes the detector if necessary.
@@ -557,7 +621,9 @@ class InitializationService:
         # Step 4: Fallback initialization if locks cannot be acquired.
         return self._fallback_init(engine, config)
 
-    def _quick_check_cache(self, engine: EntityDetectionEngine, config: Dict[str, Any]) -> Optional[Any]:
+    def _quick_check_cache(
+        self, engine: EntityDetectionEngine, config: Dict[str, Any]
+    ) -> Optional[Any]:
         """
         Quickly check if a detector instance is cached.
         If found, update its usage metrics.
@@ -614,7 +680,9 @@ class InitializationService:
             # Return False if lock acquisition times out.
             return False
 
-    def _initialize_and_store_detector(self, engine: EntityDetectionEngine, config: Dict[str, Any]) -> Any:
+    def _initialize_and_store_detector(
+        self, engine: EntityDetectionEngine, config: Dict[str, Any]
+    ) -> Any:
         """
         Under lock, initialize the requested detector and store it in the cache.
 
@@ -765,7 +833,9 @@ class InitializationService:
         # Return the new detector.
         return new_det
 
-    def _fallback_init(self, engine: EntityDetectionEngine, config: Dict[str, Any]) -> Any:
+    def _fallback_init(
+        self, engine: EntityDetectionEngine, config: Dict[str, Any]
+    ) -> Any:
         """
         Fallback initialization if lock acquisition fails; directly initialize detector without locking.
 
@@ -777,7 +847,9 @@ class InitializationService:
             The initialized detector instance.
         """
         # Log a warning that a fallback initialization is being used.
-        log_warning("Timeout acquiring detector lock - proceeding with fallback initialization")
+        log_warning(
+            "Timeout acquiring detector lock - proceeding with fallback initialization"
+        )
         # For PRESIDIO, return the cached instance if available or initialize a new one.
         if engine == EntityDetectionEngine.PRESIDIO:
             if self._presidio_detector:
@@ -794,14 +866,18 @@ class InitializationService:
             if key in self._gliner_detectors:
                 return self._gliner_detectors[key]
             model_name = config.get("model_name", GLINER_MODEL_NAME)
-            return self._initialize_gliner_detector(model_name, config.get("entities", []))
+            return self._initialize_gliner_detector(
+                model_name, config.get("entities", [])
+            )
         # For HIDEME, either return the cached detector or initialize a new one.
         if engine == EntityDetectionEngine.HIDEME:
             key = self._get_hideme_cache_key(config.get("entities", []))
             if key in self._hideme_detectors:
                 return self._hideme_detectors[key]
             model_name = config.get("model_name", HIDEME_MODEL_NAME)
-            return self._initialize_hideme_detector(model_name, config.get("entities", []))
+            return self._initialize_hideme_detector(
+                model_name, config.get("entities", [])
+            )
         # For HYBRID, either return the cached detector or initialize a new one.
         if engine == EntityDetectionEngine.HYBRID:
             key = self._get_hybrid_cache_key(config)
@@ -826,7 +902,9 @@ class InitializationService:
             # Ensure the category exists in the metrics.
             self._usage_metrics.setdefault(category, {})
             # Ensure the specific detector key is initialized.
-            self._usage_metrics[category].setdefault(detector_key, {"uses": 0, "last_used": None})
+            self._usage_metrics[category].setdefault(
+                detector_key, {"uses": 0, "last_used": None}
+            )
             # Increment the usage count.
             self._usage_metrics[category][detector_key]["uses"] += 1
             # Update the last used timestamp.
@@ -851,7 +929,9 @@ class InitializationService:
             self._increment_usage_metrics(detector_key, current_time)
         except Exception as exc:
             # Log any non-critical processing error.
-            SecurityAwareErrorHandler().log_processing_error(exc, "_update_usage_metrics_no_lock")
+            SecurityAwareErrorHandler().log_processing_error(
+                exc, "_update_usage_metrics_no_lock"
+            )
             log_warning(f"Exception updating usage metrics (non-critical): {exc}")
 
     def _evict_least_recently_used(self, detector_type: str):
@@ -875,7 +955,10 @@ class InitializationService:
             if not category_metrics:
                 return
             # Find the detector key with the smallest "last_used" value.
-            lru_item = min(category_metrics.items(), key=lambda item: item[1].get("last_used", float('inf')))
+            lru_item = min(
+                category_metrics.items(),
+                key=lambda item: item[1].get("last_used", float("inf")),
+            )
             # Extract the actual cache key (remove prefix).
             lru_key = lru_item[0].split("_", 1)[-1]
             if detector_type == "gliner" and lru_key in self._gliner_detectors:
@@ -970,8 +1053,12 @@ class InitializationService:
                 return dict(self._initialization_status)
         except Exception as exc:
             # Log any processing errors encountered.
-            SecurityAwareErrorHandler().log_processing_error(exc, "get_initialization_status")
-            log_warning(f"Lock acquisition failed in get_initialization_status: {str(exc)}")
+            SecurityAwareErrorHandler().log_processing_error(
+                exc, "get_initialization_status"
+            )
+            log_warning(
+                f"Lock acquisition failed in get_initialization_status: {str(exc)}"
+            )
             # Return the initialization status regardless.
             return dict(self._initialization_status)
 
@@ -994,12 +1081,14 @@ class InitializationService:
                     # Include GLiNER metrics if available.
                     if "gliner" in self._usage_metrics:
                         metrics_copy["gliner"] = {
-                            key: dict(val) for key, val in self._usage_metrics["gliner"].items()
+                            key: dict(val)
+                            for key, val in self._usage_metrics["gliner"].items()
                         }
                     # Include HIDEME metrics if available.
                     if "hideme" in self._usage_metrics:
                         metrics_copy["hideme"] = {
-                            key: dict(val) for key, val in self._usage_metrics["hideme"].items()
+                            key: dict(val)
+                            for key, val in self._usage_metrics["hideme"].items()
                         }
                     # Return the complete metrics copy.
                     return metrics_copy
@@ -1030,11 +1119,11 @@ class InitializationService:
                 try:
                     # Calculate the total cache size from all detector caches.
                     cache_size = (
-                            (1 if self._presidio_detector else 0) +
-                            (1 if self._gemini_detector else 0) +
-                            len(self._gliner_detectors) +
-                            len(self._hideme_detectors) +
-                            len(self._hybrid_detectors)
+                        (1 if self._presidio_detector else 0)
+                        + (1 if self._gemini_detector else 0)
+                        + len(self._gliner_detectors)
+                        + len(self._hideme_detectors)
+                        + len(self._hybrid_detectors)
                     )
                     # Return the health status with cache metrics.
                     return {
@@ -1042,7 +1131,7 @@ class InitializationService:
                         "timestamp": datetime.now().isoformat(),
                         "cache_size": cache_size,
                         "max_cache_size": self.max_cache_size,
-                        "detectors": dict(self._initialization_status)
+                        "detectors": dict(self._initialization_status),
                     }
                 finally:
                     # Release the lock.
@@ -1055,7 +1144,7 @@ class InitializationService:
                     "cache_size": -1,
                     "max_cache_size": self.max_cache_size,
                     "detectors": dict(self._initialization_status),
-                    "error": "Lock acquisition timeout"
+                    "error": "Lock acquisition timeout",
                 }
         except Exception as exc:
             # Log any processing errors that occur during the health check.
@@ -1065,7 +1154,7 @@ class InitializationService:
             return {
                 "health": "error",
                 "timestamp": datetime.now().isoformat(),
-                "error": str(exc)
+                "error": str(exc),
             }
 
 

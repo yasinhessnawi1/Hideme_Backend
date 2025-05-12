@@ -26,10 +26,10 @@ router = APIRouter()
 @limiter.limit("10/minute")
 @memory_optimized(threshold_mb=100)
 async def pdf_redact(
-        request: Request,
-        file: UploadFile = File(...),
-        redaction_mapping: str = Form(None),
-        remove_images: bool = Form(False)
+    request: Request,
+    file: UploadFile = File(...),
+    redaction_mapping: str = Form(None),
+    remove_images: bool = Form(False),
 ) -> Response:
     """
     Apply redactions to a PDF file using the provided redaction mapping.

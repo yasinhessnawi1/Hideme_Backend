@@ -18,7 +18,7 @@ def valid_pdf_bytes():
         "subject": "Testing Metadata",
         "keywords": "PDF, Test, Metadata",
         "producer": "PyMuPDF",
-        "creator": "PyMuPDF"
+        "creator": "PyMuPDF",
     }
 
     for i in range(15):
@@ -166,7 +166,9 @@ class TestPDFTextExtractor:
     def test_close_error(self, valid_pdf_bytes):
         extractor = PDFTextExtractor(valid_pdf_bytes)
 
-        with patch.object(extractor.pdf_document, "close", side_effect=Exception("Close error")):
+        with patch.object(
+            extractor.pdf_document, "close", side_effect=Exception("Close error")
+        ):
             extractor.close()
 
     # Test single-page PDF extraction
@@ -198,7 +200,9 @@ class TestPDFTextExtractor:
     @pytest.mark.asyncio
     @patch("backend.app.document_processing.pdf_extractor.log_info")
     async def test_batch_text_extraction_valid_files(self, mock_log, valid_pdf_bytes):
-        result = await PDFTextExtractor.extract_batch_text([valid_pdf_bytes, valid_pdf_bytes])
+        result = await PDFTextExtractor.extract_batch_text(
+            [valid_pdf_bytes, valid_pdf_bytes]
+        )
 
         assert len(result) == 2
 
@@ -213,8 +217,12 @@ class TestPDFTextExtractor:
 
     # Test batch text extraction handles corrupted PDF
     @pytest.mark.asyncio
-    @patch("backend.app.document_processing.pdf_extractor.SecurityAwareErrorHandler.log_processing_error")
-    async def test_batch_text_extraction_invalid_pdf(self, mock_log_error, corrupted_pdf_bytes):
+    @patch(
+        "backend.app.document_processing.pdf_extractor.SecurityAwareErrorHandler.log_processing_error"
+    )
+    async def test_batch_text_extraction_invalid_pdf(
+        self, mock_log_error, corrupted_pdf_bytes
+    ):
         result = await PDFTextExtractor.extract_batch_text([corrupted_pdf_bytes])
 
         assert "error" in result[0][1]
@@ -225,9 +233,9 @@ class TestPDFTextExtractor:
 
         call_args = mock_log_error.call_args_list[1][0]
 
-        assert call_args[1] == 'batch_pdf_extraction'
+        assert call_args[1] == "batch_pdf_extraction"
 
-        assert str(call_args[0]) == 'Failed to open stream'
+        assert str(call_args[0]) == "Failed to open stream"
 
     # Test batch text extraction for empty PDF
     @pytest.mark.asyncio
@@ -245,14 +253,18 @@ class TestPDFTextExtractor:
     @patch("backend.app.document_processing.pdf_extractor.log_warning")
     @patch("backend.app.document_processing.pdf_extractor.log_error")
     @patch("backend.app.document_processing.pdf_extractor.log_info")
-    async def test_process_page_timeout(self, mock_log_info, mock_log_error, mock_log_warning, valid_pdf_bytes):
+    async def test_process_page_timeout(
+        self, mock_log_info, mock_log_error, mock_log_warning, valid_pdf_bytes
+    ):
         extractor = PDFTextExtractor(valid_pdf_bytes)
 
         extracted_data = {}
 
         empty_pages = []
 
-        with patch.object(extractor, "_process_page", side_effect=Exception("Test error")):
+        with patch.object(
+            extractor, "_process_page", side_effect=Exception("Test error")
+        ):
             extractor._extract_pages_in_batches(extracted_data, empty_pages)
 
         mock_log_error.assert_called()
@@ -263,18 +275,24 @@ class TestPDFTextExtractor:
     @patch("backend.app.document_processing.pdf_extractor.log_warning")
     @patch("backend.app.document_processing.pdf_extractor.log_error")
     @patch("backend.app.document_processing.pdf_extractor.log_info")
-    def test_process_page_batch_timeout(self, mock_log_info, mock_log_error, mock_log_warning, valid_pdf_bytes):
+    def test_process_page_batch_timeout(
+        self, mock_log_info, mock_log_error, mock_log_warning, valid_pdf_bytes
+    ):
         extractor = PDFTextExtractor(valid_pdf_bytes)
 
         extracted_data = {}
 
         empty_pages = []
 
-        with patch.object(extractor, "_process_page", side_effect=TimeoutError("Batch timeout")):
+        with patch.object(
+            extractor, "_process_page", side_effect=TimeoutError("Batch timeout")
+        ):
             extractor.page_batch_size = 1
 
             extractor._extract_pages_in_batches(extracted_data, empty_pages)
 
         mock_log_error.assert_called()
 
-        assert "[ERROR] Error processing page 14: Batch timeout" in str(mock_log_error.call_args[0][0])
+        assert "[ERROR] Error processing page 14: Batch timeout" in str(
+            mock_log_error.call_args[0][0]
+        )

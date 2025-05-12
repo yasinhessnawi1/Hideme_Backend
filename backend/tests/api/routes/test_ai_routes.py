@@ -13,7 +13,9 @@ class TestAIDetectRouter:
     @pytest.mark.asyncio
     @patch("backend.app.services.ai_detect_service.AIDetectService.detect")
     @patch("backend.app.api.routes.ai_routes.validate_threshold_score")
-    async def test_ai_detect_sensitive_success(self, mock_validate_threshold_score, mock_detect):
+    async def test_ai_detect_sensitive_success(
+        self, mock_validate_threshold_score, mock_detect
+    ):
         mock_validate_threshold_score.return_value = None
 
         mock_result = MagicMock()
@@ -22,9 +24,9 @@ class TestAIDetectRouter:
 
         mock_detect.return_value = mock_result
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ai/detect", files=files, data={'threshold': 0.5})
+        response = client.post("/ai/detect", files=files, data={"threshold": 0.5})
 
         # Ensure the threshold validation was called
         mock_validate_threshold_score.assert_called_once_with(0.5)
@@ -39,12 +41,16 @@ class TestAIDetectRouter:
     @pytest.mark.asyncio
     @patch("backend.app.services.ai_detect_service.AIDetectService.detect")
     @patch("backend.app.api.routes.ai_routes.validate_threshold_score")
-    async def test_ai_detect_sensitive_invalid_threshold(self, mock_validate_threshold_score, mock_detect):
-        mock_validate_threshold_score.side_effect = HTTPException(status_code=400, detail="Invalid threshold")
+    async def test_ai_detect_sensitive_invalid_threshold(
+        self, mock_validate_threshold_score, mock_detect
+    ):
+        mock_validate_threshold_score.side_effect = HTTPException(
+            status_code=400, detail="Invalid threshold"
+        )
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ai/detect", files=files, data={'threshold': 2.0})
+        response = client.post("/ai/detect", files=files, data={"threshold": 2.0})
 
         assert response.status_code == 400
 
@@ -58,9 +64,12 @@ class TestAIDetectRouter:
     @pytest.mark.asyncio
     @patch("backend.app.services.ai_detect_service.AIDetectService.detect")
     @patch("backend.app.api.routes.ai_routes.validate_threshold_score")
-    @patch("backend.app.api.routes.ai_routes.SecurityAwareErrorHandler.handle_safe_error")
-    async def test_ai_detect_sensitive_internal_error(self, mock_handle_safe_error, mock_validate_threshold_score,
-                                                      mock_detect):
+    @patch(
+        "backend.app.api.routes.ai_routes.SecurityAwareErrorHandler.handle_safe_error"
+    )
+    async def test_ai_detect_sensitive_internal_error(
+        self, mock_handle_safe_error, mock_validate_threshold_score, mock_detect
+    ):
         mock_validate_threshold_score.return_value = None
         mock_detect.side_effect = Exception("Internal error")
 
@@ -70,13 +79,13 @@ class TestAIDetectRouter:
                 "error": "Internal error",
                 "error_id": "mock_id",
                 "error_type": "Exception",
-                "status": "error"
-            }
+                "status": "error",
+            },
         )
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ai/detect", files=files, data={'threshold': 0.7})
+        response = client.post("/ai/detect", files=files, data={"threshold": 0.7})
 
         assert response.status_code == 500
 
@@ -85,7 +94,7 @@ class TestAIDetectRouter:
                 "error": "Internal error",
                 "error_id": "mock_id",
                 "error_type": "Exception",
-                "status": "error"
+                "status": "error",
             }
         }
 
@@ -98,12 +107,10 @@ class TestAIDetectRouter:
     # Test default threshold validation error handling
     @pytest.mark.asyncio
     async def test_ai_detect_sensitive_invalid_threshold_error_handling(self):
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ai/detect", files=files, data={'threshold': -10})
+        response = client.post("/ai/detect", files=files, data={"threshold": -10})
 
         assert response.status_code == 400
 
-        assert response.json() == {
-            'detail': 'Threshold must be between 0.00 and 1.00.'
-        }
+        assert response.json() == {"detail": "Threshold must be between 0.00 and 1.00."}

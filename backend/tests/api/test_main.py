@@ -42,7 +42,7 @@ class TestFastAPIApp:
 
     # Test rate limiting by exceeding allowed calls
     def test_rate_limit(self, client):
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
         for _ in range(11):
             response = client.post("/pdf/extract", files=files)
@@ -61,7 +61,9 @@ class TestFastAPIApp:
 
     # Test that oversized requests return 413
     def test_invalid_request_size(self, client):
-        files = {'file': ('test_file.pdf', b"A" * (25 * 1024 * 1024), 'application/pdf')}
+        files = {
+            "file": ("test_file.pdf", b"A" * (25 * 1024 * 1024), "application/pdf")
+        }
 
         response = client.post("/pdf/extract", files=files)
 
@@ -107,9 +109,9 @@ class TestFastAPIApp:
     # Test shutdown event triggers retention shutdown without exit
     @pytest.mark.asyncio
     @patch("backend.app.api.main.retention_manager.shutdown")
-    async def test_shutdown_event(self, mock_retention_shutdown, client):
+    async def test_shutdown_event_1(self, mock_retention_shutdown, client):
         with patch("builtins.exit") as mock_exit:
-            response = client.get("/health")
+            client.get("/health")
 
             await client.app.router.shutdown()
 

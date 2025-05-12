@@ -4,6 +4,7 @@ Entity detection package.
 This package contains implementations for detecting sensitive entities
 in text using various detection engines.
 """
+
 from backend.app.entity_detection.base import BaseEntityDetector
 from backend.app.entity_detection.glinerbase import GenericEntityDetector
 from backend.app.entity_detection.hideme import HidemeEntityDetector
@@ -20,5 +21,5 @@ __all__ = [
     "GenericEntityDetector",
     "HidemeEntityDetector",
     "GlinerEntityDetector",
-    "EntityDetectionEngine"
+    "EntityDetectionEngine",
 ]

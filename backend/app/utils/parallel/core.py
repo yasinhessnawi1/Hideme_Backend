@@ -15,16 +15,24 @@ import psutil
 from weakref import WeakKeyDictionary
 
 from backend.app.configs.config_singleton import get_config
-from backend.app.utils.constant.constant import DEFAULT_BATCH_TIMEOUT, DEFAULT_ITEM_TIMEOUT, DEFAULT_LOCK_TIMEOUT
+from backend.app.utils.constant.constant import (
+    DEFAULT_BATCH_TIMEOUT,
+    DEFAULT_ITEM_TIMEOUT,
+    DEFAULT_LOCK_TIMEOUT,
+)
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.system_utils.memory_management import memory_monitor
-from backend.app.utils.system_utils.synchronization_utils import AsyncTimeoutSemaphore, LockPriority, AsyncTimeoutLock
+from backend.app.utils.system_utils.synchronization_utils import (
+    AsyncTimeoutSemaphore,
+    LockPriority,
+    AsyncTimeoutLock,
+)
 
 # Type variables for generic functions
-T = TypeVar('T')
-R = TypeVar('R')
+T = TypeVar("T")
+R = TypeVar("R")
 
 # Configure logger for this module.
 logger = logging.getLogger(__name__)
@@ -43,7 +51,9 @@ def get_resource_lock() -> AsyncTimeoutLock:
     # If no lock exists for this loop, create one.
     if loop not in _loop_locks:
         # Create a new lock for this loop if not already present.
-        _loop_locks[loop] = AsyncTimeoutLock("parallel_core_lock", priority=LockPriority.MEDIUM)
+        _loop_locks[loop] = AsyncTimeoutLock(
+            "parallel_core_lock", priority=LockPriority.MEDIUM
+        )
     # Return the resource lock for the current loop.
     return _loop_locks[loop]
 
@@ -65,11 +75,11 @@ class ParallelProcessingCore:
 
     @classmethod
     def get_optimal_workers(
-            cls,
-            items_count: int,
-            memory_per_item: Optional[int] = None,
-            min_workers: int = 2,
-            max_workers: int = 8
+        cls,
+        items_count: int,
+        memory_per_item: Optional[int] = None,
+        min_workers: int = 2,
+        max_workers: int = 8,
     ) -> int:
         """
         Calculate the optimal number of parallel workers based on system resources.
@@ -94,7 +104,9 @@ class ParallelProcessingCore:
         # Check if a per-item memory requirement is provided.
         if memory_per_item is not None and memory_per_item > 0:
             # Compute the max number of workers permitted by available memory.
-            memory_based_workers = max(1, min(int(available_memory * 0.8 / memory_per_item), cpu_based_workers))
+            memory_based_workers = max(
+                1, min(int(available_memory * 0.8 / memory_per_item), cpu_based_workers)
+            )
         else:
             # Adjust worker count based on memory usage if no memory_per_item is specified.
             memory_factor = 1.0 - (current_memory_usage * 1.5)
@@ -107,21 +119,24 @@ class ParallelProcessingCore:
         optimal_workers = max(optimal_workers, min_workers)
         # Log the calculated metrics and optimal worker count.
         log_info(
-            f"Calculated optimal workers: {optimal_workers} (CPU: {cpu_count}, Load: {current_load:.2f}, Memory: {current_memory_usage:.2f})")
+            f"Calculated optimal workers: {optimal_workers} (CPU: {cpu_count}, Load: {current_load:.2f}, Memory: {current_memory_usage:.2f})"
+        )
         # Return the determined optimal number of workers.
         return optimal_workers
 
     @classmethod
     async def process_in_parallel(
-            cls,
-            items: List[T],
-            processor: Callable[[T], Awaitable[R]],
-            max_workers: Optional[int] = None,
-            batch_timeout: Optional[float] = None,
-            item_timeout: Optional[float] = None,
-            operation_id: Optional[str] = None,
-            adaptive: bool = True,
-            progress_callback: Optional[Callable[[int, int, float], Awaitable[None]]] = None
+        cls,
+        items: List[T],
+        processor: Callable[[T], Awaitable[R]],
+        max_workers: Optional[int] = None,
+        batch_timeout: Optional[float] = None,
+        item_timeout: Optional[float] = None,
+        operation_id: Optional[str] = None,
+        adaptive: bool = True,
+        progress_callback: Optional[
+            Callable[[int, int, float], Awaitable[None]]
+        ] = None,
     ) -> List[Tuple[int, Optional[R]]]:
         """
         Process a list of items concurrently with monitoring and error handling.
@@ -143,8 +158,10 @@ class ParallelProcessingCore:
         """
         try:
             # Validate inputs and set default values; record the start time.
-            operation_id, batch_timeout, item_timeout, start_time = cls._validate_and_prepare_input(
-                items, batch_timeout, item_timeout, operation_id
+            operation_id, batch_timeout, item_timeout, start_time = (
+                cls._validate_and_prepare_input(
+                    items, batch_timeout, item_timeout, operation_id
+                )
             )
             # Determine the optimal number of workers while considering adaptive settings.
             worker_count = await cls._acquire_worker_count(items, max_workers, adaptive)
@@ -154,8 +171,13 @@ class ParallelProcessingCore:
             progress_data = cls._init_progress_data(start_time, len(items))
             # Build a mapping of indices to asyncio tasks for each item.
             tasks_map = cls._create_tasks_map(
-                items, semaphore, processor, item_timeout, operation_id,
-                progress_data, progress_callback
+                items,
+                semaphore,
+                processor,
+                item_timeout,
+                operation_id,
+                progress_data,
+                progress_callback,
             )
             # Wait for the tasks to complete with the given batch timeout.
             results = await cls._gather_tasks_with_timeout(
@@ -167,16 +189,18 @@ class ParallelProcessingCore:
             return results
         except Exception as e:
             # Log any unexpected error encountered during parallel processing.
-            log_error(f"Unexpected error in process_in_parallel: {e} [operation_id={operation_id}]")
+            log_error(
+                f"Unexpected error in process_in_parallel: {e} [operation_id={operation_id}]"
+            )
             # Raise the exception to propagate error state.
             raise
 
     @staticmethod
     def _validate_and_prepare_input(
-            items: List[T],
-            batch_timeout: Optional[float],
-            item_timeout: Optional[float],
-            operation_id: Optional[str]
+        items: List[T],
+        batch_timeout: Optional[float],
+        item_timeout: Optional[float],
+        operation_id: Optional[str],
     ) -> Tuple[str, float, float, float]:
         """
         Validate inputs and set defaults for timeouts and the operation ID.
@@ -205,10 +229,7 @@ class ParallelProcessingCore:
 
     @classmethod
     async def _acquire_worker_count(
-            cls,
-            items: List[T],
-            max_workers: Optional[int],
-            adaptive: bool
+        cls, items: List[T], max_workers: Optional[int], adaptive: bool
     ) -> int:
         """
         Determine the optimal worker count using a lock to prevent race conditions.
@@ -240,12 +261,16 @@ class ParallelProcessingCore:
             # On timeout, fall back to a heuristic: a small number of workers.
             worker_count = max(2, min(4, len(items)))
             # Log a warning indicating the fallback was used.
-            log_warning(f"Timeout acquiring resource lock, using {worker_count} workers")
+            log_warning(
+                f"Timeout acquiring resource lock, using {worker_count} workers"
+            )
         # Return the determined worker count.
         return worker_count
 
     @staticmethod
-    def _create_semaphore(worker_count: int, operation_id: str) -> AsyncTimeoutSemaphore:
+    def _create_semaphore(
+        worker_count: int, operation_id: str
+    ) -> AsyncTimeoutSemaphore:
         """
         Create a semaphore limiting concurrency to the specified worker count.
         Args:
@@ -255,12 +280,14 @@ class ParallelProcessingCore:
             An instance of AsyncTimeoutSemaphore.
         """
         # Log the semaphore creation with the specified worker count.
-        log_info(f"Creating semaphore with {worker_count} workers [operation_id={operation_id}]")
+        log_info(
+            f"Creating semaphore with {worker_count} workers [operation_id={operation_id}]"
+        )
         # Create and return a new semaphore instance with the designated worker count.
         return AsyncTimeoutSemaphore(
             name=f"parallel_semaphore_{operation_id}",
             value=worker_count,
-            priority=LockPriority.MEDIUM
+            priority=LockPriority.MEDIUM,
         )
 
     @staticmethod
@@ -280,19 +307,19 @@ class ParallelProcessingCore:
             "last_progress_log": start_time,
             "total_items": total_items,
             "start_time": start_time,
-            "last_index": None
+            "last_index": None,
         }
 
     @classmethod
     def _create_tasks_map(
-            cls,
-            items: List[T],
-            semaphore: AsyncTimeoutSemaphore,
-            processor: Callable[[T], Awaitable[R]],
-            item_timeout: float,
-            operation_id: str,
-            progress_data: Dict[str, Any],
-            progress_callback: Optional[Callable[[int, int, float], Awaitable[None]]]
+        cls,
+        items: List[T],
+        semaphore: AsyncTimeoutSemaphore,
+        processor: Callable[[T], Awaitable[R]],
+        item_timeout: float,
+        operation_id: str,
+        progress_data: Dict[str, Any],
+        progress_callback: Optional[Callable[[int, int, float], Awaitable[None]]],
     ) -> Dict[int, asyncio.Task]:
         """
         Create a mapping from item indices to their asyncio processing tasks.
@@ -314,10 +341,16 @@ class ParallelProcessingCore:
             # Create an asyncio task for processing the item with semaphore control.
             task = asyncio.create_task(
                 cls._process_with_semaphore(
-                    i, item, semaphore, processor, item_timeout,
-                    operation_id, progress_data, progress_callback
+                    i,
+                    item,
+                    semaphore,
+                    processor,
+                    item_timeout,
+                    operation_id,
+                    progress_data,
+                    progress_callback,
                 ),
-                name=str(i)
+                name=str(i),
             )
             # Map the index to the created task.
             tasks_map[i] = task
@@ -326,15 +359,15 @@ class ParallelProcessingCore:
 
     @classmethod
     async def _process_with_semaphore(
-            cls,
-            index: int,
-            item: T,
-            semaphore: AsyncTimeoutSemaphore,
-            processor: Callable[[T], Awaitable[R]],
-            item_timeout: float,
-            operation_id: str,
-            progress_data: Dict[str, Any],
-            progress_callback: Optional[Callable[[int, int, float], Awaitable[None]]]
+        cls,
+        index: int,
+        item: T,
+        semaphore: AsyncTimeoutSemaphore,
+        processor: Callable[[T], Awaitable[R]],
+        item_timeout: float,
+        operation_id: str,
+        progress_data: Dict[str, Any],
+        progress_callback: Optional[Callable[[int, int, float], Awaitable[None]]],
     ) -> Tuple[int, Optional[R]]:
         """
         Process a single item under semaphore control and within a defined timeout.
@@ -356,33 +389,41 @@ class ParallelProcessingCore:
                 # Process the item asynchronously with an individual timeout.
                 result = await asyncio.wait_for(processor(item), timeout=item_timeout)
                 # Update progress statistics after successful processing.
-                cls._update_progress(index, operation_id, progress_data, progress_callback)
+                cls._update_progress(
+                    index, operation_id, progress_data, progress_callback
+                )
                 # Return the index with its corresponding result.
                 return index, result
             except asyncio.TimeoutError:
                 # On item timeout, increment the failure count.
                 progress_data["failed"] += 1
                 # Log a warning indicating the timeout for this item.
-                log_warning(f"Item {index} processing timed out after {item_timeout}s [operation_id={operation_id}]")
+                log_warning(
+                    f"Item {index} processing timed out after {item_timeout}s [operation_id={operation_id}]"
+                )
                 # Return the index with a None result.
                 return index, None
             except Exception as e:
                 # On a generic exception, also increment the failure count.
                 progress_data["failed"] += 1
                 # Log the processing error using a security-aware error handler.
-                error_id = SecurityAwareErrorHandler.log_processing_error(e, "parallel_processing", f"item_{index}")
+                error_id = SecurityAwareErrorHandler.log_processing_error(
+                    e, "parallel_processing", f"item_{index}"
+                )
                 # Log detailed error information.
-                log_error(f"Error processing item {index}: {str(e)} [error_id={error_id}, operation_id={operation_id}]")
+                log_error(
+                    f"Error processing item {index}: {str(e)} [error_id={error_id}, operation_id={operation_id}]"
+                )
                 # Return the index with a None result.
                 return index, None
 
     @classmethod
     def _update_progress(
-            cls,
-            index: int,
-            operation_id: str,
-            progress_data: Dict[str, Any],
-            progress_callback: Optional[Callable[[int, int, float], Awaitable[None]]]
+        cls,
+        index: int,
+        operation_id: str,
+        progress_data: Dict[str, Any],
+        progress_callback: Optional[Callable[[int, int, float], Awaitable[None]]],
     ) -> None:
         """
         Update progress metrics and log progress updates if conditions are met.
@@ -405,7 +446,9 @@ class ParallelProcessingCore:
         # Retrieve the time when progress was last logged.
         last_log_time = progress_data["last_progress_log"]
         # Check if sufficient time has passed or processing is complete to log progress.
-        if (current_time - last_log_time > 5.0) or (progress_data["completed"] == total_items):
+        if (current_time - last_log_time > 5.0) or (
+            progress_data["completed"] == total_items
+        ):
             # Calculate the current progress percentage.
             progress = progress_data["completed"] / total_items
             # Estimate the total time required based on current progress.
@@ -414,20 +457,23 @@ class ParallelProcessingCore:
             remaining = estimated_total - elapsed
             # Log the progress update.
             log_info(
-                f"Progress: {progress_data['completed']}/{total_items} (Last processed index: {index}, {progress * 100:.1f}%), Elapsed: {elapsed:.1f}s, Remaining: {remaining:.1f}s [operation_id={operation_id}]")
+                f"Progress: {progress_data['completed']}/{total_items} (Last processed index: {index}, {progress * 100:.1f}%), Elapsed: {elapsed:.1f}s, Remaining: {remaining:.1f}s [operation_id={operation_id}]"
+            )
             # Update the last log timestamp to the current time.
             progress_data["last_progress_log"] = current_time
             # If a progress callback function is provided, call it asynchronously.
             if progress_callback:
-                asyncio.create_task(progress_callback(progress_data["completed"], total_items, elapsed))
+                asyncio.create_task(
+                    progress_callback(progress_data["completed"], total_items, elapsed)
+                )
 
     @classmethod
     async def _gather_tasks_with_timeout(
-            cls,
-            tasks_map: Dict[int, asyncio.Task],
-            batch_timeout: float,
-            operation_id: str,
-            progress_data: Dict[str, Any]
+        cls,
+        tasks_map: Dict[int, asyncio.Task],
+        batch_timeout: float,
+        operation_id: str,
+        progress_data: Dict[str, Any],
     ) -> List[Tuple[int, Optional[R]]]:
         """
         Await completion of all tasks with an overall batch timeout. If the timeout
@@ -444,8 +490,7 @@ class ParallelProcessingCore:
         try:
             # Attempt to gather all task results within the specified batch timeout.
             gathered_results = await asyncio.wait_for(
-                asyncio.gather(*tasks_map.values()),
-                timeout=batch_timeout
+                asyncio.gather(*tasks_map.values()), timeout=batch_timeout
             )
             # Sort the gathered results by item index.
             sorted_results = sorted(gathered_results, key=lambda x: x[0])
@@ -454,12 +499,15 @@ class ParallelProcessingCore:
         except asyncio.TimeoutError:
             # Log an error if the batch processing exceeds the timeout.
             log_error(
-                f"Batch processing timed out after {batch_timeout}s with progress: {progress_data['completed']}/{progress_data['total_items']} completed [operation_id={operation_id}]")
+                f"Batch processing timed out after {batch_timeout}s with progress: {progress_data['completed']}/{progress_data['total_items']} completed [operation_id={operation_id}]"
+            )
             # In case of timeout, return the partial results.
             return cls._collect_partial_results(tasks_map)
 
     @staticmethod
-    def _collect_partial_results(tasks_map: Dict[int, asyncio.Task]) -> List[Tuple[int, Optional[R]]]:
+    def _collect_partial_results(
+        tasks_map: Dict[int, asyncio.Task],
+    ) -> List[Tuple[int, Optional[R]]]:
         """
         Collect and return results from tasks that have completed; assign None for unfinished tasks.
         Args:
@@ -487,10 +535,10 @@ class ParallelProcessingCore:
 
     @staticmethod
     def _log_final_completion(
-            results: List[Tuple[int, Optional[R]]],
-            progress_data: Dict[str, Any],
-            start_time: float,
-            operation_id: str
+        results: List[Tuple[int, Optional[R]]],
+        progress_data: Dict[str, Any],
+        start_time: float,
+        operation_id: str,
     ) -> None:
         """
         Log a final summary of the parallel processing operation, including total time,
@@ -516,16 +564,25 @@ class ParallelProcessingCore:
         success_rate = (success_count / total_items * 100) if total_items else 100
         # Log a detailed summary of the processing outcome.
         log_info(
-            f"Completed processing {total_items} items in {total_time:.2f}s: {success_count} succeeded ({success_rate:.1f}%), {failed} failed [operation_id={operation_id}]")
+            f"Completed processing {total_items} items in {total_time:.2f}s: {success_count} succeeded ({success_rate:.1f}%), {failed} failed [operation_id={operation_id}]"
+        )
         # Log the sensitive operation details with processing statistics.
-        log_sensitive_operation("Parallel Processing", total_items, total_time, completed=completed, failed=failed,
-                                operation_id=operation_id)
+        log_sensitive_operation(
+            "Parallel Processing",
+            total_items,
+            total_time,
+            completed=completed,
+            failed=failed,
+            operation_id=operation_id,
+        )
 
     @staticmethod
     async def process_pages_in_parallel(
-            pages: List[Dict[str, Any]],
-            process_func: Callable[[Dict[str, Any]], Awaitable[Tuple[Dict[str, Any], List[Dict[str, Any]]]]],
-            max_workers: Optional[int] = None
+        pages: List[Dict[str, Any]],
+        process_func: Callable[
+            [Dict[str, Any]], Awaitable[Tuple[Dict[str, Any], List[Dict[str, Any]]]]
+        ],
+        max_workers: Optional[int] = None,
     ) -> List[Tuple[int, Tuple[Dict[str, Any], List[Dict[str, Any]]]]]:
         """
         Process multiple document pages concurrently using a provided asynchronous function.
@@ -547,8 +604,9 @@ class ParallelProcessingCore:
         # Create a semaphore based on the determined max_workers.
         semaphore = asyncio.Semaphore(max_workers)
 
-        async def process_with_semaphore(page: Dict[str, Any]) -> Tuple[
-            int, Tuple[Dict[str, Any], List[Dict[str, Any]]]]:
+        async def process_with_semaphore(
+            page: Dict[str, Any],
+        ) -> Tuple[int, Tuple[Dict[str, Any], List[Dict[str, Any]]]]:
             # Extract the page number from the page dictionary; default to 0 if missing.
             page_number = page.get("page", 0)
             # Use the semaphore to limit concurrent execution.
@@ -575,12 +633,12 @@ class ParallelProcessingCore:
 
     @staticmethod
     async def process_entities_in_parallel(
-            detector,
-            full_text: str,
-            mapping: List[Tuple[Dict[str, Any], int, int]],
-            entities: List[Any],
-            page_number: int,
-            batch_size: Optional[int] = None
+        detector,
+        full_text: str,
+        mapping: List[Tuple[Dict[str, Any], int, int]],
+        entities: List[Any],
+        page_number: int,
+        batch_size: Optional[int] = None,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Process entities concurrently for a single page by dividing them into batches.
@@ -602,9 +660,12 @@ class ParallelProcessingCore:
             batch_size = get_config("entity_batch_size", 10)
         # Log the initiation of entity processing for the given page.
         log_info(
-            f"[PARALLEL] Starting entity processing for page {page_number} with batch size {batch_size} and {len(entities)} total entities")
+            f"[PARALLEL] Starting entity processing for page {page_number} with batch size {batch_size} and {len(entities)} total entities"
+        )
         # Divide the entities list into batches.
-        entity_batches = [entities[i:i + batch_size] for i in range(0, len(entities), batch_size)]
+        entity_batches = [
+            entities[i : i + batch_size] for i in range(0, len(entities), batch_size)
+        ]
         # Prepare lists to collect batch results and their processing times.
         batch_results = []
         batch_times = []
@@ -614,10 +675,14 @@ class ParallelProcessingCore:
             start_time = time.perf_counter()
             try:
                 # Process the batch using the detector's asynchronous method.
-                result = await detector.process_entities_for_page(page_number, full_text, mapping, batch)
+                result = await detector.process_entities_for_page(
+                    page_number, full_text, mapping, batch
+                )
             except Exception as e:
                 # Log an error if processing the batch fails and assign default results.
-                log_error(f"[PARALLEL] Error processing batch {i + 1}/{len(entity_batches)} on page {page_number}: {e}")
+                log_error(
+                    f"[PARALLEL] Error processing batch {i + 1}/{len(entity_batches)} on page {page_number}: {e}"
+                )
                 result = ([], {"page": page_number, "sensitive": []})
             # Record the end time for the current batch.
             end_time = time.perf_counter()
@@ -629,11 +694,14 @@ class ParallelProcessingCore:
             batch_times.append(elapsed)
             # Log the processing time for the current batch.
             log_info(
-                f"[PARALLEL] Processed batch {i + 1}/{len(entity_batches)} with {len(batch)} entities in {elapsed:.2f}s")
+                f"[PARALLEL] Processed batch {i + 1}/{len(entity_batches)} with {len(batch)} entities in {elapsed:.2f}s"
+            )
         # Sum the total processing time for all batches.
         total_time = sum(batch_times)
         # Log sensitive details of the batch operation.
-        log_sensitive_operation("Entity Batch Processing", len(entities), total_time, page=page_number)
+        log_sensitive_operation(
+            "Entity Batch Processing", len(entities), total_time, page=page_number
+        )
         # Initialize lists for combining processed entities and redaction info.
         processed_entities = []
         page_redaction_info = {"page": page_number, "sensitive": []}
@@ -642,6 +710,8 @@ class ParallelProcessingCore:
             processed_entities.extend(processed)
             page_redaction_info["sensitive"].extend(redaction.get("sensitive", []))
         # Log the completion of entity processing for the page.
-        log_info(f"[PARALLEL] Completed entity processing for page {page_number} in {total_time:.2f}s")
+        log_info(
+            f"[PARALLEL] Completed entity processing for page {page_number} in {total_time:.2f}s"
+        )
         # Return the aggregated processed entities and redaction information.
         return processed_entities, page_redaction_info

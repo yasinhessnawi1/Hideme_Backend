@@ -1,6 +1,7 @@
 """
 Configuration for Presidio entity detection with Norwegian support.
 """
+
 import os
 
 # Base directory of the project
@@ -19,7 +20,6 @@ PRESIDIO_AVAILABLE_ENTITIES = [
     "NO_BANK_ACCOUNT_P",  # Norwegian bank account numbers
     "NO_COMPANY_NUMBER_P",  # Norwegian organization numbers
     "NO_LICENSE_PLATE_P",  # Norwegian license plates
-
     # General entities that work in any language
     "EMAIL_ADDRESS_P",  # Email addresses
     "CRYPTO_P",  # Cryptocurrency addresses
@@ -30,5 +30,5 @@ PRESIDIO_AVAILABLE_ENTITIES = [
     "MEDICAL_LICENSE_P",  # Medical license numbers
     "PERSON_P",  # Person names (via spaCy/NER)
     "ORGANIZATION_P",  # Organization names (via spaCy/NER)
-    "LOCATION_P"  # Locations (via spaCy/NER)
+    "LOCATION_P",  # Locations (via spaCy/NER)
 ]

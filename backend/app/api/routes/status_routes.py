@@ -16,7 +16,11 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from backend.app.utils.constant.constant import STATUS_CACHE_TTL, HEALTH_CACHE_TTL, METRICS_CACHE_TTL
+from backend.app.utils.constant.constant import (
+    STATUS_CACHE_TTL,
+    HEALTH_CACHE_TTL,
+    METRICS_CACHE_TTL,
+)
 from backend.app.utils.logging.logger import log_info
 from backend.app.utils.security.caching_middleware import response_cache
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
@@ -64,7 +68,7 @@ async def status(request: Request, response: Response) -> JSONResponse:
         status_data = {
             "status": "success",
             "timestamp": time.time(),
-            "api_version": os.environ.get("API_VERSION", "1.0.0")
+            "api_version": os.environ.get("API_VERSION", "1.0.0"),
         }
         # Cache the generated status data using the defined TTL.
         response_cache.set(cache_key, status_data, ttl=STATUS_CACHE_TTL)
@@ -124,26 +128,25 @@ async def health_check(request: Request, response: Response) -> JSONResponse:
             "cpu_percent": process.cpu_percent(),  # Get CPU usage percentage.
             "memory_percent": process.memory_percent(),  # Get memory usage percentage.
             "threads_count": threading.active_count(),  # Get count of active threads.
-            "uptime": time.time() - process.create_time()  # Calculate process uptime.
+            "uptime": time.time() - process.create_time(),  # Calculate process uptime.
         }
         # Retrieve memory statistics from the memory monitor.
         memory_stats = memory_monitor.get_memory_stats()
         # Retrieve cache statistics from response_cache.
         cache_stats = {
             "cache_size": len(response_cache.cache),
-            "cached_endpoints": list(response_cache.cache.keys())[:5]  # Show up to first 5 keys.
+            "cached_endpoints": list(response_cache.cache.keys())[
+                :5
+            ],  # Show up to first 5 keys.
         }
         # Build the health check data dictionary.
         health_data = {
             "status": "healthy",
             "timestamp": time.time(),
-            "services": {
-                "api": "online",
-                "document_processing": "online"
-            },
+            "services": {"api": "online", "document_processing": "online"},
             "process": process_info,
             "memory": memory_stats,
-            "cache": cache_stats
+            "cache": cache_stats,
         }
         # Optionally include debug information in non-production environments.
         environment = os.environ.get("ENVIRONMENT", "development")
@@ -151,7 +154,7 @@ async def health_check(request: Request, response: Response) -> JSONResponse:
             health_data["debug"] = {
                 "environment": environment,
                 "python_version": os.environ.get("PYTHON_VERSION", "unknown"),
-                "host": os.environ.get("HOSTNAME", "unknown")
+                "host": os.environ.get("HOSTNAME", "unknown"),
             }
         # Cache the health check data using the defined TTL.
         response_cache.set(cache_key, health_data, ttl=HEALTH_CACHE_TTL)
@@ -207,7 +210,7 @@ async def metrics(request: Request, response: Response) -> JSONResponse:
         if expected_key and api_key != expected_key:
             return JSONResponse(
                 status_code=403,
-                content={"detail": "Unauthorized access to metrics endpoint"}
+                content={"detail": "Unauthorized access to metrics endpoint"},
             )
         # Retrieve system memory statistics using psutil.
         system_memory = psutil.virtual_memory()
@@ -221,14 +224,18 @@ async def metrics(request: Request, response: Response) -> JSONResponse:
             "memory_percent": process.memory_percent(),  # Get memory percentage used by process.
             "threads_count": threading.active_count(),  # Count of active threads.
             "open_files": len(process.open_files()),  # Number of open files.
-            "connections": len(process.connections())  # Number of open connections.
+            "connections": len(process.connections()),  # Number of open connections.
         }
         # Get additional memory monitoring statistics.
         memory_stats = memory_monitor.get_memory_stats()
         # Get cache statistics from the caching middleware.
         cache_stats = {
             "cache_size": len(response_cache.cache),
-            "cache_keys": len(response_cache.access_times) if hasattr(response_cache, 'access_times') else 0
+            "cache_keys": (
+                len(response_cache.access_times)
+                if hasattr(response_cache, "access_times")
+                else 0
+            ),
         }
         # Build the metrics data dictionary with timestamp, system metrics, process info, memory stats, and cache stats.
         metrics_data = {
@@ -237,11 +244,11 @@ async def metrics(request: Request, response: Response) -> JSONResponse:
                 "cpu_percent": system_cpu,
                 "memory_percent": system_memory.percent,
                 "memory_available": system_memory.available,
-                "memory_total": system_memory.total
+                "memory_total": system_memory.total,
             },
             "process": process_info,
             "memory_monitor": memory_stats,
-            "cache": cache_stats
+            "cache": cache_stats,
         }
         # Cache the metrics data using the defined TTL.
         response_cache.set(cache_key, metrics_data, ttl=METRICS_CACHE_TTL)
@@ -286,6 +293,7 @@ async def readiness_check(request: Request) -> JSONResponse:
     try:
         # Import the initialization service to check the current initialization status.
         from backend.app.services.initialization_service import initialization_service
+
         # Retrieve initialization status.
         init_status = initialization_service.get_initialization_status()
         # Determine if the Presidio service is initialized.
@@ -303,12 +311,12 @@ async def readiness_check(request: Request) -> JSONResponse:
                 "presidio_ready": init_status.get("presidio", False),
                 "gemini_ready": init_status.get("gemini", False),
                 "gliner_ready": init_status.get("gliner", False),
-                "hideme_ready": init_status.get("hideme", False)
+                "hideme_ready": init_status.get("hideme", False),
             },
             "memory": {
                 "usage_percent": memory_usage,
-                "status": "ok" if memory_ok else "critical"
-            }
+                "status": "ok" if memory_ok else "critical",
+            },
         }
         # Return a JSONResponse with the readiness data and corresponding status code.
         return JSONResponse(status_code=status_code, content=readiness_data)

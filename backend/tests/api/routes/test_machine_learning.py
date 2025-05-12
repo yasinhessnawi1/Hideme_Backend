@@ -13,7 +13,9 @@ class TestMachineLearningRouter:
     @pytest.mark.asyncio
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
     @patch("backend.app.api.routes.machine_learning.validate_threshold_score")
-    async def test_presidio_detect_success(self, mock_validate_threshold_score, mock_detect):
+    async def test_presidio_detect_success(
+        self, mock_validate_threshold_score, mock_detect
+    ):
         mock_validate_threshold_score.return_value = None
 
         mock_result = MagicMock()
@@ -22,9 +24,9 @@ class TestMachineLearningRouter:
 
         mock_detect.return_value = mock_result
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/detect", files=files, data={'threshold': 0.5})
+        response = client.post("/ml/detect", files=files, data={"threshold": 0.5})
 
         mock_validate_threshold_score.assert_called_once_with(0.5)
 
@@ -38,12 +40,16 @@ class TestMachineLearningRouter:
     @pytest.mark.asyncio
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
     @patch("backend.app.api.routes.machine_learning.validate_threshold_score")
-    async def test_presidio_detect_invalid_threshold(self, mock_validate_threshold_score, mock_detect):
-        mock_validate_threshold_score.side_effect = HTTPException(status_code=400, detail="Invalid threshold")
+    async def test_presidio_detect_invalid_threshold(
+        self, mock_validate_threshold_score, mock_detect
+    ):
+        mock_validate_threshold_score.side_effect = HTTPException(
+            status_code=400, detail="Invalid threshold"
+        )
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/detect", files=files, data={'threshold': 2.0})
+        response = client.post("/ml/detect", files=files, data={"threshold": 2.0})
 
         assert response.status_code == 400
 
@@ -56,8 +62,12 @@ class TestMachineLearningRouter:
     # Internal error in Presidio detection is handled and returns 500
     @pytest.mark.asyncio
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
-    @patch("backend.app.api.routes.machine_learning.SecurityAwareErrorHandler.handle_safe_error")
-    async def test_presidio_detect_internal_error(self, mock_handle_safe_error, mock_detect):
+    @patch(
+        "backend.app.api.routes.machine_learning.SecurityAwareErrorHandler.handle_safe_error"
+    )
+    async def test_presidio_detect_internal_error(
+        self, mock_handle_safe_error, mock_detect
+    ):
         mock_detect.side_effect = Exception("Internal error")
 
         mock_handle_safe_error.side_effect = HTTPException(
@@ -66,13 +76,13 @@ class TestMachineLearningRouter:
                 "error": "Internal error",
                 "error_id": "mock_id",
                 "error_type": "Exception",
-                "status": "error"
-            }
+                "status": "error",
+            },
         )
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/detect", files=files, data={'threshold': 0.7})
+        response = client.post("/ml/detect", files=files, data={"threshold": 0.7})
 
         assert response.status_code == 500
 
@@ -81,7 +91,7 @@ class TestMachineLearningRouter:
                 "error": "Internal error",
                 "error_id": "mock_id",
                 "error_type": "Exception",
-                "status": "error"
+                "status": "error",
             }
         }
 
@@ -92,15 +102,17 @@ class TestMachineLearningRouter:
     # Default invalid threshold handling returns detailed error payload
     @pytest.mark.asyncio
     async def test_presidio_detect_invalid_threshold_error_handling(self):
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/detect", files=files, data={'threshold': -10})
+        response = client.post("/ml/detect", files=files, data={"threshold": -10})
 
         assert response.status_code == 400
 
         response_json = response.json()
 
-        assert "Threshold must be between 0.00 and 1.00." in response_json.get("error", "")
+        assert "Threshold must be between 0.00 and 1.00." in response_json.get(
+            "error", ""
+        )
 
         assert "error_id" in response_json
 
@@ -122,9 +134,9 @@ class TestMachineLearningRouter:
 
         mock_detect.return_value = mock_result
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/gl_detect", files=files, data={'threshold': 0.5})
+        response = client.post("/ml/gl_detect", files=files, data={"threshold": 0.5})
 
         assert response.status_code == 200
 
@@ -136,12 +148,16 @@ class TestMachineLearningRouter:
     @pytest.mark.asyncio
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
     @patch("backend.app.api.routes.machine_learning.validate_threshold_score")
-    async def test_gliner_detect_invalid_threshold(self, mock_validate_threshold_score, mock_detect):
-        mock_validate_threshold_score.side_effect = HTTPException(status_code=400, detail="Invalid threshold")
+    async def test_gliner_detect_invalid_threshold(
+        self, mock_validate_threshold_score, mock_detect
+    ):
+        mock_validate_threshold_score.side_effect = HTTPException(
+            status_code=400, detail="Invalid threshold"
+        )
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/gl_detect", files=files, data={'threshold': 2.0})
+        response = client.post("/ml/gl_detect", files=files, data={"threshold": 2.0})
 
         assert response.status_code == 400
 
@@ -154,8 +170,12 @@ class TestMachineLearningRouter:
     # Internal error in GLiNER detection is handled and returns 500
     @pytest.mark.asyncio
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
-    @patch("backend.app.api.routes.machine_learning.SecurityAwareErrorHandler.handle_safe_error")
-    async def test_gliner_detect_internal_error(self, mock_handle_safe_error, mock_detect):
+    @patch(
+        "backend.app.api.routes.machine_learning.SecurityAwareErrorHandler.handle_safe_error"
+    )
+    async def test_gliner_detect_internal_error(
+        self, mock_handle_safe_error, mock_detect
+    ):
         mock_detect.side_effect = Exception("Internal error")
 
         mock_handle_safe_error.side_effect = HTTPException(
@@ -164,13 +184,13 @@ class TestMachineLearningRouter:
                 "error": "Internal error",
                 "error_id": "mock_id",
                 "error_type": "Exception",
-                "status": "error"
-            }
+                "status": "error",
+            },
         )
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/gl_detect", files=files, data={'threshold': 0.7})
+        response = client.post("/ml/gl_detect", files=files, data={"threshold": 0.7})
 
         assert response.status_code == 500
 
@@ -179,7 +199,7 @@ class TestMachineLearningRouter:
                 "error": "Internal error",
                 "error_id": "mock_id",
                 "error_type": "Exception",
-                "status": "error"
+                "status": "error",
             }
         }
 
@@ -195,9 +215,9 @@ class TestMachineLearningRouter:
 
         mock_detect.return_value = mock_result
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/hm_detect", files=files, data={'threshold': 0.5})
+        response = client.post("/ml/hm_detect", files=files, data={"threshold": 0.5})
 
         assert response.status_code == 200
 
@@ -209,12 +229,16 @@ class TestMachineLearningRouter:
     @pytest.mark.asyncio
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
     @patch("backend.app.api.routes.machine_learning.validate_threshold_score")
-    async def test_hideme_detect_invalid_threshold(self, mock_validate_threshold_score, mock_detect):
-        mock_validate_threshold_score.side_effect = HTTPException(status_code=400, detail="Invalid threshold")
+    async def test_hideme_detect_invalid_threshold(
+        self, mock_validate_threshold_score, mock_detect
+    ):
+        mock_validate_threshold_score.side_effect = HTTPException(
+            status_code=400, detail="Invalid threshold"
+        )
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/hm_detect", files=files, data={'threshold': 2.0})
+        response = client.post("/ml/hm_detect", files=files, data={"threshold": 2.0})
 
         assert response.status_code == 400
 
@@ -227,8 +251,12 @@ class TestMachineLearningRouter:
     # Internal error in HIDEME detection is handled and returns 500
     @pytest.mark.asyncio
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
-    @patch("backend.app.api.routes.machine_learning.SecurityAwareErrorHandler.handle_safe_error")
-    async def test_hideme_detect_internal_error(self, mock_handle_safe_error, mock_detect):
+    @patch(
+        "backend.app.api.routes.machine_learning.SecurityAwareErrorHandler.handle_safe_error"
+    )
+    async def test_hideme_detect_internal_error(
+        self, mock_handle_safe_error, mock_detect
+    ):
         mock_detect.side_effect = Exception("Internal error")
 
         mock_handle_safe_error.side_effect = HTTPException(
@@ -237,13 +265,13 @@ class TestMachineLearningRouter:
                 "error": "Internal error",
                 "error_id": "mock_id",
                 "error_type": "Exception",
-                "status": "error"
-            }
+                "status": "error",
+            },
         )
 
-        files = {'file': ('test_file.pdf', b"file content", 'application/pdf')}
+        files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/hm_detect", files=files, data={'threshold': 0.7})
+        response = client.post("/ml/hm_detect", files=files, data={"threshold": 0.7})
 
         assert response.status_code == 500
 
@@ -252,7 +280,7 @@ class TestMachineLearningRouter:
                 "error": "Internal error",
                 "error_id": "mock_id",
                 "error_type": "Exception",
-                "status": "error"
+                "status": "error",
             }
         }
 

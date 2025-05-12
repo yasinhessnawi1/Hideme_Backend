@@ -17,7 +17,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from backend.app.utils.logging.logger import log_info, log_warning
-from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
+from backend.app.utils.system_utils.synchronization_utils import (
+    TimeoutLock,
+    LockPriority,
+)
 
 """
 ResponseCache Class:
@@ -59,7 +62,9 @@ class ResponseCache:
         # Initialize the read/write lock to None for lazy initialization.
         self._rwlock: Optional[TimeoutLock] = None
         # Log the successful initialization of the cache.
-        log_info(f"Response cache initialized with max_size={max_size}, default_ttl={default_ttl}s")
+        log_info(
+            f"Response cache initialized with max_size={max_size}, default_ttl={default_ttl}s"
+        )
 
     @property
     def rwlock(self) -> TimeoutLock:
@@ -110,7 +115,13 @@ class ResponseCache:
         # Return None if there is no cached value.
         return None
 
-    def set(self, key: str, value: Any, ttl: Optional[int] = None, content_hash: Optional[str] = None) -> bool:
+    def set(
+        self,
+        key: str,
+        value: Any,
+        ttl: Optional[int] = None,
+        content_hash: Optional[str] = None,
+    ) -> bool:
         """
         Set a cache entry with exclusive write access.
 
@@ -149,7 +160,9 @@ class ResponseCache:
             # Update the access time for the key.
             self.access_times[key] = current_time
             # Set the expiration time for the cache entry.
-            self.expiration_times[key] = current_time + (ttl if ttl is not None else self.default_ttl)
+            self.expiration_times[key] = current_time + (
+                ttl if ttl is not None else self.default_ttl
+            )
             # If a content hash is provided, store it as the ETag for this key.
             if content_hash:
                 self.etags[key] = content_hash
@@ -240,7 +253,11 @@ class ResponseCache:
         # Get the current time.
         current_time = time.time()
         # Identify keys for which the expiration time has passed.
-        expired_keys = [key for key, expiry in self.expiration_times.items() if current_time > expiry]
+        expired_keys = [
+            key
+            for key, expiry in self.expiration_times.items()
+            if current_time > expiry
+        ]
         # Iterate over each expired key.
         for key in expired_keys:
             # Remove the key from the main cache.
@@ -343,12 +360,12 @@ class CacheMiddleware(BaseHTTPMiddleware):
     """
 
     def __init__(
-            self,
-            app: ASGIApp,
-            paths: List[str],
-            ttl: int = 300,
-            cache_key_builder: Optional[Callable[[Request], str]] = None,
-            content_hashing: bool = True
+        self,
+        app: ASGIApp,
+        paths: List[str],
+        ttl: int = 300,
+        cache_key_builder: Optional[Callable[[Request], str]] = None,
+        content_hashing: bool = True,
     ):
         """
         Initialize the CacheMiddleware.
@@ -395,7 +412,9 @@ class CacheMiddleware(BaseHTTPMiddleware):
             A Response object, either from cache or freshly generated.
         """
         # If the request method is not GET or POST or the path should not be cached, bypass caching.
-        if request.method not in ["GET", "POST"] or not self._should_cache_path(request.url.path):
+        if request.method not in ["GET", "POST"] or not self._should_cache_path(
+            request.url.path
+        ):
             # Directly process the request without caching.
             return await call_next(request)
 
@@ -409,7 +428,9 @@ class CacheMiddleware(BaseHTTPMiddleware):
         # Check for an ETag match in the client's headers; if it matches, return a 304 response.
         if_none_match = request.headers.get("If-None-Match")
         if if_none_match and response_cache.etags.get(cache_key) == if_none_match:
-            self._logger.debug(f"ETag match for {cache_key}, returning 304 Not Modified")
+            self._logger.debug(
+                f"ETag match for {cache_key}, returning 304 Not Modified"
+            )
             return Response(status_code=304, headers={"ETag": if_none_match})
 
         # If a valid cached response exists, return it.
@@ -420,7 +441,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
                 content=cached_response["content"],
                 status_code=cached_response["status_code"],
                 headers=cached_response["headers"],
-                media_type=cached_response["media_type"]
+                media_type=cached_response["media_type"],
             )
             if etag:
                 response.headers["ETag"] = etag
@@ -467,10 +488,10 @@ class CacheMiddleware(BaseHTTPMiddleware):
                 "content": response_body,
                 "status_code": response.status_code,
                 "headers": dict(response.headers),
-                "media_type": response.media_type
+                "media_type": response.media_type,
             },
             ttl=ttl_value,
-            content_hash=content_hash
+            content_hash=content_hash,
         )
 
         # Build a new Response object to return the fully cached response.
@@ -478,7 +499,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
             content=response_body,
             status_code=response.status_code,
             headers=dict(response.headers),
-            media_type=response.media_type
+            media_type=response.media_type,
         )
         if content_hash:
             new_response.headers["ETag"] = content_hash
@@ -547,7 +568,7 @@ async def custom_file_cache_key_builder(request: Request) -> str:
         request.url.path,
         str(sorted(request.query_params.items())),
         request.headers.get("Accept", "*/*"),
-        request.headers.get("Accept-Encoding", "identity")
+        request.headers.get("Accept-Encoding", "identity"),
     ]
     # Get the content type from the headers.
     content_type = request.headers.get("content-type", "")
@@ -652,7 +673,9 @@ def clear_cached_response(key: str) -> bool:
     return response_cache.delete(key)
 
 
-def _get_keys_by_prefix(cache: ResponseCache, prefix: str, timeout: float = 3.0) -> List[str]:
+def _get_keys_by_prefix(
+    cache: ResponseCache, prefix: str, timeout: float = 3.0
+) -> List[str]:
     """
     Helper function to retrieve all keys in the cache that start with the given prefix.
 

@@ -40,12 +40,12 @@ class RateLimitConfig:
     """
 
     def __init__(
-            self,
-            requests_per_minute: int = 30,
-            admin_requests_per_minute: int = 60,
-            anonymous_requests_per_minute: int = 15,
-            burst_allowance: int = 15,
-            redis_url: Optional[str] = None
+        self,
+        requests_per_minute: int = 30,
+        admin_requests_per_minute: int = 60,
+        anonymous_requests_per_minute: int = 15,
+        burst_allowance: int = 15,
+        redis_url: Optional[str] = None,
     ):
         # Set the standard requests per minute limit.
         self.requests_per_minute = requests_per_minute
@@ -85,7 +85,7 @@ def get_rate_limit_config() -> RateLimitConfig:
         # Convert RATE_LIMIT_BURST environment variable to an integer (default 15).
         burst_allowance=int(os.getenv("RATE_LIMIT_BURST", "15")),
         # Retrieve the Redis URL from environment variables.
-        redis_url=os.getenv("REDIS_URL")
+        redis_url=os.getenv("REDIS_URL"),
     )
 
 
@@ -206,7 +206,8 @@ class LocalRateLimiter:
             self.requests[key] = {}
         # Remove outdated windows (keep only windows that are within the last 2 windows).
         self.requests[key] = {
-            window: count for window, count in self.requests[key].items()
+            window: count
+            for window, count in self.requests[key].items()
             if window >= current_window - 2
         }
         # Initialize the count for the current window if it doesn't exist.
@@ -248,7 +249,7 @@ class RateLimitingMiddleware(BaseHTTPMiddleware):
             self.rate_limiter = LocalRateLimiter()
 
     async def dispatch(
-            self, request: Request, call_next: Callable[[Request], Any]
+        self, request: Request, call_next: Callable[[Request], Any]
     ) -> Response:
         """
         Process the incoming request and enforce rate limiting.
@@ -274,9 +275,9 @@ class RateLimitingMiddleware(BaseHTTPMiddleware):
             max_requests = self.config.anonymous_requests_per_minute
         # Check if the request targets an admin endpoint and contains an admin authorization.
         if (
-                request.url.path.startswith("/admin") and
-                "authorization" in request.headers and
-                self._is_admin_user(request)
+            request.url.path.startswith("/admin")
+            and "authorization" in request.headers
+            and self._is_admin_user(request)
         ):
             # Increase the request limit for admin users.
             max_requests = self.config.admin_requests_per_minute
@@ -289,7 +290,7 @@ class RateLimitingMiddleware(BaseHTTPMiddleware):
             # Return a JSON response with a 429 status code if the limit is exceeded.
             return JSONResponse(
                 status_code=429,
-                content={"detail": "Rate limit exceeded. Please try again later."}
+                content={"detail": "Rate limit exceeded. Please try again later."},
             )
         # If not rate limited, pass the request to the next middleware or endpoint.
         return await call_next(request)
@@ -312,9 +313,9 @@ class RateLimitingMiddleware(BaseHTTPMiddleware):
 
 
 async def check_rate_limit(
-        request: Request,
-        limit_key: Optional[str] = None,
-        custom_limit: Optional[int] = None
+    request: Request,
+    limit_key: Optional[str] = None,
+    custom_limit: Optional[int] = None,
 ):
     """
     Dependency function to enforce rate limits on specific API endpoints.
@@ -355,5 +356,5 @@ async def check_rate_limit(
         # Raise an HTTPException with a 429 status code if rate limited.
         raise HTTPException(
             status_code=429,
-            detail="Rate limit exceeded for this endpoint. Please try again later."
+            detail="Rate limit exceeded for this endpoint. Please try again later.",
         )

@@ -4,14 +4,16 @@ import aiohttp
 import pytest
 import base64
 import json
+
+import importlib
+import backend.app.utils.security.session_encryption as semod
+
 from io import BytesIO
 from fastapi import UploadFile, HTTPException
 from unittest.mock import AsyncMock, patch
 
 os.environ["GO_BACKEND_URL"] = "http://dummy"
 
-import importlib
-import backend.app.utils.security.session_encryption as semod
 
 importlib.reload(semod)
 SessionEncryptionManager = semod.SessionEncryptionManager
@@ -101,7 +103,7 @@ def patched_session(monkeypatch):
 
     monkeypatch.setattr(
         "backend.app.utils.security.session_encryption.aiohttp.ClientSession",
-        DummySession
+        DummySession,
     )
 
 
@@ -111,7 +113,7 @@ def patch_error_session(monkeypatch):
 
     monkeypatch.setattr(
         "backend.app.utils.security.session_encryption.aiohttp.ClientSession",
-        ErrorSession
+        ErrorSession,
     )
 
     semod.SessionEncryptionManager._instance = None
@@ -207,8 +209,7 @@ class TestSessionEncryptionManager:
                 return DummyResponse(401)
 
         monkeypatch.setattr(
-            "backend.app.utils.security.session_encryption.aiohttp.ClientSession",
-            Bad
+            "backend.app.utils.security.session_encryption.aiohttp.ClientSession", Bad
         )
 
         with pytest.raises(HTTPException):
@@ -261,7 +262,9 @@ class TestSessionEncryptionManager:
 
         assert files == [plain_upload] and fields == {"f": "v"} and api is None
 
-    @patch.object(SessionEncryptionManager, "validate_and_fetch_api_key", new_callable=AsyncMock)
+    @patch.object(
+        SessionEncryptionManager, "validate_and_fetch_api_key", new_callable=AsyncMock
+    )
     async def test_session_prepare(self, mock_vaf, manager, dummy_api_key):
         mock_vaf.return_value = dummy_api_key
 
@@ -304,7 +307,9 @@ class TestSessionEncryptionManager:
 
         up_p = UploadFile(filename="p", file=BytesIO(pl))
 
-        fld = base64.urlsafe_b64encode(manager.encrypt_bytes(sec, dummy_api_key)).decode()
+        fld = base64.urlsafe_b64encode(
+            manager.encrypt_bytes(sec, dummy_api_key)
+        ).decode()
 
         files, fields, api = await manager.prepare_inputs(
             [up_e, up_p], {"a": fld, "b": "txt"}, None, None, "raw"
@@ -333,7 +338,7 @@ class TestSessionEncryptionManager:
 
         monkeypatch.setattr(
             "backend.app.utils.security.session_encryption.aiohttp.ClientSession",
-            ErrorSession
+            ErrorSession,
         )
 
         mgr = SessionEncryptionManager.get_instance()
@@ -351,7 +356,7 @@ class TestSessionEncryptionManager:
 
         monkeypatch.setattr(
             "backend.app.utils.security.session_encryption.aiohttp.ClientSession",
-            ErrorSession
+            ErrorSession,
         )
 
         mgr = SessionEncryptionManager.get_instance()
@@ -369,7 +374,7 @@ class TestSessionEncryptionManager:
 
         monkeypatch.setattr(
             "backend.app.utils.security.session_encryption.aiohttp.ClientSession",
-            ErrorSession
+            ErrorSession,
         )
 
         mgr = SessionEncryptionManager.get_instance()
@@ -396,7 +401,9 @@ class TestSessionEncryptionManager:
         def bad(_: bytes):
             raise HTTPException(status_code=400, detail="oops")
 
-        monkey = patch.object(SessionEncryptionManager, "decrypt_bytes", side_effect=bad)
+        monkey = patch.object(
+            SessionEncryptionManager, "decrypt_bytes", side_effect=bad
+        )
 
         with monkey:
             with pytest.raises(HTTPException):
@@ -404,7 +411,9 @@ class TestSessionEncryptionManager:
 
     @pytest.mark.asyncio
     async def test_encrypt_response_error(self, manager, dummy_api_key):
-        monkey = patch.object(SessionEncryptionManager, "encrypt_bytes", side_effect=ValueError("bad"))
+        monkey = patch.object(
+            SessionEncryptionManager, "encrypt_bytes", side_effect=ValueError("bad")
+        )
 
         with monkey:
             with pytest.raises(HTTPException) as exc:
@@ -413,9 +422,14 @@ class TestSessionEncryptionManager:
             assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_wrap_response_propagates_http_exception(self, manager, dummy_api_key):
-        monkey = patch.object(SessionEncryptionManager, "encrypt_response",
-                              side_effect=HTTPException(status_code=400, detail="x"))
+    async def test_wrap_response_propagates_http_exception(
+        self, manager, dummy_api_key
+    ):
+        monkey = patch.object(
+            SessionEncryptionManager,
+            "encrypt_response",
+            side_effect=HTTPException(status_code=400, detail="x"),
+        )
 
         with monkey:
             with pytest.raises(HTTPException) as exc:
@@ -427,7 +441,9 @@ class TestSessionEncryptionManager:
     async def test_prepare_inputs_unexpected_error(self, manager):
         manager.validate_raw_api_key = AsyncMock(return_value="k")
 
-        monkey = patch.object(manager, "_prepare_raw_inputs", side_effect=RuntimeError("boom"))
+        monkey = patch.object(
+            manager, "_prepare_raw_inputs", side_effect=RuntimeError("boom")
+        )
 
         with monkey:
             with pytest.raises(HTTPException) as exc:
@@ -445,7 +461,11 @@ class TestSessionEncryptionManager:
     async def test__process_raw_field_decrypt_http_exc(self, manager, dummy_api_key):
         blob = base64.urlsafe_b64encode(b"xyz").decode()
 
-        monkey = patch.object(manager, "decrypt_text", side_effect=HTTPException(status_code=400, detail="no"))
+        monkey = patch.object(
+            manager,
+            "decrypt_text",
+            side_effect=HTTPException(status_code=400, detail="no"),
+        )
 
         with monkey:
             val, did = await manager._process_raw_field(blob, dummy_api_key)
@@ -459,7 +479,8 @@ class TestSessionEncryptionManager:
 
             headers = {}
 
-            async def read(self): raise RuntimeError("read fail")
+            async def read(self):
+                raise RuntimeError("read fail")
 
         manager.validate_raw_api_key = AsyncMock(return_value="k")
 
@@ -472,7 +493,9 @@ class TestSessionEncryptionManager:
 
         up = UploadFile(filename="f", file=BytesIO(blob))
 
-        patcher = patch.object(SessionEncryptionManager, "decrypt_bytes", side_effect=Exception("x"))
+        patcher = patch.object(
+            SessionEncryptionManager, "decrypt_bytes", side_effect=Exception("x")
+        )
 
         with patcher:
             files_out, did = await manager._process_raw_files([up], dummy_api_key)
@@ -488,7 +511,8 @@ class TestSessionEncryptionManager:
 
             headers = {}
 
-            async def read(self): raise RuntimeError
+            async def read(self):
+                raise RuntimeError
 
         with pytest.raises(HTTPException):
             await manager._decrypt_with_key([BadFile2()], {}, "k")
@@ -501,10 +525,12 @@ class TestSessionEncryptionManager:
             headers = {}
 
             @staticmethod
-            async def read(): return b"ok"
+            async def read():
+                return b"ok"
 
-        monkey = patch.object(SessionEncryptionManager, "decrypt_files",
-                              side_effect=ValueError("fail"))
+        monkey = patch.object(
+            SessionEncryptionManager, "decrypt_files", side_effect=ValueError("fail")
+        )
 
         with monkey:
             with pytest.raises(HTTPException):

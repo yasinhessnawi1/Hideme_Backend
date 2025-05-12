@@ -12,7 +12,11 @@ from typing import List
 from backend.app.entity_detection.glinerbase import GenericEntityDetector
 from backend.app.utils.constant.constant import GLINER_CONFIG_FILENAME
 from backend.app.utils.helpers.json_helper import validate_gliner_requested_entities
-from backend.app.configs.gliner_config import GLINER_MODEL_PATH, GLINER_MODEL_NAME, GLINER_AVAILABLE_ENTITIES
+from backend.app.configs.gliner_config import (
+    GLINER_MODEL_PATH,
+    GLINER_MODEL_NAME,
+    GLINER_AVAILABLE_ENTITIES,
+)
 
 
 class GlinerEntityDetector(GenericEntityDetector):

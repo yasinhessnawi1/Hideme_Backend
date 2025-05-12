@@ -1,71 +1,117 @@
 name: CI/CD Pipeline
 
 on:
-  workflow_dispatch:
-    inputs:
-      deploy:
-        description: 'Deploy after building? (true/false)'
-        required: false
-        default: 'false'
-  # Trigger on push to main
+  workflow_dispatch: { }
   push:
-    branches:
-      - main
-
-  # Trigger on pull request targeting main
+    branches: [ "**" ]
   pull_request:
-    branches:
-      - main
+    branches: [ "**" ]
+
 jobs:
-  build:
+  lint-python:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Debug:List Repository Files
-        run: ls -R  # Debugging step to check file structure
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12.6'
 
-      - name: Install Dependencies
+      - name: Install linters
         run: |
-          python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
-          pip install pytest
+          pip install flake8 black
 
-      - name: Run Tests
-        run: pytest || echo "No tests found."
+      - name: Run black check (formatting)
+        run: black --check backend
 
-      - name: Build Docker Image with Docker Compose
-        working-directory: backend
-        run: docker compose build
+      - name: Run flake8 (with .flake8 config)
+        run: flake8 backend
 
-  push-image:
-    needs: build
+  lint-go:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          go-version: '1.22'
 
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v6
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.59.1
+
+      - name: Go mod tidy
+        run: go mod tidy
+        working-directory: gobackend
+
+      - name: Lint Go code
+        run: $(go env GOPATH)/bin/golangci-lint run ./...
+        working-directory: gobackend
+
+  test-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          context: backend
-          push: true
-          tags: yasinmh99/hideme:latest
+          python-version: '3.12.6'
+
+      - name: Install test dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run pytest with coverage
+        run: pytest --cov=backend.app --cov-report=html backend
+
+      - name: Upload HTML coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: htmlcov/
+
+  test-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Run Go tests
+        run: cd gobackend && go test ./...
+
+  infra-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Validate
+        run: cd hidemeinfra && terraform init -backend=false && terraform validate
+
+      - name: Terraform Format
+        run: cd hidemeinfra && terraform fmt -check -recursive
+
+      - name: Install tfsec
+        run: |
+          curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+
+      - name: Run tfsec
+        run: cd hidemeinfra && tfsec .
 
   deploy:
-    if: ${{ github.event.inputs.deploy == 'true' || github.event_name == 'push' || github.event_name == 'pull_request' }}
+    if: github.event_name == 'pull_request'
+    # Optional: depends on lint/test/infra
+    # needs: [lint-python, lint-go, test-python, test-go, infra-check]
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to Remote Server via SSH
@@ -75,35 +121,13 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.REMOTE_SSH_KEY }}
           script: |
-            export GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-
-            # Create the setup script file and write the secret content to it properly
-            cat << 'EOF' > setup.sh
-            ${{ secrets.SETUP_SCRIPT }}
-            EOF
-
-            # Make it executable
-            chmod +x setup.sh
-
-            # Run the setup script
-            ./setup.sh
-
-            # Ensure SSH knows the host and doesn't prompt for confirmation
-            mkdir -p ~/.ssh
-            ssh-keyscan -H github.com >> ~/.ssh/known_hosts
-
-            # Remove the old directory
-            sudo rm -rf Hideme_Backend
-
-            # Clone the repository without SSH host confirmation issues
-
-            git clone --branch main git@github.com:yasinhessnawi1/Hideme_Backend.git
-
-            cd Hideme_Backend/backend
-
-            # Set environment variable
-            echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
-
-            # Build and run the Docker container
+            cd /opt/Hideme_Backend
+            git pull
+            cd backend
+            sudo docker compose down || true
+            sudo docker compose build
+            sudo docker compose up -d
+            cd ../gobackend
+            sudo docker compose down || true
             sudo docker compose build
             sudo docker compose up -d

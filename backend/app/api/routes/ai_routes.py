@@ -29,11 +29,11 @@ router = APIRouter()
 @limiter.limit("10/minute")
 @memory_optimized(threshold_mb=75)
 async def ai_detect_sensitive(
-        request: Request,
-        file: UploadFile = File(...),
-        requested_entities: Optional[str] = Form(None),
-        remove_words: Optional[str] = Form(None),
-        threshold: Optional[float] = Form(None)
+    request: Request,
+    file: UploadFile = File(...),
+    requested_entities: Optional[str] = Form(None),
+    remove_words: Optional[str] = Form(None),
+    threshold: Optional[float] = Form(None),
 ) -> JSONResponse:
     """
     Endpoint to detect sensitive information in an uploaded file using the AI detection service.
@@ -66,9 +66,7 @@ async def ai_detect_sensitive(
         status = error_info.get("status_code", 500)
         # Return a JSONResponse with the safe error information.
         return JSONResponse(
-            content=error_info,
-            status_code=status,
-            media_type=JSON_MEDIA_TYPE
+            content=error_info, status_code=status, media_type=JSON_MEDIA_TYPE
         )
     # Instantiate the AI detection service.
     service = AIDetectService()
@@ -77,8 +75,7 @@ async def ai_detect_sensitive(
         result = await service.detect(file, requested_entities, remove_words, threshold)
         # Wrap the model dump in JSONResponse:
         return JSONResponse(
-            content=result.model_dump(exclude_none=True),
-            media_type=JSON_MEDIA_TYPE
+            content=result.model_dump(exclude_none=True), media_type=JSON_MEDIA_TYPE
         )
     except Exception as e:
         # Securely handle any exceptions during AI detection.
@@ -89,7 +86,5 @@ async def ai_detect_sensitive(
         status = error_info.get("status_code", 500)
         # Return a JSONResponse containing the sanitized error message.
         return JSONResponse(
-            content=error_info,
-            status_code=status,
-            media_type=JSON_MEDIA_TYPE
+            content=error_info, status_code=status, media_type=JSON_MEDIA_TYPE
         )

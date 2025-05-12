@@ -336,11 +336,13 @@ class TestMemoryMonitor(unittest.TestCase):
 
     # Setup before each test
     def setUp(self):
-        self.lock_patcher = patch('backend.app.utils.system_utils.memory_management.TimeoutLock')
+        self.lock_patcher = patch(
+            "backend.app.utils.system_utils.memory_management.TimeoutLock"
+        )
 
         self.mock_lock = self.lock_patcher.start()
 
-        self.vm_patcher = patch('psutil.virtual_memory')
+        self.vm_patcher = patch("psutil.virtual_memory")
 
         self.mock_vm = self.vm_patcher.start()
 
@@ -354,7 +356,7 @@ class TestMemoryMonitor(unittest.TestCase):
 
         self.mock_vm.return_value = mock_vm_instance
 
-        self.process_patcher = patch('psutil.Process')
+        self.process_patcher = patch("psutil.Process")
 
         self.mock_process = self.process_patcher.start()
 
@@ -368,26 +370,22 @@ class TestMemoryMonitor(unittest.TestCase):
 
         self.mock_process.return_value = mock_process_instance
 
-        self.thread_patcher = patch('threading.Thread')
+        self.thread_patcher = patch("threading.Thread")
 
         self.mock_thread = self.thread_patcher.start()
 
-        self.logger_patcher = patch('backend.app.utils.system_utils.memory_management.logger')
+        self.logger_patcher = patch(
+            "backend.app.utils.system_utils.memory_management.logger"
+        )
 
         self.mock_logger = self.logger_patcher.start()
 
         self.memory_monitor = MemoryMonitor(
-
             memory_threshold=80.0,
-
             critical_threshold=90.0,
-
             check_interval=5.0,
-
             enable_monitoring=False,
-
-            adaptive_thresholds=True
-
+            adaptive_thresholds=True,
         )
 
     # Tear down after each test
@@ -402,7 +400,10 @@ class TestMemoryMonitor(unittest.TestCase):
 
         self.logger_patcher.stop()
 
-        if hasattr(self.memory_monitor, '_monitor_thread') and self.memory_monitor._monitor_thread:
+        if (
+            hasattr(self.memory_monitor, "_monitor_thread")
+            and self.memory_monitor._monitor_thread
+        ):
             self.memory_monitor.stop_monitoring()
 
     # Test initialization
@@ -437,7 +438,7 @@ class TestMemoryMonitorExtraMethods(unittest.TestCase):
 
     # Setup before each test
     def setUp(self):
-        self.vm_patcher = patch('psutil.virtual_memory')
+        self.vm_patcher = patch("psutil.virtual_memory")
 
         self.mock_vm = self.vm_patcher.start()
 
@@ -451,7 +452,7 @@ class TestMemoryMonitorExtraMethods(unittest.TestCase):
 
         self.mock_vm.return_value = mock_vm_instance
 
-        self.process_patcher = patch('psutil.Process')
+        self.process_patcher = patch("psutil.Process")
 
         self.mock_process = self.process_patcher.start()
 
@@ -463,22 +464,18 @@ class TestMemoryMonitorExtraMethods(unittest.TestCase):
 
         self.mock_process.return_value = mock_process_instance
 
-        self.logger_patcher = patch('backend.app.utils.system_utils.memory_management.logger')
+        self.logger_patcher = patch(
+            "backend.app.utils.system_utils.memory_management.logger"
+        )
 
         self.mock_logger = self.logger_patcher.start()
 
         self.memory_monitor = MemoryMonitor(
-
             memory_threshold=80.0,
-
             critical_threshold=90.0,
-
             check_interval=1.0,
-
             enable_monitoring=False,
-
-            adaptive_thresholds=True
-
+            adaptive_thresholds=True,
         )
 
     # Tear down after each test
@@ -503,27 +500,29 @@ class TestMemoryMonitorExtraMethods(unittest.TestCase):
 
         stats = self.memory_monitor.get_memory_stats()
 
-        self.assertEqual(stats['peak_usage'], 55.0)
+        self.assertEqual(stats["peak_usage"], 55.0)
 
     # Test update_memory_stats
     def test_update_memory_stats(self):
         self.memory_monitor._update_memory_stats(60.0)
 
-        self.assertAlmostEqual(self.memory_monitor.memory_stats.current_usage.get(), 60.0)
+        self.assertAlmostEqual(
+            self.memory_monitor.memory_stats.current_usage.get(), 60.0
+        )
 
         self.assertEqual(self.memory_monitor.memory_stats.checks_count.get(), 1)
 
-        self.assertAlmostEqual(self.memory_monitor.memory_stats.average_usage.get(), 60.0)
+        self.assertAlmostEqual(
+            self.memory_monitor.memory_stats.average_usage.get(), 60.0
+        )
 
     # Test perform_cleanup
-    @patch('gc.collect')
+    @patch("gc.collect")
     def test_perform_cleanup(self, mock_gc_collect):
         call_values = [80.0, 70.0]
 
         self.memory_monitor.get_memory_usage = MagicMock(
-
             side_effect=lambda: call_values.pop(0) if call_values else 70.0
-
         )
 
         self.memory_monitor._last_gc_time = time.time() - 100
@@ -535,8 +534,10 @@ class TestMemoryMonitorExtraMethods(unittest.TestCase):
         self.mock_logger.info.assert_called()
 
     # Test emergency_cleanup
-    @patch('gc.collect')
-    @patch('backend.app.utils.system_utils.memory_management.MemoryMonitor._free_additional_memory')
+    @patch("gc.collect")
+    @patch(
+        "backend.app.utils.system_utils.memory_management.MemoryMonitor._free_additional_memory"
+    )
     def test_emergency_cleanup(self, mock_free_mem, mock_gc_collect):
         self.memory_monitor.memory_stats.current_usage.set(92.0)
 
@@ -559,8 +560,10 @@ class TestMemoryMonitorExtraMethods(unittest.TestCase):
         self.assertTrue(True)
 
     # Test free_additional_memory
-    @patch('backend.app.utils.system_utils.memory_management.gc.collect')
-    @patch('backend.app.utils.system_utils.memory_management.gc.malloc_trim', create=True)
+    @patch("backend.app.utils.system_utils.memory_management.gc.collect")
+    @patch(
+        "backend.app.utils.system_utils.memory_management.gc.malloc_trim", create=True
+    )
     def test_free_additional_memory(self, mock_malloc_trim, mock_gc_collect):
         from backend.app.utils.system_utils.memory_management import MemoryMonitor
 
@@ -568,7 +571,7 @@ class TestMemoryMonitorExtraMethods(unittest.TestCase):
 
         mock_gc_collect.assert_called()
 
-        if hasattr(gc, 'malloc_trim'):
+        if hasattr(gc, "malloc_trim"):
             mock_malloc_trim.assert_called()
 
     # Test adjust_thresholds_based_on_system
@@ -587,18 +590,12 @@ class TestGlobalMemoryFunctions(unittest.TestCase):
 
     # Setup before each test
     def setUp(self):
-        self.vm_patcher = patch('psutil.virtual_memory')
+        self.vm_patcher = patch("psutil.virtual_memory")
 
         self.mock_vm = self.vm_patcher.start()
 
         mock_vm_instance = MagicMock(
-
-            total=8 * 1024 * 1024 * 1024,
-
-            available=4 * 1024 * 1024 * 1024,
-
-            percent=50.0
-
+            total=8 * 1024 * 1024 * 1024, available=4 * 1024 * 1024 * 1024, percent=50.0
         )
 
         self.mock_vm.return_value = mock_vm_instance
@@ -637,15 +634,10 @@ class TestGlobalMemoryFunctions(unittest.TestCase):
 
         with _gc_lock:
             _gc_stats[func_name] = {
-
-                'last_gc_time': time.time() - 100,
-
-                'last_gc_effectiveness': 10,
-
-                'gc_calls': 0,
-
-                'memory_increases': []
-
+                "last_gc_time": time.time() - 100,
+                "last_gc_effectiveness": 10,
+                "gc_calls": 0,
+                "memory_increases": [],
             }
 
         run_flag, gen = should_run_gc(95, 10, func_name)
@@ -659,29 +651,27 @@ class TestGlobalMemoryFunctions(unittest.TestCase):
         self.assertIsInstance(run_flag, bool)
 
     # Test run_gc
-    @patch('gc.collect')
+    @patch("gc.collect")
     def test_run_gc(self, mock_gc_collect):
         func_name = "dummy_func"
 
         with _gc_lock:
-            _gc_stats.setdefault(func_name, {
-
-                'last_gc_time': 0,
-
-                'last_gc_effectiveness': 0,
-
-                'gc_calls': 0,
-
-                'memory_increases': []
-
-            })
+            _gc_stats.setdefault(
+                func_name,
+                {
+                    "last_gc_time": 0,
+                    "last_gc_effectiveness": 0,
+                    "gc_calls": 0,
+                    "memory_increases": [],
+                },
+            )
 
         run_gc(1, func_name)
 
         mock_gc_collect.assert_called_with(generation=1)
 
         with _gc_lock:
-            self.assertGreater(_gc_stats[func_name]['gc_calls'], 0)
+            self.assertGreater(_gc_stats[func_name]["gc_calls"], 0)
 
 
 # Tests for memory_optimized decorator
@@ -702,15 +692,10 @@ class TestMemoryOptimizedDecorator(unittest.TestCase):
 
         with _gc_lock:
             _gc_stats[func_name] = {
-
-                'last_gc_time': time.time() - 100,
-
-                'last_gc_effectiveness': 0,
-
-                'gc_calls': 0,
-
-                'memory_increases': []
-
+                "last_gc_time": time.time() - 100,
+                "last_gc_effectiveness": 0,
+                "gc_calls": 0,
+                "memory_increases": [],
             }
 
         original_get = memory_monitor.get_memory_usage
@@ -764,17 +749,11 @@ class TestAdditionalMemoryMethods(unittest.TestCase):
     # Setup monitor and GC stats
     def setUp(self):
         self.monitor = MemoryMonitor(
-
             memory_threshold=80.0,
-
             critical_threshold=90.0,
-
             check_interval=1.0,
-
             enable_monitoring=False,
-
-            adaptive_thresholds=True
-
+            adaptive_thresholds=True,
         )
 
         with _gc_lock:
@@ -785,9 +764,9 @@ class TestAdditionalMemoryMethods(unittest.TestCase):
     def test_adjust_thresholds_based_on_system_low_memory(self, mock_virtual_memory):
         mock_vm_instance = MagicMock()
 
-        mock_vm_instance.total = 2 * 1024 ** 3
+        mock_vm_instance.total = 2 * 1024**3
 
-        mock_vm_instance.available = 1 * 1024 ** 3
+        mock_vm_instance.available = 1 * 1024**3
 
         mock_vm_instance.percent = 80.0
 
@@ -801,16 +780,18 @@ class TestAdditionalMemoryMethods(unittest.TestCase):
 
         self.assertEqual(self.monitor.batch_memory_threshold, 50.0)
 
-        self.assertEqual(self.monitor.memory_stats.system_threshold_adjustments.get(), 2)
+        self.assertEqual(
+            self.monitor.memory_stats.system_threshold_adjustments.get(), 2
+        )
 
     # Test medium-memory adjustments
     @patch("psutil.virtual_memory")
     def test_adjust_thresholds_based_on_system_medium_usage(self, mock_virtual_memory):
         mock_vm_instance = MagicMock()
 
-        mock_vm_instance.total = 6 * 1024 ** 3
+        mock_vm_instance.total = 6 * 1024**3
 
-        mock_vm_instance.available = 3 * 1024 ** 3
+        mock_vm_instance.available = 3 * 1024**3
 
         mock_vm_instance.percent = 50.0
 
@@ -843,28 +824,27 @@ class TestAdditionalMemoryMethods(unittest.TestCase):
 
         self.monitor._monitor_thread.join
 
-        self.assertTrue(any("Memory monitoring stopped" in call_args[0][0]
-
-                            for call_args in mock_logger.info.call_args_list))
+        self.assertTrue(
+            any(
+                "Memory monitoring stopped" in call_args[0][0]
+                for call_args in mock_logger.info.call_args_list
+            )
+        )
 
     # Test adaptive threshold calculation
-    @patch("backend.app.utils.system_utils.memory_management.memory_monitor.get_memory_usage")
+    @patch(
+        "backend.app.utils.system_utils.memory_management.memory_monitor.get_memory_usage"
+    )
     def test_calc_adaptive_threshold_with_prior_gc_stats(self, mock_get_memory_usage):
         func_name = "dummy_func"
 
         with _gc_lock:
             _gc_stats[func_name] = {
-
-                'total_calls': 10,
-
-                'last_gc_time': time.time() - 100,
-
-                'last_gc_effectiveness': 5,
-
-                'gc_calls': 2,
-
-                'memory_increases': [10.0, 15.0, 20.0]
-
+                "total_calls": 10,
+                "last_gc_time": time.time() - 100,
+                "last_gc_effectiveness": 5,
+                "gc_calls": 2,
+                "memory_increases": [10.0, 15.0, 20.0],
             }
 
         mock_get_memory_usage.return_value = 70.0
@@ -878,7 +858,9 @@ class TestAdditionalMemoryMethods(unittest.TestCase):
         self.assertEqual(initial_memory, 70.0)
 
     # Test calc_adaptive_threshold with provided value
-    @patch("backend.app.utils.system_utils.memory_management.memory_monitor.get_memory_usage")
+    @patch(
+        "backend.app.utils.system_utils.memory_management.memory_monitor.get_memory_usage"
+    )
     def test_calc_adaptive_threshold_with_provided_value(self, mock_get_memory_usage):
         func_name = "dummy_func2"
 

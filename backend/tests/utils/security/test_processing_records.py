@@ -15,49 +15,49 @@ class TestProcessingRecordKeeper(unittest.TestCase):
     # set up environment mocks for each test
     def setUp(self):
         self.log_info_patcher = patch(
-            'backend.app.utils.security.processing_records.log_info'
+            "backend.app.utils.security.processing_records.log_info"
         )
 
         self.mock_log_info = self.log_info_patcher.start()
 
         self.log_warning_patcher = patch(
-            'backend.app.utils.security.processing_records.log_warning'
+            "backend.app.utils.security.processing_records.log_warning"
         )
 
         self.mock_log_warning = self.log_warning_patcher.start()
 
-        self.dirname_patcher = patch('os.path.dirname')
+        self.dirname_patcher = patch("os.path.dirname")
 
         self.mock_dirname = self.dirname_patcher.start()
 
-        self.mock_dirname.return_value = '/mock/path'
+        self.mock_dirname.return_value = "/mock/path"
 
-        self.abspath_patcher = patch('os.path.abspath')
+        self.abspath_patcher = patch("os.path.abspath")
 
         self.mock_abspath = self.abspath_patcher.start()
 
-        self.mock_abspath.return_value = '/mock/path/file.py'
+        self.mock_abspath.return_value = "/mock/path/file.py"
 
-        self.makedirs_patcher = patch('os.makedirs')
+        self.makedirs_patcher = patch("os.makedirs")
 
         self.mock_makedirs = self.makedirs_patcher.start()
 
-        self.listdir_patcher = patch('os.listdir')
+        self.listdir_patcher = patch("os.listdir")
 
         self.mock_listdir = self.listdir_patcher.start()
 
         self.mock_listdir.return_value = []
 
-        self.unlink_patcher = patch('os.unlink')
+        self.unlink_patcher = patch("os.unlink")
 
         self.mock_unlink = self.unlink_patcher.start()
 
-        self.open_patcher = patch('builtins.open', mock_open())
+        self.open_patcher = patch("builtins.open", mock_open())
 
         self.mock_open = self.open_patcher.start()
 
         self.datetime_patcher = patch(
-            'backend.app.utils.security.processing_records.datetime'
+            "backend.app.utils.security.processing_records.datetime"
         )
 
         self.mock_datetime = self.datetime_patcher.start()
@@ -68,19 +68,17 @@ class TestProcessingRecordKeeper(unittest.TestCase):
 
         self.mock_datetime.timedelta = timedelta
 
-        self.sha256_patcher = patch('hashlib.sha256')
+        self.sha256_patcher = patch("hashlib.sha256")
 
         self.mock_sha256 = self.sha256_patcher.start()
 
         mock_hash = MagicMock()
 
-        mock_hash.hexdigest.return_value = (
-            "0123456789abcdef0123456789abcdef"
-        )
+        mock_hash.hexdigest.return_value = "0123456789abcdef0123456789abcdef"
 
         self.mock_sha256.return_value = mock_hash
 
-        self.json_dumps_patcher = patch('json.dumps')
+        self.json_dumps_patcher = patch("json.dumps")
 
         self.mock_json_dumps = self.json_dumps_patcher.start()
 
@@ -135,41 +133,25 @@ class TestProcessingRecordKeeper(unittest.TestCase):
 
         msg = self.mock_log_warning.call_args[0][0]
 
-        self.assertIn(
-            f"processing_record_2025-04-15{JSON_CONSTANT}",
-            msg
-        )
+        self.assertIn(f"processing_record_2025-04-15{JSON_CONSTANT}", msg)
 
         self.assertIn("Test file error", msg)
 
     # existing record files counted correctly in stats
     def test_initialize_stats_with_records(self):
         self.mock_listdir.return_value = [
-
             f"processing_record_2025-04-14{JSON_CONSTANT}",
-
             f"processing_record_2025-04-15{JSON_CONSTANT}",
-
-            "not_a_record_file.txt"
-
+            "not_a_record_file.txt",
         ]
 
         dir_path = self.record_keeper.records_dir
 
-        file1 = os.path.join(
-            dir_path,
-            f"processing_record_2025-04-14{JSON_CONSTANT}"
-        )
+        file1 = os.path.join(dir_path, f"processing_record_2025-04-14{JSON_CONSTANT}")
 
-        file2 = os.path.join(
-            dir_path,
-            f"processing_record_2025-04-15{JSON_CONSTANT}"
-        )
+        file2 = os.path.join(dir_path, f"processing_record_2025-04-15{JSON_CONSTANT}")
 
-        file_content = {
-            file1: "record1\nrecord2",
-            file2: "record1\nrecord2\nrecord3"
-        }
+        file_content = {file1: "record1\nrecord2", file2: "record1\nrecord2\nrecord3"}
 
         def mock_open_side_effect(file_path, *args, **kwargs):
             mock_file = MagicMock()
@@ -188,7 +170,7 @@ class TestProcessingRecordKeeper(unittest.TestCase):
 
         self.assertEqual(
             self.record_keeper.stats["records_by_day"],
-            {"2025-04-14": 2, "2025-04-15": 3}
+            {"2025-04-14": 2, "2025-04-15": 3},
         )
 
         self.mock_log_info.assert_called_with(
@@ -198,44 +180,26 @@ class TestProcessingRecordKeeper(unittest.TestCase):
     # recording a new processing event writes to file and updates stats
     def test_record_processing(self):
         self.record_keeper.record_processing(
-
             operation_type="test_operation",
-
             document_type="test_document",
-
             entity_types_processed=["name", "email"],
-
             processing_time=1.5,
-
             file_count=2,
-
             entity_count=10,
-
-            success=True
-
+            success=True,
         )
 
         self.mock_log_info.assert_called_with(
-
             "[GDPR_RECORD] Processing record created for test_operation"
         )
 
         expected_file_path = os.path.join(
-
             self.record_keeper.records_dir,
-
-            f"processing_record_2025-04-15{JSON_CONSTANT}"
-
+            f"processing_record_2025-04-15{JSON_CONSTANT}",
         )
 
         self.mock_open.assert_called_once_with(
-
-            expected_file_path,
-
-            'a',
-
-            encoding='utf-8'
-
+            expected_file_path, "a", encoding="utf-8"
         )
 
         self.mock_json_dumps.assert_called_once()
@@ -260,7 +224,7 @@ class TestProcessingRecordKeeper(unittest.TestCase):
 
         self.assertEqual(
             record["legal_basis"],
-            GDPR_DOCUMENTATION.get('legal_basis', 'legitimate_interests')
+            GDPR_DOCUMENTATION.get("legal_basis", "legitimate_interests"),
         )
 
         self.assertEqual(record["operation_id"], "0123456789abcdef")
@@ -272,19 +236,14 @@ class TestProcessingRecordKeeper(unittest.TestCase):
         self.assertEqual(self.record_keeper.stats["total_records"], 1)
 
         self.assertEqual(
-            self.record_keeper.stats["last_record_time"],
-            "2025-04-15T12:00:00"
+            self.record_keeper.stats["last_record_time"], "2025-04-15T12:00:00"
         )
 
         self.assertEqual(
-            self.record_keeper.stats["records_by_type"],
-            {"test_operation": 1}
+            self.record_keeper.stats["records_by_type"], {"test_operation": 1}
         )
 
-        self.assertEqual(
-            self.record_keeper.stats["records_by_day"],
-            {"2025-04-15": 1}
-        )
+        self.assertEqual(self.record_keeper.stats["records_by_day"], {"2025-04-15": 1})
 
     # singleton pattern ensures one instance
     def test_singleton_pattern(self):
@@ -299,22 +258,13 @@ class TestProcessingRecordKeeper(unittest.TestCase):
     # cleanup with no old files leaves stats unchanged
     def test_cleanup_old_records_no_old_files(self):
         self.mock_listdir.return_value = [
-
             f"processing_record_2025-01-20{JSON_CONSTANT}",
-
-            f"processing_record_2025-05-01{JSON_CONSTANT}"
-
+            f"processing_record_2025-05-01{JSON_CONSTANT}",
         ]
 
         self.record_keeper.stats["total_records"] = 10
 
-        self.record_keeper.stats["records_by_day"] = {
-
-            "2025-01-20": 4,
-
-            "2025-05-01": 6
-
-        }
+        self.record_keeper.stats["records_by_day"] = {"2025-01-20": 4, "2025-05-01": 6}
 
         self.record_keeper._cleanup_old_records()
 
@@ -323,41 +273,26 @@ class TestProcessingRecordKeeper(unittest.TestCase):
         self.assertEqual(self.record_keeper.stats["total_records"], 10)
 
         self.assertEqual(
-
             self.record_keeper.stats["records_by_day"],
-
-            {"2025-01-20": 4, "2025-05-01": 6}
-
+            {"2025-01-20": 4, "2025-05-01": 6},
         )
 
     # old files removed and stats updated accordingly
     def test_cleanup_old_records_with_old_files(self):
         self.mock_listdir.return_value = [
-
             f"processing_record_2024-12-31{JSON_CONSTANT}",
-
-            f"processing_record_2025-04-10{JSON_CONSTANT}"
-
+            f"processing_record_2025-04-10{JSON_CONSTANT}",
         ]
 
         self.record_keeper.stats["total_records"] = 10
 
-        self.record_keeper.stats["records_by_day"] = {
-
-            "2024-12-31": 3,
-
-            "2025-04-10": 7
-
-        }
+        self.record_keeper.stats["records_by_day"] = {"2024-12-31": 3, "2025-04-10": 7}
 
         self.record_keeper._cleanup_old_records()
 
         old_file = os.path.join(
-
             self.record_keeper.records_dir,
-
-            f"processing_record_2024-12-31{JSON_CONSTANT}"
-
+            f"processing_record_2024-12-31{JSON_CONSTANT}",
         )
 
         self.mock_unlink.assert_called_once_with(old_file)
@@ -427,31 +362,18 @@ class TestProcessingRecordKeeper(unittest.TestCase):
         self.assertEqual(stats["records_by_day"], {"2025-04-15": 8})
 
         self.assertEqual(
-
             stats["retention_policy"]["retention_days"],
-
-            self.record_keeper.record_retention_days
-
+            self.record_keeper.record_retention_days,
         )
 
         expected_dir = os.path.basename(self.record_keeper.records_dir)
 
-        self.assertEqual(
-
-            stats["retention_policy"]["records_directory"],
-
-            expected_dir
-
-        )
+        self.assertEqual(stats["retention_policy"]["records_directory"], expected_dir)
 
         self.assertEqual(stats["gdpr_documentation"], GDPR_DOCUMENTATION)
 
         stats["records_by_day"]["2025-04-15"] = 100
 
         self.assertNotEqual(
-
-            self.record_keeper.stats["records_by_day"]["2025-04-15"],
-
-            100
-
+            self.record_keeper.stats["records_by_day"]["2025-04-15"], 100
         )

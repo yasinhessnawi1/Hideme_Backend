@@ -30,7 +30,9 @@ class TestStatusRouter:
     @pytest.mark.asyncio
     @patch("backend.app.api.routes.status_routes.response_cache.get", return_value=None)
     @patch("backend.app.api.routes.status_routes.response_cache.set")
-    @patch("backend.app.api.routes.status_routes.SecurityAwareErrorHandler.handle_safe_error")
+    @patch(
+        "backend.app.api.routes.status_routes.SecurityAwareErrorHandler.handle_safe_error"
+    )
     def test_status_error(self, mock_safe_error, mock_cache_set, mock_cache_get):
         response_cache.clear()
 
@@ -40,7 +42,7 @@ class TestStatusRouter:
             "error": "Internal error",
             "error_id": "mock_id",
             "error_type": "Exception",
-            "status": "error"
+            "status": "error",
         }
 
         response = client.get("/status")
@@ -80,7 +82,9 @@ class TestStatusRouter:
 
     # /health cache failure returns 500 via safe error
     @pytest.mark.asyncio
-    @patch("backend.app.api.routes.status_routes.SecurityAwareErrorHandler.handle_safe_error")
+    @patch(
+        "backend.app.api.routes.status_routes.SecurityAwareErrorHandler.handle_safe_error"
+    )
     @patch("backend.app.api.routes.status_routes.response_cache.get", return_value=None)
     @patch("backend.app.api.routes.status_routes.response_cache.set")
     def test_health_check_error(self, mock_cache_set, mock_cache_get, mock_safe_error):
@@ -88,7 +92,11 @@ class TestStatusRouter:
 
         mock_cache_get.side_effect = Exception("Health check cache fail")
 
-        mock_safe_error.return_value = {"status": "error", "error": "fail", "status_code": 500}
+        mock_safe_error.return_value = {
+            "status": "error",
+            "error": "fail",
+            "status_code": 500,
+        }
 
         response = client.get("/health")
 
@@ -117,7 +125,9 @@ class TestStatusRouter:
 
     # /metrics cache failure returns 500 via safe error
     @pytest.mark.asyncio
-    @patch("backend.app.api.routes.status_routes.SecurityAwareErrorHandler.handle_safe_error")
+    @patch(
+        "backend.app.api.routes.status_routes.SecurityAwareErrorHandler.handle_safe_error"
+    )
     @patch("backend.app.api.routes.status_routes.response_cache.get", return_value=None)
     @patch("backend.app.api.routes.status_routes.response_cache.set")
     def test_metrics_error(self, mock_cache_set, mock_cache_get, mock_safe_error):
@@ -125,7 +135,11 @@ class TestStatusRouter:
 
         mock_cache_get.side_effect = Exception("Metrics cache fail")
 
-        mock_safe_error.return_value = {"status": "error", "error": "fail", "status_code": 500}
+        mock_safe_error.return_value = {
+            "status": "error",
+            "error": "fail",
+            "status_code": 500,
+        }
 
         response = client.get("/metrics", headers={"X-API-Key": "test_api_key"})
 
@@ -152,15 +166,23 @@ class TestStatusRouter:
 
     # /readiness cache failure returns 500 via safe error
     @pytest.mark.asyncio
-    @patch("backend.app.api.routes.status_routes.SecurityAwareErrorHandler.handle_safe_error")
+    @patch(
+        "backend.app.api.routes.status_routes.SecurityAwareErrorHandler.handle_safe_error"
+    )
     @patch("backend.app.api.routes.status_routes.response_cache.get", return_value=None)
     @patch("backend.app.api.routes.status_routes.response_cache.set")
-    def test_readiness_check_error(self, mock_cache_set, mock_cache_get, mock_safe_error):
+    def test_readiness_check_error(
+        self, mock_cache_set, mock_cache_get, mock_safe_error
+    ):
         response_cache.clear()
 
         mock_cache_get.side_effect = Exception("Readiness check cache fail")
 
-        mock_safe_error.return_value = {"status": "error", "error": "fail", "status_code": 500}
+        mock_safe_error.return_value = {
+            "status": "error",
+            "error": "fail",
+            "status_code": 500,
+        }
 
         response = client.get("/readiness")
 

@@ -1,10 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from backend.app.utils.helpers.text_utils import (
-    TextUtils,
-    EntityUtils
-)
+from backend.app.utils.helpers.text_utils import TextUtils, EntityUtils
 
 
 class MockRecognizerResult:
@@ -29,7 +26,7 @@ class TestTextUtilsReconstructTextAndMapping(unittest.TestCase):
         words = [
             {"text": "Hello", "x0": 10, "y0": 20, "x1": 50, "y1": 30},
             {"text": "world", "x0": 60, "y0": 20, "x1": 100, "y1": 30},
-            {"text": "!", "x0": 110, "y0": 20, "x1": 120, "y1": 30}
+            {"text": "!", "x0": 110, "y0": 20, "x1": 120, "y1": 30},
         ]
 
         full_text, mapping = TextUtils.reconstruct_text_and_mapping(words)
@@ -69,7 +66,7 @@ class TestTextUtilsReconstructTextAndMapping(unittest.TestCase):
         words = [
             {"text": "Hello", "x0": 10, "y0": 20, "x1": 50, "y1": 30},
             {"text": "", "x0": 60, "y0": 20, "x1": 100, "y1": 30},
-            {"text": "world", "x0": 110, "y0": 20, "x1": 150, "y1": 30}
+            {"text": "world", "x0": 110, "y0": 20, "x1": 150, "y1": 30},
         ]
 
         full_text, mapping = TextUtils.reconstruct_text_and_mapping(words)
@@ -86,7 +83,7 @@ class TestTextUtilsReconstructTextAndMapping(unittest.TestCase):
     def test_reconstruct_text_and_mapping_with_whitespace(self):
         words = [
             {"text": "  Hello  ", "x0": 10, "y0": 20, "x1": 50, "y1": 30},
-            {"text": "  world  ", "x0": 60, "y0": 20, "x1": 100, "y1": 30}
+            {"text": "  world  ", "x0": 60, "y0": 20, "x1": 100, "y1": 30},
         ]
 
         full_text, mapping = TextUtils.reconstruct_text_and_mapping(words)
@@ -112,7 +109,7 @@ class TestTextUtilsReconstructTextAndMapping(unittest.TestCase):
             {"text": "test", "x0": 90, "y0": 20, "x1": 120, "y1": 30},
             {"text": "with", "x0": 130, "y0": 20, "x1": 160, "y1": 30},
             {"text": "multiple", "x0": 170, "y0": 20, "x1": 220, "y1": 30},
-            {"text": "words", "x0": 230, "y0": 20, "x1": 270, "y1": 30}
+            {"text": "words", "x0": 230, "y0": 20, "x1": 270, "y1": 30},
         ]
 
         full_text, mapping = TextUtils.reconstruct_text_and_mapping(words)
@@ -145,15 +142,17 @@ class TestTextUtilsMapOffsetsToBboxes(unittest.TestCase):
             ({"text": "some", "x0": 230, "y0": 20, "x1": 260, "y1": 30}, 29, 33),
             ({"text": "sensitive", "x0": 10, "y0": 40, "x1": 60, "y1": 50}, 34, 43),
             ({"text": "information", "x0": 70, "y0": 40, "x1": 140, "y1": 50}, 44, 55),
-            ({"text": ".", "x0": 150, "y0": 40, "x1": 155, "y1": 50}, 55, 56)
+            ({"text": ".", "x0": 150, "y0": 40, "x1": 155, "y1": 50}, 55, 56),
         ]
 
     # single-line bounding box mapping
-    @patch('backend.app.utils.helpers.text_utils.log_warning')
+    @patch("backend.app.utils.helpers.text_utils.log_warning")
     def test_map_offsets_to_bboxes_basic(self, mock_log_warning):
         sensitive_offsets = (10, 23)
 
-        bboxes = TextUtils.map_offsets_to_bboxes(self.full_text, self.mapping, sensitive_offsets)
+        bboxes = TextUtils.map_offsets_to_bboxes(
+            self.full_text, self.mapping, sensitive_offsets
+        )
 
         self.assertEqual(len(bboxes), 1)
 
@@ -170,11 +169,13 @@ class TestTextUtilsMapOffsetsToBboxes(unittest.TestCase):
         mock_log_warning.assert_not_called()
 
     # entity spanning multiple lines
-    @patch('backend.app.utils.helpers.text_utils.log_warning')
+    @patch("backend.app.utils.helpers.text_utils.log_warning")
     def test_map_offsets_to_bboxes_multiple_lines(self, mock_log_warning):
         sensitive_offsets = (29, 55)
 
-        bboxes = TextUtils.map_offsets_to_bboxes(self.full_text, self.mapping, sensitive_offsets)
+        bboxes = TextUtils.map_offsets_to_bboxes(
+            self.full_text, self.mapping, sensitive_offsets
+        )
 
         self.assertEqual(len(bboxes), 2)
 
@@ -201,17 +202,14 @@ class TestTextUtilsMapOffsetsToBboxes(unittest.TestCase):
         mock_log_warning.assert_not_called()
 
     # custom padding on bounding boxes
-    @patch('backend.app.utils.helpers.text_utils.log_warning')
+    @patch("backend.app.utils.helpers.text_utils.log_warning")
     def test_map_offsets_to_bboxes_custom_padding(self, mock_log_warning):
         sensitive_offsets = (10, 14)
 
         custom_padding = {"top": 5, "right": 10, "bottom": 5, "left": 10}
 
         bboxes = TextUtils.map_offsets_to_bboxes(
-            self.full_text,
-            self.mapping,
-            sensitive_offsets,
-            padding=custom_padding
+            self.full_text, self.mapping, sensitive_offsets, padding=custom_padding
         )
 
         self.assertEqual(len(bboxes), 1)
@@ -229,11 +227,13 @@ class TestTextUtilsMapOffsetsToBboxes(unittest.TestCase):
         mock_log_warning.assert_not_called()
 
     # offsets with no matching words
-    @patch('backend.app.utils.helpers.text_utils.log_warning')
+    @patch("backend.app.utils.helpers.text_utils.log_warning")
     def test_map_offsets_to_bboxes_no_match(self, mock_log_warning):
         sensitive_offsets = (100, 110)
 
-        bboxes = TextUtils.map_offsets_to_bboxes(self.full_text, self.mapping, sensitive_offsets)
+        bboxes = TextUtils.map_offsets_to_bboxes(
+            self.full_text, self.mapping, sensitive_offsets
+        )
 
         self.assertEqual(bboxes, [])
 
@@ -242,7 +242,7 @@ class TestTextUtilsMapOffsetsToBboxes(unittest.TestCase):
         self.assertIn("No valid bounding box found", mock_log_warning.call_args[0][0])
 
     # bounding box height capped to maximum
-    @patch('backend.app.utils.helpers.text_utils.log_warning')
+    @patch("backend.app.utils.helpers.text_utils.log_warning")
     def test_map_offsets_to_bboxes_height_limit(self, mock_log_warning):
         tall_mapping = [
             ({"text": "tall", "x0": 10, "y0": 20, "x1": 40, "y1": 100}, 0, 4)
@@ -250,7 +250,9 @@ class TestTextUtilsMapOffsetsToBboxes(unittest.TestCase):
 
         sensitive_offsets = (0, 4)
 
-        bboxes = TextUtils.map_offsets_to_bboxes("tall", tall_mapping, sensitive_offsets)
+        bboxes = TextUtils.map_offsets_to_bboxes(
+            "tall", tall_mapping, sensitive_offsets
+        )
 
         self.assertEqual(len(bboxes), 1)
 
@@ -289,7 +291,7 @@ class TestTextUtilsMergeMethods(unittest.TestCase):
     def test_merge_group(self):
         boxes = [
             {"x0": 0, "y0": 10, "x1": 30, "y1": 30},
-            {"x0": 5, "y0": 12, "x1": 35, "y1": 40}
+            {"x0": 5, "y0": 12, "x1": 35, "y1": 40},
         ]
 
         expected = {"x0": 0, "y0": 10, "x1": 35, "y1": 35}
@@ -316,14 +318,14 @@ class TestTextUtilsMergeMethods(unittest.TestCase):
         boxes = [
             {"x0": 0, "y0": 10, "x1": 30, "y1": 30},
             {"x0": 35, "y0": 12, "x1": 50, "y1": 30},
-            {"x0": 5, "y0": 50, "x1": 40, "y1": 70}
+            {"x0": 5, "y0": 50, "x1": 40, "y1": 70},
         ]
 
         expected_composite = {"x0": 0, "y0": 10, "x1": 50, "y1": 30}
 
         expected_lines = [
             {"x0": 0, "y0": 10, "x1": 50, "y1": 30},
-            {"x0": 5, "y0": 50, "x1": 40, "y1": 70}
+            {"x0": 5, "y0": 50, "x1": 40, "y1": 70},
         ]
 
         result = TextUtils.merge_bounding_boxes(boxes)
@@ -338,7 +340,7 @@ class TestTextUtilsRecomputeOffsets(unittest.TestCase):
     """Test cases for recompute_offsets method."""
 
     # basic offset recomputation
-    @patch('backend.app.utils.helpers.text_utils.log_warning')
+    @patch("backend.app.utils.helpers.text_utils.log_warning")
     def test_recompute_offsets_basic(self, mock_log_warning):
         full_text = "This is a test sentence with a test word."
 
@@ -355,7 +357,7 @@ class TestTextUtilsRecomputeOffsets(unittest.TestCase):
         mock_log_warning.assert_not_called()
 
     # no matches should log warning
-    @patch('backend.app.utils.helpers.text_utils.log_warning')
+    @patch("backend.app.utils.helpers.text_utils.log_warning")
     def test_recompute_offsets_no_match(self, mock_log_warning):
         full_text = "This is a sample sentence."
 
@@ -370,7 +372,7 @@ class TestTextUtilsRecomputeOffsets(unittest.TestCase):
         self.assertIn("No match found", mock_log_warning.call_args[0][0])
 
     # trim whitespace when searching
-    @patch('backend.app.utils.helpers.text_utils.log_warning')
+    @patch("backend.app.utils.helpers.text_utils.log_warning")
     def test_recompute_offsets_with_whitespace(self, mock_log_warning):
         full_text = "This is a test sentence."
 
@@ -385,7 +387,7 @@ class TestTextUtilsRecomputeOffsets(unittest.TestCase):
         mock_log_warning.assert_not_called()
 
     # overlapping occurrences should all be returned
-    @patch('backend.app.utils.helpers.text_utils.log_warning')
+    @patch("backend.app.utils.helpers.text_utils.log_warning")
     def test_recompute_offsets_with_overlapping_matches(self, mock_log_warning):
         full_text = "abababa"
 
@@ -404,7 +406,7 @@ class TestTextUtilsRecomputeOffsets(unittest.TestCase):
         mock_log_warning.assert_not_called()
 
     # empty entity_text matches every position
-    @patch('backend.app.utils.helpers.text_utils.log_warning')
+    @patch("backend.app.utils.helpers.text_utils.log_warning")
     def test_recompute_offsets_with_empty_entity(self, mock_log_warning):
         full_text = "This is a test sentence."
 

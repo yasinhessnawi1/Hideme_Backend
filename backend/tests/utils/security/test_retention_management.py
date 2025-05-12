@@ -13,81 +13,89 @@ class TestDocumentRetentionManager(unittest.TestCase):
     # Set up patches and a fresh manager before each test
     def setUp(self):
         # Patch logging functions.
-        self.log_info_patcher = patch('backend.app.utils.security.retention_management.log_info')
+        self.log_info_patcher = patch(
+            "backend.app.utils.security.retention_management.log_info"
+        )
 
         self.mock_log_info = self.log_info_patcher.start()
 
-        self.log_warning_patcher = patch('backend.app.utils.security.retention_management.log_warning')
+        self.log_warning_patcher = patch(
+            "backend.app.utils.security.retention_management.log_warning"
+        )
 
         self.mock_log_warning = self.log_warning_patcher.start()
 
         # Patch os.path.exists.
-        self.exists_patcher = patch('os.path.exists')
+        self.exists_patcher = patch("os.path.exists")
 
         self.mock_exists = self.exists_patcher.start()
 
         self.mock_exists.return_value = True
 
         # Patch os.path.isfile and os.path.isdir.
-        self.isfile_patcher = patch('os.path.isfile')
+        self.isfile_patcher = patch("os.path.isfile")
 
         self.mock_isfile = self.isfile_patcher.start()
 
-        self.mock_isfile.side_effect = lambda path: False if path == "/test/dir" else True
+        self.mock_isfile.side_effect = lambda path: (
+            False if path == "/test/dir" else True
+        )
 
-        self.isdir_patcher = patch('os.path.isdir')
+        self.isdir_patcher = patch("os.path.isdir")
 
         self.mock_isdir = self.isdir_patcher.start()
 
-        self.mock_isdir.side_effect = lambda path: True if path == "/test/dir" else False
+        self.mock_isdir.side_effect = lambda path: (
+            True if path == "/test/dir" else False
+        )
 
         # Patch os.path.getsize.
-        self.getsize_patcher = patch('os.path.getsize')
+        self.getsize_patcher = patch("os.path.getsize")
 
         self.mock_getsize = self.getsize_patcher.start()
 
         self.mock_getsize.return_value = 1024  # 1KB file size
 
         # Patch os.fsync.
-        self.fsync_patcher = patch('os.fsync')
+        self.fsync_patcher = patch("os.fsync")
 
         self.mock_fsync = self.fsync_patcher.start()
 
         # Patch os.listdir.
-        self.listdir_patcher = patch('os.listdir')
+        self.listdir_patcher = patch("os.listdir")
 
         self.mock_listdir = self.listdir_patcher.start()
 
         self.mock_listdir.return_value = []
 
         # Patch os.unlink.
-        self.unlink_patcher = patch('os.unlink')
+        self.unlink_patcher = patch("os.unlink")
 
         self.mock_unlink = self.unlink_patcher.start()
 
         # Patch open.
-        self.open_patcher = patch('builtins.open', mock_open())
+        self.open_patcher = patch("builtins.open", mock_open())
 
         self.mock_open = self.open_patcher.start()
 
         # Patch os.walk and shutil.rmtree.
-        self.walk_patcher = patch('os.walk')
+        self.walk_patcher = patch("os.walk")
 
         self.mock_walk = self.walk_patcher.start()
 
         self.mock_walk.return_value = [("/test/dir", [], ["file1.txt", "file2.txt"])]
 
-        self.rmtree_patcher = patch('shutil.rmtree')
+        self.rmtree_patcher = patch("shutil.rmtree")
 
         self.mock_rmtree = self.rmtree_patcher.start()
 
         # Patch threading.Thread.
-        self.thread_patcher = patch('threading.Thread')
+        self.thread_patcher = patch("threading.Thread")
 
         self.mock_thread = self.thread_patcher.start()
 
         # Patch time.time.
-        self.time_patcher = patch('time.time')
+        self.time_patcher = patch("time.time")
 
         self.mock_time = self.time_patcher.start()
 
@@ -129,7 +137,10 @@ class TestDocumentRetentionManager(unittest.TestCase):
         self.time_patcher.stop()
 
         # Stop any running cleanup thread.
-        if hasattr(self.retention_manager, "_cleanup_thread") and self.retention_manager._cleanup_thread:
+        if (
+            hasattr(self.retention_manager, "_cleanup_thread")
+            and self.retention_manager._cleanup_thread
+        ):
             self.retention_manager._stop_event.set()
 
             if hasattr(self.retention_manager._cleanup_thread, "join"):
@@ -195,7 +206,7 @@ class TestDocumentRetentionManager(unittest.TestCase):
 
         self.assertEqual(
             self.retention_manager.processed_files["/test/file.txt"],
-            1617235678.0 + 3600
+            1617235678.0 + 3600,
         )
 
         self.mock_log_info.assert_called_with(
@@ -210,7 +221,7 @@ class TestDocumentRetentionManager(unittest.TestCase):
 
         self.assertEqual(
             self.retention_manager.processed_files["/test/file.txt"],
-            1617235678.0 + TEMP_FILE_RETENTION_SECONDS
+            1617235678.0 + TEMP_FILE_RETENTION_SECONDS,
         )
 
     # Unregistering removes file from tracking and logs the removal
@@ -241,7 +252,7 @@ class TestDocumentRetentionManager(unittest.TestCase):
     def test_cleanup_expired_files(self):
         self.retention_manager.processed_files = {
             "/test/expired.txt": 1617235678.0 - 3600,
-            "/test/not_expired.txt": 1617235678.0 + 3600
+            "/test/not_expired.txt": 1617235678.0 + 3600,
         }
 
         state = {"deleted": False}
@@ -257,7 +268,11 @@ class TestDocumentRetentionManager(unittest.TestCase):
             os.unlink(path)
             state["deleted"] = True
 
-        with patch.object(self.retention_manager, '_secure_delete_file', side_effect=fake_secure_delete):
+        with patch.object(
+            self.retention_manager,
+            "_secure_delete_file",
+            side_effect=fake_secure_delete,
+        ):
             self.retention_manager.cleanup_expired_files()
 
         self.assertNotIn("/test/expired.txt", self.retention_manager.processed_files)
@@ -272,7 +287,9 @@ class TestDocumentRetentionManager(unittest.TestCase):
 
     # Permanent files are removed from tracking without deletion
     def test_cleanup_expired_files_permanent(self):
-        self.retention_manager.processed_files = {"/test/permanent.txt": 1617235678.0 - 3600}
+        self.retention_manager.processed_files = {
+            "/test/permanent.txt": 1617235678.0 - 3600
+        }
 
         self.retention_manager.permanent_files.add("/test/permanent.txt")
 
@@ -284,19 +301,25 @@ class TestDocumentRetentionManager(unittest.TestCase):
 
     # Nonexistent files are skipped without errors
     def test_cleanup_expired_files_nonexistent(self):
-        self.retention_manager.processed_files = {"/test/nonexistent.txt": 1617235678.0 - 3600}
+        self.retention_manager.processed_files = {
+            "/test/nonexistent.txt": 1617235678.0 - 3600
+        }
 
         self.mock_exists.side_effect = lambda path: False
 
         self.retention_manager.cleanup_expired_files()
 
-        self.assertNotIn("/test/nonexistent.txt", self.retention_manager.processed_files)
+        self.assertNotIn(
+            "/test/nonexistent.txt", self.retention_manager.processed_files
+        )
 
         self.mock_unlink.assert_not_called()
 
     # Errors during deletion are caught and logged as warnings
     def test_cleanup_expired_files_deletion_error(self):
-        self.retention_manager.processed_files = {"/test/error.txt": 1617235678.0 - 3600}
+        self.retention_manager.processed_files = {
+            "/test/error.txt": 1617235678.0 - 3600
+        }
 
         self.mock_unlink.side_effect = OSError("Test deletion error")
 
@@ -316,7 +339,9 @@ class TestDocumentRetentionManager(unittest.TestCase):
     def test_secure_delete_file(self):
         self.mock_exists.return_value = True
 
-        self.mock_isfile.side_effect = lambda path: True if path == "/test/file.txt" else False
+        self.mock_isfile.side_effect = lambda path: (
+            True if path == "/test/file.txt" else False
+        )
 
         self.mock_isdir.side_effect = lambda path: False
 
@@ -332,9 +357,13 @@ class TestDocumentRetentionManager(unittest.TestCase):
     def test_secure_delete_directory(self):
         self.mock_exists.return_value = True
 
-        self.mock_isfile.side_effect = lambda path: False if path == "/test/dir" else True
+        self.mock_isfile.side_effect = lambda path: (
+            False if path == "/test/dir" else True
+        )
 
-        self.mock_isdir.side_effect = lambda path: True if path == "/test/dir" else False
+        self.mock_isdir.side_effect = lambda path: (
+            True if path == "/test/dir" else False
+        )
 
         self.retention_manager._secure_delete("/test/dir")
 
@@ -382,7 +411,9 @@ class TestDocumentRetentionManager(unittest.TestCase):
 
     # Shutdown stops the cleanup thread and securely deletes pending files
     def test_shutdown(self):
-        self.retention_manager.processed_files = {"/test/delete.txt": 1617235678.0 - 3600}
+        self.retention_manager.processed_files = {
+            "/test/delete.txt": 1617235678.0 - 3600
+        }
 
         self.mock_exists.return_value = True
 
@@ -400,6 +431,8 @@ class TestDocumentRetentionManager(unittest.TestCase):
 
         self.mock_unlink.assert_called_with("/test/delete.txt")
 
-        self.mock_log_info.assert_any_call("[GDPR] Retention manager shutdown initiated")
+        self.mock_log_info.assert_any_call(
+            "[GDPR] Retention manager shutdown initiated"
+        )
 
         self.mock_log_info.assert_any_call("[GDPR] Retention manager shutdown complete")

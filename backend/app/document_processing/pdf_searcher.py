@@ -34,7 +34,7 @@ from backend.app.configs.gemini_config import (
     AI_SEARCH_PROMPT_HEADER,
     AI_SEARCH_PROMPT_FOOTER,
     AI_SEARCH_SYSTEM_INSTRUCTION,
-    AI_SEARCH_GEMINI_AVAILABLE_ENTITIES
+    AI_SEARCH_GEMINI_AVAILABLE_ENTITIES,
 )
 from backend.app.utils.helpers import TextUtils
 from backend.app.utils.helpers.gemini_helper import gemini_helper
@@ -88,7 +88,9 @@ class PDFSearcher:
         return {term.strip().lower() for term in search_terms if term.strip()}
 
     @staticmethod
-    def _word_matches(word_text: str, search_set: set, case_sensitive: bool, ai_search: bool) -> bool:
+    def _word_matches(
+        word_text: str, search_set: set, case_sensitive: bool, ai_search: bool
+    ) -> bool:
         """
         Check if a given word matches any term in the search set.
 
@@ -113,7 +115,9 @@ class PDFSearcher:
         return cleaned.lower() in search_set
 
     @staticmethod
-    def build_page_text_and_mapping(words: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], str]:
+    def build_page_text_and_mapping(
+        words: List[Dict[str, Any]],
+    ) -> Tuple[List[Dict[str, Any]], str]:
         """
         Reconstruct full page text and create a mapping of each word to its indices and bounding box.
 
@@ -148,7 +152,7 @@ class PDFSearcher:
                 "x0": word.get("x0"),
                 "y0": word.get("y0"),
                 "x1": word.get("x1"),
-                "y1": word.get("y1")
+                "y1": word.get("y1"),
             }
             # apply padding exactly as base class does:
             padded = {
@@ -158,12 +162,9 @@ class PDFSearcher:
                 "y1": bbox["y1"] - padding["bottom"],
             }
             # Append the mapping information as a dictionary.
-            mapping.append({
-                "start": start_idx,
-                "end": end_idx,
-                "bbox": padded,
-                "text": text
-            })
+            mapping.append(
+                {"start": start_idx, "end": end_idx, "bbox": padded, "text": text}
+            )
             # Append the text to the list of page text parts.
             page_text_parts.append(text)
             # Update the current index, adding one for the space that will be inserted.
@@ -198,8 +199,9 @@ class PDFSearcher:
             f"{AI_SEARCH_PROMPT_FOOTER}"
         )
 
-    async def _process_ai_page(self, page: Dict[str, Any], search_terms: List[str], case_sensitive: bool) -> Tuple[
-        Dict[str, Any], int]:
+    async def _process_ai_page(
+        self, page: Dict[str, Any], search_terms: List[str], case_sensitive: bool
+    ) -> Tuple[Dict[str, Any], int]:
         """
         Process one page using AI search mode.
 
@@ -236,7 +238,7 @@ class PDFSearcher:
                 prompt,
                 requested_entities=[combined_query],
                 raw_prompt=True,
-                system_instruction_override=AI_SEARCH_SYSTEM_INSTRUCTION
+                system_instruction_override=AI_SEARCH_SYSTEM_INSTRUCTION,
             )
             # Parse the API response to retrieve matched entities.
             parsed_response = self.gemini_helper.parse_response(response)
@@ -252,7 +254,9 @@ class PDFSearcher:
                     for page_data in parsed_response["pages"]
                     for text_obj in page_data.get("text", [])
                     for entity in text_obj.get("entities", [])
-                    for token_entity in self._split_and_remap_entity(entity, mapping, case_sensitive)
+                    for token_entity in self._split_and_remap_entity(
+                        entity, mapping, case_sensitive
+                    )
                 ]
                 # Remove duplicate bounding boxes from the list of matches.
                 page_matches = deduplicate_bbox(page_matches)
@@ -260,15 +264,17 @@ class PDFSearcher:
             return {"page": page_number, "matches": page_matches}, len(page_matches)
         except Exception as e:
             # Log any error that occurs during processing using the secure error handler.
-            SecurityAwareErrorHandler.log_processing_error(e, "PDFSearcher._process_ai_page",
-                                                           f"page_{page.get('page')}")
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "PDFSearcher._process_ai_page", f"page_{page.get('page')}"
+            )
             # Log a debug message with error details.
             log_debug(f"Error processing AI page {page.get('page')}: {e}")
             # Return an empty match set for the page in case of error.
             return {"page": page.get("page"), "matches": []}, 0
 
-    def _process_fallback_page(self, page: Dict[str, Any], search_set: set, case_sensitive: bool) -> Tuple[
-        Dict[str, Any], int]:
+    def _process_fallback_page(
+        self, page: Dict[str, Any], search_set: set, case_sensitive: bool
+    ) -> Tuple[Dict[str, Any], int]:
         """
         Process one page using fallback word-based matching.
 
@@ -295,31 +301,40 @@ class PDFSearcher:
                 # Retrieve the text of the word and strip extra spaces.
                 word_text = (word.get("text") or "").strip()
                 # Check whether the cleaned word matches any term in the search set.
-                if self._word_matches(word_text, search_set, case_sensitive, ai_search=False):
+                if self._word_matches(
+                    word_text, search_set, case_sensitive, ai_search=False
+                ):
                     # Retrieve the bounding box from the word, or construct it from coordinates.
                     bbox = word.get("bbox") or {
                         "x0": word.get("x0"),
                         "y0": word.get("y0"),
                         "x1": word.get("x1"),
-                        "y1": word.get("y1")
+                        "y1": word.get("y1"),
                     }
                     # Append a dictionary of the matching word's bounding box.
-                    page_matches.append({
-                        "bbox": bbox,
-                    })
+                    page_matches.append(
+                        {
+                            "bbox": bbox,
+                        }
+                    )
             # Return a dictionary with the page number and match results, along with the match count.
             return {"page": page_number, "matches": page_matches}, len(page_matches)
         except Exception as e:
             # Log errors during fallback processing securely.
-            SecurityAwareErrorHandler.log_processing_error(e, "PDFSearcher._process_fallback_page",
-                                                           f"page_{page.get('page')}")
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "PDFSearcher._process_fallback_page", f"page_{page.get('page')}"
+            )
             # Log a debug message with error details.
             log_debug(f"Error processing fallback page {page.get('page')}: {e}")
             # Return no matches if an error occurs.
             return {"page": page.get("page"), "matches": []}, 0
 
-    async def search_terms(self, search_terms: List[str], case_sensitive: bool = False, ai_search: bool = False) -> \
-            Dict[str, Any]:
+    async def search_terms(
+        self,
+        search_terms: List[str],
+        case_sensitive: bool = False,
+        ai_search: bool = False,
+    ) -> Dict[str, Any]:
         """
         Search for the specified search terms in the extracted PDF data.
 
@@ -357,7 +372,9 @@ class PDFSearcher:
                 for result in results:
                     # If the result is an exception, log it and continue.
                     if isinstance(result, Exception):
-                        SecurityAwareErrorHandler.log_processing_error(result, "PDFSearcher.search_terms", "ai_search")
+                        SecurityAwareErrorHandler.log_processing_error(
+                            result, "PDFSearcher.search_terms", "ai_search"
+                        )
                         continue
                     # Otherwise, unpack the page result and match count.
                     page_result, count = result
@@ -371,7 +388,9 @@ class PDFSearcher:
                 # Iterate through each page in the extracted data.
                 for page in self.extracted_data.get("pages", []):
                     # Process the page using fallback matching.
-                    page_result, count = self._process_fallback_page(page, search_set, case_sensitive)
+                    page_result, count = self._process_fallback_page(
+                        page, search_set, case_sensitive
+                    )
                     # Append the result.
                     pages_results.append(page_result)
                     # Accumulate the match count.
@@ -382,14 +401,17 @@ class PDFSearcher:
             return {"pages": pages_results, "match_count": total_matches}
         except Exception as e:
             # Log any errors during the overall search process.
-            SecurityAwareErrorHandler.log_processing_error(e, "PDFSearcher.search_terms", "global")
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "PDFSearcher.search_terms", "global"
+            )
             log_debug(f"Error during search_terms: {e}")
             # Return empty results if an error occurs.
             return {"pages": [], "match_count": 0}
 
     @staticmethod
-    def _split_and_remap_entity(entity: Dict[str, Any], mapping: List[Dict[str, Any]], case_sensitive: bool) -> List[
-        Dict[str, Any]]:
+    def _split_and_remap_entity(
+        entity: Dict[str, Any], mapping: List[Dict[str, Any]], case_sensitive: bool
+    ) -> List[Dict[str, Any]]:
         """
         Split a Gemini entity's original text into tokens and remap each token to its corresponding location.
 
@@ -419,7 +441,11 @@ class PDFSearcher:
         if not entity_query:
             return token_entities
         # Define a comparison function based on the case sensitivity flag.
-        compare = (lambda a, b: a == b) if case_sensitive else (lambda a, b: a.lower() == b.lower())
+        compare = (
+            (lambda a, b: a == b)
+            if case_sensitive
+            else (lambda a, b: a.lower() == b.lower())
+        )
         # Split the entity's text into individual tokens.
         for token in entity_query.split():
             # strip punctuation from the AI token
@@ -433,20 +459,24 @@ class PDFSearcher:
                 # Compare the mapping text with the token.
                 if compare(mapping_text, token):
                     # If they match, append a dictionary of token information.
-                    token_entities.append({
-                        "entity_type": entity.get("entity_type"),
-                        "original_text": mapping_text,
-                        "start": m.get("start"),
-                        "end": m.get("end"),
-                        "bbox": m.get("bbox"),
-                        "score": entity.get("score"),
-                        "case_sensitive": case_sensitive
-                    })
+                    token_entities.append(
+                        {
+                            "entity_type": entity.get("entity_type"),
+                            "original_text": mapping_text,
+                            "start": m.get("start"),
+                            "end": m.get("end"),
+                            "bbox": m.get("bbox"),
+                            "score": entity.get("score"),
+                            "case_sensitive": case_sensitive,
+                        }
+                    )
         # Return the list of remapped token entities.
         return token_entities
 
     @staticmethod
-    def _word_center_in_bbox(word_bbox: Dict[str, Any], target_bbox: Dict[str, Any]) -> bool:
+    def _word_center_in_bbox(
+        word_bbox: Dict[str, Any], target_bbox: Dict[str, Any]
+    ) -> bool:
         """
         Check if the center of a word's bounding box lies within the given target bounding box.
 
@@ -462,7 +492,10 @@ class PDFSearcher:
         # Calculate the vertical center (cy) of the word's bounding box.
         cy = (word_bbox["y0"] + word_bbox["y1"]) / 2.0
         # Return True if the center point lies within the target bounding box.
-        return target_bbox["x0"] <= cx <= target_bbox["x1"] and target_bbox["y0"] <= cy <= target_bbox["y1"]
+        return (
+            target_bbox["x0"] <= cx <= target_bbox["x1"]
+            and target_bbox["y0"] <= cy <= target_bbox["y1"]
+        )
 
     @staticmethod
     def _group_consecutive_indices(indices: List[int]) -> List[List[int]]:
@@ -496,8 +529,9 @@ class PDFSearcher:
         # Return the list of grouped consecutive indices.
         return groups
 
-    def _process_single_word_occurrences(self, page: Dict[str, Any], candidate_phrase: str) -> Tuple[
-        Dict[str, Any], int]:
+    def _process_single_word_occurrences(
+        self, page: Dict[str, Any], candidate_phrase: str
+    ) -> Tuple[Dict[str, Any], int]:
         """
         Process a page when the candidate phrase consists of a single word.
 
@@ -531,16 +565,20 @@ class PDFSearcher:
 
             if cleaned_word_text == cleaned_candidate_phrase:
                 # If the cleaned word matches the cleaned candidate phrase, record its bounding box.
-                page_matches.append({
-                    "bbox": m["bbox"],
-                })
+                page_matches.append(
+                    {
+                        "bbox": m["bbox"],
+                    }
+                )
                 log_debug(f"Page {page_number}: Found occurrence")
 
         # Return a dictionary with the page number and matches, and the count of matches.
         return {"page": page_number, "matches": page_matches}, len(page_matches)
 
     @staticmethod
-    def _process_multiword_occurrences(page: Dict[str, Any], candidate_phrase: str) -> Tuple[Dict[str, Any], int]:
+    def _process_multiword_occurrences(
+        page: Dict[str, Any], candidate_phrase: str
+    ) -> Tuple[Dict[str, Any], int]:
         """
         Process a page when the candidate phrase consists of multiple words.
         It rebuilds the full page text using TextUtils, finds the offsets for the candidate phrase,
@@ -558,14 +596,18 @@ class PDFSearcher:
         # Initialize an empty list to store match results.
         page_matches = []
         # Reconstruct the full text and mapping using TextUtils helper.
-        full_text, text_mapping = TextUtils.reconstruct_text_and_mapping(page.get("words", []))
+        full_text, text_mapping = TextUtils.reconstruct_text_and_mapping(
+            page.get("words", [])
+        )
         # Compute the offsets where the candidate phrase occurs.
         matches = TextUtils.recompute_offsets(full_text, candidate_phrase)
         # Process each occurrence identified by its start and end offsets.
         for s, e in matches:
             try:
                 # Map the character offsets back to bounding boxes.
-                bboxes = TextUtils.map_offsets_to_bboxes(full_text, text_mapping, (s, e))
+                bboxes = TextUtils.map_offsets_to_bboxes(
+                    full_text, text_mapping, (s, e)
+                )
             except Exception as exc:
                 # Log any error that occurs during mapping.
                 log_debug(f"Page {page_number}: Error in map_offsets_to_bboxes: {exc}")
@@ -584,7 +626,9 @@ class PDFSearcher:
         return {"page": page_number, "matches": page_matches}, len(page_matches)
 
     @staticmethod
-    def _bbox_equal(b1: Dict[str, float], b2: Dict[str, float], tol: float = 10) -> bool:
+    def _bbox_equal(
+        b1: Dict[str, float], b2: Dict[str, float], tol: float = 10
+    ) -> bool:
         """
         Check if two bounding boxes are equal within a small tolerance.
 
@@ -598,16 +642,21 @@ class PDFSearcher:
         """
         # Compare x0 coordinates within tolerance
         return (
-                abs(b1["x0"] - b2["x0"]) < tol and
-                # Compare y0 coordinates within tolerance
-                abs(b1["y0"] - b2["y0"]) < tol and
-                # Compare x1 coordinates within tolerance
-                abs(b1["x1"] - b2["x1"]) < tol and
-                # Compare y1 coordinates within tolerance
-                abs(b1["y1"] - b2["y1"]) < tol
+            abs(b1["x0"] - b2["x0"]) < tol
+            and
+            # Compare y0 coordinates within tolerance
+            abs(b1["y0"] - b2["y0"]) < tol
+            and
+            # Compare x1 coordinates within tolerance
+            abs(b1["x1"] - b2["x1"]) < tol
+            and
+            # Compare y1 coordinates within tolerance
+            abs(b1["y1"] - b2["y1"]) < tol
         )
 
-    def find_target_phrase_occurrences(self, target_bbox: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
+    def find_target_phrase_occurrences(
+        self, target_bbox: Dict[str, Any]
+    ) -> Tuple[Dict[str, Any], int]:
         """
         Find all occurrences of a candidate phrase across pages matching the given bbox exactly.
 
@@ -635,7 +684,9 @@ class PDFSearcher:
             return {"pages": [], "target_phrase": None, "word_count": 0}, 0
 
         # Search for that confirmed phrase across all pages
-        total_occurrences, pages_results = self._search_all_pages(best_candidate, best_word_count)
+        total_occurrences, pages_results = self._search_all_pages(
+            best_candidate, best_word_count
+        )
 
         # Return the detailed results and total count
         return {
@@ -644,7 +695,9 @@ class PDFSearcher:
             "word_count": best_word_count,
         }, total_occurrences
 
-    def _find_exact_phrase_by_bbox(self, target_bbox: Dict[str, Any]) -> Tuple[Optional[str], int]:
+    def _find_exact_phrase_by_bbox(
+        self, target_bbox: Dict[str, Any]
+    ) -> Tuple[Optional[str], int]:
         """
         Search through all pages and find a phrase whose bounding box exactly matches the given target_bbox.
 
@@ -665,7 +718,8 @@ class PDFSearcher:
 
             # Identify indices of words whose center falls inside the target_bbox
             candidate_indices = [
-                idx for idx, m in enumerate(mapping)
+                idx
+                for idx, m in enumerate(mapping)
                 if self._word_center_in_bbox(m["bbox"], target_bbox)
             ]
 
@@ -682,7 +736,9 @@ class PDFSearcher:
                 phrase = " ".join(mapping[i]["text"] for i in group)
 
                 # Compute the bbox for the phrase
-                bbox = self._get_phrase_bbox(page, mapping, group, phrase, target_bbox=target_bbox)
+                bbox = self._get_phrase_bbox(
+                    page, mapping, group, phrase, target_bbox=target_bbox
+                )
 
                 # Compare to the target bbox
                 if bbox and self._bbox_equal(bbox, target_bbox):
@@ -694,11 +750,11 @@ class PDFSearcher:
 
     @staticmethod
     def _get_phrase_bbox(
-            page: Dict[str, Any],
-            mapping: List[Dict[str, Any]],
-            group: List[int],
-            phrase: str,
-            target_bbox: Optional[Dict[str, Any]] = None
+        page: Dict[str, Any],
+        mapping: List[Dict[str, Any]],
+        group: List[int],
+        phrase: str,
+        target_bbox: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Compute the bounding box for a phrase using extracted word mapping and optional bbox target.
@@ -725,17 +781,23 @@ class PDFSearcher:
             # Iterate over all mapped words and return the bbox that matches the text (and optionally the bbox)
             return next(
                 (
-                    w["bbox"] for w in mapping
-                    if w["text"] == word_text and
-                       (not target_bbox or PDFSearcher._bbox_equal(w["bbox"], target_bbox))
+                    w["bbox"]
+                    for w in mapping
+                    if w["text"] == word_text
+                    and (
+                        not target_bbox
+                        or PDFSearcher._bbox_equal(w["bbox"], target_bbox)
+                    )
                 ),
-                None  # If no match is found, return None
+                None,  # If no match is found, return None
             )
 
         # Handle multi-word phrase case
         try:
             # Reconstruct full page text and character-to-word mapping
-            full_text, text_mapping = TextUtils.reconstruct_text_and_mapping(page.get("words", []))
+            full_text, text_mapping = TextUtils.reconstruct_text_and_mapping(
+                page.get("words", [])
+            )
 
             # Find all character offset positions for this phrase in the reconstructed text
             offsets = TextUtils.recompute_offsets(full_text, phrase)
@@ -746,7 +808,9 @@ class PDFSearcher:
             # Loop over every occurrence of the phrase in the text
             for start, end in offsets:
                 # Map the character offsets back to bounding boxes of individual words
-                bboxes = TextUtils.map_offsets_to_bboxes(full_text, text_mapping, (start, end))
+                bboxes = TextUtils.map_offsets_to_bboxes(
+                    full_text, text_mapping, (start, end)
+                )
                 if not bboxes:
                     # Skip if no word bounding boxes could be found
                     continue
@@ -769,7 +833,9 @@ class PDFSearcher:
         # If no matching phrase bbox found, return None
         return None
 
-    def _search_all_pages(self, phrase: str, word_count: int) -> Tuple[int, List[Dict[str, Any]]]:
+    def _search_all_pages(
+        self, phrase: str, word_count: int
+    ) -> Tuple[int, List[Dict[str, Any]]]:
         """
         Internal: For a confirmed phrase, run the appropriate per‐page search across all pages.
 

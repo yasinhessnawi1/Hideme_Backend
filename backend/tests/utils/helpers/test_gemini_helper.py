@@ -46,9 +46,18 @@ class TestGeminiHelperCacheKey(unittest.TestCase):
 class TestGeminiHelperCreatePrompt(unittest.TestCase):
 
     # Test default prompt uses all available entities
-    @patch("backend.app.utils.helpers.gemini_helper.GEMINI_PROMPT_HEADER", new=DUMMY_PROMPT_HEADER)
-    @patch("backend.app.utils.helpers.gemini_helper.GEMINI_PROMPT_FOOTER", new=DUMMY_PROMPT_FOOTER)
-    @patch("backend.app.utils.helpers.gemini_helper.GEMINI_AVAILABLE_ENTITIES", new=DUMMY_AVAILABLE_ENTITIES)
+    @patch(
+        "backend.app.utils.helpers.gemini_helper.GEMINI_PROMPT_HEADER",
+        new=DUMMY_PROMPT_HEADER,
+    )
+    @patch(
+        "backend.app.utils.helpers.gemini_helper.GEMINI_PROMPT_FOOTER",
+        new=DUMMY_PROMPT_FOOTER,
+    )
+    @patch(
+        "backend.app.utils.helpers.gemini_helper.GEMINI_AVAILABLE_ENTITIES",
+        new=DUMMY_AVAILABLE_ENTITIES,
+    )
     def test_create_prompt_default_entities(self):
         text = "Analyze this text."
 
@@ -84,7 +93,7 @@ class TestGeminiHelperSendRequest(unittest.IsolatedAsyncioTestCase):
 
         fake_response = MagicMock()
 
-        fake_response.text = "  `{\"result\": \"ok\"}  "
+        fake_response.text = '  `{"result": "ok"}  '
 
         with patch("google.generativeai.GenerativeModel") as FakeModel:
             instance = FakeModel.return_value
@@ -122,7 +131,9 @@ class TestGeminiHelperSendRequest(unittest.IsolatedAsyncioTestCase):
             instance.generate_content.side_effect = ConnectionError("Network failure")
 
             with patch("time.sleep", return_value=None):
-                result = await helper.send_request("dummy prompt", raw_prompt=True, max_retries=2)
+                result = await helper.send_request(
+                    "dummy prompt", raw_prompt=True, max_retries=2
+                )
 
         self.assertIsNone(result)
 
@@ -136,7 +147,7 @@ class TestGeminiHelperParseResponse(unittest.TestCase):
 
     # Test valid JSON response is parsed correctly
     def test_parse_response_valid_json(self):
-        response = "  ` {\"key\": \"value\"} `  "
+        response = '  ` {"key": "value"} `  '
 
         parsed = self.helper.parse_response(response)
 
@@ -154,7 +165,7 @@ class TestGeminiHelperParseResponse(unittest.TestCase):
 
     # Test _try_json_parse returns dict on valid JSON
     def test_try_json_parse_valid(self):
-        json_str = "{\"a\": 1}"
+        json_str = '{"a": 1}'
 
         result = GeminiHelper._try_json_parse(json_str)
 
@@ -170,7 +181,7 @@ class TestGeminiHelperParseResponse(unittest.TestCase):
 
     # Test extraction of JSON substrings from text
     def test_extract_json_candidates(self):
-        text = "Here is some text {\"x\": 10} and some more text {\"y\":20}."
+        text = 'Here is some text {"x": 10} and some more text {"y":20}.'
 
         candidates = GeminiHelper._extract_json_candidates(text)
 
@@ -207,7 +218,9 @@ class TestGeminiHelperProcessText(unittest.IsolatedAsyncioTestCase):
 
         self.helper.cache[key] = fake_result
 
-        with patch.object(self.helper, "send_request", new_callable=AsyncMock) as mock_send:
+        with patch.object(
+            self.helper, "send_request", new_callable=AsyncMock
+        ) as mock_send:
             result = await self.helper.process_text(text, None)
 
         self.assertEqual(result, fake_result)
@@ -218,9 +231,11 @@ class TestGeminiHelperProcessText(unittest.IsolatedAsyncioTestCase):
     async def test_process_text_success(self):
         text = "Process this text"
 
-        fake_api_response = " {\"status\":\"ok\"} "
+        fake_api_response = ' {"status":"ok"} '
 
-        with patch.object(self.helper, "send_request", new_callable=AsyncMock) as mock_send:
+        with patch.object(
+            self.helper, "send_request", new_callable=AsyncMock
+        ) as mock_send:
             mock_send.return_value = fake_api_response
 
             result = await self.helper.process_text(text, ["PERSON"])
@@ -239,7 +254,9 @@ class TestGeminiHelperProcessText(unittest.IsolatedAsyncioTestCase):
     async def test_process_text_failure(self):
         text = "Process this text"
 
-        with patch.object(self.helper, "send_request", new_callable=AsyncMock) as mock_send:
+        with patch.object(
+            self.helper, "send_request", new_callable=AsyncMock
+        ) as mock_send:
             mock_send.return_value = None
 
             result = await self.helper.process_text(text, None)

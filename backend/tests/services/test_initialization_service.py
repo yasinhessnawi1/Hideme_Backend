@@ -2,7 +2,10 @@ import unittest
 from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
 
-from backend.app.configs.gliner_config import GLINER_MODEL_NAME, GLINER_AVAILABLE_ENTITIES
+from backend.app.configs.gliner_config import (
+    GLINER_MODEL_NAME,
+    GLINER_AVAILABLE_ENTITIES,
+)
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.initialization_service import InitializationService
 
@@ -49,9 +52,13 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
     # Test get_detector falls back when cache miss and lock unavailable
     def test_get_detector_fallback(self):
-        with patch.object(self.service, "_quick_check_cache", return_value=None), \
-                patch.object(self.service, "_try_acquire_lock", return_value=False), \
-                patch.object(self.service, "_fallback_init", return_value="fallback"):
+        with patch.object(
+            self.service, "_quick_check_cache", return_value=None
+        ), patch.object(
+            self.service, "_try_acquire_lock", return_value=False
+        ), patch.object(
+            self.service, "_fallback_init", return_value="fallback"
+        ):
             result = self.service.get_detector(EntityDetectionEngine.PRESIDIO)
 
             self.assertEqual(result, "fallback")
@@ -69,17 +76,11 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
     # Test caching of hybrid detector returns stored instance
     def test_get_hybrid_detector_caching(self):
         config = {
-
             "use_presidio": True,
-
             "use_gemini": False,
-
             "use_gliner": False,
-
             "use_hideme": False,
-
-            "entities": []
-
+            "entities": [],
         }
 
         key = self.service._get_hybrid_cache_key(config)
@@ -104,8 +105,9 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
     # Test get_detector with repeated lock failures falls back
     def test_get_detector_with_lock_timeout(self):
-        with patch.object(self.service, "_try_acquire_lock", side_effect=[False, False]), \
-                patch.object(self.service, "_fallback_init", return_value="fallback"):
+        with patch.object(
+            self.service, "_try_acquire_lock", side_effect=[False, False]
+        ), patch.object(self.service, "_fallback_init", return_value="fallback"):
             result = self.service.get_detector(EntityDetectionEngine.PRESIDIO)
 
             self.assertEqual(result, "fallback")
@@ -122,12 +124,16 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
     def test_initialize_presidio_or_gemini_cache_hit(self):
         self.service._presidio_detector = "presidio_mock"
 
-        result = self.service._initialize_presidio_or_gemini(EntityDetectionEngine.PRESIDIO)
+        result = self.service._initialize_presidio_or_gemini(
+            EntityDetectionEngine.PRESIDIO
+        )
 
         self.assertEqual(result, "presidio_mock")
 
     # Test lazy initialization of Presidio detector succeeds
-    @patch("backend.app.services.initialization_service.InitializationService._initialize_presidio_detector")
+    @patch(
+        "backend.app.services.initialization_service.InitializationService._initialize_presidio_detector"
+    )
     async def test_lazy_init_presidio_success(self, mock_init):
         mock_init.return_value = "presidio_mock"
 
@@ -138,7 +144,9 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.service._initialization_status["presidio"])
 
     # Test lazy initialization of Gemini detector succeeds
-    @patch("backend.app.services.initialization_service.InitializationService._initialize_gemini_detector")
+    @patch(
+        "backend.app.services.initialization_service.InitializationService._initialize_gemini_detector"
+    )
     async def test_lazy_init_gemini_success(self, mock_init):
         mock_init.return_value = "gemini_mock"
 
@@ -149,9 +157,16 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.service._initialization_status["gemini"])
 
     # Test lazy initialization of GLiNER detector succeeds
-    @patch("backend.app.services.initialization_service.GLINER_AVAILABLE_ENTITIES", new=[])
-    @patch("backend.app.services.initialization_service.memory_monitor.get_memory_usage", return_value=10)
-    @patch("backend.app.services.initialization_service.InitializationService._initialize_gliner_detector")
+    @patch(
+        "backend.app.services.initialization_service.GLINER_AVAILABLE_ENTITIES", new=[]
+    )
+    @patch(
+        "backend.app.services.initialization_service.memory_monitor.get_memory_usage",
+        return_value=10,
+    )
+    @patch(
+        "backend.app.services.initialization_service.InitializationService._initialize_gliner_detector"
+    )
     async def test_lazy_init_gliner_success(self, mock_init, mock_memory):
         mock_init.return_value = "gliner_mock"
 
@@ -162,9 +177,16 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.service._gliner_detectors[key], "gliner_mock")
 
     # Test lazy initialization of HideMe detector succeeds
-    @patch("backend.app.services.initialization_service.HIDEME_AVAILABLE_ENTITIES", new=[])
-    @patch("backend.app.services.initialization_service.memory_monitor.get_memory_usage", return_value=10)
-    @patch("backend.app.services.initialization_service.InitializationService._initialize_hideme_detector")
+    @patch(
+        "backend.app.services.initialization_service.HIDEME_AVAILABLE_ENTITIES", new=[]
+    )
+    @patch(
+        "backend.app.services.initialization_service.memory_monitor.get_memory_usage",
+        return_value=10,
+    )
+    @patch(
+        "backend.app.services.initialization_service.InitializationService._initialize_hideme_detector"
+    )
     async def test_lazy_init_hideme_success(self, mock_init, mock_memory):
         mock_init.return_value = "hideme_mock"
 
@@ -189,17 +211,11 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
     # Test generation of hybrid cache key includes flags and sorted entities
     def test_get_hybrid_cache_key(self):
         config = {
-
             "use_presidio": True,
-
             "use_gemini": False,
-
             "use_gliner": True,
-
             "use_hideme": False,
-
-            "entities": ["ssn", "name"]
-
+            "entities": ["ssn", "name"],
         }
 
         key = self.service._get_hybrid_cache_key(config)
@@ -239,7 +255,11 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "presidio_cached")
 
     # Test fallback_init for Presidio uses initialize_presidio_detector
-    @patch.object(InitializationService, "_initialize_presidio_detector", return_value="presidio_fallback")
+    @patch.object(
+        InitializationService,
+        "_initialize_presidio_detector",
+        return_value="presidio_fallback",
+    )
     def test_fallback_init_presidio(self, _):
         result = self.service._fallback_init(EntityDetectionEngine.PRESIDIO, {})
 
@@ -258,7 +278,9 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
     @patch.object(InitializationService, "_lazy_init_gemini")
     @patch.object(InitializationService, "_maybe_lazy_init_gliner")
     @patch.object(InitializationService, "_maybe_lazy_init_hideme")
-    async def test_initialize_detectors_lazy(self, mock_hideme, mock_gliner, mock_gemini, mock_presidio):
+    async def test_initialize_detectors_lazy(
+        self, mock_hideme, mock_gliner, mock_gemini, mock_presidio
+    ):
         await self.service.initialize_detectors_lazy()
 
         mock_presidio.assert_called_once()
@@ -270,45 +292,49 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         mock_hideme.assert_called_once()
 
     # Test GLiNER eviction logic when cache size exceeded
-    @patch.object(InitializationService, "_initialize_gliner_detector", return_value="new_gliner")
+    @patch.object(
+        InitializationService, "_initialize_gliner_detector", return_value="new_gliner"
+    )
     def test_initialize_and_store_gliner_eviction(self, mock_init):
         self.service._gliner_detectors = {"existing1": "det1", "existing2": "det2"}
 
         self.service._usage_metrics["gliner"] = {
-
             "gliner_existing1": {"uses": 1, "last_used": 10},
-
             "gliner_existing2": {"uses": 2, "last_used": 20},
-
         }
 
         config = {"entities": ["ssn"]}
 
-        det = self.service._initialize_and_store_detector(EntityDetectionEngine.GLINER, config)
+        det = self.service._initialize_and_store_detector(
+            EntityDetectionEngine.GLINER, config
+        )
 
         self.assertEqual(det, "new_gliner")
 
     # Test HideMe eviction logic when cache size exceeded
-    @patch.object(InitializationService, "_initialize_hideme_detector", return_value="hideme_det")
+    @patch.object(
+        InitializationService, "_initialize_hideme_detector", return_value="hideme_det"
+    )
     def test_initialize_and_store_hideme_eviction(self, mock_init):
         self.service._hideme_detectors = {"old1": "h1", "old2": "h2"}
 
         self.service._usage_metrics["hideme"] = {
-
             "hideme_old1": {"uses": 3, "last_used": 1},
-
-            "hideme_old2": {"uses": 5, "last_used": 2}
-
+            "hideme_old2": {"uses": 5, "last_used": 2},
         }
 
         config = {"entities": ["email"]}
 
-        det = self.service._initialize_and_store_detector(EntityDetectionEngine.HIDEME, config)
+        det = self.service._initialize_and_store_detector(
+            EntityDetectionEngine.HIDEME, config
+        )
 
         self.assertEqual(det, "hideme_det")
 
     # Test update_usage_metrics_no_lock does not raise on exception
-    @patch.object(InitializationService, "_increment_usage_metrics", side_effect=Exception("fail"))
+    @patch.object(
+        InitializationService, "_increment_usage_metrics", side_effect=Exception("fail")
+    )
     def test_update_usage_metrics_no_lock_fail(self, _):
         self.service._update_usage_metrics_no_lock("presidio")
 
@@ -357,19 +383,25 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
     # Test lazy initialization handles exceptions and logs errors
     @patch("backend.app.services.initialization_service.log_error")
-    @patch("backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error")
+    @patch(
+        "backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error"
+    )
     @patch.object(InitializationService, "_lazy_init_presidio", new_callable=AsyncMock)
     @patch.object(InitializationService, "_lazy_init_gemini", new_callable=AsyncMock)
-    @patch.object(InitializationService, "_maybe_lazy_init_gliner", new_callable=AsyncMock)
-    @patch.object(InitializationService, "_maybe_lazy_init_hideme", new_callable=AsyncMock)
+    @patch.object(
+        InitializationService, "_maybe_lazy_init_gliner", new_callable=AsyncMock
+    )
+    @patch.object(
+        InitializationService, "_maybe_lazy_init_hideme", new_callable=AsyncMock
+    )
     async def test_initialize_detectors_lazy_with_exception(
-            self,
-            mock_hideme,
-            mock_gliner,
-            mock_gemini,
-            mock_presidio,
-            mock_error_log,
-            mock_log_error,
+        self,
+        mock_hideme,
+        mock_gliner,
+        mock_gemini,
+        mock_presidio,
+        mock_error_log,
+        mock_log_error,
     ):
         mock_gemini.side_effect = Exception("Simulated Gemini failure")
 
@@ -382,13 +414,21 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Simulated Gemini failure", mock_log_error.call_args[0][0])
 
     # Test exception handling in lazy GLiNER initialization
-    @patch("backend.app.services.initialization_service.asyncio.to_thread",
-           side_effect=Exception("Failed to load GLiNER"))
-    @patch("backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error")
+    @patch(
+        "backend.app.services.initialization_service.asyncio.to_thread",
+        side_effect=Exception("Failed to load GLiNER"),
+    )
+    @patch(
+        "backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error"
+    )
     @patch("backend.app.services.initialization_service.log_error")
-    @patch("backend.app.services.initialization_service.memory_monitor.get_memory_usage", return_value=30.0)
-    async def test_lazy_init_gliner_exception_handling(self, mock_mem, mock_log_error, mock_process_error,
-                                                       mock_to_thread):
+    @patch(
+        "backend.app.services.initialization_service.memory_monitor.get_memory_usage",
+        return_value=30.0,
+    )
+    async def test_lazy_init_gliner_exception_handling(
+        self, mock_mem, mock_log_error, mock_process_error, mock_to_thread
+    ):
         await self.service._maybe_lazy_init_gliner()
 
         mock_process_error.assert_called()
@@ -398,11 +438,21 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Failed to load GLiNER", str(mock_log_error.call_args[0][0]))
 
     # Test exception handling in lazy HideMe initialization
-    @patch("backend.app.entity_detection.hideme.HidemeEntityDetector", side_effect=Exception("Failed to load HIDEME"))
-    @patch("backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error")
+    @patch(
+        "backend.app.entity_detection.hideme.HidemeEntityDetector",
+        side_effect=Exception("Failed to load HIDEME"),
+    )
+    @patch(
+        "backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error"
+    )
     @patch("backend.app.services.initialization_service.log_error")
-    @patch("backend.app.services.initialization_service.memory_monitor.get_memory_usage", return_value=30.0)
-    async def test_lazy_init_hideme_exception_handling(self, mock_mem, mock_log, mock_err_log, mock_hideme):
+    @patch(
+        "backend.app.services.initialization_service.memory_monitor.get_memory_usage",
+        return_value=30.0,
+    )
+    async def test_lazy_init_hideme_exception_handling(
+        self, mock_mem, mock_log, mock_err_log, mock_hideme
+    ):
         await self.service._maybe_lazy_init_hideme()
 
         mock_err_log.assert_called()
@@ -410,10 +460,17 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Failed to load HIDEME", str(mock_err_log.call_args[0][0]))
 
     # Test exception in Presidio detector initialization is logged and propagated
-    @patch("backend.app.entity_detection.presidio.PresidioEntityDetector", side_effect=Exception("Presidio init error"))
-    @patch("backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error")
+    @patch(
+        "backend.app.entity_detection.presidio.PresidioEntityDetector",
+        side_effect=Exception("Presidio init error"),
+    )
+    @patch(
+        "backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error"
+    )
     @patch("backend.app.services.initialization_service.log_error")
-    def test_initialize_presidio_detector_exception(self, mock_log_error, mock_error_handler, mock_presidio):
+    def test_initialize_presidio_detector_exception(
+        self, mock_log_error, mock_error_handler, mock_presidio
+    ):
         with self.assertRaises(Exception) as ctx:
             self.service._initialize_presidio_detector()
 
@@ -424,10 +481,17 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         mock_log_error.assert_called()
 
     # Test exception in Gemini detector initialization is handled and status updated
-    @patch("backend.app.entity_detection.gemini.GeminiEntityDetector", side_effect=Exception("Gemini init error"))
+    @patch(
+        "backend.app.entity_detection.gemini.GeminiEntityDetector",
+        side_effect=Exception("Gemini init error"),
+    )
     @patch("backend.app.services.initialization_service.log_error")
-    @patch("backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error")
-    def test_initialize_gemini_detector_exception(self, mock_log_processing_error, mock_log_error, mock_gemini_cls):
+    @patch(
+        "backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error"
+    )
+    def test_initialize_gemini_detector_exception(
+        self, mock_log_processing_error, mock_log_error, mock_gemini_cls
+    ):
         service = InitializationService()
 
         with pytest.raises(Exception) as exc_info:
@@ -453,28 +517,36 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
         mock_gliner_cls.return_value = mock_detector
 
-        result = service._initialize_gliner_detector(GLINER_MODEL_NAME, GLINER_AVAILABLE_ENTITIES)
+        result = service._initialize_gliner_detector(
+            GLINER_MODEL_NAME, GLINER_AVAILABLE_ENTITIES
+        )
 
         assert result == mock_detector
 
         assert service._initialization_status["gliner"] is True
 
         mock_log_info.assert_any_call(
-
             f"Initializing GLiNER detector with model {GLINER_MODEL_NAME}"
-
         )
 
     # Test failure in GLiNER detector initialization logs and propagates
-    @patch("backend.app.services.initialization_service.GlinerEntityDetector",
-           side_effect=Exception("GLiNER init failed"))
-    @patch("backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error")
+    @patch(
+        "backend.app.services.initialization_service.GlinerEntityDetector",
+        side_effect=Exception("GLiNER init failed"),
+    )
+    @patch(
+        "backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error"
+    )
     @patch("backend.app.services.initialization_service.log_error")
-    def test_initialize_gliner_detector_failure(self, mock_log_error, mock_log_processing_error, mock_gliner_cls):
+    def test_initialize_gliner_detector_failure(
+        self, mock_log_error, mock_log_processing_error, mock_gliner_cls
+    ):
         service = InitializationService()
 
         with pytest.raises(Exception) as exc_info:
-            service._initialize_gliner_detector(GLINER_MODEL_NAME, GLINER_AVAILABLE_ENTITIES)
+            service._initialize_gliner_detector(
+                GLINER_MODEL_NAME, GLINER_AVAILABLE_ENTITIES
+            )
 
         assert str(exc_info.value) == "GLiNER init failed"
 
@@ -507,10 +579,17 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         mock_log_info.assert_any_call("Hybrid detector initialized in 0.00s")
 
     # Test failure in hybrid detector initialization logs and propagates
-    @patch("backend.app.entity_detection.hybrid.HybridEntityDetector", side_effect=Exception("Hybrid init error"))
-    @patch("backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error")
+    @patch(
+        "backend.app.entity_detection.hybrid.HybridEntityDetector",
+        side_effect=Exception("Hybrid init error"),
+    )
+    @patch(
+        "backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error"
+    )
     @patch("backend.app.services.initialization_service.log_error")
-    def test_initialize_hybrid_detector_exception(self, mock_log_error, mock_log_processing_error, mock_hybrid_cls):
+    def test_initialize_hybrid_detector_exception(
+        self, mock_log_error, mock_log_processing_error, mock_hybrid_cls
+    ):
         service = InitializationService()
 
         config = {"mode": "fail"}
@@ -532,7 +611,9 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
     def test_get_presidio_detector_calls_get_detector_with_presidio(self):
         service = InitializationService()
 
-        with patch.object(service, "get_detector", return_value="presidio_instance") as mock_get:
+        with patch.object(
+            service, "get_detector", return_value="presidio_instance"
+        ) as mock_get:
             result = service.get_presidio_detector()
 
             mock_get.assert_called_once_with(EntityDetectionEngine.PRESIDIO)
@@ -543,7 +624,9 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
     def test_get_gemini_detector_calls_get_detector_with_gemini(self):
         service = InitializationService()
 
-        with patch.object(service, "get_detector", return_value="gemini_instance") as mock_get:
+        with patch.object(
+            service, "get_detector", return_value="gemini_instance"
+        ) as mock_get:
             result = service.get_gemini_detector()
 
             mock_get.assert_called_once_with(EntityDetectionEngine.GEMINI)
@@ -558,10 +641,14 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
         expected_config = {"entities": test_entities}
 
-        with patch.object(service, "get_detector", return_value="gliner_instance") as mock_get:
+        with patch.object(
+            service, "get_detector", return_value="gliner_instance"
+        ) as mock_get:
             result = service.get_gliner_detector(test_entities)
 
-            mock_get.assert_called_once_with(EntityDetectionEngine.GLINER, expected_config)
+            mock_get.assert_called_once_with(
+                EntityDetectionEngine.GLINER, expected_config
+            )
 
             assert result == "gliner_instance"
 
@@ -573,21 +660,22 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
         expected_config = {"entities": test_entities}
 
-        with patch.object(service, "get_detector", return_value="hideme_instance") as mock_get:
+        with patch.object(
+            service, "get_detector", return_value="hideme_instance"
+        ) as mock_get:
             result = service.get_hideme_detector(test_entities)
 
-            mock_get.assert_called_once_with(EntityDetectionEngine.HIDEME, expected_config)
+            mock_get.assert_called_once_with(
+                EntityDetectionEngine.HIDEME, expected_config
+            )
 
             assert result == "hideme_instance"
 
     # Test quick cache hits for basic engines update usage metrics
     def test_quick_check_cache_basic_engines(self):
         test_cases = [
-
             (EntityDetectionEngine.PRESIDIO, "_presidio_detector", "presidio"),
-
             (EntityDetectionEngine.GEMINI, "_gemini_detector", "gemini"),
-
         ]
 
         for engine, attr_name, usage_key in test_cases:
@@ -616,9 +704,12 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
         service._gliner_detectors[key] = fake_detector
 
-        with patch.object(service, "_get_gliner_cache_key", return_value=key), \
-                patch.object(service, "_update_usage_metrics_no_lock") as mock_usage:
-            result = service._quick_check_cache(EntityDetectionEngine.GLINER, {"entities": entities})
+        with patch.object(
+            service, "_get_gliner_cache_key", return_value=key
+        ), patch.object(service, "_update_usage_metrics_no_lock") as mock_usage:
+            result = service._quick_check_cache(
+                EntityDetectionEngine.GLINER, {"entities": entities}
+            )
 
             assert result == fake_detector
 
@@ -636,9 +727,12 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
         service._hideme_detectors[key] = fake_detector
 
-        with patch.object(service, "_get_hideme_cache_key", return_value=key), \
-                patch.object(service, "_update_usage_metrics_no_lock") as mock_usage:
-            result = service._quick_check_cache(EntityDetectionEngine.HIDEME, {"entities": entities})
+        with patch.object(
+            service, "_get_hideme_cache_key", return_value=key
+        ), patch.object(service, "_update_usage_metrics_no_lock") as mock_usage:
+            result = service._quick_check_cache(
+                EntityDetectionEngine.HIDEME, {"entities": entities}
+            )
 
             assert result == fake_detector
 
@@ -681,9 +775,13 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
         service.max_cache_size = 1
 
-        with patch.object(service, "_get_hybrid_cache_key", return_value=fake_key), \
-                patch.object(service, "_initialize_hybrid_detector", return_value=fake_detector), \
-                patch.object(service, "_evict_least_recently_used") as mock_evict:
+        with patch.object(
+            service, "_get_hybrid_cache_key", return_value=fake_key
+        ), patch.object(
+            service, "_initialize_hybrid_detector", return_value=fake_detector
+        ), patch.object(
+            service, "_evict_least_recently_used"
+        ) as mock_evict:
             # Case 1: cache miss, not full
 
             service._hybrid_detectors = {}
@@ -732,7 +830,9 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
     # Test get_initialization_status logs on exception
     @patch("backend.app.services.initialization_service.log_warning")
-    @patch("backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error")
+    @patch(
+        "backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error"
+    )
     def test_get_initialization_status_exception(self, mock_error_log, mock_log):
         service = InitializationService()
 
@@ -751,7 +851,9 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         mock_log.assert_called_once()
 
     # Test get_usage_metrics returns data when lock acquired
-    @patch("backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error")
+    @patch(
+        "backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error"
+    )
     @patch("backend.app.services.initialization_service.log_error")
     def test_get_usage_metrics_lock_success(self, mock_err_log, mock_log):
         service = InitializationService()
@@ -761,15 +863,10 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         service._lock.acquire.return_value = True
 
         service._usage_metrics = {
-
             "presidio": {"count": 10},
-
             "gemini": {"count": 5},
-
             "gliner": {"key1": {"c": 1}},
-
             "hideme": {"key2": {"c": 2}},
-
         }
 
         result = service.get_usage_metrics()
@@ -784,7 +881,9 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
     # Test get_usage_metrics logs on exception
     @patch("backend.app.services.initialization_service.log_error")
-    @patch("backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error")
+    @patch(
+        "backend.app.services.initialization_service.SecurityAwareErrorHandler.log_processing_error"
+    )
     def test_get_usage_metrics_exception(self, mock_error_log, mock_log):
         service = InitializationService()
 
@@ -863,7 +962,9 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
         self.service._fallback_init(EntityDetectionEngine.GLINER, config)
 
-        self.service._initialize_gliner_detector.assert_called_with("gliner_model", ["email"])
+        self.service._initialize_gliner_detector.assert_called_with(
+            "gliner_model", ["email"]
+        )
 
     # Test fallback_init returns cached HideMe detector if exists
     @patch("backend.app.services.initialization_service.log_warning")
@@ -897,7 +998,9 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
 
         self.service._fallback_init(EntityDetectionEngine.HIDEME, config)
 
-        self.service._initialize_hideme_detector.assert_called_with("hideme_model", ["phone"])
+        self.service._initialize_hideme_detector.assert_called_with(
+            "hideme_model", ["phone"]
+        )
 
     # Test fallback_init returns cached hybrid detector if exists
     @patch("backend.app.services.initialization_service.log_warning")
@@ -934,23 +1037,29 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         self.service._initialize_hybrid_detector.assert_called_with(config)
 
     # Test get_detector returns cached immediately without lock
-    @patch.object(InitializationService, '_quick_check_cache', return_value='cached-detector')
+    @patch.object(
+        InitializationService, "_quick_check_cache", return_value="cached-detector"
+    )
     def test_get_detector_returns_cached_immediately(self, mock_cache):
         result = self.service.get_detector(EntityDetectionEngine.PRESIDIO)
 
-        self.assertEqual(result, 'cached-detector')
+        self.assertEqual(result, "cached-detector")
 
         mock_cache.assert_called_once()
 
     # Test get_detector returns after short lock acquisition
-    @patch.object(InitializationService, '_quick_check_cache', side_effect=[None, 'rechecked-detector'])
-    @patch.object(InitializationService, '_try_acquire_lock', return_value=True)
+    @patch.object(
+        InitializationService,
+        "_quick_check_cache",
+        side_effect=[None, "rechecked-detector"],
+    )
+    @patch.object(InitializationService, "_try_acquire_lock", return_value=True)
     def test_get_detector_returns_after_short_lock(self, mock_lock, mock_cache):
         self.service._lock = MagicMock()
 
         result = self.service.get_detector(EntityDetectionEngine.PRESIDIO)
 
-        self.assertEqual(result, 'rechecked-detector')
+        self.assertEqual(result, "rechecked-detector")
 
         self.assertEqual(mock_lock.call_count, 1)
 
@@ -959,15 +1068,25 @@ class TestInitializationService(unittest.IsolatedAsyncioTestCase):
         self.service._lock.release.assert_called_once()
 
     # Test get_detector returns after long lock acquisition and initialization
-    @patch.object(InitializationService, '_quick_check_cache', side_effect=[None, 'final-detector'])
-    @patch.object(InitializationService, '_try_acquire_lock', side_effect=[False, True])
-    @patch.object(InitializationService, '_initialize_and_store_detector', return_value='final-detector')
-    def test_get_detector_returns_after_long_lock(self, mock_init, mock_lock, mock_cache):
+    @patch.object(
+        InitializationService,
+        "_quick_check_cache",
+        side_effect=[None, "final-detector"],
+    )
+    @patch.object(InitializationService, "_try_acquire_lock", side_effect=[False, True])
+    @patch.object(
+        InitializationService,
+        "_initialize_and_store_detector",
+        return_value="final-detector",
+    )
+    def test_get_detector_returns_after_long_lock(
+        self, mock_init, mock_lock, mock_cache
+    ):
         self.service._lock = MagicMock()
 
         result = self.service.get_detector(EntityDetectionEngine.GEMINI)
 
-        self.assertEqual(result, 'final-detector')
+        self.assertEqual(result, "final-detector")
 
         self.assertEqual(mock_lock.call_count, 2)
 

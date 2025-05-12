@@ -39,27 +39,23 @@ def redaction_mapping():
 
     return {
         "pages": [
-                     {
-                         "page": i + 1,
-                         "sensitive": [
-                             {
-                                 "entity_type": "secret",
-                                 "boxes": {"x0": 100, "y0": 100, "x1": 250, "y1": 120}
-                             }
-                         ]
-                     }
-                     for i in range(12)
-                 ]
-                 + [
-                     {
-                         "page": 2,
-                         "sensitive": [
-                             {
-                                 "bbox": {"x0": 50, "y0": 150, "x1": 150, "y1": 250}
-                             }
-                         ]
-                     }
-                 ]
+            {
+                "page": i + 1,
+                "sensitive": [
+                    {
+                        "entity_type": "secret",
+                        "boxes": {"x0": 100, "y0": 100, "x1": 250, "y1": 120},
+                    }
+                ],
+            }
+            for i in range(12)
+        ]
+        + [
+            {
+                "page": 2,
+                "sensitive": [{"bbox": {"x0": 50, "y0": 150, "x1": 150, "y1": 250}}],
+            }
+        ]
     }
 
 
@@ -105,7 +101,9 @@ class TestPDFRedactionService:
             instance.close()
 
     # Test applying redactions to file output
-    def test_apply_redactions_to_file(self, valid_pdf_with_content, redaction_mapping, tmp_path):
+    def test_apply_redactions_to_file(
+        self, valid_pdf_with_content, redaction_mapping, tmp_path
+    ):
 
         output_path = tmp_path / "output.pdf"
 
@@ -120,8 +118,17 @@ class TestPDFRedactionService:
             assert len(doc) == 12
 
             cleared_metadata_fields = [
-                'format', 'title', 'author', 'subject', 'keywords', 'creator',
-                'producer', 'creationDate', 'modDate', 'trapped', 'encryption'
+                "format",
+                "title",
+                "author",
+                "subject",
+                "keywords",
+                "creator",
+                "producer",
+                "creationDate",
+                "modDate",
+                "trapped",
+                "encryption",
             ]
 
             for key, value in doc.metadata.items():
@@ -130,7 +137,9 @@ class TestPDFRedactionService:
                     assert value == "" or value is None
 
     # Test applying redactions in-memory returns bytes without sensitive text
-    def test_apply_redactions_to_memory(self, valid_pdf_with_content, redaction_mapping):
+    def test_apply_redactions_to_memory(
+        self, valid_pdf_with_content, redaction_mapping
+    ):
 
         redactor = PDFRedactionService(valid_pdf_with_content)
 
@@ -156,7 +165,7 @@ class TestPDFRedactionService:
                     "page": 2,
                     "sensitive": [
                         {"bbox": {"x0": 50, "y0": 150, "x1": 150, "y1": 250}}
-                    ]
+                    ],
                 }
             ]
         }
@@ -202,7 +211,9 @@ class TestPDFRedactionService:
 
         redactor = PDFRedactionService(valid_pdf_with_content)
 
-        with patch.object(redactor, "_process_redaction_page", side_effect=Exception("Test error")):
+        with patch.object(
+            redactor, "_process_redaction_page", side_effect=Exception("Test error")
+        ):
             with pytest.raises(Exception):
                 redactor.apply_redactions(redaction_mapping, "dummy.pdf")
 
@@ -212,9 +223,11 @@ class TestPDFRedactionService:
         redactor = PDFRedactionService(valid_pdf_with_content)
 
         with patch(
-                "backend.app.document_processing.pdf_redactor.SecurityAwareErrorHandler.log_processing_error"
+            "backend.app.document_processing.pdf_redactor.SecurityAwareErrorHandler.log_processing_error"
         ) as mock_log_processing_error:
-            with patch.object(redactor.doc, "set_metadata", side_effect=Exception("Sanitize error")):
+            with patch.object(
+                redactor.doc, "set_metadata", side_effect=Exception("Sanitize error")
+            ):
                 redactor._sanitize_document()
 
             called_args = mock_log_processing_error.call_args[0]

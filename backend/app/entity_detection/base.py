@@ -19,7 +19,10 @@ from backend.app.utils.helpers.text_utils import TextUtils
 from backend.app.utils.logging.logger import default_logger as logger, log_warning
 from backend.app.utils.security.processing_records import record_keeper
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
+from backend.app.utils.system_utils.synchronization_utils import (
+    TimeoutLock,
+    LockPriority,
+)
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
 
 
@@ -71,18 +74,20 @@ class BaseEntityDetector(EntityDetector, ABC):
                 self._lock = TimeoutLock(
                     name="entity_detector_lock",
                     priority=LockPriority.MEDIUM,
-                    timeout=10.0
+                    timeout=10.0,
                 )
             except Exception as exc:
                 # In case of an error during lock creation, log the error using the secure error handler.
-                SecurityAwareErrorHandler.log_processing_error(exc, "lock_initialization")
+                SecurityAwareErrorHandler.log_processing_error(
+                    exc, "lock_initialization"
+                )
         # Return the lock (newly created or already available).
         return self._lock
 
     async def detect_sensitive_data_async(
-            self,
-            extracted_data: Dict[str, Any],
-            requested_entities: Optional[List[str]] = None
+        self,
+        extracted_data: Dict[str, Any],
+        requested_entities: Optional[List[str]] = None,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Asynchronous method to detect sensitive entities in extracted text.
@@ -104,9 +109,9 @@ class BaseEntityDetector(EntityDetector, ABC):
         raise NotImplementedError("Subclasses must implement this method")
 
     def detect_sensitive_data(
-            self,
-            extracted_data: Dict[str, Any],
-            requested_entities: Optional[List[str]] = None
+        self,
+        extracted_data: Dict[str, Any],
+        requested_entities: Optional[List[str]] = None,
     ) -> Union[Tuple[List[Any], Dict[str, List[Any]]], None]:
         """
         Synchronous wrapper around the asynchronous sensitive data detection method.
@@ -132,10 +137,12 @@ class BaseEntityDetector(EntityDetector, ABC):
                 # Execute the asynchronous detection method within the new event loop safely.
                 success, result, error_msg = SecurityAwareErrorHandler.safe_execution(
                     func=lambda: loop.run_until_complete(
-                        self.detect_sensitive_data_async(minimized_data, requested_entities)
+                        self.detect_sensitive_data_async(
+                            minimized_data, requested_entities
+                        )
                     ),
                     error_type="entity_detection",
-                    default=([], {"pages": []})
+                    default=([], {"pages": []}),
                 )
                 # If execution was not successful, log a warning with the error message.
                 if not success:
@@ -152,15 +159,12 @@ class BaseEntityDetector(EntityDetector, ABC):
             )
 
     async def process_entities_for_page(
-            self,
-            page_number: int,
-            full_text: str,
-            mapping: List[Tuple[Dict[str, Any], int, int]],
-            entities: List[Any]
-    ) -> Optional[Tuple[
-        List[Dict[str, Any]],
-        Dict[str, Any]
-    ]]:
+        self,
+        page_number: int,
+        full_text: str,
+        mapping: List[Tuple[Dict[str, Any], int, int]],
+        entities: List[Any],
+    ) -> Optional[Tuple[List[Dict[str, Any]], Dict[str, Any]]]:
         """
         Process entities for a single page.
 
@@ -191,13 +195,13 @@ class BaseEntityDetector(EntityDetector, ABC):
         try:
             # Process the standardized entities to compute positions and bounding boxes.
             processed_entities, page_sensitive = self._process_sanitized_entities(
-                standardized_entities,
-                full_text,
-                mapping
+                standardized_entities, full_text, mapping
             )
         except Exception as exc:
             # Log any error during the processing of sanitized entities.
-            SecurityAwareErrorHandler.log_processing_error(exc, "process_sanitized_entities")
+            SecurityAwareErrorHandler.log_processing_error(
+                exc, "process_sanitized_entities"
+            )
             # Use empty lists if an error occurs.
             processed_entities, page_sensitive = [], []
         # Build the redaction mapping information for the page.
@@ -216,9 +220,7 @@ class BaseEntityDetector(EntityDetector, ABC):
         return processed_entities, page_redaction_info
 
     def _standardize_raw_entities(
-            self,
-            raw_entities: List[Any],
-            full_text: str
+        self, raw_entities: List[Any], full_text: str
     ) -> List[Dict[str, Any]]:
         """
         Convert raw entities into a standardized dictionary format.
@@ -243,7 +245,9 @@ class BaseEntityDetector(EntityDetector, ABC):
                 # Check if the conversion returned a valid entity.
                 if not converted_entity:
                     # Log a warning if the conversion returned None.
-                    log_warning("[WARNING] _convert_to_entity_dict returned None. Skipping entity.")
+                    log_warning(
+                        "[WARNING] _convert_to_entity_dict returned None. Skipping entity."
+                    )
                     # Skip processing this entity.
                     continue
                 # Extract the entity text from the full text using helper method.
@@ -253,7 +257,9 @@ class BaseEntityDetector(EntityDetector, ABC):
                     standardized_entities.append(converted_entity)
                 else:
                     # Log a warning if no valid text is found.
-                    log_warning("[WARNING] Could not determine entity text, skipping entity.")
+                    log_warning(
+                        "[WARNING] Could not determine entity text, skipping entity."
+                    )
             except Exception as exc:
                 # Log any exceptions encountered during entity processing.
                 logger.error("Error processing entity: " + str(exc))
@@ -263,10 +269,10 @@ class BaseEntityDetector(EntityDetector, ABC):
         return standardized_entities
 
     def _process_sanitized_entities(
-            self,
-            sanitized_entities: List[Dict[str, Any]],
-            full_text: str,
-            mapping: List[Tuple[Dict[str, Any], int, int]]
+        self,
+        sanitized_entities: List[Dict[str, Any]],
+        full_text: str,
+        mapping: List[Tuple[Dict[str, Any], int, int]],
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         Process sanitized entities to determine text positions and bounding boxes.
@@ -292,9 +298,7 @@ class BaseEntityDetector(EntityDetector, ABC):
             try:
                 # Process each entity individually to determine its occurrences and bounding boxes.
                 local_processed, local_sensitive = self._process_single_entity(
-                    sanitized_entity,
-                    full_text,
-                    mapping
+                    sanitized_entity, full_text, mapping
                 )
                 # Extend the processed_entities list with the processed results.
                 processed_entities.extend(local_processed)
@@ -309,10 +313,10 @@ class BaseEntityDetector(EntityDetector, ABC):
         return processed_entities, page_sensitive
 
     def _process_single_entity(
-            self,
-            sanitized_entity: Dict[str, Any],
-            full_text: str,
-            mapping: List[Tuple[Dict[str, Any], int, int]]
+        self,
+        sanitized_entity: Dict[str, Any],
+        full_text: str,
+        mapping: List[Tuple[Dict[str, Any], int, int]],
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         Process a single sanitized entity to determine all occurrences in the text.
@@ -341,7 +345,9 @@ class BaseEntityDetector(EntityDetector, ABC):
         # Retrieve the text for the entity using the helper method.
         entity_text = self._get_entity_text(sanitized_entity, full_text)
         if not entity_text:
-            log_warning("[WARNING] Could not determine entity text after sanitization. Skipping entity.")
+            log_warning(
+                "[WARNING] Could not determine entity text after sanitization. Skipping entity."
+            )
             return local_processed, local_sensitive
 
         try:
@@ -352,7 +358,11 @@ class BaseEntityDetector(EntityDetector, ABC):
             return local_processed, local_sensitive
 
         if not matches:
-            log_warning("[WARNING] No matches found for entity '{0}', skipping".format(entity_text))
+            log_warning(
+                "[WARNING] No matches found for entity '{0}', skipping".format(
+                    entity_text
+                )
+            )
             return local_processed, local_sensitive
 
         # Deduplicate matches based on (start, end) offsets.
@@ -366,9 +376,13 @@ class BaseEntityDetector(EntityDetector, ABC):
         for start_offset, end_offset in unique_matches.values():
             try:
                 # Map the character offsets back to word bounding boxes.
-                bboxes = TextUtils.map_offsets_to_bboxes(full_text, mapping, (start_offset, end_offset))
+                bboxes = TextUtils.map_offsets_to_bboxes(
+                    full_text, mapping, (start_offset, end_offset)
+                )
             except Exception as exc:
-                SecurityAwareErrorHandler.log_processing_error(exc, "map_offsets_to_bboxes")
+                SecurityAwareErrorHandler.log_processing_error(
+                    exc, "map_offsets_to_bboxes"
+                )
                 continue
 
             # Skip this occurrence if no bounding boxes were found.
@@ -387,21 +401,25 @@ class BaseEntityDetector(EntityDetector, ABC):
                 "start": start_offset,
                 "end": end_offset,
                 "score": sanitized_entity["score"],
-                "bbox": final_bbox
+                "bbox": final_bbox,
             }
             local_sensitive.append(sensitive_item)
 
             # Append the processed entity metadata for this occurrence.
-            local_processed.append({
-                "entity_type": sanitized_entity["entity_type"],
-                "start": start_offset,
-                "end": end_offset,
-                "score": sanitized_entity["score"]
-            })
+            local_processed.append(
+                {
+                    "entity_type": sanitized_entity["entity_type"],
+                    "start": start_offset,
+                    "end": end_offset,
+                    "score": sanitized_entity["score"],
+                }
+            )
 
         return local_processed, local_sensitive
 
-    def _update_entity_metrics(self, processed_entities: List[Dict[str, Any]], processing_time: float) -> None:
+    def _update_entity_metrics(
+        self, processed_entities: List[Dict[str, Any]], processing_time: float
+    ) -> None:
         """
         Update internal counters to track entity detection metrics.
 
@@ -433,8 +451,7 @@ class BaseEntityDetector(EntityDetector, ABC):
 
     @staticmethod
     def _record_entity_processing(
-            processed_entities: List[Dict[str, Any]],
-            processing_time: float
+        processed_entities: List[Dict[str, Any]], processing_time: float
     ) -> None:
         """
         Record entity processing details for GDPR compliance and auditing.
@@ -449,10 +466,12 @@ class BaseEntityDetector(EntityDetector, ABC):
         record_keeper.record_processing(
             operation_type="entity_processing",
             document_type="page_entity_detection",
-            entity_types_processed=[ent.get("entity_type") for ent in processed_entities],
+            entity_types_processed=[
+                ent.get("entity_type") for ent in processed_entities
+            ],
             processing_time=processing_time,
             entity_count=len(processed_entities),
-            success=True
+            success=True,
         )
 
     @staticmethod
@@ -476,9 +495,10 @@ class BaseEntityDetector(EntityDetector, ABC):
 
         # Check for valid 'start' and 'end' indices in the entity_dict.
         if (
-                "start" in entity_dict and "end" in entity_dict
-                and entity_dict["start"] is not None
-                and entity_dict["end"] is not None
+            "start" in entity_dict
+            and "end" in entity_dict
+            and entity_dict["start"] is not None
+            and entity_dict["end"] is not None
         ):
             try:
                 # Convert start and end indices to integers.
@@ -489,7 +509,9 @@ class BaseEntityDetector(EntityDetector, ABC):
                     return full_text[start:end]
             except (ValueError, TypeError, IndexError) as exc:
                 # Log any errors encountered during extraction.
-                SecurityAwareErrorHandler.log_processing_error(exc, "entity_text_extraction")
+                SecurityAwareErrorHandler.log_processing_error(
+                    exc, "entity_text_extraction"
+                )
         # Check if the key 'text' exists and is non-empty.
         if "text" in entity_dict and entity_dict["text"]:
             return entity_dict["text"]
@@ -519,24 +541,31 @@ class BaseEntityDetector(EntityDetector, ABC):
                     "initialization_time": self._initialization_time,
                     "initialization_time_readable": datetime.fromtimestamp(
                         self._initialization_time
-                    ).strftime('%Y-%m-%d %H:%M:%S'),
+                    ).strftime("%Y-%m-%d %H:%M:%S"),
                     "last_used": self._last_used,
                     "last_used_readable": (
-                        datetime.fromtimestamp(self._last_used).strftime('%Y-%m-%d %H:%M:%S')
-                        if self._last_used else "Never Used"
+                        datetime.fromtimestamp(self._last_used).strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
+                        if self._last_used
+                        else "Never Used"
                     ),
-                    "idle_time": (time.time() - self._last_used) if self._last_used else None,
+                    "idle_time": (
+                        (time.time() - self._last_used) if self._last_used else None
+                    ),
                     "idle_time_readable": (
                         "{:.2f} seconds".format(time.time() - self._last_used)
-                        if self._last_used else "N/A"
+                        if self._last_used
+                        else "N/A"
                     ),
                     "total_calls": self._total_calls,
                     "total_entities_detected": self._total_entities_detected,
                     "total_processing_time": self._total_processing_time,
                     "average_processing_time": (
                         self._total_processing_time / self._total_calls
-                        if self._total_calls > 0 else None
-                    )
+                        if self._total_calls > 0
+                        else None
+                    ),
                 }
                 # Return the status dictionary.
                 return status
@@ -545,7 +574,7 @@ class BaseEntityDetector(EntityDetector, ABC):
                 return {
                     "initialized": True,
                     "initialization_time": self._initialization_time,
-                    "lock_acquisition_failed": True
+                    "lock_acquisition_failed": True,
                 }
         finally:
             # Release the lock if it was acquired.
@@ -590,8 +619,7 @@ class BaseEntityDetector(EntityDetector, ABC):
 
     @staticmethod
     def filter_by_score(
-            data: Union[List[Dict[str, Any]], Dict[str, Any]],
-            threshold: float = 0.85
+        data: Union[List[Dict[str, Any]], Dict[str, Any]], threshold: float = 0.85
     ) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Filter a list of entity dictionaries or a redaction mapping based on a score threshold.
@@ -618,13 +646,16 @@ class BaseEntityDetector(EntityDetector, ABC):
             for page in data.get("pages", []):
                 if "sensitive" in page:
                     page["sensitive"] = [
-                        entity for entity in page["sensitive"]
+                        entity
+                        for entity in page["sensitive"]
                         if entity.get("score", 0) >= threshold
                     ]
             return data
         else:
             # Raise an error if data is not the expected type.
-            raise ValueError("Input data must be a list or a dictionary with a 'pages' key.")
+            raise ValueError(
+                "Input data must be a list or a dictionary with a 'pages' key."
+            )
 
     @staticmethod
     def _convert_to_entity_dict(entity: Any) -> Dict[str, Any]:
@@ -651,7 +682,7 @@ class BaseEntityDetector(EntityDetector, ABC):
                 "entity_type": entity.get("entity_type", "UNKNOWN"),
                 "start": entity.get("start", 0),
                 "end": entity.get("end", 0),
-                "score": float(entity.get("score", 0.5))
+                "score": float(entity.get("score", 0.5)),
             }
             # Include original_text if present.
             if "original_text" in entity:
@@ -665,7 +696,7 @@ class BaseEntityDetector(EntityDetector, ABC):
                 "entity_type": getattr(entity, "entity_type", "UNKNOWN"),
                 "start": getattr(entity, "start", 0),
                 "end": getattr(entity, "end", 0),
-                "score": float(getattr(entity, "score", 0.5))
+                "score": float(getattr(entity, "score", 0.5)),
             }
 
         # Attempt a generic extraction from the entity.
@@ -674,10 +705,12 @@ class BaseEntityDetector(EntityDetector, ABC):
                 "entity_type": getattr(entity, "entity_type", "UNKNOWN"),
                 "start": getattr(entity, "start", 0),
                 "end": getattr(entity, "end", 0),
-                "score": float(getattr(entity, "score", 0.5))
+                "score": float(getattr(entity, "score", 0.5)),
             }
         except Exception as conversion_exc:
             # Log any error that occurs during entity conversion.
-            SecurityAwareErrorHandler.log_processing_error(conversion_exc, "entity_conversion")
+            SecurityAwareErrorHandler.log_processing_error(
+                conversion_exc, "entity_conversion"
+            )
             # Return a default dictionary if conversion fails.
             return {"entity_type": "UNKNOWN", "start": 0, "end": 0, "score": 0.0}
