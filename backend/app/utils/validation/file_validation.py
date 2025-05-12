@@ -17,8 +17,13 @@ from typing import Optional, Union, Tuple, BinaryIO, List
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
 
-from backend.app.utils.constant.constant import FILE_SIGNATURES, EXTENSION_TO_MIME, APPLICATION_WORD, \
-    ALLOWED_MIME_TYPES, MAX_PDF_SIZE_BYTES
+from backend.app.utils.constant.constant import (
+    FILE_SIGNATURES,
+    EXTENSION_TO_MIME,
+    APPLICATION_WORD,
+    ALLOWED_MIME_TYPES,
+    MAX_PDF_SIZE_BYTES,
+)
 from backend.app.utils.logging.logger import log_info, log_warning
 
 # Configure module-level logger.
@@ -45,14 +50,16 @@ def get_file_signature(content: bytes) -> Optional[str]:
             # Check if content length is sufficient for the signature match.
             if len(content) >= offset + len(signature):
                 # Compare the specific segment of content with the signature.
-                if content[offset:offset + len(signature)] == signature:
+                if content[offset : offset + len(signature)] == signature:
                     # Return the matching file type.
                     return file_type
     # If no match is found, return None.
     return None
 
 
-def get_mime_type_from_buffer(buffer: Union[bytes, BinaryIO], filename: Optional[str] = None) -> str:
+def get_mime_type_from_buffer(
+    buffer: Union[bytes, BinaryIO], filename: Optional[str] = None
+) -> str:
     """
     Determine the MIME type from file content and optional filename.
 
@@ -123,9 +130,11 @@ def sanitize_filename(filename: str) -> str:
         filename = "unnamed_file"
     # Check environment variable to see if filenames should be randomized.
     if os.environ.get("RANDOMIZE_FILENAMES", "false").lower() == "true":
-        import random, string
+        import random
+        import string
+
         # Generate a random 8-character suffix.
-        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
         base, ext = os.path.splitext(filename)
         # Append the random suffix to the base name.
         filename = f"{base}_{suffix}{ext}"
@@ -133,7 +142,9 @@ def sanitize_filename(filename: str) -> str:
     return filename
 
 
-def validate_mime_type(content_type: str, allowed_types: Optional[Union[List[str], set]] = None) -> bool:
+def validate_mime_type(
+    content_type: str, allowed_types: Optional[Union[List[str], set]] = None
+) -> bool:
     """
     Validate that the provided MIME type is allowed.
 
@@ -148,7 +159,7 @@ def validate_mime_type(content_type: str, allowed_types: Optional[Union[List[str
     if not content_type:
         return False
     # Normalize the content type by splitting and stripping extra parameters.
-    normalized = content_type.split(';')[0].strip().lower()
+    normalized = content_type.split(";")[0].strip().lower()
     # Use default allowed types if none provided.
     if allowed_types is None:
         allowed_types = ALLOWED_MIME_TYPES["pdf"]
@@ -228,7 +239,9 @@ def _check_pdf_acroform(content: bytes, filename: Optional[str]) -> None:
         _logger.warning("PDF contains AcroForm: %s", filename or "")
 
 
-def validate_file_safety(content: bytes, filename: Optional[str] = None) -> Tuple[bool, str]:
+def validate_file_safety(
+    content: bytes, filename: Optional[str] = None
+) -> Tuple[bool, str]:
     """
     Validate the safety of a PDF file by checking for potentially malicious elements.
 
@@ -257,8 +270,9 @@ def validate_file_safety(content: bytes, filename: Optional[str] = None) -> Tupl
     return True, ""
 
 
-def validate_file_content(content: bytes, filename: Optional[str] = None, content_type: Optional[str] = None) -> Tuple[
-    bool, str, Optional[str]]:
+def validate_file_content(
+    content: bytes, filename: Optional[str] = None, content_type: Optional[str] = None
+) -> Tuple[bool, str, Optional[str]]:
     """
     Perform comprehensive validation of a PDF file's content.
 
@@ -280,14 +294,22 @@ def validate_file_content(content: bytes, filename: Optional[str] = None, conten
     # If a content_type is provided...
     if content_type:
         # Normalize content type.
-        normalized_content_type = content_type.split(';')[0].strip().lower()
+        normalized_content_type = content_type.split(";")[0].strip().lower()
         # Compare with the detected MIME type.
         if normalized_content_type != detected_mime:
-            return False, f"Content type mismatch: provided {normalized_content_type}, detected {detected_mime}", detected_mime
+            return (
+                False,
+                f"Content type mismatch: provided {normalized_content_type}, detected {detected_mime}",
+                detected_mime,
+            )
 
     # Check if the detected MIME type is allowed for PDFs.
     if detected_mime not in ALLOWED_MIME_TYPES["pdf"]:
-        return False, f"Only PDF files are allowed, detected: {detected_mime}", detected_mime
+        return (
+            False,
+            f"Only PDF files are allowed, detected: {detected_mime}",
+            detected_mime,
+        )
 
     # Validate the PDF file structure.
     if not validate_pdf_file(content):
@@ -302,8 +324,9 @@ def validate_file_content(content: bytes, filename: Optional[str] = None, conten
     return True, "", detected_mime
 
 
-async def validate_file_content_async(content: bytes, filename: Optional[str] = None,
-                                      content_type: Optional[str] = None) -> Tuple[bool, str, Optional[str]]:
+async def validate_file_content_async(
+    content: bytes, filename: Optional[str] = None, content_type: Optional[str] = None
+) -> Tuple[bool, str, Optional[str]]:
     """
     Asynchronously validate a PDF file's content.
 
@@ -317,7 +340,9 @@ async def validate_file_content_async(content: bytes, filename: Optional[str] = 
     """
     try:
         # Offload synchronous validation to a separate thread.
-        result = await asyncio.to_thread(validate_file_content, content, filename, content_type)
+        result = await asyncio.to_thread(
+            validate_file_content, content, filename, content_type
+        )
         # Return the result from the synchronous function.
         return result
     except Exception as e:
@@ -326,8 +351,9 @@ async def validate_file_content_async(content: bytes, filename: Optional[str] = 
         return False, "Async validation error", None
 
 
-async def read_and_validate_file(file: UploadFile, operation_id: str) -> Tuple[
-    Optional[bytes], Optional[JSONResponse], float]:
+async def read_and_validate_file(
+    file: UploadFile, operation_id: str
+) -> Tuple[Optional[bytes], Optional[JSONResponse], float]:
     """
     Reads and validates a single PDF file.
 
@@ -350,10 +376,21 @@ async def read_and_validate_file(file: UploadFile, operation_id: str) -> Tuple[
     try:
         # Validate the MIME type of the file against allowed PDF types.
         if not validate_mime_type(file.content_type, list(ALLOWED_MIME_TYPES["pdf"])):
-            log_warning(f"[SECURITY] Unsupported file type: {file.content_type} [operation_id={operation_id}]")
+            log_warning(
+                f"[SECURITY] Unsupported file type: {file.content_type} [operation_id={operation_id}]"
+            )
             # Return an HTTP 415 error response if MIME type is not supported.
-            return None, JSONResponse(status_code=415, content={"detail": "Only PDF files are supported",
-                                                                "operation_id": operation_id}), 0
+            return (
+                None,
+                JSONResponse(
+                    status_code=415,
+                    content={
+                        "detail": "Only PDF files are supported",
+                        "operation_id": operation_id,
+                    },
+                ),
+                0,
+            )
 
         # Record the start time for reading the file.
         file_read_start = time.time()
@@ -363,32 +400,62 @@ async def read_and_validate_file(file: UploadFile, operation_id: str) -> Tuple[
         file_read_time = time.time() - file_read_start
         # Log the file read completion with timing and size information.
         log_info(
-            f"[SECURITY] File read completed in {file_read_time:.3f}s. Size: {len(content) / 1024:.1f}KB [operation_id={operation_id}]")
+            f"[SECURITY] File read completed in {file_read_time:.3f}s. Size: {len(content) / 1024:.1f}KB [operation_id={operation_id}]"
+        )
 
         # Check if the file size exceeds the maximum allowed PDF size.
         if len(content) > MAX_PDF_SIZE_BYTES:
             log_warning(
-                f"[SECURITY] PDF size exceeds limit: {len(content) / (1024 * 1024):.2f}MB > {MAX_PDF_SIZE_BYTES / (1024 * 1024):.2f}MB [operation_id={operation_id}]")
+                f"[SECURITY] PDF size exceeds limit: {len(content) / (1024 * 1024):.2f}MB > {MAX_PDF_SIZE_BYTES / (1024 * 1024):.2f}MB [operation_id={operation_id}]"
+            )
             # Return an HTTP 413 error response if file is too large.
-            return None, JSONResponse(status_code=413,
-                                      content={
-                                          "detail": f"PDF file size exceeds maximum allowed ({MAX_PDF_SIZE_BYTES // (1024 * 1024)}MB)",
-                                          "operation_id": operation_id}), file_read_time
+            return (
+                None,
+                JSONResponse(
+                    status_code=413,
+                    content={
+                        "detail": f"PDF file size exceeds maximum allowed ({MAX_PDF_SIZE_BYTES // (1024 * 1024)}MB)",
+                        "operation_id": operation_id,
+                    },
+                ),
+                file_read_time,
+            )
 
         # Asynchronously validate the file content.
-        is_valid, reason, _ = await validate_file_content_async(content, file.filename, file.content_type)
+        is_valid, reason, _ = await validate_file_content_async(
+            content, file.filename, file.content_type
+        )
         if not is_valid:
-            log_warning(f"[SECURITY] Invalid PDF content: {reason} [operation_id={operation_id}]")
+            log_warning(
+                f"[SECURITY] Invalid PDF content: {reason} [operation_id={operation_id}]"
+            )
             # Return an HTTP 415 error response if content validation fails.
-            return None, JSONResponse(status_code=415,
-                                      content={"detail": reason, "operation_id": operation_id}), file_read_time
+            return (
+                None,
+                JSONResponse(
+                    status_code=415,
+                    content={"detail": reason, "operation_id": operation_id},
+                ),
+                file_read_time,
+            )
 
         # Return the valid file content, no error response, and the elapsed read time.
         return content, None, file_read_time
 
     except Exception as e:
         # Log any exception encountered during reading and validation.
-        log_warning(f"[SECURITY] Exception in read_and_validate_file: {str(e)} [operation_id={operation_id}]")
+        log_warning(
+            f"[SECURITY] Exception in read_and_validate_file: {str(e)} [operation_id={operation_id}]"
+        )
         # Return an HTTP 500 error response in case of server error.
-        return None, JSONResponse(status_code=500,
-                                  content={"detail": "Internal Server Error", "operation_id": operation_id}), 0
+        return (
+            None,
+            JSONResponse(
+                status_code=500,
+                content={
+                    "detail": "Internal Server Error",
+                    "operation_id": operation_id,
+                },
+            ),
+            0,
+        )

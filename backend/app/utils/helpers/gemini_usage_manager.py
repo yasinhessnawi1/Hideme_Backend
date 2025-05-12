@@ -30,11 +30,11 @@ class GeminiUsageManager:
     """
 
     def __init__(
-            self,
-            max_daily_requests: int = 100000,  # Adjust based on Gemini API plan.
-            max_concurrent_requests: int = 10,
-            request_delay: float = 0.1,
-            text_truncation_limit: int = 10000  # Maximum characters allowed per API call.
+        self,
+        max_daily_requests: int = 100000,  # Adjust based on Gemini API plan.
+        max_concurrent_requests: int = 10,
+        request_delay: float = 0.1,
+        text_truncation_limit: int = 10000,  # Maximum characters allowed per API call.
     ):
         """
         Initialize GeminiUsageManager with intelligent controls for API usage.
@@ -83,10 +83,10 @@ class GeminiUsageManager:
         return _gemini_locks[loop]
 
     async def manage_page_processing(
-            self,
-            full_text: str,
-            requested_entities: Optional[List[str]] = None,
-            page_number: Optional[int] = None
+        self,
+        full_text: str,
+        requested_entities: Optional[List[str]] = None,
+        page_number: Optional[int] = None,
     ) -> Optional[str]:
         """
         Intelligently manage the Gemini API request for processing a single page of text.
@@ -150,12 +150,18 @@ class GeminiUsageManager:
                 self.request_history = []
             # If the daily requests exceed or equal the allowed maximum, raise an error.
             if self.daily_requests >= self.max_daily_requests:
-                raise ValueError(f"Daily Gemini API request quota ({self.max_daily_requests}) exceeded")
+                raise ValueError(
+                    f"Daily Gemini API request quota ({self.max_daily_requests}) exceeded"
+                )
             # If the number of concurrent requests exceeds or equals the allowed maximum, raise an error.
             if self.concurrent_requests >= self.max_concurrent_requests:
-                raise ValueError(f"Maximum concurrent Gemini requests ({self.max_concurrent_requests}) reached")
+                raise ValueError(
+                    f"Maximum concurrent Gemini requests ({self.max_concurrent_requests}) reached"
+                )
             # Calculate the time elapsed since the last API request.
-            time_since_last_request = (current_time - self._last_request_time).total_seconds()
+            time_since_last_request = (
+                current_time - self._last_request_time
+            ).total_seconds()
             # If the elapsed time is less than the required delay, wait for the remaining delay duration.
             if time_since_last_request < self.request_delay:
                 await asyncio.sleep(self.request_delay - time_since_last_request)
@@ -166,11 +172,13 @@ class GeminiUsageManager:
             # Update the last request time to the current time.
             self._last_request_time = datetime.now()
             # Append the current request details to the request history.
-            self.request_history.append({
-                "timestamp": current_time,
-                "page_number": page_number,
-                "daily_requests": self.daily_requests
-            })
+            self.request_history.append(
+                {
+                    "timestamp": current_time,
+                    "page_number": page_number,
+                    "daily_requests": self.daily_requests,
+                }
+            )
 
     def _truncate_text(self, text: str) -> Optional[str]:
         """
@@ -189,9 +197,9 @@ class GeminiUsageManager:
         if len(text) <= self.text_truncation_limit:
             return text
         # Otherwise, truncate the text to the defined limit.
-        truncated_text = text[:self.text_truncation_limit]
+        truncated_text = text[: self.text_truncation_limit]
         # Find the last space in the truncated text to avoid cutting in the middle of a word.
-        last_space = truncated_text.rfind(' ')
+        last_space = truncated_text.rfind(" ")
         # If a space is found, return the text up to that space; else, return the truncated text.
         return truncated_text[:last_space] if last_space != -1 else truncated_text
 
@@ -209,7 +217,7 @@ class GeminiUsageManager:
             "concurrent_requests": self.concurrent_requests,
             "max_concurrent_requests": self.max_concurrent_requests,
             "request_history_length": len(self.request_history),
-            "last_reset_time": self.last_reset_time
+            "last_reset_time": self.last_reset_time,
         }
 
     async def release_request_slot(self):

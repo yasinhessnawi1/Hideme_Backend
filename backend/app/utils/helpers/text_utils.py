@@ -21,7 +21,9 @@ class TextUtils:
     """Utilities for text processing and entity mapping."""
 
     @staticmethod
-    def reconstruct_text_and_mapping(words: List[Dict[str, Any]]) -> Tuple[str, List[Tuple[Dict[str, Any], int, int]]]:
+    def reconstruct_text_and_mapping(
+        words: List[Dict[str, Any]],
+    ) -> Tuple[str, List[Tuple[Dict[str, Any], int, int]]]:
         """
         Reconstructs the full text from a list of word dictionaries and builds a mapping
         from each word to its start and end character offsets.
@@ -66,10 +68,10 @@ class TextUtils:
 
     @staticmethod
     def map_offsets_to_bboxes(
-            full_text: str,
-            mapping: List[Tuple[Dict[str, Any], int, int]],
-            sensitive_offsets: Tuple[int, int],
-            padding: Dict[str, int] = None
+        full_text: str,
+        mapping: List[Tuple[Dict[str, Any], int, int]],
+        sensitive_offsets: Tuple[int, int],
+        padding: Dict[str, int] = None,
     ) -> List[Dict[str, float]]:
         """
         Maps a sensitive text span (given as character offsets) to bounding boxes.
@@ -99,16 +101,20 @@ class TextUtils:
             if w_end < s_start or w_start > s_end:
                 continue  # Skip words outside the entity span.
             # Append a new bounding box dictionary for the word with adjusted padding.
-            word_bboxes.append({
-                "x0": word["x0"] - padding["left"],  # Adjust left boundary.
-                "y0": word["y0"] + padding["top"],  # Adjust top boundary.
-                "x1": word["x1"] + padding["right"],  # Adjust right boundary.
-                "y1": word["y1"] - padding["bottom"]  # Adjust bottom boundary.
-            })
+            word_bboxes.append(
+                {
+                    "x0": word["x0"] - padding["left"],  # Adjust left boundary.
+                    "y0": word["y0"] + padding["top"],  # Adjust top boundary.
+                    "x1": word["x1"] + padding["right"],  # Adjust right boundary.
+                    "y1": word["y1"] - padding["bottom"],  # Adjust bottom boundary.
+                }
+            )
 
         # If no bounding boxes were identified, log a warning and return an empty list.
         if not word_bboxes:
-            log_warning(f"[OK] No valid bounding box found for entity at {s_start}-{s_end}")
+            log_warning(
+                f"[OK] No valid bounding box found for entity at {s_start}-{s_end}"
+            )
             return []
 
         # Initialize a default dictionary to group bounding boxes by their y0 coordinate (line start).
@@ -134,12 +140,7 @@ class TextUtils:
             if (y1 - y0) > max_height:
                 y1 = y0 + max_height
             # Append the computed bounding box for the line.
-            bboxes_per_line.append({
-                "x0": x0,
-                "y0": y0,
-                "x1": x1,
-                "y1": y1
-            })
+            bboxes_per_line.append({"x0": x0, "y0": y0, "x1": x1, "y1": y1})
 
         # Return the list of bounding boxes per line.
         return bboxes_per_line
@@ -162,7 +163,9 @@ class TextUtils:
         matches = []
 
         # Iterate over all positions in full_text where the text starts with entity_text.
-        start_positions = [i for i in range(len(full_text)) if full_text.startswith(entity_text, i)]
+        start_positions = [
+            i for i in range(len(full_text)) if full_text.startswith(entity_text, i)
+        ]
 
         # If any starting positions are found, compute their end positions.
         if start_positions:
@@ -214,7 +217,7 @@ class TextUtils:
             "x0": min(b["x0"] for b in boxes),  # Left boundary: smallest x0.
             "y0": min(b["y0"] for b in boxes),  # Top boundary: smallest y0.
             "x1": max(b["x1"] for b in boxes),  # Right boundary: largest x1.
-            "y1": max(b["y1"] for b in boxes)  # Bottom boundary: largest y1.
+            "y1": max(b["y1"] for b in boxes),  # Bottom boundary: largest y1.
         }
         # Apply height restriction to ensure the merged box doesn't exceed max_height.
         return TextUtils._cap_height(merged, max_height)
@@ -281,7 +284,9 @@ class EntityUtils:
     """Utilities for processing and manipulating entities."""
 
     @staticmethod
-    def merge_overlapping_entities(entities: List[RecognizerResult]) -> List[RecognizerResult]:
+    def merge_overlapping_entities(
+        entities: List[RecognizerResult],
+    ) -> List[RecognizerResult]:
         """
         Merges overlapping entities by keeping the longest span.
 

@@ -20,7 +20,10 @@ from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHand
 from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.security.processing_records import record_keeper
-from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
+from backend.app.utils.system_utils.synchronization_utils import (
+    TimeoutLock,
+    LockPriority,
+)
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 
 
@@ -34,8 +37,11 @@ class PDFRedactionService(DocumentRedactor):
     security through standardized error handling and audit logging.
     """
 
-    def __init__(self, pdf_input: Union[str, pymupdf.Document, bytes, BinaryIO],
-                 page_batch_size: int = 5):
+    def __init__(
+        self,
+        pdf_input: Union[str, pymupdf.Document, bytes, BinaryIO],
+        page_batch_size: int = 5,
+    ):
         """
         Initialize PDFRedactionService with flexible PDF input types.
 
@@ -63,7 +69,7 @@ class PDFRedactionService(DocumentRedactor):
             self._instance_lock = TimeoutLock(
                 f"pdf_redactor_instance_lock_{id(self)}",  # Unique name based on the instance id.
                 priority=LockPriority.MEDIUM,  # Set lock priority.
-                timeout=DEFAULT_LOCK_TIMEOUT  # Set the timeout threshold.
+                timeout=DEFAULT_LOCK_TIMEOUT,  # Set the timeout threshold.
             )
 
             # Check if pdf_input is a string (assumed to be a file path).
@@ -97,13 +103,13 @@ class PDFRedactionService(DocumentRedactor):
                 # Open the PDF document from the buffer.
                 self.doc = pymupdf.open(stream=buffer, filetype="pdf")
                 # Save the name attribute if available.
-                self.file_path = getattr(pdf_input, 'name', "buffered_reader")
+                self.file_path = getattr(pdf_input, "name", "buffered_reader")
             # Check if pdf_input is a file-like object.
-            elif hasattr(pdf_input, 'read') and callable(pdf_input.read):
+            elif hasattr(pdf_input, "read") and callable(pdf_input.read):
                 # Open the PDF using the file-like object.
                 self.doc = pymupdf.open(stream=pdf_input, filetype="pdf")
                 # Save the name attribute if available.
-                self.file_path = getattr(pdf_input, 'name', "file_object")
+                self.file_path = getattr(pdf_input, "name", "file_object")
             else:
                 # Raise an exception for invalid input types.
                 raise ValueError(
@@ -117,12 +123,17 @@ class PDFRedactionService(DocumentRedactor):
             SecurityAwareErrorHandler.log_processing_error(
                 e,
                 "pdf_redaction_init",
-                str(pdf_input) if isinstance(pdf_input, str) else "memory_buffer"
+                str(pdf_input) if isinstance(pdf_input, str) else "memory_buffer",
             )
             # Re-raise the exception to halt the process.
             raise
 
-    def apply_redactions(self, redaction_mapping: Dict[str, Any], output_path: str, remove_images: bool = False) -> str:
+    def apply_redactions(
+        self,
+        redaction_mapping: Dict[str, Any],
+        output_path: str,
+        remove_images: bool = False,
+    ) -> str:
         """
         Apply redactions to the PDF based on the provided redaction mapping and save the result.
 
@@ -140,24 +151,38 @@ class PDFRedactionService(DocumentRedactor):
         # Record the start time of the redaction process.
         start_time = time.time()
         # Determine an operation identifier based on the file path.
-        operation_id = os.path.basename(self.file_path) if isinstance(self.file_path, str) else "memory_document"
+        operation_id = (
+            os.path.basename(self.file_path)
+            if isinstance(self.file_path, str)
+            else "memory_document"
+        )
         # Count all sensitive items across pages from the mapping.
         sensitive_items_count = sum(
             len(page.get("sensitive", []))  # Count sensitive items on each page.
-            for page in redaction_mapping.get("pages", [])  # Iterate over pages in the mapping.
+            for page in redaction_mapping.get(
+                "pages", []
+            )  # Iterate over pages in the mapping.
         )
 
         try:
             # Acquire the instance lock to perform thread-safe redaction operations.
-            with self._instance_lock.acquire_timeout(timeout=DEFAULT_LOCK_TIMEOUT) as acquired:
+            with self._instance_lock.acquire_timeout(
+                timeout=DEFAULT_LOCK_TIMEOUT
+            ) as acquired:
                 # Check if the lock was successfully acquired.
                 if not acquired:
                     # Log an error and raise TimeoutError if lock acquisition fails.
-                    log_error(f"[ERROR] Failed to acquire lock for redaction: {operation_id}")
-                    raise TimeoutError(f"Failed to acquire redaction lock after {DEFAULT_LOCK_TIMEOUT}s")
+                    log_error(
+                        f"[ERROR] Failed to acquire lock for redaction: {operation_id}"
+                    )
+                    raise TimeoutError(
+                        f"Failed to acquire redaction lock after {DEFAULT_LOCK_TIMEOUT}s"
+                    )
 
                 # Log the start of the redaction process.
-                log_info(f"[OK] Processing PDF redaction (operation_id: {operation_id})")
+                log_info(
+                    f"[OK] Processing PDF redaction (operation_id: {operation_id})"
+                )
 
                 # Draw redaction boxes using the provided mapping.
                 self._draw_redaction_boxes(redaction_mapping, remove_images)
@@ -180,7 +205,7 @@ class PDFRedactionService(DocumentRedactor):
                     processing_time=processing_time,
                     file_count=1,
                     entity_count=sensitive_items_count,
-                    success=True
+                    success=True,
                 )
 
                 # Log a secure operation for redaction.
@@ -189,7 +214,7 @@ class PDFRedactionService(DocumentRedactor):
                     sensitive_items_count,
                     processing_time,
                     file_path=self.file_path,
-                    operation_id=operation_id
+                    operation_id=operation_id,
                 )
 
                 # Log the success message and return the output path.
@@ -207,7 +232,7 @@ class PDFRedactionService(DocumentRedactor):
                 processing_time=processing_time,
                 file_count=1,
                 entity_count=0,
-                success=False
+                success=False,
             )
             # Log the redaction timeout error.
             log_error(f"[ERROR] Redaction timeout: {str(te)}")
@@ -224,14 +249,18 @@ class PDFRedactionService(DocumentRedactor):
                 processing_time=processing_time,
                 file_count=1,
                 entity_count=0,
-                success=False
+                success=False,
             )
             # Log any error encountered using the secure error handler.
-            SecurityAwareErrorHandler.log_processing_error(e, "pdf_redaction", self.file_path)
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "pdf_redaction", self.file_path
+            )
             # Re-raise the exception.
             raise
 
-    def apply_redactions_to_memory(self, redaction_mapping: Dict[str, Any], remove_images: bool = False) -> bytes:
+    def apply_redactions_to_memory(
+        self, redaction_mapping: Dict[str, Any], remove_images: bool = False
+    ) -> bytes:
         """
         Apply redactions to the PDF and return the redacted document as bytes.
 
@@ -257,15 +286,23 @@ class PDFRedactionService(DocumentRedactor):
 
         try:
             # Acquire the instance lock for thread-safe in-memory redaction.
-            with self._instance_lock.acquire_timeout(timeout=DEFAULT_LOCK_TIMEOUT) as acquired:
+            with self._instance_lock.acquire_timeout(
+                timeout=DEFAULT_LOCK_TIMEOUT
+            ) as acquired:
                 # Check if the lock acquisition succeeded.
                 if not acquired:
                     # Log the error and raise TimeoutError if the lock cannot be acquired.
-                    log_error(f"[ERROR] Failed to acquire lock for memory redaction: {operation_id}")
-                    raise TimeoutError(f"Failed to acquire memory redaction lock after {DEFAULT_LOCK_TIMEOUT}s")
+                    log_error(
+                        f"[ERROR] Failed to acquire lock for memory redaction: {operation_id}"
+                    )
+                    raise TimeoutError(
+                        f"Failed to acquire memory redaction lock after {DEFAULT_LOCK_TIMEOUT}s"
+                    )
 
                 # Log the start of the in-memory redaction process.
-                log_info(f"[OK] Processing PDF memory redaction (operation_id: {operation_id})")
+                log_info(
+                    f"[OK] Processing PDF memory redaction (operation_id: {operation_id})"
+                )
 
                 # Draw redaction boxes based on the mapping.
                 self._draw_redaction_boxes(redaction_mapping, remove_images)
@@ -295,7 +332,7 @@ class PDFRedactionService(DocumentRedactor):
                     processing_time=processing_time,
                     file_count=1,
                     entity_count=sensitive_items_count,
-                    success=True
+                    success=True,
                 )
 
                 # Log the sensitive operation for auditing.
@@ -303,7 +340,7 @@ class PDFRedactionService(DocumentRedactor):
                     "PDF Memory Redaction",
                     sensitive_items_count,
                     processing_time,
-                    operation_id=operation_id
+                    operation_id=operation_id,
                 )
 
                 # Return the redacted PDF content.
@@ -320,7 +357,7 @@ class PDFRedactionService(DocumentRedactor):
                 processing_time=processing_time,
                 file_count=1,
                 entity_count=0,
-                success=False
+                success=False,
             )
             # Log the timeout error.
             log_error(f"[ERROR] Memory redaction timeout: {str(te)}")
@@ -337,14 +374,18 @@ class PDFRedactionService(DocumentRedactor):
                 processing_time=processing_time,
                 file_count=1,
                 entity_count=0,
-                success=False
+                success=False,
             )
             # Log the error securely.
-            SecurityAwareErrorHandler.log_processing_error(e, "pdf_memory_redaction", self.file_path)
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "pdf_memory_redaction", self.file_path
+            )
             # Re-raise the exception.
             raise
 
-    def _draw_redaction_boxes(self, redaction_mapping: Dict[str, Any], remove_images: bool) -> None:
+    def _draw_redaction_boxes(
+        self, redaction_mapping: Dict[str, Any], remove_images: bool
+    ) -> None:
         """
         Process the redaction mapping and apply redaction boxes to the specified pages.
 
@@ -357,8 +398,11 @@ class PDFRedactionService(DocumentRedactor):
         # Get the total number of pages in the PDF document.
         total_pages = len(self.doc)
         # Extract a sorted list of unique page numbers from the mapping.
-        page_numbers = {page_info.get("page") for page_info in redaction_mapping.get("pages", [])
-                        if page_info.get("page") is not None}
+        page_numbers = {
+            page_info.get("page")
+            for page_info in redaction_mapping.get("pages", [])
+            if page_info.get("page") is not None
+        }
         page_numbers = sorted(page_numbers)
 
         try:
@@ -367,28 +411,44 @@ class PDFRedactionService(DocumentRedactor):
                 # Iterate through page numbers in batches.
                 for batch_start in range(0, len(page_numbers), self.page_batch_size):
                     # Determine the end index for the current batch.
-                    batch_end = min(batch_start + self.page_batch_size, len(page_numbers))
+                    batch_end = min(
+                        batch_start + self.page_batch_size, len(page_numbers)
+                    )
                     # Get the list of page numbers in the current batch.
                     batch_page_numbers = page_numbers[batch_start:batch_end]
                     # Log the batch processing of redaction.
-                    log_info(f"[OK] Processing redaction batch for pages {batch_page_numbers}")
+                    log_info(
+                        f"[OK] Processing redaction batch for pages {batch_page_numbers}"
+                    )
                     # Process the current batch of pages.
-                    self._process_redaction_pages_batch(redaction_mapping, batch_page_numbers, total_pages,
-                                                        remove_images)
+                    self._process_redaction_pages_batch(
+                        redaction_mapping,
+                        batch_page_numbers,
+                        total_pages,
+                        remove_images,
+                    )
                     # Import and invoke garbage collection to free memory.
                     import gc
+
                     gc.collect()
             else:
                 # If few pages, process them all at once.
-                self._process_all_redaction_pages(redaction_mapping, total_pages, remove_images)
+                self._process_all_redaction_pages(
+                    redaction_mapping, total_pages, remove_images
+                )
         except Exception as e:
             # Log any error encountered during the drawing of redaction boxes.
             log_error(f"[ERROR] Error while drawing redaction boxes: {str(e)}")
             # Re-raise the exception.
             raise
 
-    def _process_redaction_page(self, page_num: int, page_info: Dict[str, Any], total_pages: int,
-                                remove_images: bool = False) -> None:
+    def _process_redaction_page(
+        self,
+        page_num: int,
+        page_info: Dict[str, Any],
+        total_pages: int,
+        remove_images: bool = False,
+    ) -> None:
         """
         Process redaction for a single page based on the mapping.
 
@@ -414,7 +474,8 @@ class PDFRedactionService(DocumentRedactor):
         if page_num < 1 or page_num > total_pages:
             # Log a warning if the page number is out of range.
             log_warning(
-                f"[WARNING] Page number {page_num} is out of range for document with {total_pages} pages. Skipping.")
+                f"[WARNING] Page number {page_num} is out of range for document with {total_pages} pages. Skipping."
+            )
             # Return early.
             return
 
@@ -438,16 +499,21 @@ class PDFRedactionService(DocumentRedactor):
                         # Add a redaction annotation with a black fill.
                         page.add_redact_annot(rect, fill=(0, 0, 0))
                     # Log the number of redacted images.
-                    log_info(f"[OK] ✅ Detected and redacted {len(image_boxes)} image(s) on page {page_num}")
+                    log_info(
+                        f"[OK] ✅ Detected and redacted {len(image_boxes)} image(s) on page {page_num}"
+                    )
 
             # Apply all redaction annotations on the page.
             page.apply_redactions()
         except Exception as e:
             # Log any error during the redaction of this page.
-            SecurityAwareErrorHandler.log_processing_error(e, "pdf_redaction_page", f"{self.file_path}:page_{page_num}")
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "pdf_redaction_page", f"{self.file_path}:page_{page_num}"
+            )
 
-    def _process_all_redaction_pages(self, redaction_mapping: Dict[str, Any], total_pages: int,
-                                     remove_images: bool) -> None:
+    def _process_all_redaction_pages(
+        self, redaction_mapping: Dict[str, Any], total_pages: int, remove_images: bool
+    ) -> None:
         """
         Process redactions for all pages specified in the mapping sequentially.
 
@@ -464,10 +530,17 @@ class PDFRedactionService(DocumentRedactor):
             if page_num is None:
                 continue
             # Process redaction for the specific page.
-            self._process_redaction_page(page_num, page_info, total_pages, remove_images)
+            self._process_redaction_page(
+                page_num, page_info, total_pages, remove_images
+            )
 
-    def _process_redaction_pages_batch(self, redaction_mapping: Dict[str, Any],
-                                       page_numbers: List[int], total_pages: int, remove_images: bool) -> None:
+    def _process_redaction_pages_batch(
+        self,
+        redaction_mapping: Dict[str, Any],
+        page_numbers: List[int],
+        total_pages: int,
+        remove_images: bool,
+    ) -> None:
         """
         Process a batch of pages for redaction to optimize memory usage.
 
@@ -478,9 +551,11 @@ class PDFRedactionService(DocumentRedactor):
             remove_images: Flag to enable image redaction.
         """
         # Build a lookup mapping keyed by page number for easy access.
-        page_mapping = {page_info.get("page"): page_info
-                        for page_info in redaction_mapping.get("pages", [])
-                        if page_info.get("page") in page_numbers}
+        page_mapping = {
+            page_info.get("page"): page_info
+            for page_info in redaction_mapping.get("pages", [])
+            if page_info.get("page") in page_numbers
+        }
 
         # Start the timer for the batch processing.
         batch_start_time = time.time()
@@ -493,16 +568,21 @@ class PDFRedactionService(DocumentRedactor):
             if time.time() - batch_start_time > max_batch_time:
                 # Log a warning and break out of the loop.
                 log_warning(
-                    f"[WARNING] Batch processing timeout reached after {(time.time() - batch_start_time):.2f}s, skipping remaining pages")
+                    f"[WARNING] Batch processing timeout reached after {(time.time() - batch_start_time):.2f}s, skipping remaining pages"
+                )
                 break
 
             # Retrieve the corresponding page information.
             page_info = page_mapping.get(page_num)
             # If information exists, process the redaction for the page.
             if page_info:
-                self._process_redaction_page(page_num, page_info, total_pages, remove_images)
+                self._process_redaction_page(
+                    page_num, page_info, total_pages, remove_images
+                )
 
-    def _process_sensitive_item(self, page: pymupdf.Page, item: Dict[str, Any], page_num: int) -> None:
+    def _process_sensitive_item(
+        self, page: pymupdf.Page, item: Dict[str, Any], page_num: int
+    ) -> None:
         """
         Process a single sensitive item to create a redaction annotation on the page.
 
@@ -522,9 +602,13 @@ class PDFRedactionService(DocumentRedactor):
                     # Create a rectangle using the box coordinates.
                     rect = pymupdf.Rect(box["x0"], box["y0"], box["x1"], box["y1"])
                     # Add a redaction annotation with an optional entity type label.
-                    page.add_redact_annot(rect, fill=(0, 0, 0), text=item.get("entity_type"))
+                    page.add_redact_annot(
+                        rect, fill=(0, 0, 0), text=item.get("entity_type")
+                    )
                     # Log the redaction of the sensitive item.
-                    log_info(f"[OK] Redacting entity {item.get('entity_type')} on page {page_num}")
+                    log_info(
+                        f"[OK] Redacting entity {item.get('entity_type')} on page {page_num}"
+                    )
             # Otherwise, check if a single bounding box is provided.
             elif "bbox" in item:
                 # Extract the bounding box.
@@ -535,8 +619,9 @@ class PDFRedactionService(DocumentRedactor):
                 page.add_redact_annot(rect, fill=(0, 0, 0))
         except Exception as e:
             # Log any error during sensitive item processing.
-            SecurityAwareErrorHandler.log_processing_error(e, "pdf_process_sensitive_item",
-                                                           f"{self.file_path}:page_{page_num}")
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "pdf_process_sensitive_item", f"{self.file_path}:page_{page_num}"
+            )
 
     def _sanitize_document(self) -> None:
         """
@@ -563,7 +648,9 @@ class PDFRedactionService(DocumentRedactor):
             self.doc.scrub()
         except Exception as e:
             # Log any error encountered during the document sanitization.
-            SecurityAwareErrorHandler.log_processing_error(e, "pdf_document_sanitize", self.file_path)
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "pdf_document_sanitize", self.file_path
+            )
 
     def close(self) -> None:
         """
@@ -581,4 +668,6 @@ class PDFRedactionService(DocumentRedactor):
                 self.doc = None
         except Exception as e:
             # Log any error during the document close operation.
-            SecurityAwareErrorHandler.log_processing_error(e, "pdf_document_close", self.file_path)
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "pdf_document_close", self.file_path
+            )

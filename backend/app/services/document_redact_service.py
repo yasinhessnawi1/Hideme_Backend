@@ -17,7 +17,11 @@ from fastapi.responses import StreamingResponse, JSONResponse
 
 # Import custom modules for PDF redaction, logging, error handling, etc.
 from backend.app.document_processing.pdf_redactor import PDFRedactionService
-from backend.app.domain.models import RedactFileResult, RedactBatchSummary, BatchRedactResponse
+from backend.app.domain.models import (
+    RedactFileResult,
+    RedactBatchSummary,
+    BatchRedactResponse,
+)
 from backend.app.utils.constant.constant import CHUNK_SIZE
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
@@ -45,10 +49,10 @@ class DocumentRedactionService:
     """
 
     async def redact(
-            self,
-            file: UploadFile,
-            redaction_mapping: Optional[str],
-            remove_images: bool = False
+        self,
+        file: UploadFile,
+        redaction_mapping: Optional[str],
+        remove_images: bool = False,
     ) -> Union[StreamingResponse, JSONResponse]:
         """
         Redact the provided PDF file using the specified redaction mapping and optional image removal.
@@ -72,7 +76,9 @@ class DocumentRedactionService:
         start_time = time.time()
         # Generate a unique operation ID based on the current time.
         operation_id = f"pdf_redact_{time.time()}"
-        log_info(f"[SECURITY] Starting PDF redaction processing [operation_id={operation_id}]")
+        log_info(
+            f"[SECURITY] Starting PDF redaction processing [operation_id={operation_id}]"
+        )
 
         try:
             # Validate and read the uploaded file using a utility function.
@@ -82,19 +88,21 @@ class DocumentRedactionService:
                 return self._build_error_response(
                     filename=file.filename,
                     operation_id=operation_id,
-                    http_status=error.status_code
+                    http_status=error.status_code,
                 )
 
             # Parse the redaction mapping JSON string to get the mapping data and count of redactions.
-            mapping_data, total_redactions, mapping_error = self._parse_redaction_mapping(
-                redaction_mapping, file.filename, operation_id
+            mapping_data, total_redactions, mapping_error = (
+                self._parse_redaction_mapping(
+                    redaction_mapping, file.filename, operation_id
+                )
             )
             if mapping_error:
                 # If parsing the redaction mapping fails, return the error response.
                 return self._build_error_response(
                     filename=file.filename,
                     operation_id=operation_id,
-                    http_status=mapping_error.status_code
+                    http_status=mapping_error.status_code,
                 )
 
             # Override or set the remove_images flag in the mapping based on the provided parameter.
@@ -106,21 +114,26 @@ class DocumentRedactionService:
                 # Initialize the PDFRedactionService with the file contents.
                 redaction_service = PDFRedactionService(contents)
                 # Apply redactions in memory using the parsed mapping data.
-                redacted_content = redaction_service.apply_redactions_to_memory(mapping_data, remove_images)
+                redacted_content = redaction_service.apply_redactions_to_memory(
+                    mapping_data, remove_images
+                )
                 # Close the redaction service to free up resources.
                 redaction_service.close()
                 log_info(
-                    f"[SECURITY] PDF redaction completed successfully: {total_redactions} redactions applied [operation_id={operation_id}]")
+                    f"[SECURITY] PDF redaction completed successfully: {total_redactions} redactions applied [operation_id={operation_id}]"
+                )
             except Exception as e:
                 # If an error occurs during the redaction process, log the error and return a secure error response.
-                log_error(f"[SECURITY] Error applying redactions: {str(e)} [operation_id={operation_id}]")
+                log_error(
+                    f"[SECURITY] Error applying redactions: {str(e)} [operation_id={operation_id}]"
+                )
                 error_response = SecurityAwareErrorHandler.handle_safe_error(
                     e, "file_redaction_service", file.filename
                 )
                 return self._build_error_response(
                     filename=file.filename,
                     operation_id=operation_id,
-                    http_status=error_response["status_code"]
+                    http_status=error_response["status_code"],
                 )
 
             # Calculate the elapsed time for redaction and the total processing time.
@@ -134,7 +147,7 @@ class DocumentRedactionService:
                 entity_types_processed=[],
                 processing_time=total_time,
                 entity_count=total_redactions,
-                success=True
+                success=True,
             )
 
             # Log sensitive operation details including redaction count and timing.
@@ -143,19 +156,20 @@ class DocumentRedactionService:
                 total_redactions,
                 total_time,
                 redact_time=redact_time,
-                file_type="PDF"
+                file_type="PDF",
             )
 
             # Retrieve current memory usage statistics after redaction.
             mem_stats = memory_monitor.get_memory_stats()
             log_info(
-                f"[SECURITY] Memory usage after PDF redaction: current={mem_stats['current_usage']:.1f}%, peak={mem_stats['peak_usage']:.1f}% [operation_id={operation_id}]")
+                f"[SECURITY] Memory usage after PDF redaction: current={mem_stats['current_usage']:.1f}%, peak={mem_stats['peak_usage']:.1f}% [operation_id={operation_id}]"
+            )
 
             # Define an asynchronous generator to stream the redacted content in fixed-size chunks.
             async def content_streamer():
                 # Loop through the redacted content by CHUNK_SIZE and yield each chunk.
                 for i in range(0, len(redacted_content), CHUNK_SIZE):
-                    yield redacted_content[i:i + CHUNK_SIZE]
+                    yield redacted_content[i : i + CHUNK_SIZE]
 
             # Prepare HTTP response headers with detailed operation metrics.
             response_headers = {
@@ -165,22 +179,29 @@ class DocumentRedactionService:
                 "X-Redactions-Applied": str(total_redactions),
                 "X-Memory-Usage": f"{mem_stats['current_usage']:.1f}%",
                 "X-Peak-Memory": f"{mem_stats['peak_usage']:.1f}%",
-                "X-Operation-ID": operation_id
+                "X-Operation-ID": operation_id,
             }
             # Return a StreamingResponse with the redacted PDF.
-            return StreamingResponse(content_streamer(), media_type="application/pdf", headers=response_headers)
+            return StreamingResponse(
+                content_streamer(),
+                media_type="application/pdf",
+                headers=response_headers,
+            )
 
         except Exception as e:
             # Catch any unexpected errors, log the error, and return a secure API error response.
-            log_error(f"[SECURITY] Unhandled exception in PDF redaction: {str(e)} [operation_id={operation_id}]")
+            log_error(
+                f"[SECURITY] Unhandled exception in PDF redaction: {str(e)} [operation_id={operation_id}]"
+            )
             error_response = SecurityAwareErrorHandler.handle_safe_error(
                 e, "file_redaction_service", file.filename
             )
             return JSONResponse(content=error_response)
 
     @staticmethod
-    def _parse_redaction_mapping(redaction_mapping: Optional[str], filename: str, operation_id: str) -> Tuple[
-        dict, int, Optional[HTTPException]]:
+    def _parse_redaction_mapping(
+        redaction_mapping: Optional[str], filename: str, operation_id: str
+    ) -> Tuple[dict, int, Optional[HTTPException]]:
         """
         Parse the redaction mapping JSON string.
 
@@ -204,31 +225,40 @@ class DocumentRedactionService:
                 # Parse the redaction mapping JSON string into a dictionary.
                 mapping_data = json.loads(redaction_mapping)
                 # Compute the total number of redactions by summing the lengths of "sensitive" entries on each page.
-                total_redactions = sum(len(page.get("sensitive", [])) for page in mapping_data.get("pages", []))
+                total_redactions = sum(
+                    len(page.get("sensitive", []))
+                    for page in mapping_data.get("pages", [])
+                )
                 log_info(
-                    f"[SECURITY] Parsed redaction mapping with {total_redactions} redactions [operation_id={operation_id}]")
+                    f"[SECURITY] Parsed redaction mapping with {total_redactions} redactions [operation_id={operation_id}]"
+                )
                 return mapping_data, total_redactions, None
             except Exception as e:
                 # If parsing fails, log the error and generate a secure error response.
-                log_error(f"[SECURITY] Error parsing redaction mapping: {str(e)} [operation_id={operation_id}]")
+                log_error(
+                    f"[SECURITY] Error parsing redaction mapping: {str(e)} [operation_id={operation_id}]"
+                )
                 error_response = SecurityAwareErrorHandler.handle_safe_error(
                     e, "file_mapping_parse", filename
                 )
-                return {}, 0, HTTPException(
-                    status_code=error_response["status_code"],
-                    detail=error_response["detail"]
+                return (
+                    {},
+                    0,
+                    HTTPException(
+                        status_code=error_response["status_code"],
+                        detail=error_response["detail"],
+                    ),
                 )
         else:
             # If no redaction mapping is provided, log that an empty mapping will be used.
-            log_info(f"[SECURITY] No redaction mapping provided; using empty mapping [operation_id={operation_id}]")
+            log_info(
+                f"[SECURITY] No redaction mapping provided; using empty mapping [operation_id={operation_id}]"
+            )
             return {"pages": []}, 0, None
 
     @staticmethod
     def _build_error_response(
-            filename: str,
-            operation_id: str,
-            http_status: int,
-            total_redactions: int = 0
+        filename: str, operation_id: str, http_status: int, total_redactions: int = 0
     ) -> JSONResponse:
         """
         Construct a standardized error response for a single-file redaction failure.
@@ -250,10 +280,7 @@ class DocumentRedactionService:
                 A FastAPI JSONResponse whose body is the serialized `BatchRedactResponse`.
         """
         # Build the per-file result indicating an error.
-        file_result = RedactFileResult(
-            file=filename,
-            status="error"
-        )
+        file_result = RedactFileResult(file=filename, status="error")
 
         # Build the batch summary for a single-file batch.
         start_ts = float(operation_id.split("_", 1)[1])
@@ -263,17 +290,13 @@ class DocumentRedactionService:
             successful=0,
             failed=1,
             total_redactions=total_redactions,
-            total_time=time.time() - start_ts
+            total_time=time.time() - start_ts,
         )
 
         # Combine into the full batch response model.
-        model = BatchRedactResponse(
-            batch_summary=summary,
-            file_results=[file_result]
-        )
+        model = BatchRedactResponse(batch_summary=summary, file_results=[file_result])
 
         # Serialize the Pydantic model, dropping any None fields
         return JSONResponse(
-            content=model.model_dump(exclude_none=True),
-            status_code=http_status
+            content=model.model_dump(exclude_none=True), status_code=http_status
         )

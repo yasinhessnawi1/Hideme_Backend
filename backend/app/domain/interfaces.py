@@ -1,6 +1,7 @@
 """
 Core domain interfaces for pdf processing system.
 """
+
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any, Tuple
 
@@ -28,12 +29,10 @@ class DocumentExtractor(ABC):
                 ]
             }
         """
-        pass
 
     @abstractmethod
     def close(self) -> None:
         """Close the document and free resources."""
-        pass
 
 
 class EntityDetector(ABC):
@@ -41,9 +40,9 @@ class EntityDetector(ABC):
 
     @abstractmethod
     def detect_sensitive_data(
-            self,
-            extracted_data: Dict[str, Any],
-            requested_entities: Optional[List[str]] = None
+        self,
+        extracted_data: Dict[str, Any],
+        requested_entities: Optional[List[str]] = None,
     ) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any]]:
         """
         Detect sensitive entities in extracted text.
@@ -55,7 +54,6 @@ class EntityDetector(ABC):
         Returns:
             Tuple of (results_json, redaction_mapping)
         """
-        pass
 
 
 class DocumentRedactor(ABC):
@@ -63,9 +61,7 @@ class DocumentRedactor(ABC):
 
     @abstractmethod
     def apply_redactions(
-            self,
-            redaction_mapping: Dict[str, Any],
-            output_path: str
+        self, redaction_mapping: Dict[str, Any], output_path: str
     ) -> str:
         """
         Apply redactions to the document based on provided mapping.
@@ -77,11 +73,9 @@ class DocumentRedactor(ABC):
         Returns:
             Path to the redacted document
         """
-        pass
 
     def close(self):
         """Close the document and free resources."""
-        pass
 
 
 class PDFEntityMapping(ABC):
@@ -89,10 +83,10 @@ class PDFEntityMapping(ABC):
 
     @abstractmethod
     def map_entities_to_positions(
-            self,
-            full_text: str,
-            text_to_position_mapping: List[Tuple[Any, int, int]],
-            entity_offsets: Tuple[int, int]
+        self,
+        full_text: str,
+        text_to_position_mapping: List[Tuple[Any, int, int]],
+        entity_offsets: Tuple[int, int],
     ) -> List[Dict[str, float]]:
         """
         Map entity character offsets to document positions.
@@ -105,4 +99,3 @@ class PDFEntityMapping(ABC):
         Returns:
             List of bounding boxes as dictionaries
         """
-        pass

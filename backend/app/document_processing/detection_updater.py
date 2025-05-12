@@ -33,9 +33,9 @@ class DetectionResultUpdater:
     """
 
     def __init__(
-            self,
-            extracted_data: Dict[str, Any],
-            detection_result: Tuple[List[Dict[str, Any]], Dict[str, Any]]
+        self,
+        extracted_data: Dict[str, Any],
+        detection_result: Tuple[List[Dict[str, Any]], Dict[str, Any]],
     ):
         """
         Initialize the DetectionResultUpdater.
@@ -99,7 +99,7 @@ class DetectionResultUpdater:
                     full_text,  # Provide reconstructed full text.
                     mapping,  # Provide text-to-word mapping.
                     page_num,  # Provide current page number.
-                    entities_by_page  # Provide dictionary to update entity counts.
+                    entities_by_page,  # Provide dictionary to update entity counts.
                 )
                 # Append the updated redaction mapping for the current page.
                 updated_pages.append({"page": page_num, "sensitive": updated_sensitive})
@@ -112,8 +112,8 @@ class DetectionResultUpdater:
                 "redaction_mapping": {"pages": updated_pages},
                 "entities_detected": {
                     "total": total_entities,
-                    "by_page": entities_by_page
-                }
+                    "by_page": entities_by_page,
+                },
             }
             # Return the updated result dictionary.
             return updated_result
@@ -175,8 +175,12 @@ class DetectionResultUpdater:
         try:
             # Find the page in the extracted data matching the page number.
             page_data = next(
-                (p for p in self.extracted_data.get("pages", []) if p.get("page") == page_num),
-                {}
+                (
+                    p
+                    for p in self.extracted_data.get("pages", [])
+                    if p.get("page") == page_num
+                ),
+                {},
             )
             # Return page_data if found, else return an empty dict.
             return page_data if page_data else {}
@@ -188,7 +192,7 @@ class DetectionResultUpdater:
 
     @staticmethod
     def _reconstruct_page_text(
-            page_data: Dict[str, Any], page_num: int
+        page_data: Dict[str, Any], page_num: int
     ) -> Tuple[str, List[Tuple[Dict[str, Any], int, int]]]:
         """
         Rebuild the full text and mapping for a given page.
@@ -219,13 +223,13 @@ class DetectionResultUpdater:
             return "", []
 
     def _process_sensitive_entities(
-            self,
-            entities_list: List[Dict[str, Any]],
-            remove_words: List[str],
-            full_text: str,
-            mapping: List[Tuple[Dict[str, Any], int, int]],
-            page_num: int,
-            entities_by_page: Dict[str, int]
+        self,
+        entities_list: List[Dict[str, Any]],
+        remove_words: List[str],
+        full_text: str,
+        mapping: List[Tuple[Dict[str, Any], int, int]],
+        page_num: int,
+        entities_by_page: Dict[str, int],
     ) -> List[Dict[str, Any]]:
         """
         Process each sensitive entity on a page by applying removal phrases and recalculating offsets.
@@ -272,7 +276,7 @@ class DetectionResultUpdater:
                             full_text,
                             mapping,
                             page_num,
-                            entities_by_page
+                            entities_by_page,
                         )
                     else:
                         # If no offsets found, build an updated entity using original offsets.
@@ -282,7 +286,7 @@ class DetectionResultUpdater:
                             new_start=entity.get("start", 0),
                             new_end=entity.get("end", 0),
                             full_text=full_text,
-                            mapping=mapping
+                            mapping=mapping,
                         )
                         # Append the fallback updated entity to the list.
                         updated_sensitive.append(updated_entity)
@@ -293,19 +297,21 @@ class DetectionResultUpdater:
             return updated_sensitive
         except Exception as e:
             # Handle exceptions securely and return an empty list.
-            SecurityAwareErrorHandler.handle_safe_error(e, "detection._process_sensitive_entities")
+            SecurityAwareErrorHandler.handle_safe_error(
+                e, "detection._process_sensitive_entities"
+            )
             return []
 
     def _append_updated_entities(
-            self,
-            updated_sensitive: List[Dict[str, Any]],
-            base_entity: Dict[str, Any],
-            updated_text: str,
-            offsets: List[Tuple[int, int]],
-            full_text: str,
-            mapping: List[Tuple[Dict[str, Any], int, int]],
-            page_num: int,
-            entities_by_page: Dict[str, int]
+        self,
+        updated_sensitive: List[Dict[str, Any]],
+        base_entity: Dict[str, Any],
+        updated_text: str,
+        offsets: List[Tuple[int, int]],
+        full_text: str,
+        mapping: List[Tuple[Dict[str, Any], int, int]],
+        page_num: int,
+        entities_by_page: Dict[str, int],
     ) -> None:
         """
         Append new entity entries based on each occurrence (offset) of the updated text.
@@ -328,12 +334,7 @@ class DetectionResultUpdater:
             for new_start, new_end in offsets:
                 # Build an updated entity for the current offset.
                 updated_entity = self._build_updated_entity(
-                    base_entity,
-                    updated_text,
-                    new_start,
-                    new_end,
-                    full_text,
-                    mapping
+                    base_entity, updated_text, new_start, new_end, full_text, mapping
                 )
                 # Append the updated entity to the list.
                 updated_sensitive.append(updated_entity)
@@ -342,16 +343,18 @@ class DetectionResultUpdater:
                 entities_by_page[key] = entities_by_page.get(key, 0) + 1
         except Exception as e:
             # Handle exceptions securely during entity appending.
-            SecurityAwareErrorHandler.handle_safe_error(e, "detection._append_updated_entities")
+            SecurityAwareErrorHandler.handle_safe_error(
+                e, "detection._append_updated_entities"
+            )
 
     @staticmethod
     def _build_updated_entity(
-            base_entity: Dict[str, Any],
-            updated_text: str,
-            new_start: int,
-            new_end: int,
-            full_text: str,
-            mapping: List[Tuple[Dict[str, Any], int, int]]
+        base_entity: Dict[str, Any],
+        updated_text: str,
+        new_start: int,
+        new_end: int,
+        full_text: str,
+        mapping: List[Tuple[Dict[str, Any], int, int]],
     ) -> Dict[str, Any]:
         """
         Build a new entity dictionary with updated text, offsets, and bounding box.
@@ -371,7 +374,9 @@ class DetectionResultUpdater:
             Dict[str, Any]: A dictionary representing the updated entity.
         """
         # Calculate new bounding boxes using the text mapping.
-        bboxes = TextUtils.map_offsets_to_bboxes(full_text, mapping, (new_start, new_end))
+        bboxes = TextUtils.map_offsets_to_bboxes(
+            full_text, mapping, (new_start, new_end)
+        )
         # Make a copy of the base entity dictionary.
         updated_entity = base_entity.copy()
         # Update the entity's text.
@@ -439,20 +444,25 @@ def _remove_phrase_from_text(text: str, phrase_tokens: List[str]) -> List[str]:
     if tokens == phrase_tokens:
         return []
     # If the text starts and ends with the phrase tokens, remove the first and last token.
-    if (tokens[0].lower() == phrase_tokens[0].lower() and
-            tokens[-1].lower() == phrase_tokens[-1].lower() and
-            len(tokens) >= len(phrase_tokens)):
+    if (
+        tokens[0].lower() == phrase_tokens[0].lower()
+        and tokens[-1].lower() == phrase_tokens[-1].lower()
+        and len(tokens) >= len(phrase_tokens)
+    ):
         new_text = " ".join(tokens[1:-1])
         return [new_text] if new_text else []
     # Iterate through the tokens to find the phrase as a contiguous block.
     for i in range(len(tokens) - len(phrase_tokens) + 1):
         # Extract a block of tokens from the text.
-        block = tokens[i:i + len(phrase_tokens)]
+        block = tokens[i : i + len(phrase_tokens)]
         # Compare the block tokens to the phrase tokens ignoring case.
-        if all(block[j].lower() == phrase_tokens[j].lower() for j in range(len(phrase_tokens))):
+        if all(
+            block[j].lower() == phrase_tokens[j].lower()
+            for j in range(len(phrase_tokens))
+        ):
             # Remove the block from the text by splitting into two parts.
             part1 = tokens[:i]
-            part2 = tokens[i + len(phrase_tokens):]
+            part2 = tokens[i + len(phrase_tokens) :]
             results = []
             # If part1 exists, join tokens and append to results.
             if part1:

@@ -12,7 +12,12 @@ from fastapi import UploadFile, HTTPException
 
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
 from backend.app.document_processing.pdf_searcher import PDFSearcher
-from backend.app.domain.models import BatchDetectionResponse, BatchSummary, BatchDetectionDebugInfo, FileResult
+from backend.app.domain.models import (
+    BatchDetectionResponse,
+    BatchSummary,
+    BatchDetectionDebugInfo,
+    FileResult,
+)
 from backend.app.utils.constant.constant import MAX_FILES_COUNT
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_batch_operation
@@ -34,11 +39,11 @@ class BatchSearchService:
 
     @staticmethod
     async def batch_search_text(
-            files: List[UploadFile],
-            search_terms: Union[str, List[str]],
-            max_parallel_files: Optional[int] = None,
-            case_sensitive: bool = False,
-            ai_search: bool = False
+        files: List[UploadFile],
+        search_terms: Union[str, List[str]],
+        max_parallel_files: Optional[int] = None,
+        case_sensitive: bool = False,
+        ai_search: bool = False,
     ) -> BatchDetectionResponse:
         """
         Extract text from multiple PDF files and search for the specified terms.
@@ -74,7 +79,9 @@ class BatchSearchService:
         # Check if the number of files exceeds the allowed maximum.
         if len(files) > MAX_FILES_COUNT:
             # Create an error message indicating too many files uploaded.
-            error_message = f"Too many files uploaded. Maximum allowed is {MAX_FILES_COUNT}."
+            error_message = (
+                f"Too many files uploaded. Maximum allowed is {MAX_FILES_COUNT}."
+            )
             # Log the error message with security context.
             log_error(f"[SECURITY] {error_message} [operation_id={batch_id}]")
             raise HTTPException(status_code=400, detail=error_message)
@@ -86,7 +93,9 @@ class BatchSearchService:
         search_words = BatchSearchService._parse_search_words(search_terms)
 
         # Read and validate the files for extraction; get file contents and metadata.
-        pdf_files, file_metadata = await BatchSearchService._read_files_for_extraction(files, batch_id)
+        pdf_files, file_metadata = await BatchSearchService._read_files_for_extraction(
+            files, batch_id
+        )
 
         # Filter out any files that failed validation.
         valid_pdf_files = [content for content in pdf_files if content is not None]
@@ -108,10 +117,14 @@ class BatchSearchService:
                 peak_memory=memory_monitor.get_memory_stats().get("peak_usage"),
                 operation_id=batch_id,
             )
-            return BatchDetectionResponse(batch_summary=summary, file_results=[], debug=debug)
+            return BatchDetectionResponse(
+                batch_summary=summary, file_results=[], debug=debug
+            )
 
         # Extract text from valid PDF files in parallel using PDFTextExtractor.
-        extraction_results = await PDFTextExtractor.extract_batch_text(valid_pdf_files, max_workers=optimal_workers)
+        extraction_results = await PDFTextExtractor.extract_batch_text(
+            valid_pdf_files, max_workers=optimal_workers
+        )
         # Create a mapping from the valid file index to its corresponding extraction result.
         extraction_map = {idx: result for idx, result in extraction_results}
 
@@ -134,7 +147,7 @@ class BatchSearchService:
                     FileResult(
                         file=metadata.get("original_name"),
                         status="error",
-                        error=metadata.get("error", "File validation failed.")
+                        error=metadata.get("error", "File validation failed."),
                     )
                 )
                 # Increment the failure counter.
@@ -149,8 +162,14 @@ class BatchSearchService:
 
             try:
                 # Process the search on the extraction result for a single file.
-                result_data, success_flag, fail_flag, match_count = await BatchSearchService._process_single_file_result(
-                    metadata, extraction_result, search_words, case_sensitive, ai_search
+                result_data, success_flag, fail_flag, match_count = (
+                    await BatchSearchService._process_single_file_result(
+                        metadata,
+                        extraction_result,
+                        search_words,
+                        case_sensitive,
+                        ai_search,
+                    )
                 )
                 # Append the processed result data to the file results.
                 file_results.append(FileResult(**result_data))
@@ -162,13 +181,15 @@ class BatchSearchService:
             except Exception as e:
                 # Log any unexpected error with security context.
                 log_error(
-                    f"[SECURITY] Error processing file {metadata.get('original_name')}: {str(e)} [operation_id={batch_id}]")
-                # Append an error result for this file.
-                file_results.append(FileResult(
-                    file=metadata.get("original_name", f"file_{i}"),
-                    status="error",
-                    error=f"Unhandled processing error: {str(e)}"
+                    f"[SECURITY] Error processing file {metadata.get('original_name')}: {str(e)} [operation_id={batch_id}]"
                 )
+                # Append an error result for this file.
+                file_results.append(
+                    FileResult(
+                        file=metadata.get("original_name", f"file_{i}"),
+                        status="error",
+                        error=f"Unhandled processing error: {str(e)}",
+                    )
                 )
                 # Increment the failure counter.
                 failed += 1
@@ -202,14 +223,17 @@ class BatchSearchService:
             processing_time=query_time,
             file_count=len(files),
             entity_count=total_matches,
-            success=(successful > 0)
+            success=(successful > 0),
         )
 
-        return BatchDetectionResponse(batch_summary=summary, file_results=file_results, debug=debug)
+        return BatchDetectionResponse(
+            batch_summary=summary, file_results=file_results, debug=debug
+        )
 
     @staticmethod
-    async def _read_files_for_extraction(files: List[UploadFile], operation_id: str) -> Tuple[
-        List[Optional[bytes]], List[Dict[str, Any]]]:
+    async def _read_files_for_extraction(
+        files: List[UploadFile], operation_id: str
+    ) -> Tuple[List[Optional[bytes]], List[Dict[str, Any]]]:
         """
         Reads and validates a list of files for text extraction.
 
@@ -234,53 +258,71 @@ class BatchSearchService:
         for i, file in enumerate(files):
             try:
                 # Attempt to read and validate the file.
-                content, error_response, read_time = await read_and_validate_file(file, operation_id)
+                content, error_response, read_time = await read_and_validate_file(
+                    file, operation_id
+                )
                 # Check if there was an error during validation.
                 if error_response:
                     # Log the error with security context.
-                    log_error(f"[SECURITY] Validation failed for file {file.filename} [operation_id={operation_id}]")
+                    log_error(
+                        f"[SECURITY] Validation failed for file {file.filename} [operation_id={operation_id}]"
+                    )
                     # Append None for this file's content.
                     pdf_files.append(None)
                     # Use SecurityAwareErrorHandler to generate a safe error message.
                     error_info = SecurityAwareErrorHandler.handle_safe_error(
-                        Exception("File validation error"), "file_validation", file.filename
+                        Exception("File validation error"),
+                        "file_validation",
+                        file.filename,
                     )
                     # Append the metadata for this file indicating an error.
-                    file_metadata.append({
-                        "original_name": file.filename or f"file_{i}",
-                        "content_type": file.content_type or "application/octet-stream",
-                        "size": 0,
-                        "read_time": read_time,
-                        "status": "error",
-                        "error": error_info.get("error", "File validation failed")
-                    })
+                    file_metadata.append(
+                        {
+                            "original_name": file.filename or f"file_{i}",
+                            "content_type": file.content_type
+                            or "application/octet-stream",
+                            "size": 0,
+                            "read_time": read_time,
+                            "status": "error",
+                            "error": error_info.get("error", "File validation failed"),
+                        }
+                    )
                 else:
                     # Append the valid file content.
                     pdf_files.append(content)
                     # Append the metadata for the successfully read file.
-                    file_metadata.append({
-                        "original_name": file.filename or f"file_{i}.pdf",
-                        "content_type": file.content_type or "application/octet-stream",
-                        "size": len(content),
-                        "read_time": read_time,
-                        "status": "success"
-                    })
+                    file_metadata.append(
+                        {
+                            "original_name": file.filename or f"file_{i}.pdf",
+                            "content_type": file.content_type
+                            or "application/octet-stream",
+                            "size": len(content),
+                            "read_time": read_time,
+                            "status": "success",
+                        }
+                    )
             except Exception as e:
                 # Log any unexpected exception with security context.
-                log_error(f"[SECURITY] Exception reading file {file.filename}: {str(e)} [operation_id={operation_id}]")
+                log_error(
+                    f"[SECURITY] Exception reading file {file.filename}: {str(e)} [operation_id={operation_id}]"
+                )
                 # Use SecurityAwareErrorHandler to generate a safe error message.
-                error_info = SecurityAwareErrorHandler.handle_safe_error(e, "file_read", file.filename)
+                error_info = SecurityAwareErrorHandler.handle_safe_error(
+                    e, "file_read", file.filename
+                )
                 # Append None for the file content due to error.
                 pdf_files.append(None)
                 # Append the metadata for this file with the error information.
-                file_metadata.append({
-                    "original_name": file.filename or f"file_{i}",
-                    "content_type": "unknown",
-                    "size": 0,
-                    "read_time": 0,
-                    "status": "error",
-                    "error": error_info.get("error", str(e))
-                })
+                file_metadata.append(
+                    {
+                        "original_name": file.filename or f"file_{i}",
+                        "content_type": "unknown",
+                        "size": 0,
+                        "read_time": 0,
+                        "status": "error",
+                        "error": error_info.get("error", str(e)),
+                    }
+                )
         # Return the list of file contents and corresponding metadata.
         return pdf_files, file_metadata
 
@@ -311,18 +353,20 @@ class BatchSearchService:
         # Otherwise, treat search_words as a string and strip it.
         s = search_words.strip()
         # If the string starts and ends with quotes, remove them.
-        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        if (s.startswith('"') and s.endswith('"')) or (
+            s.startswith("'") and s.endswith("'")
+        ):
             s = s[1:-1].strip()
         # Split the string into words, clean each, and return the list.
         return [w.strip() for w in s.split() if w.strip()]
 
     @staticmethod
     async def _process_single_file_result(
-            metadata: Dict[str, Any],
-            extraction_result: Any,
-            search_words: List[str],
-            case_sensitive: bool,
-            ai_search: bool
+        metadata: Dict[str, Any],
+        extraction_result: Any,
+        search_words: List[str],
+        case_sensitive: bool,
+        ai_search: bool,
     ) -> Tuple[Dict[str, Any], int, int, int]:
         """
         Processes the extraction result for a single file by searching for the given terms.
@@ -346,41 +390,62 @@ class BatchSearchService:
               - Count of matches found.
         """
         # Check if the extraction result is invalid or contains an error.
-        if extraction_result is None or (isinstance(extraction_result, dict) and "error" in extraction_result):
+        if extraction_result is None or (
+            isinstance(extraction_result, dict) and "error" in extraction_result
+        ):
             # Return an error result tuple indicating extraction failure.
-            return ({
-                        "file": metadata["original_name"],
-                        "status": "error",
-                        "error": extraction_result.get("error",
-                                                       "Extraction failed") if extraction_result else "Extraction missing"
-                    }, 0, 1, 0)
+            return (
+                {
+                    "file": metadata["original_name"],
+                    "status": "error",
+                    "error": (
+                        extraction_result.get("error", "Extraction failed")
+                        if extraction_result
+                        else "Extraction missing"
+                    ),
+                },
+                0,
+                1,
+                0,
+            )
         try:
             # Instantiate PDFSearcher with the extracted result.
             searcher = PDFSearcher(extraction_result)
             # Perform the search asynchronously with the provided search words and options.
-            search_result = await searcher.search_terms(search_words, case_sensitive=case_sensitive,
-                                                        ai_search=ai_search)
+            search_result = await searcher.search_terms(
+                search_words, case_sensitive=case_sensitive, ai_search=ai_search
+            )
             # Return a success result tuple with the search result and match count.
-            return ({
-                        "file": metadata["original_name"],
-                        "status": "success",
-                        "results": search_result
-                    }, 1, 0, search_result.get("match_count", 0))
+            return (
+                {
+                    "file": metadata["original_name"],
+                    "status": "success",
+                    "results": search_result,
+                },
+                1,
+                0,
+                search_result.get("match_count", 0),
+            )
         except Exception as e:
             # Log any exception during search with security context.
-            log_error(f"[SECURITY] Error searching file {metadata.get('original_name')}: {str(e)}")
+            log_error(
+                f"[SECURITY] Error searching file {metadata.get('original_name')}: {str(e)}"
+            )
             # Return an error result tuple indicating search failure.
-            return ({
-                        "file": metadata["original_name"],
-                        "status": "error",
-                        "error": f"Error during search: {str(e)}"
-                    }, 0, 1, 0)
+            return (
+                {
+                    "file": metadata["original_name"],
+                    "status": "error",
+                    "error": f"Error during search: {str(e)}",
+                },
+                0,
+                1,
+                0,
+            )
 
     @staticmethod
     async def find_words_by_bbox(
-            files: List[UploadFile],
-            bounding_box: Dict[str, float],
-            operation_id: str
+        files: List[UploadFile], bounding_box: Dict[str, float], operation_id: str
     ) -> BatchDetectionResponse:
         """
         Combines all extracted PDF pages into one logical document and finds the phrase
@@ -410,8 +475,8 @@ class BatchSearchService:
 
         # Read and validate all UploadFile PDFs
         try:
-            pdf_files, file_metadata = await BatchSearchService._read_files_for_extraction(
-                files, operation_id
+            pdf_files, file_metadata = (
+                await BatchSearchService._read_files_for_extraction(files, operation_id)
             )
         except Exception as e:
             log_error(
@@ -438,7 +503,9 @@ class BatchSearchService:
                 peak_memory=memory_monitor.get_memory_stats().get("peak_usage"),
                 operation_id=operation_id,
             )
-            return BatchDetectionResponse(batch_summary=summary, file_results=[], debug=debug)
+            return BatchDetectionResponse(
+                batch_summary=summary, file_results=[], debug=debug
+            )
 
         # Extract pages/text from valid PDFs in parallel
         extraction_results = await PDFTextExtractor.extract_batch_text(valid_pdf_files)
@@ -485,11 +552,13 @@ class BatchSearchService:
                 file_results_map[source_file] = FileResult(
                     file=source_file,
                     status="success",
-                    results={"pages": [], "match_count": 0}
+                    results={"pages": [], "match_count": 0},
                 )
             # Add this page's matches to the file's results
             file_results_map[source_file].results["pages"].append(page_result)
-            file_results_map[source_file].results["match_count"] += len(page_result.get("matches", []))
+            file_results_map[source_file].results["match_count"] += len(
+                page_result.get("matches", [])
+            )
 
         # Convert the map of file->results into a list for the response
         file_results = list(file_results_map.values())
@@ -503,7 +572,7 @@ class BatchSearchService:
             processing_time=query_time,
             file_count=len(files),
             entity_count=total_matches,
-            success=(successful > 0)
+            success=(successful > 0),
         )
 
         # Construct and return the final payload
@@ -521,4 +590,6 @@ class BatchSearchService:
             peak_memory=memory_monitor.get_memory_stats().get("peak_usage"),
             operation_id=operation_id,
         )
-        return BatchDetectionResponse(batch_summary=summary, file_results=file_results, debug=debug)
+        return BatchDetectionResponse(
+            batch_summary=summary, file_results=file_results, debug=debug
+        )

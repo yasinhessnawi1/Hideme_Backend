@@ -16,12 +16,19 @@ from fastapi import UploadFile, HTTPException
 
 # Import PDF extraction and entity detection modules.
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
-from backend.app.domain.models import BatchDetectionResponse, BatchSummary, FileResult, BatchDetectionDebugInfo
+from backend.app.domain.models import (
+    BatchDetectionResponse,
+    BatchSummary,
+    FileResult,
+    BatchDetectionDebugInfo,
+)
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services.base_detect_service import BaseDetectionService
 from backend.app.services.initialization_service import initialization_service
 from backend.app.utils.constant.constant import MAX_FILES_COUNT
-from backend.app.utils.helpers.json_helper import validate_all_engines_requested_entities
+from backend.app.utils.helpers.json_helper import (
+    validate_all_engines_requested_entities,
+)
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_batch_operation
 from backend.app.utils.security.processing_records import record_keeper
@@ -29,7 +36,10 @@ from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHand
 from backend.app.utils.system_utils.memory_management import memory_monitor
 from backend.app.utils.validation.data_minimization import minimize_extracted_data
 from backend.app.utils.validation.file_validation import read_and_validate_file
-from backend.app.utils.validation.sanitize_utils import sanitize_detection_output, replace_original_text_in_redaction
+from backend.app.utils.validation.sanitize_utils import (
+    sanitize_detection_output,
+    replace_original_text_in_redaction,
+)
 
 
 class BatchDetectService(BaseDetectionService):
@@ -44,16 +54,16 @@ class BatchDetectService(BaseDetectionService):
 
     @staticmethod
     async def detect_entities_in_files(
-            files: List[UploadFile],
-            requested_entities: Optional[str] = None,
-            detection_engine: EntityDetectionEngine = EntityDetectionEngine.PRESIDIO,
-            max_parallel_files: Optional[int] = None,
-            use_presidio: bool = True,
-            use_gemini: bool = False,
-            use_gliner: bool = False,
-            use_hideme: bool = False,
-            remove_words: Optional[str] = None,
-            threshold: Optional[float] = None
+        files: List[UploadFile],
+        requested_entities: Optional[str] = None,
+        detection_engine: EntityDetectionEngine = EntityDetectionEngine.PRESIDIO,
+        max_parallel_files: Optional[int] = None,
+        use_presidio: bool = True,
+        use_gemini: bool = False,
+        use_gliner: bool = False,
+        use_hideme: bool = False,
+        remove_words: Optional[str] = None,
+        threshold: Optional[float] = None,
     ) -> BatchDetectionResponse:
         """
         Process a batch of PDF files for entity detection.
@@ -84,7 +94,9 @@ class BatchDetectService(BaseDetectionService):
 
         # Check if the number of files exceeds the allowed maximum.
         if len(files) > MAX_FILES_COUNT:
-            error_message = f"Too many files uploaded. Maximum allowed is {MAX_FILES_COUNT}."
+            error_message = (
+                f"Too many files uploaded. Maximum allowed is {MAX_FILES_COUNT}."
+            )
             log_error(f"[SECURITY] {error_message} [operation_id={batch_id}]")
             raise HTTPException(status_code=400, detail=error_message)
 
@@ -93,30 +105,45 @@ class BatchDetectService(BaseDetectionService):
             entity_list = validate_all_engines_requested_entities(requested_entities)
         except Exception as e:
             # Use SecurityAwareErrorHandler to log and create an error response for entity validation.
-            return SecurityAwareErrorHandler.handle_safe_error(e, "batch_entity_validation")
+            return SecurityAwareErrorHandler.handle_safe_error(
+                e, "batch_entity_validation"
+            )
 
         # Initialize the detection engine (detector) based on the provided engine type and flags.
         try:
             detector = await BatchDetectService._get_initialized_detector(
-                detection_engine, use_presidio, use_gemini, use_gliner, use_hideme, entity_list
+                detection_engine,
+                use_presidio,
+                use_gemini,
+                use_gliner,
+                use_hideme,
+                entity_list,
             )
         except Exception as e:
             # Use SecurityAwareErrorHandler to log and create an error response for detector initialization.
-            return SecurityAwareErrorHandler.handle_safe_error(e, "batch_initialization")
+            return SecurityAwareErrorHandler.handle_safe_error(
+                e, "batch_initialization"
+            )
 
         # Determine the optimal number of workers for parallel processing.
         optimal_workers = max_parallel_files if max_parallel_files is not None else 4
-        log_info(f"Processing {len(files)} files with {optimal_workers} workers (Batch ID: {batch_id})")
+        log_info(
+            f"Processing {len(files)} files with {optimal_workers} workers (Batch ID: {batch_id})"
+        )
 
         # Read and validate PDF files, collecting contents, filenames, and metadata.
-        pdf_files, file_names, file_metadata = await BatchDetectService._read_pdf_files(files, batch_id)
+        pdf_files, file_names, file_metadata = await BatchDetectService._read_pdf_files(
+            files, batch_id
+        )
 
         # Filter out invalid PDF files.
         valid_pdf_files = [content for content in pdf_files if content is not None]
 
         # Batch extract text from the valid PDFs using parallel processing.
         try:
-            extraction_map = await BatchDetectService._batch_extract_text(valid_pdf_files, optimal_workers)
+            extraction_map = await BatchDetectService._batch_extract_text(
+                valid_pdf_files, optimal_workers
+            )
         except Exception as e:
             # Use SecurityAwareErrorHandler to log and create an error response for extraction errors.
             return SecurityAwareErrorHandler.handle_safe_error(e, "batch_extraction")
@@ -128,11 +155,13 @@ class BatchDetectService(BaseDetectionService):
         for i, filename in enumerate(file_names):
             # Check if the file content is valid; if not, append an error result.
             if pdf_files[i] is None:
-                detection_results.append({
-                    "file": filename,
-                    "status": "error",
-                    "error": "Not a valid PDF file."
-                })
+                detection_results.append(
+                    {
+                        "file": filename,
+                        "status": "error",
+                        "error": "Not a valid PDF file.",
+                    }
+                )
                 continue
 
             # Retrieve the extraction result for the current valid file.
@@ -141,19 +170,33 @@ class BatchDetectService(BaseDetectionService):
 
             # Check if extraction failed or returned an error.
             if not extracted or ("error" in extracted and extracted["error"]):
-                detection_results.append({
-                    "file": filename,
-                    "status": "error",
-                    "error": extracted.get("error", "Extraction failed") if extracted else "Extraction missing"
-                })
+                detection_results.append(
+                    {
+                        "file": filename,
+                        "status": "error",
+                        "error": (
+                            extracted.get("error", "Extraction failed")
+                            if extracted
+                            else "Extraction missing"
+                        ),
+                    }
+                )
                 continue
 
             # Process entity detection for the current file with the defined threshold.
             result = await BatchDetectService._process_detection_for_file(
-                extracted, filename, file_metadata[i], entity_list, detector,
-                detection_engine, use_presidio, use_gemini, use_gliner, use_hideme,
+                extracted,
+                filename,
+                file_metadata[i],
+                entity_list,
+                detector,
+                detection_engine,
+                use_presidio,
+                use_gemini,
+                use_gliner,
+                use_hideme,
                 remove_words=remove_words,
-                threshold=threshold
+                threshold=threshold,
             )
             detection_results.append(result)
 
@@ -166,10 +209,15 @@ class BatchDetectService(BaseDetectionService):
             "successful": sum(1 for d in detection_results if d["status"] == "success"),
             "failed": sum(1 for d in detection_results if d["status"] != "success"),
             "total_time": total_time,
-            "workers": optimal_workers
+            "workers": optimal_workers,
         }
         # Log the batch operation with secure logging.
-        log_batch_operation("Batch Entity Detection", len(files), batch_summary["successful"], total_time)
+        log_batch_operation(
+            "Batch Entity Detection",
+            len(files),
+            batch_summary["successful"],
+            total_time,
+        )
         # Record processing details for compliance.
         record_keeper.record_processing(
             operation_type="batch_entity_detection",
@@ -177,9 +225,12 @@ class BatchDetectService(BaseDetectionService):
             entity_types_processed=entity_list,
             processing_time=total_time,
             file_count=len(files),
-            entity_count=sum(len(d.get("results", {}).get("entities", []))
-                             for d in detection_results if d["status"] == "success"),
-            success=(batch_summary["successful"] > 0)
+            entity_count=sum(
+                len(d.get("results", {}).get("entities", []))
+                for d in detection_results
+                if d["status"] == "success"
+            ),
+            success=(batch_summary["successful"] > 0),
         )
         # Construct and return a structured Pydantic response
         return BatchDetectionResponse(
@@ -188,14 +239,13 @@ class BatchDetectService(BaseDetectionService):
             debug=BatchDetectionDebugInfo(
                 memory_usage=memory_monitor.get_memory_stats().get("current_usage"),
                 peak_memory=memory_monitor.get_memory_stats().get("peak_usage"),
-                operation_id=batch_id
-            )
+                operation_id=batch_id,
+            ),
         )
 
     @staticmethod
     async def _read_pdf_files(
-            files: List[UploadFile],
-            operation_id: str
+        files: List[UploadFile], operation_id: str
     ) -> Tuple[List[Optional[bytes]], List[str], List[Dict[str, Any]]]:
         """
         Asynchronously read and validate a list of PDF files.
@@ -223,11 +273,15 @@ class BatchDetectService(BaseDetectionService):
             try:
                 start_time = time.time()
                 # Validate and read the file.
-                content, error_response, _ = await read_and_validate_file(file, operation_id)
+                content, error_response, _ = await read_and_validate_file(
+                    file, operation_id
+                )
                 read_time = time.time() - start_time
                 # If validation fails, log an error and append None as the file content.
                 if error_response:
-                    log_error(f"[SECURITY] Validation failed for file {file.filename} [operation_id={operation_id}]")
+                    log_error(
+                        f"[SECURITY] Validation failed for file {file.filename} [operation_id={operation_id}]"
+                    )
                     pdf_files.append(None)
                 else:
                     # If validation is successful, append the file content.
@@ -235,27 +289,35 @@ class BatchDetectService(BaseDetectionService):
                 # Append the filename.
                 file_names.append(file.filename)
                 # Build metadata dictionary and append.
-                file_metadata.append({
-                    "filename": file.filename,
-                    "content_type": file.content_type or "application/octet-stream",
-                    "size": len(content) if content else 0,
-                    "read_time": read_time
-                })
+                file_metadata.append(
+                    {
+                        "filename": file.filename,
+                        "content_type": file.content_type or "application/octet-stream",
+                        "size": len(content) if content else 0,
+                        "read_time": read_time,
+                    }
+                )
             except Exception as e:
                 # Log exceptions securely and record default metadata.
-                log_error(f"[SECURITY] Exception reading file {file.filename}: {str(e)} [operation_id={operation_id}]")
+                log_error(
+                    f"[SECURITY] Exception reading file {file.filename}: {str(e)} [operation_id={operation_id}]"
+                )
                 pdf_files.append(None)
                 file_names.append(file.filename)
-                file_metadata.append({
-                    "filename": file.filename,
-                    "content_type": "unknown",
-                    "size": 0,
-                    "read_time": 0
-                })
+                file_metadata.append(
+                    {
+                        "filename": file.filename,
+                        "content_type": "unknown",
+                        "size": 0,
+                        "read_time": 0,
+                    }
+                )
         return pdf_files, file_names, file_metadata
 
     @staticmethod
-    async def _batch_extract_text(valid_pdf_files: List[bytes], optimal_workers: int) -> Dict[int, Dict[str, Any]]:
+    async def _batch_extract_text(
+        valid_pdf_files: List[bytes], optimal_workers: int
+    ) -> Dict[int, Dict[str, Any]]:
         """
         Extract text from a batch of valid PDF files concurrently.
 
@@ -269,8 +331,10 @@ class BatchDetectService(BaseDetectionService):
         try:
             start = time.time()
             # Call the batch extraction method from PDFTextExtractor using the specified number of workers.
-            extraction_results: List[Tuple[int, Dict[str, Any]]] = await PDFTextExtractor.extract_batch_text(
-                valid_pdf_files, max_workers=optimal_workers
+            extraction_results: List[Tuple[int, Dict[str, Any]]] = (
+                await PDFTextExtractor.extract_batch_text(
+                    valid_pdf_files, max_workers=optimal_workers
+                )
             )
             total_extraction_time = time.time() - start
 
@@ -286,18 +350,18 @@ class BatchDetectService(BaseDetectionService):
 
     @staticmethod
     async def _process_detection_for_file(
-            extracted: Dict[str, Any],
-            filename: str,
-            file_meta: Dict[str, Any],
-            entity_list: List[str],
-            detector: Any,
-            detection_engine: EntityDetectionEngine,
-            use_presidio: bool,
-            use_gemini: bool,
-            use_gliner: bool,
-            use_hideme: bool,
-            remove_words: Optional[str] = None,
-            threshold: Optional[float] = None
+        extracted: Dict[str, Any],
+        filename: str,
+        file_meta: Dict[str, Any],
+        entity_list: List[str],
+        detector: Any,
+        detection_engine: EntityDetectionEngine,
+        use_presidio: bool,
+        use_gemini: bool,
+        use_gliner: bool,
+        use_hideme: bool,
+        remove_words: Optional[str] = None,
+        threshold: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Process entity detection for a single file.
@@ -342,47 +406,59 @@ class BatchDetectService(BaseDetectionService):
             det_start = time.time()
             # Depending on the detection engine type, choose hybrid or single detection.
             if detection_engine == EntityDetectionEngine.HYBRID:
-                combined_entities, combined_redaction_mapping = await BatchDetectService._process_hybrid_detection(
-                    minimized_extracted, entity_list, detector, remove_words
+                combined_entities, combined_redaction_mapping = (
+                    await BatchDetectService._process_hybrid_detection(
+                        minimized_extracted, entity_list, detector, remove_words
+                    )
                 )
             else:
-                combined_entities, combined_redaction_mapping = await BatchDetectService._process_single_detection(
-                    minimized_extracted, entity_list, detector, remove_words
+                combined_entities, combined_redaction_mapping = (
+                    await BatchDetectService._process_single_detection(
+                        minimized_extracted, entity_list, detector, remove_words
+                    )
                 )
             detection_time = time.time() - det_start
             processing_times["detection_time"] = detection_time
 
             # Calculate total words and page count for performance metrics.
-            total_words = sum(len(page.get("words", [])) for page in minimized_extracted.get("pages", []))
+            total_words = sum(
+                len(page.get("words", []))
+                for page in minimized_extracted.get("pages", [])
+            )
             pages_count = len(minimized_extracted.get("pages", []))
-            density = (len(combined_entities) / total_words * 1000) if total_words else 0
+            density = (
+                (len(combined_entities) / total_words * 1000) if total_words else 0
+            )
 
-            processing_times.update({
-                "words_count": total_words,
-                "pages_count": pages_count,
-                "entity_density": density,
-            })
+            processing_times.update(
+                {
+                    "words_count": total_words,
+                    "pages_count": pages_count,
+                    "entity_density": density,
+                }
+            )
 
             # sanitize_time and total_time
             san_start = time.time()
             # Apply threshold filtering ---
             # Use the centralized method from BaseDetectionService to filter the detection results.
-            filtered_entities, filtered_redaction_mapping = BaseDetectionService.apply_threshold_filter(
-                combined_entities, combined_redaction_mapping, threshold
+            filtered_entities, filtered_redaction_mapping = (
+                BaseDetectionService.apply_threshold_filter(
+                    combined_entities, combined_redaction_mapping, threshold
+                )
             )
 
             # Sanitize the detection output using the filtered results.
-            sanitized = sanitize_detection_output(filtered_entities, filtered_redaction_mapping, processing_times)
+            sanitized = sanitize_detection_output(
+                filtered_entities, filtered_redaction_mapping, processing_times
+            )
 
             sanitize_time = time.time() - san_start
             processing_times["sanitize_time"] = sanitize_time
 
             # now compute total_time as the sum of the pieces
             processing_times["total_time"] = (
-                    file_read_time
-                    + extraction_time
-                    + detection_time
-                    + sanitize_time
+                file_read_time + extraction_time + detection_time + sanitize_time
             )
 
             sanitized["performance"] = processing_times
@@ -391,7 +467,7 @@ class BatchDetectService(BaseDetectionService):
             sanitized["file_info"] = {
                 "filename": filename,
                 "content_type": file_meta.get("content_type", "unknown"),
-                "size": f"{round(file_meta.get('size', 0) / (1024 * 1024), 2)} MB"
+                "size": f"{round(file_meta.get('size', 0) / (1024 * 1024), 2)} MB",
             }
             # Append model information based on the detection engine type.
             if detection_engine == EntityDetectionEngine.HYBRID:
@@ -401,33 +477,27 @@ class BatchDetectService(BaseDetectionService):
                         "presidio": use_presidio,
                         "gemini": use_gemini,
                         "gliner": use_gliner,
-                        "hideme": use_hideme
-                    }
+                        "hideme": use_hideme,
+                    },
                 }
             else:
                 sanitized["model_info"] = {"engine": detection_engine.name}
 
             # Return the successful result for this file.
-            return {
-                "file": filename,
-                "status": "success",
-                "results": sanitized
-            }
+            return {"file": filename, "status": "success", "results": sanitized}
         except Exception as e:
             # Log detection errors securely and return an error result.
-            log_error(f"[SECURITY] Error detecting entities in file {filename}: {str(e)}")
-            return {
-                "file": filename,
-                "status": "error",
-                "error": str(e)
-            }
+            log_error(
+                f"[SECURITY] Error detecting entities in file {filename}: {str(e)}"
+            )
+            return {"file": filename, "status": "error", "error": str(e)}
 
     @staticmethod
     async def _process_hybrid_detection(
-            minimized_extracted: Dict[str, Any],
-            entity_list: List[str],
-            detector: Any,
-            remove_words: Optional[str] = None
+        minimized_extracted: Dict[str, Any],
+        entity_list: List[str],
+        detector: Any,
+        remove_words: Optional[str] = None,
     ) -> Tuple[List[Any], Dict[str, Any]]:
         """
         Process entity detection using a hybrid engine that runs multiple detectors concurrently.
@@ -444,7 +514,9 @@ class BatchDetectService(BaseDetectionService):
               - A merged redaction mapping dictionary.
         """
         combined_entities = []  # Initialize list to accumulate detected entities.
-        combined_redaction_mapping = {"pages": []}  # Initialize combined redaction mapping.
+        combined_redaction_mapping = {
+            "pages": []
+        }  # Initialize combined redaction mapping.
         try:
             engine_tasks = []  # List to hold tasks for each individual detector.
             # Iterate over each individual detector in the hybrid detector.
@@ -457,7 +529,7 @@ class BatchDetectService(BaseDetectionService):
                 task = asyncio.to_thread(
                     individual_detector.detect_sensitive_data,
                     minimized_extracted,
-                    entity_list
+                    entity_list,
                 )
                 engine_tasks.append((engine_name, task))
             # Unpack engine names and their corresponding tasks.
@@ -468,7 +540,9 @@ class BatchDetectService(BaseDetectionService):
             for engine, result in zip(engines_used, results):
                 # If the result is an exception, log the error securely.
                 if isinstance(result, Exception):
-                    log_error(f"[SECURITY] Detection failed for engine {engine}: {result}")
+                    log_error(
+                        f"[SECURITY] Detection failed for engine {engine}: {result}"
+                    )
                     continue
                 # Verify that the result is a tuple with two elements.
                 if not (isinstance(result, tuple) and len(result) == 2):
@@ -479,16 +553,24 @@ class BatchDetectService(BaseDetectionService):
 
                 # If remove_words is specified, adjust the output accordingly.
                 if remove_words:
-                    entities, redaction_mapping = BatchDetectService.apply_removal_words(
-                        minimized_extracted, (entities, redaction_mapping), remove_words
+                    entities, redaction_mapping = (
+                        BatchDetectService.apply_removal_words(
+                            minimized_extracted,
+                            (entities, redaction_mapping),
+                            remove_words,
+                        )
                     )
 
                 # Replace original text in redaction mapping with sanitized values.
-                redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name=engine)
+                redaction_mapping = replace_original_text_in_redaction(
+                    redaction_mapping, engine_name=engine
+                )
                 # Append the detected entities from this engine.
                 combined_entities.extend(entities)
                 # Merge redaction mapping pages.
-                BatchDetectService._merge_pages(combined_redaction_mapping, redaction_mapping)
+                BatchDetectService._merge_pages(
+                    combined_redaction_mapping, redaction_mapping
+                )
             return combined_entities, combined_redaction_mapping
         except Exception as e:
             # Log any errors in hybrid detection securely and propagate the exception.
@@ -497,8 +579,7 @@ class BatchDetectService(BaseDetectionService):
 
     @staticmethod
     def _merge_pages(
-            combined_mapping: Dict[str, Any],
-            redaction_mapping: Dict[str, Any]
+        combined_mapping: Dict[str, Any], redaction_mapping: Dict[str, Any]
     ) -> None:
         """
         Merge pages from a new redaction mapping into the combined redaction mapping.
@@ -514,7 +595,7 @@ class BatchDetectService(BaseDetectionService):
             # Find if this page already exists in the combined mapping.
             existing_page = next(
                 (p for p in combined_mapping["pages"] if p.get("page") == page_number),
-                None
+                None,
             )
             # If the page exists, extend its 'sensitive' list.
             if existing_page:
@@ -525,10 +606,10 @@ class BatchDetectService(BaseDetectionService):
 
     @staticmethod
     async def _process_single_detection(
-            minimized_extracted: Dict[str, Any],
-            entity_list: List[str],
-            detector: Any,
-            remove_words: Optional[str] = None
+        minimized_extracted: Dict[str, Any],
+        entity_list: List[str],
+        detector: Any,
+        remove_words: Optional[str] = None,
     ) -> Tuple[List[Any], Dict[str, Any]]:
         """
         Process entity detection using a single detection engine.
@@ -546,7 +627,9 @@ class BatchDetectService(BaseDetectionService):
         """
         try:
             # Run the detection in a separate thread and await its result.
-            detection_raw = await asyncio.to_thread(detector.detect_sensitive_data, minimized_extracted, entity_list)
+            detection_raw = await asyncio.to_thread(
+                detector.detect_sensitive_data, minimized_extracted, entity_list
+            )
             # Check if the result has the expected tuple format.
             if not (isinstance(detection_raw, tuple) and len(detection_raw) == 2):
                 raise ValueError("Invalid detection result format")
@@ -562,7 +645,9 @@ class BatchDetectService(BaseDetectionService):
             if engine_name.endswith("entitydetector"):
                 engine_name = engine_name.replace("entitydetector", "")
             # Sanitize the redaction mapping by replacing original text.
-            redaction_mapping = replace_original_text_in_redaction(redaction_mapping, engine_name=engine_name)
+            redaction_mapping = replace_original_text_in_redaction(
+                redaction_mapping, engine_name=engine_name
+            )
             return entities, redaction_mapping
         except Exception as e:
             # Log errors securely and propagate the exception.
@@ -571,12 +656,12 @@ class BatchDetectService(BaseDetectionService):
 
     @staticmethod
     async def _get_initialized_detector(
-            detection_engine: EntityDetectionEngine,
-            use_presidio: bool = True,
-            use_gemini: bool = False,
-            use_gliner: bool = False,
-            use_hideme: bool = False,
-            entity_list: Optional[List[str]] = None
+        detection_engine: EntityDetectionEngine,
+        use_presidio: bool = True,
+        use_gemini: bool = False,
+        use_gliner: bool = False,
+        use_hideme: bool = False,
+        entity_list: Optional[List[str]] = None,
     ) -> Any:
         """
         Initialize and return an entity detection engine instance.
@@ -601,7 +686,7 @@ class BatchDetectService(BaseDetectionService):
                     "use_presidio": use_presidio,
                     "use_gemini": use_gemini,
                     "use_gliner": use_gliner,
-                    "use_hideme": use_hideme
+                    "use_hideme": use_hideme,
                 }
                 if entity_list:
                     config["entities"] = entity_list
@@ -610,12 +695,18 @@ class BatchDetectService(BaseDetectionService):
                 # For non-hybrid engines, pass configuration if needed.
                 if entity_list and detection_engine == EntityDetectionEngine.GLINER:
                     config = {"entities": entity_list}
-                    detector = initialization_service.get_detector(detection_engine, config)
+                    detector = initialization_service.get_detector(
+                        detection_engine, config
+                    )
                 else:
-                    detector = initialization_service.get_detector(detection_engine, None)
+                    detector = initialization_service.get_detector(
+                        detection_engine, None
+                    )
             # If initialization fails, raise an error.
             if detector is None:
-                raise ValueError(f"Failed to initialize {detection_engine.name} detector")
+                raise ValueError(
+                    f"Failed to initialize {detection_engine.name} detector"
+                )
             return detector
         except Exception as e:
             # Log detector initialization errors securely.

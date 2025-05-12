@@ -23,7 +23,10 @@ from backend.app.utils.logging.logger import log_info, log_warning, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.parallel.core import ParallelProcessingCore
 from backend.app.utils.security.processing_records import record_keeper
-from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority
+from backend.app.utils.system_utils.synchronization_utils import (
+    TimeoutLock,
+    LockPriority,
+)
 from backend.app.utils.validation.data_minimization import sanitize_document_metadata
 
 
@@ -39,8 +42,11 @@ class PDFTextExtractor(DocumentExtractor):
     - Detailed logging and error reporting for GDPR compliance.
     """
 
-    def __init__(self, pdf_input: Union[str, pymupdf.Document, bytes, BinaryIO],
-                 page_batch_size: int = 20):
+    def __init__(
+        self,
+        pdf_input: Union[str, pymupdf.Document, bytes, BinaryIO],
+        page_batch_size: int = 20,
+    ):
         """
         Initialize a PDFTextExtractor instance using a flexible PDF input.
 
@@ -67,7 +73,7 @@ class PDFTextExtractor(DocumentExtractor):
         self._instance_lock = TimeoutLock(
             f"pdf_extractor_instance_lock_{id(self)}",  # Unique lock name based on instance ID
             priority=LockPriority.MEDIUM,  # Set lock priority
-            timeout=DEFAULT_EXTRACTION_TIMEOUT  # Set extraction timeout as defined in constants
+            timeout=DEFAULT_EXTRACTION_TIMEOUT,  # Set extraction timeout as defined in constants
         )
 
         try:
@@ -92,18 +98,22 @@ class PDFTextExtractor(DocumentExtractor):
                 # Set the file_labeling_path as memory_buffer.
                 self.file_path = "memory_buffer"
             # Check if the pdf_input is a file-like object.
-            elif hasattr(pdf_input, 'read') and callable(pdf_input.read):
+            elif hasattr(pdf_input, "read") and callable(pdf_input.read):
                 # Open the PDF document using the file-like object.
                 self.pdf_document = pymupdf.open(stream=pdf_input, filetype="pdf")
                 # Get the name attribute from the file-like object if available.
-                self.file_path = getattr(pdf_input, 'name', "file_object")
+                self.file_path = getattr(pdf_input, "name", "file_object")
             else:
                 # Raise a ValueError if the input type is invalid.
-                raise ValueError("Invalid input! Expected a file path, PyMuPDF Document, bytes, or file-like object.")
+                raise ValueError(
+                    "Invalid input! Expected a file path, PyMuPDF Document, bytes, or file-like object."
+                )
         except Exception as e:
             # Log the error using the SecurityAwareErrorHandler.
             SecurityAwareErrorHandler.log_processing_error(
-                e, "pdf_extractor_init", str(pdf_input) if isinstance(pdf_input, str) else "memory_buffer"
+                e,
+                "pdf_extractor_init",
+                str(pdf_input) if isinstance(pdf_input, str) else "memory_buffer",
             )
             # Re-raise the exception after logging.
             raise
@@ -132,7 +142,11 @@ class PDFTextExtractor(DocumentExtractor):
         # Get the total number of pages from the PDF document.
         total_pages = len(self.pdf_document)
         # Determine the operation identifier based on file_labeling_path or default memory_document.
-        operation_id = os.path.basename(self.file_path) if isinstance(self.file_path, str) else "memory_document"
+        operation_id = (
+            os.path.basename(self.file_path)
+            if isinstance(self.file_path, str)
+            else "memory_document"
+        )
         # Start the timer for performance tracking.
         start_time = time.time()
 
@@ -142,12 +156,20 @@ class PDFTextExtractor(DocumentExtractor):
                 # Check if the lock was successfully acquired.
                 if not acquired:
                     # Log an error if lock acquisition fails.
-                    log_error(f"[ERROR] Failed to acquire lock for extraction: {operation_id}")
+                    log_error(
+                        f"[ERROR] Failed to acquire lock for extraction: {operation_id}"
+                    )
                     # Return an error dictionary with timeout information.
-                    return {"pages": [], "error": "Lock acquisition timeout", "timeout": True}
+                    return {
+                        "pages": [],
+                        "error": "Lock acquisition timeout",
+                        "timeout": True,
+                    }
 
                 # Log that PDF extraction is starting.
-                log_info(f"[OK] Processing PDF extraction (operation_id: {operation_id})")
+                log_info(
+                    f"[OK] Processing PDF extraction (operation_id: {operation_id})"
+                )
 
                 # Determine if page batch processing should be used (for documents with more than 10 pages).
                 use_paged_processing = total_pages > 10
@@ -171,7 +193,7 @@ class PDFTextExtractor(DocumentExtractor):
                         len(empty_pages),
                         0.0,
                         total_pages=total_pages,
-                        operation_id=operation_id
+                        operation_id=operation_id,
                     )
 
                 # Record document statistics: total pages.
@@ -187,7 +209,9 @@ class PDFTextExtractor(DocumentExtractor):
                     # Check if metadata exists.
                     if metadata:
                         # Sanitize the metadata.
-                        extracted_data["metadata"] = sanitize_document_metadata(metadata)
+                        extracted_data["metadata"] = sanitize_document_metadata(
+                            metadata
+                        )
                 except Exception as meta_error:
                     # Log any error encountered during metadata extraction.
                     SecurityAwareErrorHandler.log_processing_error(
@@ -205,7 +229,7 @@ class PDFTextExtractor(DocumentExtractor):
                 processing_time=processing_time,
                 file_count=1,
                 entity_count=0,
-                success=False
+                success=False,
             )
             # Log the timeout error.
             log_error(f"[ERROR] Timeout during PDF extraction: {str(te)}")
@@ -222,7 +246,7 @@ class PDFTextExtractor(DocumentExtractor):
                 processing_time=processing_time,
                 file_count=1,
                 entity_count=0,
-                success=False
+                success=False,
             )
             # Log the processing error with details.
             SecurityAwareErrorHandler.log_processing_error(
@@ -242,7 +266,7 @@ class PDFTextExtractor(DocumentExtractor):
             processing_time=processing_time,
             file_count=1,
             entity_count=0,
-            success=True
+            success=True,
         )
 
         # Log the sensitive operation without exposing sensitive details.
@@ -252,16 +276,19 @@ class PDFTextExtractor(DocumentExtractor):
             processing_time,
             pages=len(extracted_data["pages"]),
             total_pages=total_pages,
-            operation_id=operation_id
+            operation_id=operation_id,
         )
 
         # Log the completion of extraction.
         log_info(
-            f"[OK] Text extraction completed successfully. Extracted {len(extracted_data['pages'])} pages with content.")
+            f"[OK] Text extraction completed successfully. Extracted {len(extracted_data['pages'])} pages with content."
+        )
         # Return the dictionary containing all extracted data and metadata.
         return extracted_data
 
-    def _extract_pages_in_batches(self, extracted_data: Dict[str, Any], empty_pages: List[int]) -> None:
+    def _extract_pages_in_batches(
+        self, extracted_data: Dict[str, Any], empty_pages: List[int]
+    ) -> None:
         """
         Extract text from pages in batches to reduce memory usage in large documents.
 
@@ -280,7 +307,9 @@ class PDFTextExtractor(DocumentExtractor):
             # Determine the last page index for the current batch.
             batch_end = min(batch_start + self.page_batch_size, total_pages)
             # Log the details of the page batch being processed.
-            log_info(f"[OK] Processing PDF page batch {batch_start}-{batch_end - 1} of {total_pages}")
+            log_info(
+                f"[OK] Processing PDF page batch {batch_start}-{batch_end - 1} of {total_pages}"
+            )
 
             # Start the timer for the current batch.
             batch_start_time = time.time()
@@ -297,7 +326,8 @@ class PDFTextExtractor(DocumentExtractor):
                     # If the batch processing exceeds the timeout, log a warning and exit the loop.
                     if elapsed_batch_time > DEFAULT_EXTRACTION_TIMEOUT:
                         log_warning(
-                            f"[WARNING] Batch processing is taking too long ({elapsed_batch_time:.2f}s), skipping remaining pages")
+                            f"[WARNING] Batch processing is taking too long ({elapsed_batch_time:.2f}s), skipping remaining pages"
+                        )
                         # Break out of the page processing loop if timeout is reached.
                         break
 
@@ -309,21 +339,27 @@ class PDFTextExtractor(DocumentExtractor):
                         # If processing time exceeds the per-page limit, log a warning.
                         if page_time > max_page_time:
                             log_warning(
-                                f"[WARNING] Page {page_num} processing took {page_time:.2f}s (exceeded {max_page_time}s threshold)")
+                                f"[WARNING] Page {page_num} processing took {page_time:.2f}s (exceeded {max_page_time}s threshold)"
+                            )
                     except Exception as e:
                         # Log any error that occurs during processing of a page.
                         log_error(f"[ERROR] Error processing page {page_num}: {str(e)}")
                         # Continue processing the next pages despite the error.
             except TimeoutError:
                 # Log an error if a timeout occurs during batch processing.
-                log_error(f"[ERROR] Timeout during batch processing pages {batch_start}-{batch_end - 1}")
+                log_error(
+                    f"[ERROR] Timeout during batch processing pages {batch_start}-{batch_end - 1}"
+                )
 
             # Import the garbage collection module.
             import gc
+
             # Trigger garbage collection to free up memory after processing the current batch.
             gc.collect()
 
-    def _process_page(self, page_num: int, extracted_data: Dict[str, Any], empty_pages: List[int]) -> None:
+    def _process_page(
+        self, page_num: int, extracted_data: Dict[str, Any], empty_pages: List[int]
+    ) -> None:
         """
         Process an individual page by extracting text and its word positions.
 
@@ -354,10 +390,7 @@ class PDFTextExtractor(DocumentExtractor):
                 return
 
             # Create a dictionary for the page data.
-            page_data = {
-                "page": page_num + 1,
-                "words": page_words
-            }
+            page_data = {"page": page_num + 1, "words": page_words}
             # Append the page data to the overall extracted data.
             extracted_data["pages"].append(page_data)
 
@@ -365,11 +398,13 @@ class PDFTextExtractor(DocumentExtractor):
             # Log any exceptions encountered during page processing.
             log_error(f"[ERROR] Error in page {page_num} processing: {str(e)}")
             # Append an error entry for the page in the extracted data.
-            extracted_data["pages"].append({
-                "page": page_num + 1,
-                "words": [],
-                "error": f"Error processing page: {str(e)}"
-            })
+            extracted_data["pages"].append(
+                {
+                    "page": page_num + 1,
+                    "words": [],
+                    "error": f"Error processing page: {str(e)}",
+                }
+            )
 
     @staticmethod
     def _extract_page_words(page: pymupdf.Page) -> List[Dict[str, Any]]:
@@ -397,13 +432,9 @@ class PDFTextExtractor(DocumentExtractor):
                 # Check if the text is not empty after stripping whitespace.
                 if text.strip():
                     # Append the word and its coordinates as a dictionary.
-                    page_words.append({
-                        "text": text.strip(),
-                        "x0": x0,
-                        "y0": y0,
-                        "x1": x1,
-                        "y1": y1
-                    })
+                    page_words.append(
+                        {"text": text.strip(), "x0": x0, "y0": y0, "x1": x1, "y1": y1}
+                    )
         except Exception as e:
             # Log any error encountered during word extraction using the SecurityAwareErrorHandler.
             SecurityAwareErrorHandler.log_processing_error(
@@ -440,16 +471,20 @@ class PDFTextExtractor(DocumentExtractor):
                 # Iterate over each rectangle returned.
                 for rect in rects:
                     # Append the image bounding box details as a dictionary.
-                    image_boxes.append({
-                        "x0": rect.x0,
-                        "y0": rect.y0,
-                        "x1": rect.x1,
-                        "y1": rect.y1,
-                        "xref": xref
-                    })
+                    image_boxes.append(
+                        {
+                            "x0": rect.x0,
+                            "y0": rect.y0,
+                            "x1": rect.x1,
+                            "y1": rect.y1,
+                            "xref": xref,
+                        }
+                    )
         except Exception as e:
             # Log any error that occurs during image extraction.
-            SecurityAwareErrorHandler.log_processing_error(e, "pdf_image_extraction", f"page_{page.number}")
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "pdf_image_extraction", f"page_{page.number}"
+            )
         # Return the list of image bounding boxes.
         return image_boxes
 
@@ -475,8 +510,7 @@ class PDFTextExtractor(DocumentExtractor):
 
     @staticmethod
     async def extract_batch_text(
-            pdf_files: List[Union[str, bytes, BinaryIO]],
-            max_workers: Optional[int] = None
+        pdf_files: List[Union[str, bytes, BinaryIO]], max_workers: Optional[int] = None
     ) -> List[Tuple[int, Dict[str, Any]]]:
         """
         Extract text from multiple PDF files in parallel.
@@ -514,15 +548,15 @@ class PDFTextExtractor(DocumentExtractor):
                 # Determine a file identifier based on input type.
                 file_id = pdf_file if isinstance(pdf_file, str) else "memory_buffer"
                 # Log any error encountered during PDF extraction.
-                SecurityAwareErrorHandler.log_processing_error(e, "batch_pdf_extraction", file_id)
+                SecurityAwareErrorHandler.log_processing_error(
+                    e, "batch_pdf_extraction", file_id
+                )
                 # Return a dictionary indicating the error.
                 return {"pages": [], "error": str(e)}
 
         # Use ParallelProcessingCore to process all PDFs in parallel.
         results = await ParallelProcessingCore.process_in_parallel(
-            pdf_files,
-            lambda pdf: process_pdf(pdf),
-            max_workers=max_workers
+            pdf_files, lambda pdf: process_pdf(pdf), max_workers=max_workers
         )
         # Return the list of (index, result) tuples.
         return results

@@ -18,7 +18,7 @@ from backend.app.configs.gemini_config import (
     GEMINI_PROMPT_HEADER,
     GEMINI_PROMPT_FOOTER,
     GEMINI_AVAILABLE_ENTITIES,
-    SYSTEM_INSTRUCTION
+    SYSTEM_INSTRUCTION,
 )
 from backend.app.configs.config_singleton import get_config
 from backend.app.utils.logging.logger import default_logger as logger
@@ -74,9 +74,9 @@ class GeminiHelper:
         key_data = text
         # If specific requested entities are provided, append their sorted, comma-separated string.
         if requested_entities:
-            key_data += '|' + ','.join(sorted(requested_entities))
+            key_data += "|" + ",".join(sorted(requested_entities))
         # Generate the MD5 hash of the key data and return it as a hexadecimal string.
-        return hashlib.md5(key_data.encode('utf-8')).hexdigest()
+        return hashlib.md5(key_data.encode("utf-8")).hexdigest()
 
     @staticmethod
     def create_prompt(text: str, requested_entities: Optional[List[str]] = None) -> str:
@@ -102,12 +102,12 @@ class GeminiHelper:
         return f"{GEMINI_PROMPT_HEADER}{entities_str}\n\n### **Text to Analyze:**\n{text}\n{GEMINI_PROMPT_FOOTER}"
 
     async def send_request(
-            self,
-            text: str,
-            requested_entities: Optional[List[str]] = None,
-            max_retries: int = 3,
-            raw_prompt: bool = False,
-            system_instruction_override: Optional[str] = None
+        self,
+        text: str,
+        requested_entities: Optional[List[str]] = None,
+        max_retries: int = 3,
+        raw_prompt: bool = False,
+        system_instruction_override: Optional[str] = None,
     ) -> Optional[str]:
         """
         Send a request to the Gemini API with retry logic and exponential backoff.
@@ -135,7 +135,9 @@ class GeminiHelper:
         for attempt in range(max_retries):
             try:
                 # Initialize a Gemini GenerativeModel instance with the selected model and system instruction.
-                model = genai.GenerativeModel(self.model_name, system_instruction=sys_inst)
+                model = genai.GenerativeModel(
+                    self.model_name, system_instruction=sys_inst
+                )
                 # Call the generate_content method in a separate thread to prevent blocking.
                 response = await asyncio.to_thread(model.generate_content, prompt)
                 # Check if the response is empty or contains only whitespace; if so, log error and return an empty string.
@@ -152,11 +154,15 @@ class GeminiHelper:
                     logger.error(f"❌ Network Error communicating with Gemini API: {e}")
                 # If the exception message suggests content was rejected due to copyright filtering, log a warning and return None.
                 elif "finish_reason" in str(e) and "is 4" in str(e):
-                    logger.warning("⚠️ Gemini refused content due to copyright filtering. Returning empty result.")
+                    logger.warning(
+                        "⚠️ Gemini refused content due to copyright filtering. Returning empty result."
+                    )
                     return None
             # If not on the last retry attempt, log retry information and wait for the designated backoff period.
             if attempt < max_retries - 1:
-                logger.info(f"Retrying after {backoff} seconds (attempt {attempt + 2} of {max_retries})...")
+                logger.info(
+                    f"Retrying after {backoff} seconds (attempt {attempt + 2} of {max_retries})..."
+                )
                 time.sleep(backoff)
                 # Double the backoff period for exponential backoff.
                 backoff *= 2
@@ -200,7 +206,9 @@ class GeminiHelper:
             if parsed_json:
                 return parsed_json
         # Log an error if no valid JSON object could be extracted.
-        logger.error("❌ Error: No valid JSON object could be extracted from the response")
+        logger.error(
+            "❌ Error: No valid JSON object could be extracted from the response"
+        )
         # Return None if parsing fails completely.
         return None
 
@@ -226,7 +234,9 @@ class GeminiHelper:
             return None
 
     @staticmethod
-    def _process_json_character(char: str, index: int, stack: List[str], start: Optional[int]) -> Optional[int]:
+    def _process_json_character(
+        char: str, index: int, stack: List[str], start: Optional[int]
+    ) -> Optional[int]:
         """
         Process a single character to help identify JSON object boundaries.
 
@@ -240,14 +250,14 @@ class GeminiHelper:
             Optional[int]: The updated start index if a new JSON block is detected; otherwise, the original start.
         """
         # If the character is an opening brace, check if this is the start of a JSON block.
-        if char == '{':
+        if char == "{":
             # If start is not set, mark this index as the start.
             if start is None:
                 start = index
             # Push an opening brace onto the stack.
-            stack.append('{')
+            stack.append("{")
         # If the character is a closing brace and there is an open block in the stack,
-        elif char == '}' and stack:
+        elif char == "}" and stack:
             # Pop the last opening brace from the stack.
             stack.pop()
             # If the stack is empty, it means the JSON block has closed; return the start index.
@@ -283,7 +293,7 @@ class GeminiHelper:
             # If a JSON candidate has been identified and the stack is empty, a candidate block has ended.
             if start is not None and not stack:
                 # Extract the candidate substring from start index to current index (inclusive).
-                candidate = text[start:i + 1]
+                candidate = text[start : i + 1]
                 # Ensure the candidate is valid by checking its length or if it exactly equals "{}".
                 if candidate == "{}" or len(candidate) > 2:
                     json_candidates.append(candidate)
@@ -306,10 +316,15 @@ class GeminiHelper:
         # First, obtain potential JSON substrings from the text.
         potential_jsons = GeminiHelper._find_potential_json_candidates(text)
         # Filter the potential candidates, returning only those that are either "{}" or can be parsed as JSON.
-        return [candidate for candidate in potential_jsons if
-                candidate == "{}" or GeminiHelper._try_json_parse(candidate)]
+        return [
+            candidate
+            for candidate in potential_jsons
+            if candidate == "{}" or GeminiHelper._try_json_parse(candidate)
+        ]
 
-    async def process_text(self, text: str, requested_entities: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+    async def process_text(
+        self, text: str, requested_entities: Optional[List[str]] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         Process the provided text with the Gemini API and return the parsed JSON result.
 

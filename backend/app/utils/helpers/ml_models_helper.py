@@ -45,7 +45,9 @@ def get_spacy_model(model_name: str) -> Any:
     return model
 
 
-def get_hf_ner_pipeline(model_path: str, aggregation_strategy: str = "simple") -> Optional[Any]:
+def get_hf_ner_pipeline(
+    model_path: str, aggregation_strategy: str = "simple"
+) -> Optional[Any]:
     """
     Load a Hugging Face Named Entity Recognition (NER) pipeline from a local or remote model.
 
@@ -60,13 +62,15 @@ def get_hf_ner_pipeline(model_path: str, aggregation_strategy: str = "simple") -
         # Load the tokenizer for the specified model with trust for remote code.
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
         # Load the model for token classification with trust for remote code.
-        model = AutoModelForTokenClassification.from_pretrained(model_path, trust_remote_code=True)
+        model = AutoModelForTokenClassification.from_pretrained(
+            model_path, trust_remote_code=True
+        )
         # Initialize the NER pipeline with the model, tokenizer, and aggregation strategy.
         ner_pipe = pipeline(
             "ner",
             model=model,
             tokenizer=tokenizer,
-            aggregation_strategy=aggregation_strategy
+            aggregation_strategy=aggregation_strategy,
         )
         # Log that the Hugging Face model was successfully loaded.
         log_info(f"[OK] Successfully loaded Hugging Face model from '{model_path}'")

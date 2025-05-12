@@ -18,7 +18,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-
 # Importing the API routers for various modules.
 from backend.app.api.routes import (
     status_router,
@@ -28,18 +27,28 @@ from backend.app.api.routes import (
     metadata_router,
     batch_router,
 )
+
 # Service that initializes detectors and related components.
 from backend.app.services.initialization_service import initialization_service
+
 # Constants for allowed origins and JSON media type.
 from backend.app.utils.constant.constant import ALLOWED_ORIGINS, JSON_MEDIA_TYPE
+
 # Logging functions for information and error logging.
 from backend.app.utils.logging.logger import log_info, log_error
+
 # Caching middleware to cache responses on specific paths.
 from backend.app.utils.security.caching_middleware import CacheMiddleware
+
 # Manager for data retention and cleanup.
 from backend.app.utils.security.retention_management import retention_manager
+
 # Rate limiting middleware and configuration retrieval.
-from backend.app.utils.security.rate_limiting import RateLimitingMiddleware, get_rate_limit_config
+from backend.app.utils.security.rate_limiting import (
+    RateLimitingMiddleware,
+    get_rate_limit_config,
+)
+
 # Security-aware error handling for safely processing exceptions.
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 
@@ -54,18 +63,18 @@ def _init_middlewares(app: FastAPI) -> None:
     try:
         # Add custom middleware to set security headers on all responses.
         app.add_middleware(
-            BaseHTTPMiddleware,
-            dispatch=SecurityHeadersMiddleware(app=app).dispatch
+            BaseHTTPMiddleware, dispatch=SecurityHeadersMiddleware(app=app).dispatch
         )
         # Add validation middleware to prevent suspicious URL patterns.
         app.add_middleware(
-            BaseHTTPMiddleware,
-            dispatch=ValidationMiddleware(app=app).dispatch
+            BaseHTTPMiddleware, dispatch=ValidationMiddleware(app=app).dispatch
         )
         # Add middleware to enforce a maximum request body size.
         app.add_middleware(
             BaseHTTPMiddleware,
-            dispatch=RequestSizeMiddleware(max_content_length=25 * 1024 * 1024, app=app).dispatch
+            dispatch=RequestSizeMiddleware(
+                max_content_length=25 * 1024 * 1024, app=app
+            ).dispatch,
         )
         # Add GZip middleware to compress responses larger than 1KB.
         app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -83,7 +92,9 @@ def _init_middlewares(app: FastAPI) -> None:
         # In production, filter out localhost origins.
         if os.environ.get("ENVIRONMENT") == "production":
             cors_config["allow_origins"] = [
-                origin for origin in ALLOWED_ORIGINS if not origin.startswith("http://localhost")
+                origin
+                for origin in ALLOWED_ORIGINS
+                if not origin.startswith("http://localhost")
             ]
         # Apply the CORS configuration.
         app.add_middleware(CORSMiddleware, **cors_config)
@@ -137,7 +148,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # Enable XSS protection in browsers.
             response.headers["X-XSS-Protection"] = "1; mode=block"
             # Set strict transport security header.
-            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains; preload"
+            )
             # Determine the environment to set the appropriate Content-Security-Policy.
             env = os.environ.get("ENVIRONMENT", "development")
             if env == "production":
@@ -155,7 +168,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
             response.headers["Cache-Control"] = "no-store, max-age=0"
             response.headers["Pragma"] = "no-cache"
-            response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+            response.headers["Permissions-Policy"] = (
+                "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+            )
             response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
             response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
             response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
@@ -168,9 +183,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             )
             status = error_info.get("status_code", 500)
             return Response(
-                content=error_info,
-                status_code=status,
-                media_type=JSON_MEDIA_TYPE
+                content=error_info, status_code=status, media_type=JSON_MEDIA_TYPE
             )
 
 
@@ -209,11 +222,14 @@ class RequestSizeMiddleware(BaseHTTPMiddleware):
             # Retrieve the 'content-length' header from the request.
             content_length = request.headers.get("content-length")
             # If the content length is provided and exceeds the maximum allowed, return a 413 response.
-            if content_length is not None and int(content_length) > self.max_content_length:
+            if (
+                content_length is not None
+                and int(content_length) > self.max_content_length
+            ):
                 return Response(
                     status_code=413,
                     content=json.dumps({"detail": "Request body too large"}),
-                    media_type=JSON_MEDIA_TYPE
+                    media_type=JSON_MEDIA_TYPE,
                 )
             # Otherwise, continue processing the request.
             return await call_next(request)
@@ -224,9 +240,7 @@ class RequestSizeMiddleware(BaseHTTPMiddleware):
             )
             status = error_info.get("status_code", 500)
             return Response(
-                content=error_info,
-                status_code=status,
-                media_type=JSON_MEDIA_TYPE
+                content=error_info, status_code=status, media_type=JSON_MEDIA_TYPE
             )
 
 
@@ -261,7 +275,7 @@ class ValidationMiddleware(BaseHTTPMiddleware):
                     return Response(
                         status_code=400,
                         content=json.dumps({"detail": "Invalid request path"}),
-                        media_type=JSON_MEDIA_TYPE
+                        media_type=JSON_MEDIA_TYPE,
                     )
             # Proceed with processing if the path is valid.
             return await call_next(request)
@@ -272,9 +286,7 @@ class ValidationMiddleware(BaseHTTPMiddleware):
             )
             status = error_info.get("status_code", 500)
             return Response(
-                content=error_info,
-                status_code=status,
-                media_type=JSON_MEDIA_TYPE
+                content=error_info, status_code=status, media_type=JSON_MEDIA_TYPE
             )
 
 
@@ -306,17 +318,26 @@ def create_app() -> FastAPI:
         app.add_middleware(
             CacheMiddleware,
             paths=[
-                "/ai", "/ml", "/batch", "/pdf", "/status", "/help",
-                "/readiness", "/metrics", "/health"
+                "/ai",
+                "/ml",
+                "/batch",
+                "/pdf",
+                "/status",
+                "/help",
+                "/readiness",
+                "/metrics",
+                "/health",
             ],
-            ttl=600
+            ttl=600,
         )
 
         # Include routers for various API endpoints.
         app.include_router(status_router, tags=["Status"])
         app.include_router(pdf_router, prefix="/pdf", tags=["PDF Processing"])
         app.include_router(gemini_router, prefix="/ai", tags=["AI Detection"])
-        app.include_router(presidio_router, prefix="/ml", tags=["Machine Learning Detection"])
+        app.include_router(
+            presidio_router, prefix="/ml", tags=["Machine Learning Detection"]
+        )
         app.include_router(metadata_router, prefix="/help", tags=["System Metadata"])
         app.include_router(batch_router, prefix="/batch", tags=["Batch Processing"])
 
@@ -336,12 +357,10 @@ def create_app() -> FastAPI:
                 version="1.0",
                 description="""
                 API for detecting and redacting sensitive information from various document formats.
-                
                 GDPR Compliance:
                 - Processing is performed under GDPR Article 6(1)(f).
                 - Data is processed in-memory where possible and temporary files are securely deleted.
                 - Data minimization principles are applied throughout the pipeline.
-                
                 Security:
                 - Endpoints enforce rate limiting.
                 - Files are validated before processing.
@@ -353,11 +372,7 @@ def create_app() -> FastAPI:
             # Add security schemes to the OpenAPI schema for API key authentication.
             openapi_schema["components"] = openapi_schema.get("components", {})
             openapi_schema["components"]["securitySchemes"] = {
-                "apiKeyAuth": {
-                    "type": "apiKey",
-                    "in": "header",
-                    "name": "X-API-Key"
-                }
+                "apiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
             }
             app.openapi_schema = openapi_schema
             # Return the completed OpenAPI schema.
@@ -394,9 +409,7 @@ def create_app() -> FastAPI:
                 )
                 status = error_info.get("status_code", 500)
                 return JSONResponse(
-                    content=error_info,
-                    status_code=status,
-                    media_type=JSON_MEDIA_TYPE
+                    content=error_info, status_code=status, media_type=JSON_MEDIA_TYPE
                 )
             # Calculate the total processing time.
             process_time = time.time() - start_time
@@ -404,7 +417,8 @@ def create_app() -> FastAPI:
             response.headers["X-Process-Time"] = str(process_time)
             response.headers["X-Request-ID"] = request_id
             log_info(
-                f"[REQUEST] {request.method} {request.url.path} completed in {process_time:.4f}s [ID: {request_id}]")
+                f"[REQUEST] {request.method} {request.url.path} completed in {process_time:.4f}s [ID: {request_id}]"
+            )
             # Return the modified response.
             return response
 
@@ -422,7 +436,9 @@ def create_app() -> FastAPI:
                 await initialization_service.initialize_detectors_lazy()
                 # Retrieve the current initialization status.
                 status = initialization_service.get_initialization_status()
-                log_info(f"[STARTUP] Presidio initialized: {status.get('presidio', False)}")
+                log_info(
+                    f"[STARTUP] Presidio initialized: {status.get('presidio', False)}"
+                )
                 log_info(f"[STARTUP] Gemini initialized: {status.get('gemini', False)}")
                 log_info(f"[STARTUP] GLiNER initialized: {status.get('gliner', False)}")
                 log_info(f"[STARTUP] HIDEME initialized: {status.get('hideme', False)}")
@@ -453,9 +469,13 @@ def create_app() -> FastAPI:
             try:
                 # Perform garbage collection to free memory.
                 import gc
+
                 gc.collect()
                 # Invalidate any cached responses.
-                from backend.app.utils.security.caching_middleware import invalidate_cache
+                from backend.app.utils.security.caching_middleware import (
+                    invalidate_cache,
+                )
+
                 invalidate_cache()
                 log_info("[SHUTDOWN] Additional cleanup completed successfully")
             except Exception as exp:

@@ -2,7 +2,6 @@ import os
 import unittest
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch, MagicMock
-from wsgiref.headers import Headers
 import redis
 from fastapi import HTTPException
 from fastapi import Request
@@ -45,7 +44,7 @@ class TestRateLimitConfig(unittest.TestCase):
             admin_requests_per_minute=200,
             anonymous_requests_per_minute=50,
             burst_allowance=40,
-            redis_url="redis://custom:6379"
+            redis_url="redis://custom:6379",
         )
 
         self.assertEqual(config.requests_per_minute, 100)
@@ -63,13 +62,16 @@ class TestRateLimitConfig(unittest.TestCase):
 class TestGetRateLimitConfig(unittest.TestCase):
     """Tests for get_rate_limit_config function."""
 
-    @patch.dict(os.environ, {
-        "RATE_LIMIT_RPM": "100",
-        "ADMIN_RATE_LIMIT_RPM": "200",
-        "ANON_RATE_LIMIT_RPM": "50",
-        "RATE_LIMIT_BURST": "40",
-        "REDIS_URL": "redis://test:6379"
-    })
+    @patch.dict(
+        os.environ,
+        {
+            "RATE_LIMIT_RPM": "100",
+            "ADMIN_RATE_LIMIT_RPM": "200",
+            "ANON_RATE_LIMIT_RPM": "50",
+            "RATE_LIMIT_BURST": "40",
+            "REDIS_URL": "redis://test:6379",
+        },
+    )
     # should read values from environment
     def test_get_rate_limit_config_from_env(self):
         get_rate_limit_config.cache_clear()
@@ -184,7 +186,7 @@ class TestRedisRateLimiter(unittest.TestCase):
     """Tests for RedisRateLimiter class."""
 
     def setUp(self):
-        self.redis_patcher = patch('redis.from_url')
+        self.redis_patcher = patch("redis.from_url")
 
         self.mock_redis = self.redis_patcher.start()
 
@@ -207,7 +209,7 @@ class TestRedisRateLimiter(unittest.TestCase):
 
         self.assertEqual(self.rate_limiter.window_size, 60)
 
-    @patch('time.time')
+    @patch("time.time")
     # under limit should not rate limit and set expire/incr
     def test_is_rate_limited_under_limit(self, mock_time):
         mock_time.return_value = 1617235678.0
@@ -226,7 +228,7 @@ class TestRedisRateLimiter(unittest.TestCase):
 
         self.mock_pipeline.execute.assert_called_once()
 
-    @patch('time.time')
+    @patch("time.time")
     # over limit should return True
     def test_is_rate_limited_over_limit(self, mock_time):
         mock_time.return_value = 1617235678.0
@@ -237,14 +239,14 @@ class TestRedisRateLimiter(unittest.TestCase):
 
         self.assertTrue(result)
 
-    @patch('time.time')
+    @patch("time.time")
     # Redis errors should be caught and treated as no rate limit
     def test_is_rate_limited_redis_error(self, mock_time):
         mock_time.return_value = 1617235678.0
 
         self.mock_pipeline.execute.side_effect = redis.RedisError("Test Redis error")
 
-        with patch('backend.app.utils.security.rate_limiting.logger') as mock_logger:
+        with patch("backend.app.utils.security.rate_limiting.logger") as mock_logger:
             result = self.rate_limiter.is_rate_limited("test_key", 10)
 
             self.assertFalse(result)
@@ -267,7 +269,7 @@ class TestLocalRateLimiter(unittest.TestCase):
 
         self.assertEqual(self.rate_limiter.window_size, 60)
 
-    @patch('time.time')
+    @patch("time.time")
     # new client should get a counter of 1
     def test_is_rate_limited_new_client(self, mock_time):
         mock_time.return_value = 1617235678.0
@@ -278,12 +280,9 @@ class TestLocalRateLimiter(unittest.TestCase):
 
         self.assertFalse(result)
 
-        self.assertEqual(
-            self.rate_limiter.requests["test_key"][current_window],
-            1
-        )
+        self.assertEqual(self.rate_limiter.requests["test_key"][current_window], 1)
 
-    @patch('time.time')
+    @patch("time.time")
     # existing client under limit should increment count
     def test_is_rate_limited_existing_client(self, mock_time):
         mock_time.return_value = 1617235678.0
@@ -296,12 +295,9 @@ class TestLocalRateLimiter(unittest.TestCase):
 
         self.assertFalse(result)
 
-        self.assertEqual(
-            self.rate_limiter.requests["test_key"][current_window],
-            6
-        )
+        self.assertEqual(self.rate_limiter.requests["test_key"][current_window], 6)
 
-    @patch('time.time')
+    @patch("time.time")
     # exceeding limit should return True and increment
     def test_is_rate_limited_over_limit(self, mock_time):
         mock_time.return_value = 1617235678.0
@@ -314,12 +310,9 @@ class TestLocalRateLimiter(unittest.TestCase):
 
         self.assertTrue(result)
 
-        self.assertEqual(
-            self.rate_limiter.requests["test_key"][current_window],
-            11
-        )
+        self.assertEqual(self.rate_limiter.requests["test_key"][current_window], 11)
 
-    @patch('time.time')
+    @patch("time.time")
     # old windows beyond burst_allowance should be cleaned up
     def test_is_rate_limited_cleanup_old_windows(self, mock_time):
         mock_time.return_value = 1617235678.0
@@ -338,15 +331,9 @@ class TestLocalRateLimiter(unittest.TestCase):
 
         self.assertFalse(result)
 
-        self.assertNotIn(
-            current_window - 3,
-            self.rate_limiter.requests["test_key"]
-        )
+        self.assertNotIn(current_window - 3, self.rate_limiter.requests["test_key"])
 
-        self.assertEqual(
-            self.rate_limiter.requests["test_key"][current_window],
-            1
-        )
+        self.assertEqual(self.rate_limiter.requests["test_key"][current_window], 1)
 
 
 # Dummy ASGI app for middleware tests
@@ -363,7 +350,7 @@ class TestRateLimitingMiddleware(IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         self.get_config_patcher = patch(
-            'backend.app.utils.security.rate_limiting.get_rate_limit_config'
+            "backend.app.utils.security.rate_limiting.get_rate_limit_config"
         )
 
         self.mock_get_config = self.get_config_patcher.start()
@@ -467,7 +454,9 @@ class TestRateLimitingMiddleware(IsolatedAsyncioTestCase):
 
         mock_request.client = MagicMock(host="5.6.7.8")
 
-        with patch.object(RateLimitingMiddleware, "_is_admin_user", return_value=True) as mock_is_admin:
+        with patch.object(
+            RateLimitingMiddleware, "_is_admin_user", return_value=True
+        ) as mock_is_admin:
             self.rate_limiter.is_rate_limited.return_value = False
 
             async def call_next(req):
@@ -506,7 +495,7 @@ class TestCheckRateLimit(IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         self.get_config_patcher = patch(
-            'backend.app.utils.security.rate_limiting.get_rate_limit_config'
+            "backend.app.utils.security.rate_limiting.get_rate_limit_config"
         )
 
         self.mock_get_config = self.get_config_patcher.start()
@@ -520,13 +509,13 @@ class TestCheckRateLimit(IsolatedAsyncioTestCase):
         self.mock_get_config.return_value = self.mock_config
 
         self.redis_limiter_patcher = patch(
-            'backend.app.utils.security.rate_limiting.RedisRateLimiter'
+            "backend.app.utils.security.rate_limiting.RedisRateLimiter"
         )
 
         self.mock_redis_limiter_class = self.redis_limiter_patcher.start()
 
         self.local_limiter_patcher = patch(
-            'backend.app.utils.security.rate_limiting.LocalRateLimiter'
+            "backend.app.utils.security.rate_limiting.LocalRateLimiter"
         )
 
         self.mock_local_limiter_class = self.local_limiter_patcher.start()

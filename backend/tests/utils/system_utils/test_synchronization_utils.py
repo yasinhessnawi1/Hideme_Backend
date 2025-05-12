@@ -10,7 +10,7 @@ from backend.app.utils.system_utils.synchronization_utils import (
     TimeoutLock,
     AsyncTimeoutLock,
     AsyncTimeoutSemaphore,
-    init
+    init,
 )
 
 
@@ -19,15 +19,15 @@ class TestLockPriority(unittest.TestCase):
 
     # Test LockPriority value ordering
     def test_lock_priority_values(self):
-        self.assertTrue(hasattr(LockPriority, 'CRITICAL'))
+        self.assertTrue(hasattr(LockPriority, "CRITICAL"))
 
-        self.assertTrue(hasattr(LockPriority, 'HIGH'))
+        self.assertTrue(hasattr(LockPriority, "HIGH"))
 
-        self.assertTrue(hasattr(LockPriority, 'MEDIUM'))
+        self.assertTrue(hasattr(LockPriority, "MEDIUM"))
 
-        self.assertTrue(hasattr(LockPriority, 'LOW'))
+        self.assertTrue(hasattr(LockPriority, "LOW"))
 
-        self.assertTrue(hasattr(LockPriority, 'BACKGROUND'))
+        self.assertTrue(hasattr(LockPriority, "BACKGROUND"))
 
         self.assertLess(LockPriority.CRITICAL.value, LockPriority.HIGH.value)
 
@@ -43,13 +43,13 @@ class TestLockType(unittest.TestCase):
 
     # Test LockType attributes
     def test_lock_type_values(self):
-        self.assertTrue(hasattr(LockType, 'THREAD'))
+        self.assertTrue(hasattr(LockType, "THREAD"))
 
-        self.assertTrue(hasattr(LockType, 'ASYNCIO'))
+        self.assertTrue(hasattr(LockType, "ASYNCIO"))
 
-        self.assertTrue(hasattr(LockType, 'SEMAPHORE'))
+        self.assertTrue(hasattr(LockType, "SEMAPHORE"))
 
-        self.assertTrue(hasattr(LockType, 'RW_LOCK'))
+        self.assertTrue(hasattr(LockType, "RW_LOCK"))
 
 
 # Tests for LockStatistics behavior
@@ -69,7 +69,9 @@ class TestLockStatistics(unittest.TestCase):
 
     # Test registering locks and summary counts
     def test_register_lock(self):
-        self.lock_stats.register_lock(self.lock_id, self.lock_name, LockType.THREAD, LockPriority.MEDIUM, False)
+        self.lock_stats.register_lock(
+            self.lock_id, self.lock_name, LockType.THREAD, LockPriority.MEDIUM, False
+        )
 
         stats = self.lock_stats.get_lock_stats(self.lock_id)
 
@@ -91,7 +93,9 @@ class TestLockStatistics(unittest.TestCase):
 
         instance_lock_id = "test_instance_lock"
 
-        self.lock_stats.register_lock(instance_lock_id, "InstanceLock", LockType.THREAD, LockPriority.LOW, True)
+        self.lock_stats.register_lock(
+            instance_lock_id, "InstanceLock", LockType.THREAD, LockPriority.LOW, True
+        )
 
         summary = self.lock_stats.get_summary_stats()
 
@@ -101,7 +105,9 @@ class TestLockStatistics(unittest.TestCase):
 
     # Test recording acquisitions and stats
     def test_record_acquisition(self):
-        self.lock_stats.register_lock(self.lock_id, self.lock_name, LockType.THREAD, LockPriority.MEDIUM, False)
+        self.lock_stats.register_lock(
+            self.lock_id, self.lock_name, LockType.THREAD, LockPriority.MEDIUM, False
+        )
 
         self.lock_stats.record_acquisition(self.lock_id, self.thread_id, 0.1, 0.05)
 
@@ -131,7 +137,9 @@ class TestLockStatistics(unittest.TestCase):
 
     # Test recording releases clears active locks
     def test_record_release(self):
-        self.lock_stats.register_lock(self.lock_id, self.lock_name, LockType.THREAD, LockPriority.MEDIUM, False)
+        self.lock_stats.register_lock(
+            self.lock_id, self.lock_name, LockType.THREAD, LockPriority.MEDIUM, False
+        )
 
         self.lock_stats.record_acquisition(self.lock_id, self.thread_id, 0.1, 0.05)
 
@@ -147,7 +155,9 @@ class TestLockStatistics(unittest.TestCase):
 
     # Test recording timeouts increments counter
     def test_record_timeout(self):
-        self.lock_stats.register_lock(self.lock_id, self.lock_name, LockType.THREAD, LockPriority.MEDIUM, False)
+        self.lock_stats.register_lock(
+            self.lock_id, self.lock_name, LockType.THREAD, LockPriority.MEDIUM, False
+        )
 
         self.lock_stats.record_timeout(self.lock_id)
 
@@ -163,7 +173,9 @@ class TestLockStatistics(unittest.TestCase):
 
     # Test recording contention increments counter
     def test_record_contention(self):
-        self.lock_stats.register_lock(self.lock_id, self.lock_name, LockType.THREAD, LockPriority.MEDIUM, False)
+        self.lock_stats.register_lock(
+            self.lock_id, self.lock_name, LockType.THREAD, LockPriority.MEDIUM, False
+        )
 
         self.lock_stats.record_contention(self.lock_id)
 
@@ -173,9 +185,13 @@ class TestLockStatistics(unittest.TestCase):
 
     # Test retrieving single and all lock stats
     def test_get_lock_stats(self):
-        self.lock_stats.register_lock("lock1", "Lock1", LockType.THREAD, LockPriority.HIGH, False)
+        self.lock_stats.register_lock(
+            "lock1", "Lock1", LockType.THREAD, LockPriority.HIGH, False
+        )
 
-        self.lock_stats.register_lock("lock2", "Lock2", LockType.ASYNCIO, LockPriority.LOW, True)
+        self.lock_stats.register_lock(
+            "lock2", "Lock2", LockType.ASYNCIO, LockPriority.LOW, True
+        )
 
         stats1 = self.lock_stats.get_lock_stats("lock1")
 
@@ -195,9 +211,13 @@ class TestLockStatistics(unittest.TestCase):
 
     # Test active locks tracking
     def test_get_active_locks(self):
-        self.lock_stats.register_lock("lock1", "Lock1", LockType.THREAD, LockPriority.HIGH, False)
+        self.lock_stats.register_lock(
+            "lock1", "Lock1", LockType.THREAD, LockPriority.HIGH, False
+        )
 
-        self.lock_stats.register_lock("lock2", "Lock2", LockType.ASYNCIO, LockPriority.LOW, True)
+        self.lock_stats.register_lock(
+            "lock2", "Lock2", LockType.ASYNCIO, LockPriority.LOW, True
+        )
 
         self.lock_stats.record_acquisition("lock1", "thread1", 0.1, 0.05)
 
@@ -221,9 +241,13 @@ class TestLockStatistics(unittest.TestCase):
 
     # Test summary statistics calculation
     def test_get_summary_stats(self):
-        self.lock_stats.register_lock("lock1", "Lock1", LockType.THREAD, LockPriority.HIGH, False)
+        self.lock_stats.register_lock(
+            "lock1", "Lock1", LockType.THREAD, LockPriority.HIGH, False
+        )
 
-        self.lock_stats.register_lock("lock2", "Lock2", LockType.ASYNCIO, LockPriority.LOW, True)
+        self.lock_stats.register_lock(
+            "lock2", "Lock2", LockType.ASYNCIO, LockPriority.LOW, True
+        )
 
         self.lock_stats.record_acquisition("lock1", "thread1", 0.1, 0.05)
 
@@ -247,9 +271,13 @@ class TestLockStatistics(unittest.TestCase):
 
     # Test resetting stats for specific and all locks
     def test_reset_stats(self):
-        self.lock_stats.register_lock("lock1", "Lock1", LockType.THREAD, LockPriority.HIGH, False)
+        self.lock_stats.register_lock(
+            "lock1", "Lock1", LockType.THREAD, LockPriority.HIGH, False
+        )
 
-        self.lock_stats.register_lock("lock2", "Lock2", LockType.ASYNCIO, LockPriority.LOW, True)
+        self.lock_stats.register_lock(
+            "lock2", "Lock2", LockType.ASYNCIO, LockPriority.LOW, True
+        )
 
         self.lock_stats.record_acquisition("lock1", "thread1", 0.1, 0.05)
 
@@ -309,13 +337,17 @@ class TestLockManager(unittest.TestCase):
     def test_check_deadlock_instance_lock(self):
         self.lock_manager.register_lock_acquisition("lock1", LockPriority.HIGH, False)
 
-        result = self.lock_manager.check_deadlock("instance_lock", LockPriority.LOW, True)
+        result = self.lock_manager.check_deadlock(
+            "instance_lock", LockPriority.LOW, True
+        )
 
         self.assertFalse(result)
 
     # Test deadlock check when hierarchy is invalid but allowed
     def test_check_deadlock_invalid_hierarchy(self):
-        self.lock_manager.register_lock_acquisition("lock_high", LockPriority.HIGH, False)
+        self.lock_manager.register_lock_acquisition(
+            "lock_high", LockPriority.HIGH, False
+        )
 
         result = self.lock_manager.check_deadlock("lock_low", LockPriority.LOW, False)
 
@@ -333,7 +365,9 @@ class TestLockManager(unittest.TestCase):
     def test_register_lock_acquisition(self):
         self.lock_manager.register_lock_acquisition("lock1", LockPriority.HIGH, False)
 
-        self.lock_manager.register_lock_acquisition("instance_lock", LockPriority.LOW, True)
+        self.lock_manager.register_lock_acquisition(
+            "instance_lock", LockPriority.LOW, True
+        )
 
         self.assertIsNotNone(self.lock_manager._thread_locks.get(threading.get_ident()))
 
@@ -343,7 +377,9 @@ class TestLockManager(unittest.TestCase):
 
         self.lock_manager.register_lock_release("lock1", False)
 
-        self.assertEqual(self.lock_manager._thread_locks.get(threading.get_ident(), []), [])
+        self.assertEqual(
+            self.lock_manager._thread_locks.get(threading.get_ident(), []), []
+        )
 
     # Test clearing thread data
     def test_clear_thread_data(self):
@@ -359,8 +395,13 @@ class TestTimeoutLock(unittest.TestCase):
 
     # Setup TimeoutLock instance
     def setUp(self):
-        self.lock = TimeoutLock("TestLock", priority=LockPriority.MEDIUM, timeout=1.0, reentrant=True,
-                                is_instance_lock=False)
+        self.lock = TimeoutLock(
+            "TestLock",
+            priority=LockPriority.MEDIUM,
+            timeout=1.0,
+            reentrant=True,
+            is_instance_lock=False,
+        )
 
     # Test acquiring and releasing via context manager
     def test_acquire_and_release(self):
@@ -371,11 +412,13 @@ class TestTimeoutLock(unittest.TestCase):
 
     # Test acquisition failure when lock already held
     def test_acquire_timeout_failure(self):
-        non_reentrant_lock = TimeoutLock("TestLockNonReentrant",
-                                         priority=LockPriority.MEDIUM,
-                                         timeout=1.0,
-                                         reentrant=False,
-                                         is_instance_lock=False)
+        non_reentrant_lock = TimeoutLock(
+            "TestLockNonReentrant",
+            priority=LockPriority.MEDIUM,
+            timeout=1.0,
+            reentrant=False,
+            is_instance_lock=False,
+        )
 
         non_reentrant_lock.lock.acquire()
 
@@ -391,8 +434,12 @@ class TestAsyncTimeoutLock(unittest.IsolatedAsyncioTestCase):
 
     # Setup AsyncTimeoutLock instance
     async def asyncSetUp(self):
-        self.async_lock = AsyncTimeoutLock("AsyncTestLock", priority=LockPriority.MEDIUM, timeout=1.0,
-                                           is_instance_lock=False)
+        self.async_lock = AsyncTimeoutLock(
+            "AsyncTestLock",
+            priority=LockPriority.MEDIUM,
+            timeout=1.0,
+            is_instance_lock=False,
+        )
 
     # Test async acquire and release
     async def test_async_acquire_and_release(self):
@@ -400,7 +447,10 @@ class TestAsyncTimeoutLock(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(acquired)
 
-        self.assertEqual(self.async_lock.owner, f"{threading.get_ident()}:{id(asyncio.current_task())}")
+        self.assertEqual(
+            self.async_lock.owner,
+            f"{threading.get_ident()}:{id(asyncio.current_task())}",
+        )
 
         self.async_lock.release()
 
@@ -430,7 +480,9 @@ class TestAsyncTimeoutSemaphore(unittest.IsolatedAsyncioTestCase):
 
     # Setup AsyncTimeoutSemaphore instance
     async def asyncSetUp(self):
-        self.semaphore = AsyncTimeoutSemaphore("AsyncSemaphore", value=2, priority=LockPriority.MEDIUM, timeout=1.0)
+        self.semaphore = AsyncTimeoutSemaphore(
+            "AsyncSemaphore", value=2, priority=LockPriority.MEDIUM, timeout=1.0
+        )
 
     # Test semaphore acquire and release
     async def test_semaphore_acquire_release(self):
@@ -467,7 +519,7 @@ class TestAsyncTimeoutSemaphore(unittest.IsolatedAsyncioTestCase):
 class TestInitFunction(unittest.TestCase):
 
     # Test init logs initialization message
-    @patch('backend.app.utils.system_utils.synchronization_utils.logger')
+    @patch("backend.app.utils.system_utils.synchronization_utils.logger")
     def test_init(self, mock_logger):
         module_logger = mock_logger
 

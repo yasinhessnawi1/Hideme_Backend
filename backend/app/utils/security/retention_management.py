@@ -44,7 +44,7 @@ class DocumentRetentionManager:
         # Use the class-level lock to ensure thread-safe initialization.
         with self.__class__._lock:
             # Initialize only if the instance has not yet been initialized.
-            if not getattr(self, '_initialized', False):
+            if not getattr(self, "_initialized", False):
                 # Create a dictionary to track processed file paths with their expiration times.
                 self.processed_files = {}
                 # Create a set for files that should never be deleted automatically.
@@ -102,7 +102,9 @@ class DocumentRetentionManager:
         # Log that the cleanup thread has started.
         log_info("[GDPR] Retention cleanup thread started")
 
-    def register_processed_file(self, file_path: str, retention_seconds: int = TEMP_FILE_RETENTION_SECONDS) -> None:
+    def register_processed_file(
+        self, file_path: str, retention_seconds: int = TEMP_FILE_RETENTION_SECONDS
+    ) -> None:
         """
         Register a file for scheduled deletion.
 
@@ -119,7 +121,9 @@ class DocumentRetentionManager:
             # Store the file path and its expiration time.
             self.processed_files[file_path] = expiration_time
             # Log the registration of the file for retention.
-            log_info(f"[GDPR] Registered file for retention: {os.path.basename(file_path)}")
+            log_info(
+                f"[GDPR] Registered file for retention: {os.path.basename(file_path)}"
+            )
 
     def unregister_file(self, file_path: str) -> None:
         """
@@ -137,7 +141,9 @@ class DocumentRetentionManager:
             # Also remove the file from the permanent_files set.
             self.permanent_files.discard(file_path)
             # Log the unregistration of the file.
-            log_info(f"[GDPR] Unregistered file from retention management: {os.path.basename(file_path)}")
+            log_info(
+                f"[GDPR] Unregistered file from retention management: {os.path.basename(file_path)}"
+            )
 
     def cleanup_expired_files(self) -> None:
         """
@@ -152,7 +158,8 @@ class DocumentRetentionManager:
             current_time = time.time()
             # Create a list of file paths that have expired.
             expired_files = [
-                file_path for file_path, exp in list(self.processed_files.items())
+                file_path
+                for file_path, exp in list(self.processed_files.items())
                 if current_time > exp
             ]
             # Remove expired files from the tracking dictionary.
@@ -173,13 +180,19 @@ class DocumentRetentionManager:
                 # Check if the file has been successfully deleted.
                 if not os.path.exists(file_path):
                     # Log successful deletion.
-                    log_info(f"[GDPR] Successfully deleted file: {os.path.basename(file_path)}")
+                    log_info(
+                        f"[GDPR] Successfully deleted file: {os.path.basename(file_path)}"
+                    )
                 else:
                     # Log a warning if the file still exists after attempted deletion.
-                    log_warning(f"[GDPR] File still exists after deletion attempt: {os.path.basename(file_path)}")
+                    log_warning(
+                        f"[GDPR] File still exists after deletion attempt: {os.path.basename(file_path)}"
+                    )
             except (OSError, IOError) as e:
                 # Log a warning if deletion fails.
-                log_warning(f"[GDPR] Failed to remove expired file: {os.path.basename(file_path)}. Error: {e}")
+                log_warning(
+                    f"[GDPR] Failed to remove expired file: {os.path.basename(file_path)}. Error: {e}"
+                )
 
     def _secure_delete(self, path: str) -> None:
         """
@@ -226,11 +239,11 @@ class DocumentRetentionManager:
                 return
             # Define multiple patterns for overwriting the file.
             patterns = [
-                b'\x00' * 4096,  # Overwrite with zeros.
-                b'\xFF' * 4096,  # Overwrite with ones.
-                b'\xAA' * 4096,  # Overwrite with alternating bits 10101010.
-                b'\x55' * 4096,  # Overwrite with alternating bits 01010101.
-                os.urandom(4096)  # Overwrite with random data.
+                b"\x00" * 4096,  # Overwrite with zeros.
+                b"\xff" * 4096,  # Overwrite with ones.
+                b"\xaa" * 4096,  # Overwrite with alternating bits 10101010.
+                b"\x55" * 4096,  # Overwrite with alternating bits 01010101.
+                os.urandom(4096),  # Overwrite with random data.
             ]
             # Open the file in binary write mode.
             with open(path, "wb") as f:
@@ -257,7 +270,8 @@ class DocumentRetentionManager:
         except (OSError, IOError) as e:
             # If secure deletion fails, log a warning.
             log_warning(
-                f"[GDPR] Secure deletion failed for file: {os.path.basename(path)} with error: {e}. Attempting regular deletion.")
+                f"[GDPR] Secure deletion failed for file: {os.path.basename(path)} with error: {e}. Attempting regular deletion."
+            )
             # Attempt fallback regular deletion in a nested try block.
             try:
                 # Check if the file still exists.
@@ -265,10 +279,14 @@ class DocumentRetentionManager:
                     # Delete the file using standard unlink.
                     os.unlink(path)
                     # Log successful regular deletion.
-                    log_info(f"[GDPR] Regular deletion succeeded for file: {os.path.basename(path)}")
+                    log_info(
+                        f"[GDPR] Regular deletion succeeded for file: {os.path.basename(path)}"
+                    )
             except (OSError, IOError) as e2:
                 # Log a warning if fallback deletion also fails.
-                log_warning(f"[GDPR] Regular deletion also failed for file: {os.path.basename(path)} with error: {e2}")
+                log_warning(
+                    f"[GDPR] Regular deletion also failed for file: {os.path.basename(path)} with error: {e2}"
+                )
 
     def _secure_delete_directory(self, path: str) -> None:
         """
@@ -293,7 +311,9 @@ class DocumentRetentionManager:
             shutil.rmtree(path, ignore_errors=False)
         except (OSError, IOError) as e:
             # Log a warning if the directory deletion fails.
-            log_warning(f"[GDPR] Failed to remove directory: {os.path.basename(path)} with error: {e}")
+            log_warning(
+                f"[GDPR] Failed to remove directory: {os.path.basename(path)} with error: {e}"
+            )
 
     def shutdown(self) -> None:
         """
@@ -327,7 +347,9 @@ class DocumentRetentionManager:
                     # Attempt to securely delete the file.
                     self._secure_delete(file_path)
                     # Log the successful deletion of the file during shutdown.
-                    log_info(f"[GDPR] Removed file during shutdown: {os.path.basename(file_path)}")
+                    log_info(
+                        f"[GDPR] Removed file during shutdown: {os.path.basename(file_path)}"
+                    )
                 except (OSError, IOError) as e:
                     # Log a warning if deletion fails during shutdown.
                     log_warning(

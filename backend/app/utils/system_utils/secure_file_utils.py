@@ -17,12 +17,16 @@ from backend.app.configs.gdpr_config import TEMP_FILE_RETENTION_SECONDS
 from backend.app.utils.logging.logger import log_info, log_warning
 from backend.app.utils.security.retention_management import retention_manager
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
-from backend.app.utils.system_utils.synchronization_utils import TimeoutLock, LockPriority, logger
+from backend.app.utils.system_utils.synchronization_utils import (
+    TimeoutLock,
+    LockPriority,
+    logger,
+)
 
 # Configure module-specific logger.
 _logger = logging.getLogger("secure_file_utils")
 # Define a generic type variable.
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class SecureTempFileManager:
@@ -33,13 +37,18 @@ class SecureTempFileManager:
     using a retention manager, and securely delete them using random data overwrites when possible.
     Batch support is enhanced by asynchronous operations and centralized registry tracking.
     """
+
     # Registry for tracking created temporary files and directories.
     _temp_files_registry = set()
     # Lock for synchronizing access to the registry.
-    _registry_lock = TimeoutLock("temp_files_registry_lock", LockPriority.MEDIUM, 3.0, is_instance_lock=True)
+    _registry_lock = TimeoutLock(
+        "temp_files_registry_lock", LockPriority.MEDIUM, 3.0, is_instance_lock=True
+    )
 
     @staticmethod
-    async def _register_temp_file(file_path: str, retention_seconds: Optional[int] = None) -> None:
+    async def _register_temp_file(
+        file_path: str, retention_seconds: Optional[int] = None
+    ) -> None:
         """
         Register a temporary file for cleanup tracking.
 
@@ -52,12 +61,15 @@ class SecureTempFileManager:
         """
         # Attempt to acquire the registry lock with a timeout.
         try:
-            with SecureTempFileManager._registry_lock.acquire_timeout(timeout=3.0) as acquired:
+            with SecureTempFileManager._registry_lock.acquire_timeout(
+                timeout=3.0
+            ) as acquired:
                 # Check if the lock was acquired successfully.
                 if not acquired:
                     # Log a warning if unable to register within the timeout.
                     log_warning(
-                        f"[SECURITY] Timeout registering temp file {os.path.basename(file_path)}, continuing without registry tracking")
+                        f"[SECURITY] Timeout registering temp file {os.path.basename(file_path)}, continuing without registry tracking"
+                    )
                 else:
                     # Add file_labeling_path to the temporary file's registry.
                     SecureTempFileManager._temp_files_registry.add(file_path)
@@ -70,11 +82,17 @@ class SecureTempFileManager:
             retention_manager.register_processed_file(file_path, retention_seconds)
         else:
             # Otherwise, register with the default temporary file retention seconds.
-            retention_manager.register_processed_file(file_path, TEMP_FILE_RETENTION_SECONDS)
+            retention_manager.register_processed_file(
+                file_path, TEMP_FILE_RETENTION_SECONDS
+            )
 
     @staticmethod
-    async def create_secure_temp_file_async(suffix: str = ".tmp", content: Optional[bytes] = None,
-                                            prefix: str = "secure_", retention_seconds: Optional[int] = None) -> str:
+    async def create_secure_temp_file_async(
+        suffix: str = ".tmp",
+        content: Optional[bytes] = None,
+        prefix: str = "secure_",
+        retention_seconds: Optional[int] = None,
+    ) -> str:
         """
         Asynchronously create a secure temporary file with optional content and register it for cleanup.
 
@@ -91,12 +109,16 @@ class SecureTempFileManager:
         registers the file for automatic cleanup, and logs creation details.
         """
         # Create a trace identifier for logging purposes.
-        trace_id = f"secure_file_{time.time()}_{hashlib.md5(prefix.encode()).hexdigest()[:6]}"
+        trace_id = (
+            f"secure_file_{time.time()}_{hashlib.md5(prefix.encode()).hexdigest()[:6]}"
+        )
         # Initialize a variable to hold the temporary file object.
         temp_file = None
         try:
             # Create a temporary file that will not be deleted automatically.
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, prefix=prefix)
+            temp_file = tempfile.NamedTemporaryFile(
+                delete=False, suffix=suffix, prefix=prefix
+            )
             # Check if content is provided.
             if content:
                 # Write provided content into the temporary file.
@@ -112,30 +134,39 @@ class SecureTempFileManager:
                 file_size = os.path.getsize(temp_file.name)
                 # Raise an error if expected and actual sizes do not match.
                 if file_size != len(content):
-                    raise IOError(f"File size mismatch: expected {len(content)}, got {file_size}")
+                    raise IOError(
+                        f"File size mismatch: expected {len(content)}, got {file_size}"
+                    )
 
             # Asynchronously register the file for cleanup.
             await SecureTempFileManager._register_temp_file(
-                temp_file.name,
-                retention_seconds or TEMP_FILE_RETENTION_SECONDS
+                temp_file.name, retention_seconds or TEMP_FILE_RETENTION_SECONDS
             )
 
             # Log information about the successful creation of the file.
-            log_info(f"[SECURITY] Created secure temporary file: {os.path.basename(temp_file.name)} "
-                     f"({len(content) / 1024 if content else 0:.1f}KB) [trace_id={trace_id}]")
+            log_info(
+                f"[SECURITY] Created secure temporary file: {os.path.basename(temp_file.name)} "
+                f"({len(content) / 1024 if content else 0:.1f}KB) [trace_id={trace_id}]"
+            )
             # Return the path to the created temporary file.
             return temp_file.name
         except Exception as e:
             # If an error occurs and the temporary file exists, attempt to delete it securely.
             if temp_file and os.path.exists(temp_file.name):
-                await asyncio.to_thread(SecureTempFileManager.secure_delete_file, temp_file.name)
+                await asyncio.to_thread(
+                    SecureTempFileManager.secure_delete_file, temp_file.name
+                )
             # Log the processing error with the error handler.
-            SecurityAwareErrorHandler.log_processing_error(e, "secure_temp_file_creation", trace_id=trace_id)
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "secure_temp_file_creation", trace_id=trace_id
+            )
             # Re-raise the exception.
             raise e
 
     @staticmethod
-    async def create_secure_temp_dir_async(prefix: str = "secure_dir_", retention_seconds: Optional[int] = None) -> str:
+    async def create_secure_temp_dir_async(
+        prefix: str = "secure_dir_", retention_seconds: Optional[int] = None
+    ) -> str:
         """
         Asynchronously create a secure temporary directory and register it for cleanup.
 
@@ -154,12 +185,13 @@ class SecureTempFileManager:
 
         # Asynchronously register the directory for cleanup tracking.
         await SecureTempFileManager._register_temp_file(
-            temp_dir,
-            retention_seconds or TEMP_FILE_RETENTION_SECONDS
+            temp_dir, retention_seconds or TEMP_FILE_RETENTION_SECONDS
         )
 
         # Log the creation of the temporary directory.
-        log_info(f"[SECURITY] Created secure temporary directory: {os.path.basename(temp_dir)}")
+        log_info(
+            f"[SECURITY] Created secure temporary directory: {os.path.basename(temp_dir)}"
+        )
         # Return the path to the directory.
         return temp_dir
 
@@ -178,7 +210,11 @@ class SecureTempFileManager:
         then deletes it. It also unregisters the file from internal tracking and the retention manager.
         """
         # Check if the file_labeling_path is valid and corresponds to an existing file.
-        if not file_path or not os.path.exists(file_path) or not os.path.isfile(file_path):
+        if (
+            not file_path
+            or not os.path.exists(file_path)
+            or not os.path.isfile(file_path)
+        ):
             # Return False immediately if file does not exist or is not a regular file.
             return False
         try:
@@ -203,13 +239,20 @@ class SecureTempFileManager:
 
             # Attempt to acquire the registry lock to unregister the file.
             try:
-                with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0) as acquired:
+                with SecureTempFileManager._registry_lock.acquire_timeout(
+                    timeout=1.0
+                ) as acquired:
                     # If lock was acquired and the file is tracked, remove it.
-                    if acquired and file_path in SecureTempFileManager._temp_files_registry:
+                    if (
+                        acquired
+                        and file_path in SecureTempFileManager._temp_files_registry
+                    ):
                         SecureTempFileManager._temp_files_registry.remove(file_path)
             except TimeoutError:
                 # Log a warning if the lock acquisition times out.
-                logger.warning(f"[SECURITY] Timeout while unregistering file: {os.path.basename(file_path)}")
+                logger.warning(
+                    f"[SECURITY] Timeout while unregistering file: {os.path.basename(file_path)}"
+                )
 
             # Unregister the file from the retention manager.
             retention_manager.unregister_file(file_path)
@@ -220,18 +263,23 @@ class SecureTempFileManager:
             return True
         except Exception as e:
             # Log a warning if secure deletion fails.
-            log_warning(f"[SECURITY] Failed to securely delete file: {os.path.basename(file_path)} - {e}")
+            log_warning(
+                f"[SECURITY] Failed to securely delete file: {os.path.basename(file_path)} - {e}"
+            )
             try:
                 # As a fallback, attempt a regular deletion.
                 if os.path.exists(file_path):
                     os.unlink(file_path)
                     # Log info about the fallback deletion.
-                    log_info(f"[SECURITY] Deleted file (regular deletion): {os.path.basename(file_path)}")
+                    log_info(
+                        f"[SECURITY] Deleted file (regular deletion): {os.path.basename(file_path)}"
+                    )
                     return True
             except Exception as fallback_ex:
                 # Log a warning if the fallback deletion also fails.
                 log_warning(
-                    f"[SECURITY] Fallback deletion failed for file: {os.path.basename(file_path)} - {fallback_ex}")
+                    f"[SECURITY] Fallback deletion failed for file: {os.path.basename(file_path)} - {fallback_ex}"
+                )
             # Return False if deletion ultimately failed.
             return False
 
@@ -264,9 +312,14 @@ class SecureTempFileManager:
 
             # Attempt to acquire the registry lock to unregister the directory.
             try:
-                with SecureTempFileManager._registry_lock.acquire_timeout(timeout=1.0) as acquired:
+                with SecureTempFileManager._registry_lock.acquire_timeout(
+                    timeout=1.0
+                ) as acquired:
                     # If lock acquired and directory is tracked, remove it.
-                    if acquired and dir_path in SecureTempFileManager._temp_files_registry:
+                    if (
+                        acquired
+                        and dir_path in SecureTempFileManager._temp_files_registry
+                    ):
                         SecureTempFileManager._temp_files_registry.remove(dir_path)
             except TimeoutError:
                 # Continue silently if unregistering fails due to timeout.
@@ -276,11 +329,15 @@ class SecureTempFileManager:
             retention_manager.unregister_file(dir_path)
 
             # Log information about the successful secure deletion of the directory.
-            log_info(f"[SECURITY] Securely deleted directory: {os.path.basename(dir_path)}")
+            log_info(
+                f"[SECURITY] Securely deleted directory: {os.path.basename(dir_path)}"
+            )
             # Return True indicating success.
             return True
         except Exception as e:
             # Log the error using the error handler for directory deletion.
-            SecurityAwareErrorHandler.log_processing_error(e, "directory_secure_deletion", dir_path)
+            SecurityAwareErrorHandler.log_processing_error(
+                e, "directory_secure_deletion", dir_path
+            )
             # Return False upon failure.
             return False

@@ -1,19 +1,19 @@
-GEMINI_PROMPT_HEADER = """You are Gemini, an advanced Named Entity Recognition AI specialized in detecting sensitive personal information in Norwegian texts. 
-Your task is to analyze the given document and tag all entities that belong to the specified categories of personal data. 
-The text may be in Norwegian Bokmål or Nynorsk, so consider variations in vocabulary (e.g. ikke vs ikkje for “not”, syk vs sjuk for “sick”) and spelling. 
-Pay close attention to context – some sensitive details are implied rather than explicitly stated. 
-Use a BIO tagging approach internally (Begin, Inside, Outside) to identify exact entity spans with correct boundaries, 
-then output the results in the structured JSON format. 
-Ensure each entity is labeled with the appropriate type from the list below, 
+GEMINI_PROMPT_HEADER = """You are Gemini, an advanced Named Entity Recognition AI specialized in detecting sensitive personal information in Norwegian texts.
+Your task is to analyze the given document and tag all entities that belong to the specified categories of personal data.
+The text may be in Norwegian Bokmål or Nynorsk, so consider variations in vocabulary (e.g. ikke vs ikkje for “not”, syk vs sjuk for “sick”) and spelling.
+Pay close attention to context – some sensitive details are implied rather than explicitly stated.
+Use a BIO tagging approach internally (Begin, Inside, Outside) to identify exact entity spans with correct boundaries,
+then output the results in the structured JSON format.
+Ensure each entity is labeled with the appropriate type from the list below,
 with a confidence score reflecting your certainty (0.0 to 1.0).
 
-Critically, disambiguate entities based on context to avoid false positives: 
-for example, distinguish personal names from place names or common words, 
-and verify that a detected term truly refers to personal data. 
-Likewise, minimize false negatives by capturing all relevant personal data, 
-including those that require understanding the context (for instance, a medical condition or criminal act mentioned euphemistically). 
+Critically, disambiguate entities based on context to avoid false positives:
+for example, distinguish personal names from place names or common words,
+and verify that a detected term truly refers to personal data.
+Likewise, minimize false negatives by capturing all relevant personal data,
+including those that require understanding the context (for instance, a medical condition or criminal act mentioned euphemistically).
 Maintain a balanced and thorough approach – be comprehensive but precise in what you tag as an entity.
-**ENTITIES to Analyze:** : 
+**ENTITIES to Analyze:** :
 """
 
 # Gemini prompt template footer
@@ -24,7 +24,7 @@ Immediately return a structured JSON output in the following format:
 {
   "pages": [
     {
-      "text": [ 
+      "text": [
       {
         "entities": [
             {
@@ -83,7 +83,7 @@ Immediately return a structured JSON output in the following format:
                 "end": 170,
                 "score": 0.98
             }
-        ]  
+        ]
        }
       ]
     }
@@ -110,7 +110,7 @@ GEMINI_AVAILABLE_ENTITIES = {
     "TRADE_UNION-G": "- ** TRADE_UNION ** → Membership or involvement in a trade union. Example: “medlem av fagforeningen” (member of the labor union). If the text notes someone’s union membership or role, tag it under this category.",
     "BIOMETRIC_DATA-G": "- ** BIOMETRIC_DATA ** → Biometric identifiers used for identification. Tag fingerprints, DNA information, facial recognition data, or retinal scans if mentioned as personal data. Examples: “fingeravtrykk registrert”, “DNA-profiler”.",
     "GENETIC_DATA-G": "- ** GENETIC_DATA ** → Information about a person’s genetic traits or test results. Example: “bærer av BRCA1-genmutasjon” (carrier of the BRCA1 gene mutation).",
-    "CONTEXT-G": "- ** CONTEXT_SENSITIVE ** → Any other personal data that is sensitive due to context. Use this for information that doesn’t fall neatly into the above categories but could be sensitive when considering the individual’s situation. This includes details about vulnerable individuals (e.g., a child in foster care, a patient in a psychiatric unit) or sensitive situational info. Examples: references to a person’s family relationships (like being someone’s child or spouse in a context that needs anonymization), personal behavioral information or traits (e.g., “har problemer med oppmøte” – has attendance issues, which might be sensitive in an HR context), and other status indicators (e.g., “under etterforskning” – under investigation, if not already covered under criminal)."
+    "CONTEXT-G": "- ** CONTEXT_SENSITIVE ** → Any other personal data that is sensitive due to context. Use this for information that doesn’t fall neatly into the above categories but could be sensitive when considering the individual’s situation. This includes details about vulnerable individuals (e.g., a child in foster care, a patient in a psychiatric unit) or sensitive situational info. Examples: references to a person’s family relationships (like being someone’s child or spouse in a context that needs anonymization), personal behavioral information or traits (e.g., “har problemer med oppmøte” – has attendance issues, which might be sensitive in an HR context), and other status indicators (e.g., “under etterforskning” – under investigation, if not already covered under criminal).",
 }
 
 # System instruction for Gemini API with Norwegian support
@@ -170,7 +170,7 @@ Immediately return a structured JSON output in the following format:
 {
   "pages": [
     {
-      "text": [ 
+      "text": [
       {
         "entities": [
             {
@@ -181,7 +181,7 @@ Immediately return a structured JSON output in the following format:
                 "score": 0.99
             }
             // more entities as needed, but only of the types requested by the user
-        ]  
+        ]
        }
       ]
     }
@@ -190,7 +190,9 @@ Immediately return a structured JSON output in the following format:
 
 Only include entity types the user explicitly or implicitly asked for. Do not include extra categories. Maintain accurate start/end character indices from the original input text."""
 
-AI_SEARCH_GEMINI_AVAILABLE_ENTITIES = {"AI_Search": "- ** AI_Search ** → Any thing the user try to search for"}
+AI_SEARCH_GEMINI_AVAILABLE_ENTITIES = {
+    "AI_Search": "- ** AI_Search ** → Any thing the user try to search for"
+}
 
 AI_SEARCH_SYSTEM_INSTRUCTION = """
 You must strictly follow these system instructions while processing the text:

@@ -14,7 +14,7 @@ from backend.app.utils.security.caching_middleware import (
     get_cached_response,
     cache_response,
     clear_cached_response,
-    invalidate_cache
+    invalidate_cache,
 )
 from backend.app.utils.system_utils.synchronization_utils import LockPriority
 
@@ -27,19 +27,19 @@ class TestResponseCache(unittest.TestCase):
     def setUp(self):
 
         self.log_info_patcher = patch(
-            'backend.app.utils.security.caching_middleware.log_info'
+            "backend.app.utils.security.caching_middleware.log_info"
         )
 
         self.mock_log_info = self.log_info_patcher.start()
 
         self.log_warning_patcher = patch(
-            'backend.app.utils.security.caching_middleware.log_warning'
+            "backend.app.utils.security.caching_middleware.log_warning"
         )
 
         self.mock_log_warning = self.log_warning_patcher.start()
 
         self.timeout_lock_patcher = patch(
-            'backend.app.utils.security.caching_middleware.TimeoutLock'
+            "backend.app.utils.security.caching_middleware.TimeoutLock"
         )
 
         self.mock_timeout_lock = self.timeout_lock_patcher.start()
@@ -88,8 +88,7 @@ class TestResponseCache(unittest.TestCase):
         lock = self.cache.rwlock
 
         self.mock_timeout_lock.assert_called_once_with(
-            "response_cache_lock",
-            priority=LockPriority.LOW
+            "response_cache_lock", priority=LockPriority.LOW
         )
 
         self.assertIsNotNone(self.cache._rwlock)
@@ -112,9 +111,7 @@ class TestResponseCache(unittest.TestCase):
         self.assertIn("test_key", self.cache.access_times)
 
         self.assertAlmostEqual(
-            self.cache.access_times["test_key"],
-            current_time,
-            delta=1
+            self.cache.access_times["test_key"], current_time, delta=1
         )
 
     # retrieving an expired entry returns None
@@ -159,21 +156,17 @@ class TestResponseCache(unittest.TestCase):
         self.mock_log_warning.assert_called_once()
 
         self.assertIn(
-            "Error updating access time",
-            self.mock_log_warning.call_args[0][0]
+            "Error updating access time", self.mock_log_warning.call_args[0][0]
         )
 
     # setting a key with custom TTL and hash acquires lock
-    @patch('time.time')
+    @patch("time.time")
     def test_set_success(self, mock_time):
 
         mock_time.return_value = 1000.0
 
         result = self.cache.set(
-            "test_key",
-            "test_value",
-            ttl=120,
-            content_hash="test_hash"
+            "test_key", "test_value", ttl=120, content_hash="test_hash"
         )
 
         self.mock_lock_instance.acquire.assert_called_once_with(timeout=5.0)
@@ -186,15 +179,12 @@ class TestResponseCache(unittest.TestCase):
 
         self.assertEqual(self.cache.access_times["test_key"], 1000.0)
 
-        self.assertEqual(
-            self.cache.expiration_times["test_key"],
-            1120.0
-        )
+        self.assertEqual(self.cache.expiration_times["test_key"], 1120.0)
 
         self.assertEqual(self.cache.etags["test_key"], "test_hash")
 
     # setting a key without TTL uses default_ttl
-    @patch('time.time')
+    @patch("time.time")
     def test_set_with_default_ttl(self, mock_time):
 
         mock_time.return_value = 1000.0
@@ -203,17 +193,12 @@ class TestResponseCache(unittest.TestCase):
 
         self.assertTrue(result)
 
-        self.assertEqual(
-            self.cache.expiration_times["test_key"],
-            1060.0
-        )
+        self.assertEqual(self.cache.expiration_times["test_key"], 1060.0)
 
     # lock acquisition timeout returns False
     def test_set_lock_timeout(self):
 
-        self.mock_lock_instance.acquire.side_effect = TimeoutError(
-            "Lock timeout"
-        )
+        self.mock_lock_instance.acquire.side_effect = TimeoutError("Lock timeout")
 
         result = self.cache.set("test_key", "test_value")
 
@@ -226,7 +211,7 @@ class TestResponseCache(unittest.TestCase):
         self.assertNotIn("test_key", self.cache.cache)
 
     # expired entries cleaned when cache full
-    @patch('time.time')
+    @patch("time.time")
     def test_set_with_cleanup_expired(self, mock_time):
 
         mock_time.return_value = 1000.0
@@ -255,7 +240,7 @@ class TestResponseCache(unittest.TestCase):
         self.assertEqual(self.cache.cache["new_key"], "new_value")
 
     # LRU removal when cache still full after cleanup
-    @patch('time.time')
+    @patch("time.time")
     def test_set_with_lru_removal(self, mock_time):
 
         mock_time.return_value = 1000.0
@@ -319,9 +304,7 @@ class TestResponseCache(unittest.TestCase):
 
         self.cache.cache["test_key"] = "test_value"
 
-        self.mock_lock_instance.acquire.side_effect = TimeoutError(
-            "Lock timeout"
-        )
+        self.mock_lock_instance.acquire.side_effect = TimeoutError("Lock timeout")
 
         result = self.cache.delete("test_key")
 
@@ -367,9 +350,7 @@ class TestResponseCache(unittest.TestCase):
 
         self.cache.cache = {"key1": "value1", "key2": "value2"}
 
-        self.mock_lock_instance.acquire.side_effect = TimeoutError(
-            "Lock timeout"
-        )
+        self.mock_lock_instance.acquire.side_effect = TimeoutError("Lock timeout")
 
         result = self.cache.clear()
 
@@ -382,7 +363,7 @@ class TestResponseCache(unittest.TestCase):
         )
 
     # internal cleanup removes only expired entries
-    @patch('time.time')
+    @patch("time.time")
     def test_cleanup_expired_internal(self, mock_time):
 
         mock_time.return_value = 1000.0
@@ -391,28 +372,28 @@ class TestResponseCache(unittest.TestCase):
             "expired1": "value1",
             "expired2": "value2",
             "valid1": "value3",
-            "valid2": "value4"
+            "valid2": "value4",
         }
 
         self.cache.access_times = {
             "expired1": 900.0,
             "expired2": 950.0,
             "valid1": 980.0,
-            "valid2": 990.0
+            "valid2": 990.0,
         }
 
         self.cache.expiration_times = {
             "expired1": 990.0,
             "expired2": 995.0,
             "valid1": 1100.0,
-            "valid2": 1200.0
+            "valid2": 1200.0,
         }
 
         self.cache.etags = {
             "expired1": "hash1",
             "expired2": "hash2",
             "valid1": "hash3",
-            "valid2": "hash4"
+            "valid2": "hash4",
         }
 
         removed = self.cache._cleanup_expired()
@@ -453,11 +434,7 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.paths = ["/test", "/api"]
 
-        self.middleware = CacheMiddleware(
-            app=DummyApp(),
-            paths=self.paths,
-            ttl=300
-        )
+        self.middleware = CacheMiddleware(app=DummyApp(), paths=self.paths, ttl=300)
 
         response_cache.cache.clear()
 
@@ -469,23 +446,15 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
 
     # path matching prefixes should be cached
     async def test_should_cache_path_positive(self):
-        self.assertTrue(
-            self.middleware._should_cache_path("/test/resource")
-        )
+        self.assertTrue(self.middleware._should_cache_path("/test/resource"))
 
-        self.assertTrue(
-            self.middleware._should_cache_path("/api/data")
-        )
+        self.assertTrue(self.middleware._should_cache_path("/api/data"))
 
     # non-matching paths should not be cached
     async def test_should_cache_path_negative(self):
-        self.assertFalse(
-            self.middleware._should_cache_path("/other/path")
-        )
+        self.assertFalse(self.middleware._should_cache_path("/other/path"))
 
-        self.assertFalse(
-            self.middleware._should_cache_path("/static/image.png")
-        )
+        self.assertFalse(self.middleware._should_cache_path("/static/image.png"))
 
     # non-GET/POST methods bypass caching
     async def test_dispatch_non_cached_method(self):
@@ -500,7 +469,7 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
         dummy_response = Response(
             content=b"put response",
             status_code=200,
-            headers={"Content-Type": "text/plain"}
+            headers={"Content-Type": "text/plain"},
         )
 
         call_next = AsyncMock(return_value=dummy_response)
@@ -531,7 +500,7 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
         dummy_response = Response(
             content=b"default response",
             status_code=200,
-            headers={"Content-Type": "text/plain"}
+            headers={"Content-Type": "text/plain"},
         )
 
         call_next = AsyncMock(return_value=dummy_response)
@@ -557,15 +526,10 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
         key = await self.middleware.cache_key_builder(dummy_request)
 
         cached_data = {
-
             "content": b"cached content",
-
             "status_code": 200,
-
             "headers": {"Content-Type": "text/plain"},
-
-            "media_type": "text/plain"
-
+            "media_type": "text/plain",
         }
 
         response_cache.set(key, cached_data, ttl=300, content_hash="dummyhash")
@@ -597,15 +561,10 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
         cached_content = b"cached content"
 
         cached_data = {
-
             "content": cached_content,
-
             "status_code": 200,
-
             "headers": {"Content-Type": "text/plain"},
-
-            "media_type": "text/plain"
-
+            "media_type": "text/plain",
         }
 
         response_cache.set(key, cached_data, ttl=300, content_hash="dummyhash")
@@ -635,13 +594,9 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
         dummy_request.body = AsyncMock(return_value=b"request body")
 
         original_response = Response(
-
             content=b"fresh response",
-
             status_code=200,
-
-            headers={"Content-Type": "text/plain"}
-
+            headers={"Content-Type": "text/plain"},
         )
 
         async def fake_body_iterator():
@@ -680,13 +635,9 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
         dummy_request.body = AsyncMock(return_value=b"")
 
         original_response = Response(
-
             content=b"not found",
-
             status_code=404,
-
-            headers={"Content-Type": "text/plain"}
-
+            headers={"Content-Type": "text/plain"},
         )
 
         async def fake_body_iterator():
@@ -714,15 +665,13 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
 
         dummy_request.query_params = QueryParams({})
 
-        dummy_request.headers = Headers({
-
-            "content-type": "multipart/form-data; boundary=---test",
-
-            "Accept": "application/json",
-
-            "Accept-Encoding": "gzip"
-
-        })
+        dummy_request.headers = Headers(
+            {
+                "content-type": "multipart/form-data; boundary=---test",
+                "Accept": "application/json",
+                "Accept-Encoding": "gzip",
+            }
+        )
 
         dummy_request.body = AsyncMock(return_value=b"raw multipart data")
 
@@ -743,17 +692,11 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(key), 64)
 
         base_components = [
-
             "POST",
-
             "/test/upload",
-
             str(sorted(dummy_request.query_params.items())),
-
             "application/json",
-
-            "gzip"
-
+            "gzip",
         ]
 
         file_hash = hashlib.sha256(b"file content").hexdigest()
@@ -765,9 +708,7 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
         base_components.append(sorted([field_component, normal_component]))
 
         expected_key = hashlib.sha256(
-
             json.dumps(base_components, sort_keys=True).encode()
-
         ).hexdigest()
 
         self.assertEqual(key, expected_key)
@@ -782,15 +723,13 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
 
         dummy_request.query_params = QueryParams({})
 
-        dummy_request.headers = Headers({
-
-            "content-type": "multipart/form-data; boundary=---test",
-
-            "Accept": "application/json",
-
-            "Accept-Encoding": "gzip"
-
-        })
+        dummy_request.headers = Headers(
+            {
+                "content-type": "multipart/form-data; boundary=---test",
+                "Accept": "application/json",
+                "Accept-Encoding": "gzip",
+            }
+        )
 
         dummy_request.body = AsyncMock(side_effect=Exception("read error"))
 
@@ -810,15 +749,13 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
 
         dummy_request.query_params = QueryParams({"q": "value"})
 
-        dummy_request.headers = Headers({
-
-            "Accept": "application/json",
-
-            "Accept-Encoding": "gzip",
-
-            "content-type": "application/json"
-
-        })
+        dummy_request.headers = Headers(
+            {
+                "Accept": "application/json",
+                "Accept-Encoding": "gzip",
+                "content-type": "application/json",
+            }
+        )
 
         dummy_request.body = AsyncMock(return_value=b"get body")
 
@@ -827,25 +764,16 @@ class TestCacheMiddleware(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(key), 64)
 
         base_components = [
-
             "GET",
-
             "/api/data",
-
             str(sorted(dummy_request.query_params.items())),
-
             "application/json",
-
             "gzip",
-
-            b"get body".hex()
-
+            b"get body".hex(),
         ]
 
         expected_key = hashlib.sha256(
-
             json.dumps(base_components, sort_keys=True).encode()
-
         ).hexdigest()
 
         self.assertEqual(key, expected_key)
@@ -868,15 +796,10 @@ class TestUtilityFunctions(unittest.TestCase):
     # retrieving via util returns stored data
     def test_get_cached_response_util(self):
         data = {
-
             "content": b"util",
-
             "status_code": 200,
-
             "headers": {},
-
-            "media_type": "text/plain"
-
+            "media_type": "text/plain",
         }
 
         response_cache.cache["test_util"] = data
@@ -890,15 +813,10 @@ class TestUtilityFunctions(unittest.TestCase):
     # cache_response utility stores data
     def test_cache_response_util(self):
         data = {
-
             "content": b"cached",
-
             "status_code": 200,
-
             "headers": {},
-
-            "media_type": "text/plain"
-
+            "media_type": "text/plain",
         }
 
         result = cache_response("test_key", data, ttl=120)

@@ -35,6 +35,7 @@ class SessionEncryptionManager:
     Manages secure session validation, API key fetching, encryption, and decryption.
     Enforces singleton usage to maintain a single configuration instance at runtime.
     """
+
     # Holds the singleton instance once initialized
     _instance: Optional["SessionEncryptionManager"] = None
 
@@ -47,7 +48,9 @@ class SessionEncryptionManager:
         """
         # Prevent multiple instantiations of the singleton
         if SessionEncryptionManager._instance is not None:
-            raise RuntimeError("SessionEncryptionManager is a singleton! Use get_instance().")
+            raise RuntimeError(
+                "SessionEncryptionManager is a singleton! Use get_instance()."
+            )
 
         # Determine backend URL from constructor or environment
         url = go_backend_url or os.getenv("GO_BACKEND_URL")
@@ -132,7 +135,9 @@ class SessionEncryptionManager:
                         return body["data"]["key"]
                     # Raise if any non-200 status code
                     else:
-                        raise ValueError(f"Failed to retrieve API key, status code: {resp.status}")
+                        raise ValueError(
+                            f"Failed to retrieve API key, status code: {resp.status}"
+                        )
         except aiohttp.ClientError as e:
             # Handle network issues securely
             error_info = SecurityAwareErrorHandler.handle_safe_error(
@@ -250,7 +255,10 @@ class SessionEncryptionManager:
         """
         try:
             # Apply decrypt_bytes to each file
-            return [SessionEncryptionManager.decrypt_bytes(content, api_key) for content in files]
+            return [
+                SessionEncryptionManager.decrypt_bytes(content, api_key)
+                for content in files
+            ]
         except Exception as e:
             # Handle batch decryption errors securely
             error_info = SecurityAwareErrorHandler.handle_safe_error(
@@ -272,9 +280,11 @@ class SessionEncryptionManager:
         """
         try:
             # Decrypt to bytes first
-            decrypted_bytes = SessionEncryptionManager.decrypt_bytes(encrypted_text, api_key)
+            decrypted_bytes = SessionEncryptionManager.decrypt_bytes(
+                encrypted_text, api_key
+            )
             # Decode bytes to string
-            return decrypted_bytes.decode('utf-8')
+            return decrypted_bytes.decode("utf-8")
         except Exception as e:
             # Secure text decryption error handling
             error_info = SecurityAwareErrorHandler.handle_safe_error(
@@ -304,7 +314,9 @@ class SessionEncryptionManager:
             )
             raise HTTPException(status_code=400, detail=error_info)
 
-    async def validate_and_fetch_api_key(self, session_key: str, api_key_id: str) -> str:
+    async def validate_and_fetch_api_key(
+        self, session_key: str, api_key_id: str
+    ) -> str:
         """
         Combined workflow to validate session and fetch API key.
 
@@ -317,7 +329,9 @@ class SessionEncryptionManager:
         """
         # Ensure both headers are provided
         if not session_key or not api_key_id:
-            raise HTTPException(status_code=400, detail="Missing session_key or api_key_id in headers")
+            raise HTTPException(
+                status_code=400, detail="Missing session_key or api_key_id in headers"
+            )
         # Validate the session token
         valid = await self.validate_session_key(session_key)
         # Reject if token is invalid
@@ -327,12 +341,12 @@ class SessionEncryptionManager:
         return await self.fetch_api_key(session_key, api_key_id)
 
     async def prepare_inputs(
-            self,
-            files: List[UploadFile],
-            form_fields: Dict[str, Optional[str]],
-            session_key: Optional[str],
-            api_key_id: Optional[str],
-            raw_api_key: Optional[str]
+        self,
+        files: List[UploadFile],
+        form_fields: Dict[str, Optional[str]],
+        session_key: Optional[str],
+        api_key_id: Optional[str],
+        raw_api_key: Optional[str],
     ) -> Tuple[List[UploadFile], Dict[str, Optional[str]], Optional[str]]:
         """
         Dispatch to the correct input-preparation mode and handle errors securely.
@@ -363,9 +377,7 @@ class SessionEncryptionManager:
 
             # Raw-API-key mode if provided
             if raw_api_key:
-                return await self._prepare_raw_inputs(
-                    files, form_fields, raw_api_key
-                )
+                return await self._prepare_raw_inputs(files, form_fields, raw_api_key)
 
             # Public mode: no decryption or encryption
             return files, form_fields, None
@@ -381,11 +393,11 @@ class SessionEncryptionManager:
             raise HTTPException(status_code=400, detail=error_info)
 
     async def _prepare_session_inputs(
-            self,
-            files: List[UploadFile],
-            form_fields: Dict[str, Optional[str]],
-            session_key: str,
-            api_key_id: str
+        self,
+        files: List[UploadFile],
+        form_fields: Dict[str, Optional[str]],
+        session_key: str,
+        api_key_id: str,
     ) -> Tuple[List[UploadFile], Dict[str, Optional[str]], str]:
         """
         Perform strict decryption of all inputs using a session-validated key.
@@ -424,15 +436,12 @@ class SessionEncryptionManager:
                     except Exception:
                         # Client provided invalid Base64 string
                         raise HTTPException(
-                            status_code=400,
-                            detail=f"Invalid Base64 for field '{name}'"
+                            status_code=400, detail=f"Invalid Base64 for field '{name}'"
                         )
 
             # Decrypt files and form fields using the AES key
             files_out, fields_out = await self._decrypt_with_key(
-                files=files,
-                encrypted_fields=decoded,
-                api_key=api_key
+                files=files, encrypted_fields=decoded, api_key=api_key
             )
 
             # Return decrypted data and the AES key
@@ -449,10 +458,10 @@ class SessionEncryptionManager:
             raise HTTPException(status_code=400, detail=error_info)
 
     async def _prepare_raw_inputs(
-            self,
-            files: List[UploadFile],
-            form_fields: Dict[str, Optional[str]],
-            raw_api_key: str
+        self,
+        files: List[UploadFile],
+        form_fields: Dict[str, Optional[str]],
+        raw_api_key: str,
     ) -> Tuple[List[UploadFile], Dict[str, Optional[str]], Optional[str]]:
         """
         Handle raw-API-key mode: validate the key, attempt to decrypt each field and file,
@@ -500,7 +509,6 @@ class SessionEncryptionManager:
             return files_out, fields_out, (api_key if decrypted_any else None)
 
         except HTTPException:
-            # Propagate known HTTPExceptions (e.g., invalid key) unchanged
             raise
         except Exception as e:
             # Handle unexpected errors through the secure error handler
@@ -510,11 +518,7 @@ class SessionEncryptionManager:
             # Raise a generic HTTPException with sanitized info
             raise HTTPException(status_code=400, detail=info)
 
-    async def _process_raw_field(
-            self,
-            val: str,
-            api_key: str
-    ) -> Tuple[str, bool]:
+    async def _process_raw_field(self, val: str, api_key: str) -> Tuple[str, bool]:
         """
         Try to Base64-decode and AES-GCM decrypt a single form field value.
         Fallback to plaintext on any failure.
@@ -548,9 +552,7 @@ class SessionEncryptionManager:
             return blob.decode(errors="ignore"), False
 
     async def _process_raw_files(
-            self,
-            files: List[UploadFile],
-            api_key: str
+        self, files: List[UploadFile], api_key: str
     ) -> Tuple[List[UploadFile], bool]:
         """
         Attempt AES-GCM decryption on each uploaded file.
@@ -587,7 +589,7 @@ class SessionEncryptionManager:
                 new_upload = UploadFile(
                     filename=orig.filename,
                     file=BytesIO(decrypted),
-                    headers=orig.headers
+                    headers=orig.headers,
                 )
                 processed.append(new_upload)
                 decrypted_any = True
@@ -600,10 +602,10 @@ class SessionEncryptionManager:
         return processed, decrypted_any
 
     async def _decrypt_with_key(
-            self,
-            files: List[UploadFile],
-            encrypted_fields: Dict[str, Optional[bytes]],
-            api_key: str
+        self,
+        files: List[UploadFile],
+        encrypted_fields: Dict[str, Optional[bytes]],
+        api_key: str,
     ) -> Tuple[List[UploadFile], Dict[str, Optional[str]]]:
         """
         Decrypt-only helper: assumes the AES key is already validated and provided.
@@ -634,7 +636,7 @@ class SessionEncryptionManager:
                 new_upload = UploadFile(
                     filename=f.filename,
                     file=BytesIO(decrypted_bytes),
-                    headers=f.headers
+                    headers=f.headers,
                 )
                 files_out.append(new_upload)
 
@@ -661,11 +663,7 @@ class SessionEncryptionManager:
             )
             raise HTTPException(status_code=400, detail=error_info)
 
-    def wrap_response(
-            self,
-            result: Dict,
-            api_key: Optional[str]
-    ) -> JSONResponse:
+    def wrap_response(self, result: Dict, api_key: Optional[str]) -> JSONResponse:
         """
         Conditionally encrypt outgoing JSON payload if an API key is provided.
 

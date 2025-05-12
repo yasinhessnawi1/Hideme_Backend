@@ -19,9 +19,9 @@ from backend.app.utils.logging.logger import log_info
 
 
 def sanitize_detection_output(
-        entities: List[Dict[str, Any]],
-        redaction_mapping: Dict[str, Any],
-        processing_times: Optional[Dict[str, float]] = None
+    entities: List[Dict[str, Any]],
+    redaction_mapping: Dict[str, Any],
+    processing_times: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
     """
     Sanitize and standardize entity detection output for API responses.
@@ -63,8 +63,8 @@ def sanitize_detection_output(
         "entities_detected": {
             "total": len(unique_entities),
             "by_type": entities_by_type,
-            "by_page": entities_per_page
-        }
+            "by_page": entities_per_page,
+        },
     }
 
     # If processing time metrics are provided, add them into the response.
@@ -80,7 +80,9 @@ def sanitize_detection_output(
         response["performance"] = {"sanitize_time": sanitize_time}
 
     # Log sanitization statistics including the number of entities reduced and elapsed time.
-    log_info(f"[SANITIZE] Sanitized output: {len(entities)} → {len(unique_entities)} entities in {sanitize_time:.4f}s")
+    log_info(
+        f"[SANITIZE] Sanitized output: {len(entities)} → {len(unique_entities)} entities in {sanitize_time:.4f}s"
+    )
 
     # Return the final standardized and sanitized response.
     return response
@@ -106,7 +108,7 @@ def deduplicate_entities(entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         entity_key = (
             entity.get("entity_type", "UNKNOWN"),
             entity.get("start", 0),
-            entity.get("end", 0)
+            entity.get("end", 0),
         )
 
         # Get the confidence score of the current entity.
@@ -161,7 +163,7 @@ def deduplicate_redaction_mapping(redaction_mapping: Dict[str, Any]) -> Dict[str
                     round(float(bbox.get("x0", 0)), 1),
                     round(float(bbox.get("y0", 0)), 1),
                     round(float(bbox.get("x1", 0)), 1),
-                    round(float(bbox.get("y1", 0)), 1)
+                    round(float(bbox.get("y1", 0)), 1),
                 )
 
             # Create a unique key for the item.
@@ -169,7 +171,7 @@ def deduplicate_redaction_mapping(redaction_mapping: Dict[str, Any]) -> Dict[str
                 item.get("entity_type", "UNKNOWN"),
                 item.get("start", 0),
                 item.get("end", 0),
-                bbox_key
+                bbox_key,
             )
 
             # Get the score for the sensitive item.
@@ -183,16 +185,17 @@ def deduplicate_redaction_mapping(redaction_mapping: Dict[str, Any]) -> Dict[str
                 unique_items[item_key] = item
 
         # Append the deduplicated items for this page into sanitized mapping.
-        sanitized_mapping["pages"].append({
-            "page": page_num,
-            "sensitive": list(unique_items.values())
-        })
+        sanitized_mapping["pages"].append(
+            {"page": page_num, "sensitive": list(unique_items.values())}
+        )
 
     # Return the deduplicated redaction mapping.
     return sanitized_mapping
 
 
-def deduplicate_bbox(search_results: List[Dict[str, Any]], precision: int = 1) -> List[Dict[str, Any]]:
+def deduplicate_bbox(
+    search_results: List[Dict[str, Any]], precision: int = 1
+) -> List[Dict[str, Any]]:
     """
     Remove duplicate search results based on bounding box coordinates.
 
@@ -217,7 +220,7 @@ def deduplicate_bbox(search_results: List[Dict[str, Any]], precision: int = 1) -
                 round(float(bbox.get("x0", 0)), precision),
                 round(float(bbox.get("y0", 0)), precision),
                 round(float(bbox.get("x1", 0)), precision),
-                round(float(bbox.get("y1", 0)), precision)
+                round(float(bbox.get("y1", 0)), precision),
             )
             # Add the result if it hasn't been seen before.
             if bbox_key not in unique_results:
@@ -371,7 +374,9 @@ def process_pages_list(pages: list, engine_name: str) -> list:
     return new_pages
 
 
-def replace_original_text_in_redaction(redaction_mapping: dict, engine_name: str = "UNKNOWN") -> dict:
+def replace_original_text_in_redaction(
+    redaction_mapping: dict, engine_name: str = "UNKNOWN"
+) -> dict:
     """
     Replace the 'original_text' key in redaction mapping with 'engine' for each sensitive item.
 
@@ -384,6 +389,8 @@ def replace_original_text_in_redaction(redaction_mapping: dict, engine_name: str
     """
     # If "pages" in redaction_mapping is a list, process each page.
     if isinstance(redaction_mapping.get("pages"), list):
-        redaction_mapping["pages"] = process_pages_list(redaction_mapping["pages"], engine_name)
+        redaction_mapping["pages"] = process_pages_list(
+            redaction_mapping["pages"], engine_name
+        )
     # Return the updated redaction mapping.
     return redaction_mapping

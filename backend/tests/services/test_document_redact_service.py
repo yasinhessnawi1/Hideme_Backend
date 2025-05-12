@@ -21,9 +21,13 @@ class TestDocumentRedactionService(unittest.IsolatedAsyncioTestCase):
     # Test successful redaction returns StreamingResponse with redaction header
     @patch("backend.app.services.document_redact_service.read_and_validate_file")
     @patch("backend.app.services.document_redact_service.PDFRedactionService")
-    @patch("backend.app.services.document_redact_service.memory_monitor.get_memory_stats",
-           return_value={"current_usage": 50.0, "peak_usage": 75.0})
-    async def test_redact_success(self, mock_memory, mock_redactor_class, mock_validate):
+    @patch(
+        "backend.app.services.document_redact_service.memory_monitor.get_memory_stats",
+        return_value={"current_usage": 50.0, "peak_usage": 75.0},
+    )
+    async def test_redact_success(
+        self, mock_memory, mock_redactor_class, mock_validate
+    ):
         mock_validate.return_value = (b"pdf-bytes", None, 0.1)
 
         mock_redactor = MagicMock()
@@ -43,8 +47,10 @@ class TestDocumentRedactionService(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.headers["X-Redactions-Applied"], "1")
 
     # Test JSONResponse returned when file validation fails
-    @patch("backend.app.services.document_redact_service.read_and_validate_file",
-           return_value=(None, JSONResponse(content={"error": "invalid"}), 0))
+    @patch(
+        "backend.app.services.document_redact_service.read_and_validate_file",
+        return_value=(None, JSONResponse(content={"error": "invalid"}), 0),
+    )
     async def test_redact_file_validation_error(self, mock_validate):
         file = DummyFile()
 
@@ -55,9 +61,14 @@ class TestDocumentRedactionService(unittest.IsolatedAsyncioTestCase):
         self.assertIn("error", response.body.decode())
 
     # Test JSONResponse returned when internal redaction service fails
-    @patch("backend.app.services.document_redact_service.read_and_validate_file",
-           return_value=(b"valid-bytes", None, 0))
-    @patch("backend.app.services.document_redact_service.PDFRedactionService", side_effect=Exception("crash"))
+    @patch(
+        "backend.app.services.document_redact_service.read_and_validate_file",
+        return_value=(b"valid-bytes", None, 0),
+    )
+    @patch(
+        "backend.app.services.document_redact_service.PDFRedactionService",
+        side_effect=Exception("crash"),
+    )
     async def test_redact_internal_redaction_failure(self, mock_redact, mock_validate):
         file = DummyFile()
 
@@ -72,21 +83,18 @@ class TestDocumentRedactionService(unittest.IsolatedAsyncioTestCase):
     # Test parsing a valid redaction mapping returns count and no error
     def test_parse_redaction_mapping_valid(self):
         result, count, err = DocumentRedactionService._parse_redaction_mapping(
-
             '{"pages": [{"page": 1, "sensitive": ["a"]}]}', "file.pdf", "op1"
-
         )
 
         self.assertEqual(count, 1)
 
         self.assertIsNone(err)
 
-    @patch("backend.app.services.document_redact_service.SecurityAwareErrorHandler.handle_safe_error")
+    @patch(
+        "backend.app.services.document_redact_service.SecurityAwareErrorHandler.handle_safe_error"
+    )
     def test_parse_redaction_mapping_invalid(self, mock_safe_error):
-        mock_safe_error.return_value = {
-            "status_code": 400,
-            "detail": "Invalid JSON"
-        }
+        mock_safe_error.return_value = {"status_code": 400, "detail": "Invalid JSON"}
 
         result, count, err = DocumentRedactionService._parse_redaction_mapping(
             "not-json", "file.pdf", "op2"
@@ -103,9 +111,7 @@ class TestDocumentRedactionService(unittest.IsolatedAsyncioTestCase):
     # Test parsing None mapping returns empty pages and no error
     def test_parse_redaction_mapping_none(self):
         result, count, err = DocumentRedactionService._parse_redaction_mapping(
-
             None, "file.pdf", "op3"
-
         )
 
         self.assertEqual(count, 0)
@@ -115,8 +121,10 @@ class TestDocumentRedactionService(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(err)
 
     # Test redact method handles unhandled exceptions and returns error JSONResponse
-    @patch("backend.app.services.document_redact_service.read_and_validate_file",
-           return_value=(b"valid-bytes", None, 0))
+    @patch(
+        "backend.app.services.document_redact_service.read_and_validate_file",
+        return_value=(b"valid-bytes", None, 0),
+    )
     async def test_redact_unhandled_exception(self, mock_validate):
         service = DocumentRedactionService()
 

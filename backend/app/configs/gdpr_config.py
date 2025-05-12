@@ -55,6 +55,6 @@ GDPR_DOCUMENTATION = {
         "Privacy by design",
         "Secure temporary file handling",
         "Processing records",
-        "Proper data deletion"
-    ]
+        "Proper data deletion",
+    ],
 }

@@ -15,7 +15,7 @@ from backend.app.utils.validation.file_validation import (
     validate_file_safety,
     validate_file_content,
     validate_file_content_async,
-    read_and_validate_file
+    read_and_validate_file,
 )
 
 
@@ -33,29 +33,17 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.pdf_with_acroform = b"%PDF-1.5\n/AcroForm Some AcroForm content"
 
         self.mock_file_signatures = {
-
             "pdf": [(b"%PDF", 0)],
-
-            "jpg": [(b"\xFF\xD8\xFF", 0)],
-
-            "png": [(b"\x89PNG\r\n\x1A\n", 0)]
-
+            "jpg": [(b"\xff\xd8\xff", 0)],
+            "png": [(b"\x89PNG\r\n\x1a\n", 0)],
         }
 
-        self.mock_allowed_mime_types = {
-
-            "pdf": {"application/pdf", "application/x-pdf"}
-
-        }
+        self.mock_allowed_mime_types = {"pdf": {"application/pdf", "application/x-pdf"}}
 
         self.mock_extension_to_mime = {
-
             ".pdf": "application/pdf",
-
             ".jpg": "image/jpeg",
-
-            ".png": "image/png"
-
+            ".png": "image/png",
         }
 
         self.mock_application_word = "application/pdf"
@@ -67,14 +55,18 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         pass
 
     # Test get_file_signature with valid signature
-    @patch('backend.app.utils.constant.constant.FILE_SIGNATURES', {"pdf": [(b"%PDF", 0)]})
+    @patch(
+        "backend.app.utils.constant.constant.FILE_SIGNATURES", {"pdf": [(b"%PDF", 0)]}
+    )
     def test_get_file_signature_positive(self):
         result = get_file_signature(self.valid_pdf_content)
 
         self.assertEqual(result, "pdf")
 
     # Test get_file_signature returns None on invalid data
-    @patch('backend.app.utils.constant.constant.FILE_SIGNATURES', {"pdf": [(b"%PDF", 0)]})
+    @patch(
+        "backend.app.utils.constant.constant.FILE_SIGNATURES", {"pdf": [(b"%PDF", 0)]}
+    )
     def test_get_file_signature_negative(self):
         result = get_file_signature(self.invalid_pdf_content)
 
@@ -89,9 +81,12 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result)
 
     # Test get_mime_type_from_buffer uses extension mapping
-    @patch('backend.app.utils.constant.constant.EXTENSION_TO_MIME', {".pdf": "application/pdf"})
-    @patch('backend.app.utils.constant.constant.APPLICATION_WORD', "application/pdf")
-    @patch('backend.app.utils.validation.file_validation.get_file_signature')
+    @patch(
+        "backend.app.utils.constant.constant.EXTENSION_TO_MIME",
+        {".pdf": "application/pdf"},
+    )
+    @patch("backend.app.utils.constant.constant.APPLICATION_WORD", "application/pdf")
+    @patch("backend.app.utils.validation.file_validation.get_file_signature")
     def test_get_mime_type_from_buffer_with_filename(self, mock_get_file_signature):
         mock_get_file_signature.return_value = "pdf"
 
@@ -101,10 +96,12 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
 
         mock_get_file_signature.assert_not_called()
 
-    @patch('backend.app.utils.validation.file_validation.EXTENSION_TO_MIME', {})
-    @patch('mimetypes.guess_type')
-    @patch('backend.app.utils.validation.file_validation.get_file_signature')
-    def test_get_mime_type_from_buffer_with_mimetypes(self, mock_get_file_signature, mock_guess_type):
+    @patch("backend.app.utils.validation.file_validation.EXTENSION_TO_MIME", {})
+    @patch("mimetypes.guess_type")
+    @patch("backend.app.utils.validation.file_validation.get_file_signature")
+    def test_get_mime_type_from_buffer_with_mimetypes(
+        self, mock_get_file_signature, mock_guess_type
+    ):
         mock_guess_type.return_value = ("application/pdf", None)
 
         mock_get_file_signature.return_value = None
@@ -116,11 +113,13 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         mock_guess_type.assert_called_once_with("document.pdf")
 
     # Test get_mime_type_from_buffer inspects content when needed
-    @patch('backend.app.utils.constant.constant.EXTENSION_TO_MIME', {})
-    @patch('mimetypes.guess_type')
-    @patch('backend.app.utils.validation.file_validation.get_file_signature')
-    @patch('backend.app.utils.constant.constant.APPLICATION_WORD', "application/pdf")
-    def test_get_mime_type_from_buffer_with_content(self, mock_get_file_signature, mock_guess_type):
+    @patch("backend.app.utils.constant.constant.EXTENSION_TO_MIME", {})
+    @patch("mimetypes.guess_type")
+    @patch("backend.app.utils.validation.file_validation.get_file_signature")
+    @patch("backend.app.utils.constant.constant.APPLICATION_WORD", "application/pdf")
+    def test_get_mime_type_from_buffer_with_content(
+        self, mock_get_file_signature, mock_guess_type
+    ):
         mock_guess_type.return_value = (None, None)
 
         mock_get_file_signature.return_value = "pdf"
@@ -144,10 +143,12 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(file_obj.tell(), 0)
 
     # Test get_mime_type_from_buffer defaults unknown to octet-stream
-    @patch('backend.app.utils.constant.constant.EXTENSION_TO_MIME', {})
-    @patch('mimetypes.guess_type')
-    @patch('backend.app.utils.validation.file_validation.get_file_signature')
-    def test_get_mime_type_from_buffer_unknown(self, mock_get_file_signature, mock_guess_type):
+    @patch("backend.app.utils.constant.constant.EXTENSION_TO_MIME", {})
+    @patch("mimetypes.guess_type")
+    @patch("backend.app.utils.validation.file_validation.get_file_signature")
+    def test_get_mime_type_from_buffer_unknown(
+        self, mock_get_file_signature, mock_guess_type
+    ):
         mock_guess_type.return_value = (None, None)
 
         mock_get_file_signature.return_value = None
@@ -180,7 +181,7 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, "malicious.pdf")
 
-        result = sanitize_filename("bad\x01file\x1F.pdf")
+        result = sanitize_filename("bad\x01file\x1f.pdf")
 
         self.assertEqual(result, "badfile.pdf")
 
@@ -195,7 +196,7 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(len(result), 255)
 
     # Test sanitize_filename adds randomness when enabled
-    @patch('os.environ.get')
+    @patch("os.environ.get")
     def test_sanitize_filename_with_randomization(self, mock_environ_get):
         mock_environ_get.return_value = "true"
 
@@ -208,7 +209,10 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(len(result), len("document.pdf"))
 
     # Test validate_mime_type accepts allowed types
-    @patch('backend.app.utils.constant.constant.ALLOWED_MIME_TYPES', {"pdf": {"application/pdf", "application/x-pdf"}})
+    @patch(
+        "backend.app.utils.constant.constant.ALLOWED_MIME_TYPES",
+        {"pdf": {"application/pdf", "application/x-pdf"}},
+    )
     def test_validate_mime_type_positive(self):
         result = validate_mime_type("application/pdf")
 
@@ -223,7 +227,10 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
 
     # Test validate_mime_type rejects invalid types
-    @patch('backend.app.utils.constant.constant.ALLOWED_MIME_TYPES', {"pdf": {"application/pdf", "application/x-pdf"}})
+    @patch(
+        "backend.app.utils.constant.constant.ALLOWED_MIME_TYPES",
+        {"pdf": {"application/pdf", "application/x-pdf"}},
+    )
     def test_validate_mime_type_negative(self):
         result = validate_mime_type("image/jpeg")
 
@@ -262,8 +269,8 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result)
 
     # Test _check_pdf_javascript blocks or warns based on config
-    @patch('os.environ.get')
-    @patch('backend.app.utils.validation.file_validation._logger')
+    @patch("os.environ.get")
+    @patch("backend.app.utils.validation.file_validation._logger")
     def test_check_pdf_javascript_blocking_enabled(self, mock_logger, mock_environ_get):
         mock_environ_get.return_value = "true"
 
@@ -276,9 +283,11 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         mock_logger.warning.assert_not_called()
 
     # Test _check_pdf_javascript warns when blocking disabled
-    @patch('os.environ.get')
-    @patch('backend.app.utils.validation.file_validation._logger')
-    def test_check_pdf_javascript_blocking_disabled(self, mock_logger, mock_environ_get):
+    @patch("os.environ.get")
+    @patch("backend.app.utils.validation.file_validation._logger")
+    def test_check_pdf_javascript_blocking_disabled(
+        self, mock_logger, mock_environ_get
+    ):
         mock_environ_get.return_value = "false"
 
         is_safe, reason = _check_pdf_javascript(self.pdf_with_js, "test.pdf")
@@ -287,14 +296,18 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(reason, "")
 
-        mock_logger.warning.assert_called_once_with("PDF contains JavaScript: %s", "test.pdf")
+        mock_logger.warning.assert_called_once_with(
+            "PDF contains JavaScript: %s", "test.pdf"
+        )
 
     # Test _check_pdf_acroform logs warning if present
-    @patch('backend.app.utils.validation.file_validation._logger')
+    @patch("backend.app.utils.validation.file_validation._logger")
     def test_check_pdf_acroform(self, mock_logger):
         _check_pdf_acroform(self.pdf_with_acroform, "test.pdf")
 
-        mock_logger.warning.assert_called_once_with("PDF contains AcroForm: %s", "test.pdf")
+        mock_logger.warning.assert_called_once_with(
+            "PDF contains AcroForm: %s", "test.pdf"
+        )
 
         mock_logger.reset_mock()
 
@@ -303,10 +316,12 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         mock_logger.warning.assert_not_called()
 
     # Test validate_file_safety positive PDF case
-    @patch('backend.app.utils.validation.file_validation.get_file_signature')
-    @patch('backend.app.utils.validation.file_validation._check_pdf_javascript')
-    @patch('backend.app.utils.validation.file_validation._check_pdf_acroform')
-    def test_validate_file_safety_positive(self, mock_check_acroform, mock_check_javascript, mock_get_file_signature):
+    @patch("backend.app.utils.validation.file_validation.get_file_signature")
+    @patch("backend.app.utils.validation.file_validation._check_pdf_javascript")
+    @patch("backend.app.utils.validation.file_validation._check_pdf_acroform")
+    def test_validate_file_safety_positive(
+        self, mock_check_acroform, mock_check_javascript, mock_get_file_signature
+    ):
         mock_get_file_signature.return_value = "pdf"
 
         mock_check_javascript.return_value = (True, "")
@@ -324,9 +339,11 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         mock_check_acroform.assert_called_once()
 
     # Test validate_file_safety rejects non-PDF
-    @patch('backend.app.utils.validation.file_validation.get_file_signature')
-    @patch('backend.app.utils.validation.file_validation._check_pdf_javascript')
-    def test_validate_file_safety_not_pdf(self, mock_check_javascript, mock_get_file_signature):
+    @patch("backend.app.utils.validation.file_validation.get_file_signature")
+    @patch("backend.app.utils.validation.file_validation._check_pdf_javascript")
+    def test_validate_file_safety_not_pdf(
+        self, mock_check_javascript, mock_get_file_signature
+    ):
         mock_get_file_signature.return_value = "jpg"
 
         is_safe, reason = validate_file_safety(self.invalid_pdf_content, "test.jpg")
@@ -338,12 +355,17 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         mock_check_javascript.assert_not_called()
 
     # Test validate_file_safety handles AcroForm exceptions
-    @patch('backend.app.utils.validation.file_validation.get_file_signature')
-    @patch('backend.app.utils.validation.file_validation._check_pdf_javascript')
-    @patch('backend.app.utils.validation.file_validation._check_pdf_acroform')
-    @patch('backend.app.utils.validation.file_validation._logger')
-    def test_validate_file_safety_acroform_exception(self, mock_logger, mock_check_acroform, mock_check_javascript,
-                                                     mock_get_file_signature):
+    @patch("backend.app.utils.validation.file_validation.get_file_signature")
+    @patch("backend.app.utils.validation.file_validation._check_pdf_javascript")
+    @patch("backend.app.utils.validation.file_validation._check_pdf_acroform")
+    @patch("backend.app.utils.validation.file_validation._logger")
+    def test_validate_file_safety_acroform_exception(
+        self,
+        mock_logger,
+        mock_check_acroform,
+        mock_check_javascript,
+        mock_get_file_signature,
+    ):
         mock_get_file_signature.return_value = "pdf"
 
         mock_check_javascript.return_value = (True, "")
@@ -359,10 +381,22 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         mock_logger.warning.assert_called_once()
 
     # Test validate_file_content success path
-    @patch('backend.app.utils.validation.file_validation.get_mime_type_from_buffer', return_value="application/pdf")
-    @patch('backend.app.utils.validation.file_validation.ALLOWED_MIME_TYPES', {"pdf": {"application/pdf"}})
-    @patch('backend.app.utils.validation.file_validation.validate_pdf_file', return_value=True)
-    @patch('backend.app.utils.validation.file_validation.validate_file_safety', return_value=(True, ""))
+    @patch(
+        "backend.app.utils.validation.file_validation.get_mime_type_from_buffer",
+        return_value="application/pdf",
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.ALLOWED_MIME_TYPES",
+        {"pdf": {"application/pdf"}},
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_pdf_file",
+        return_value=True,
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_file_safety",
+        return_value=(True, ""),
+    )
     def test_validate_file_content_success(self, mock_safety, mock_pdf, mock_mime):
         content = self.valid_pdf_content
 
@@ -385,9 +419,14 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(dm)
 
     # Test validate_file_content detects MIME mismatch
-    @patch('backend.app.utils.validation.file_validation.get_mime_type_from_buffer', return_value="application/pdf")
+    @patch(
+        "backend.app.utils.validation.file_validation.get_mime_type_from_buffer",
+        return_value="application/pdf",
+    )
     def test_validate_file_content_mismatch(self, mock_mime):
-        ok, reason, dm = validate_file_content(self.valid_pdf_content, "foo.pdf", "image/png")
+        ok, reason, dm = validate_file_content(
+            self.valid_pdf_content, "foo.pdf", "image/png"
+        )
 
         self.assertFalse(ok)
 
@@ -396,8 +435,14 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(dm, "application/pdf")
 
     # Test validate_file_content rejects disallowed MIME
-    @patch('backend.app.utils.validation.file_validation.get_mime_type_from_buffer', return_value="application/zip")
-    @patch('backend.app.utils.validation.file_validation.ALLOWED_MIME_TYPES', {"pdf": {"application/pdf"}})
+    @patch(
+        "backend.app.utils.validation.file_validation.get_mime_type_from_buffer",
+        return_value="application/zip",
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.ALLOWED_MIME_TYPES",
+        {"pdf": {"application/pdf"}},
+    )
     def test_validate_file_content_not_allowed(self, mock_get_mime):
         ok, reason, dm = validate_file_content(self.valid_pdf_content, "foo.zip", None)
 
@@ -408,8 +453,14 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(dm, "application/zip")
 
     # Test validate_file_content rejects structurally invalid PDFs
-    @patch('backend.app.utils.validation.file_validation.get_mime_type_from_buffer', return_value="application/pdf")
-    @patch('backend.app.utils.validation.file_validation.validate_pdf_file', return_value=False)
+    @patch(
+        "backend.app.utils.validation.file_validation.get_mime_type_from_buffer",
+        return_value="application/pdf",
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_pdf_file",
+        return_value=False,
+    )
     def test_validate_file_content_bad_structure(self, mock_pdf, mock_mime):
         ok, reason, dm = validate_file_content(self.valid_pdf_content, None, None)
 
@@ -418,9 +469,18 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reason, "Invalid PDF file structure")
 
     # Test validate_file_content rejects unsafe PDFs
-    @patch('backend.app.utils.validation.file_validation.get_mime_type_from_buffer', return_value="application/pdf")
-    @patch('backend.app.utils.validation.file_validation.validate_pdf_file', return_value=True)
-    @patch('backend.app.utils.validation.file_validation.validate_file_safety', return_value=(False, "Bad JS"))
+    @patch(
+        "backend.app.utils.validation.file_validation.get_mime_type_from_buffer",
+        return_value="application/pdf",
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_pdf_file",
+        return_value=True,
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_file_safety",
+        return_value=(False, "Bad JS"),
+    )
     def test_validate_file_content_unsafe(self, mock_safety, mock_pdf, mock_mime):
         ok, reason, dm = validate_file_content(self.pdf_with_js, None, None)
 
@@ -432,7 +492,9 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
 
     # Test validate_file_content_async mirrors sync behavior
     def test_validate_file_content_async_success(self):
-        coro = validate_file_content_async(self.valid_pdf_content, "foo.pdf", "application/pdf")
+        coro = validate_file_content_async(
+            self.valid_pdf_content, "foo.pdf", "application/pdf"
+        )
 
         ok, reason, dm = asyncio.run(coro)
 
@@ -443,10 +505,12 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(dm, "application/pdf")
 
     # Test validate_file_content_async catches exceptions
-    @patch('backend.app.utils.validation.file_validation._logger')
-    @patch('asyncio.to_thread', side_effect=Exception("fail"))
+    @patch("backend.app.utils.validation.file_validation._logger")
+    @patch("asyncio.to_thread", side_effect=Exception("fail"))
     def test_validate_file_content_async_error(self, mock_thread, mock_logger):
-        ok, reason, dm = asyncio.run(validate_file_content_async(self.valid_pdf_content, None, None))
+        ok, reason, dm = asyncio.run(
+            validate_file_content_async(self.valid_pdf_content, None, None)
+        )
 
         self.assertFalse(ok)
 
@@ -470,8 +534,11 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
             return self._content
 
     # Test read_and_validate_file rejects bad MIME
-    @patch('backend.app.utils.validation.file_validation.validate_mime_type', return_value=False)
-    @patch('backend.app.utils.logging.logger.log_warning')
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_mime_type",
+        return_value=False,
+    )
+    @patch("backend.app.utils.logging.logger.log_warning")
     async def test_read_and_validate_file_bad_mime(self, mock_validate_mime, mock_warn):
         dummy = self.DummyUpload(b"pdfdata", "image/png", "foo.png")
 
@@ -488,17 +555,20 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         mock_warn.assert_called_once()
 
     # Test read_and_validate_file handles size limits and success
-    @patch('backend.app.utils.validation.file_validation.validate_mime_type', return_value=True)
-    @patch('backend.app.utils.validation.file_validation.validate_file_content_async',
-           return_value=(True, "", "application/pdf"))
-    @patch('backend.app.utils.validation.file_validation.MAX_PDF_SIZE_BYTES', 5)
-    @patch('backend.app.utils.validation.file_validation.log_info')
-    @patch('backend.app.utils.validation.file_validation.log_warning')
-    async def test_read_and_validate_file_success_and_too_large(self,
-                                                                mock_warn,
-                                                                mock_info,
-                                                                mock_validate_async,
-                                                                mock_validate_mime):
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_mime_type",
+        return_value=True,
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_file_content_async",
+        return_value=(True, "", "application/pdf"),
+    )
+    @patch("backend.app.utils.validation.file_validation.MAX_PDF_SIZE_BYTES", 5)
+    @patch("backend.app.utils.validation.file_validation.log_info")
+    @patch("backend.app.utils.validation.file_validation.log_warning")
+    async def test_read_and_validate_file_success_and_too_large(
+        self, mock_warn, mock_info, mock_validate_async, mock_validate_mime
+    ):
         small = self.DummyUpload(b"a" * 3, "application/pdf", "foo.pdf")
 
         content, resp, t = await read_and_validate_file(small, "op2")
@@ -520,9 +590,14 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         mock_warn.assert_called()
 
     # Test read_and_validate_file handles exceptions in mime check
-    @patch('backend.app.utils.validation.file_validation.validate_mime_type', side_effect=Exception("boom"))
-    @patch('backend.app.utils.logging.logger.log_warning')
-    async def test_read_and_validate_file_exception(self, mock_validate_mime, mock_warn):
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_mime_type",
+        side_effect=Exception("boom"),
+    )
+    @patch("backend.app.utils.logging.logger.log_warning")
+    async def test_read_and_validate_file_exception(
+        self, mock_validate_mime, mock_warn
+    ):
         dummy = self.DummyUpload(b"", "application/pdf", "foo.pdf")
 
         content, resp, t = await read_and_validate_file(dummy, "op3")
@@ -536,15 +611,22 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         mock_warn.assert_called_once()
 
     # Test read_and_validate_file rejects invalid content
-    @patch('backend.app.utils.validation.file_validation.validate_mime_type', return_value=True)
-    @patch('backend.app.utils.validation.file_validation.MAX_PDF_SIZE_BYTES', 1024 * 1024 * 10)
-    @patch('backend.app.utils.validation.file_validation.validate_file_content_async',
-           return_value=(False, "Bad PDF content", "application/pdf"))
-    @patch('backend.app.utils.validation.file_validation.log_warning')
-    async def test_read_and_validate_file_content_invalid(self,
-                                                          mock_warn,
-                                                          mock_validate_async,
-                                                          mock_validate_mime):
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_mime_type",
+        return_value=True,
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.MAX_PDF_SIZE_BYTES",
+        1024 * 1024 * 10,
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_file_content_async",
+        return_value=(False, "Bad PDF content", "application/pdf"),
+    )
+    @patch("backend.app.utils.validation.file_validation.log_warning")
+    async def test_read_and_validate_file_content_invalid(
+        self, mock_warn, mock_validate_async, mock_validate_mime
+    ):
         dummy = self.DummyUpload(b"%PDF-1.5 dummy", "application/pdf", "doc.pdf")
 
         content, resp, read_time = await read_and_validate_file(dummy, "op_badcontent")
@@ -562,15 +644,22 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
         mock_warn.assert_called_once()
 
     # Test read_and_validate_file full success path
-    @patch('backend.app.utils.validation.file_validation.validate_mime_type', return_value=True)
-    @patch('backend.app.utils.validation.file_validation.MAX_PDF_SIZE_BYTES', 1024 * 1024 * 10)
-    @patch('backend.app.utils.validation.file_validation.validate_file_content_async',
-           return_value=(True, "", "application/pdf"))
-    @patch('backend.app.utils.validation.file_validation.log_info')
-    async def test_read_and_validate_file_full_success(self,
-                                                       mock_info,
-                                                       mock_validate_async,
-                                                       mock_validate_mime):
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_mime_type",
+        return_value=True,
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.MAX_PDF_SIZE_BYTES",
+        1024 * 1024 * 10,
+    )
+    @patch(
+        "backend.app.utils.validation.file_validation.validate_file_content_async",
+        return_value=(True, "", "application/pdf"),
+    )
+    @patch("backend.app.utils.validation.file_validation.log_info")
+    async def test_read_and_validate_file_full_success(
+        self, mock_info, mock_validate_async, mock_validate_mime
+    ):
         payload = b"%PDF-1.5 perfectly fine"
 
         dummy = self.DummyUpload(payload, "application/pdf", "ok.pdf")

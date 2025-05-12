@@ -17,6 +17,7 @@ class EntityDetectionEngine(Enum):
         HYBRID: Engine that utilizes multiple engines (combination of results)
                 to enhance entity detection accuracy.
     """
+
     PRESIDIO = auto()
     GEMINI = auto()
     GLINER = auto()

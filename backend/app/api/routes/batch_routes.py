@@ -19,12 +19,23 @@ Each endpoint now supports three modes of input handling:
   2. Raw-API-key mode: header `raw_api_key`
   3. Public mode: no decryption/encryption
 """
+
 import base64
 import json
 import time
 from typing import Optional, List
 
-from fastapi import APIRouter, File, UploadFile, Form, Header, BackgroundTasks, Request, Response, HTTPException
+from fastapi import (
+    APIRouter,
+    File,
+    UploadFile,
+    Form,
+    Header,
+    BackgroundTasks,
+    Request,
+    Response,
+    HTTPException,
+)
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse, StreamingResponse
@@ -48,16 +59,16 @@ router = APIRouter()
 @limiter.limit("10/minute")
 @memory_optimized(threshold_mb=75)
 async def batch_detect_sensitive(
-        request: Request,
-        files: List[UploadFile] = File(...),
-        requested_entities: Optional[str] = Form(None),
-        detection_engine: Optional[str] = Form("presidio"),
-        max_parallel_files: Optional[int] = Form(4),
-        remove_words: Optional[str] = Form(None),
-        threshold: Optional[float] = Form(None),
-        session_key: Optional[str] = Header(None),
-        api_key_id: Optional[str] = Header(None),
-        raw_api_key: Optional[str] = Header(None),
+    request: Request,
+    files: List[UploadFile] = File(...),
+    requested_entities: Optional[str] = Form(None),
+    detection_engine: Optional[str] = Form("presidio"),
+    max_parallel_files: Optional[int] = Form(4),
+    remove_words: Optional[str] = Form(None),
+    threshold: Optional[float] = Form(None),
+    session_key: Optional[str] = Header(None),
+    api_key_id: Optional[str] = Header(None),
+    raw_api_key: Optional[str] = Header(None),
 ) -> JSONResponse:
     """
     Batch-sensitive entity detection endpoint.
@@ -108,7 +119,9 @@ async def batch_detect_sensitive(
         error_info = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_sensitive", endpoint=str(request.url)
         )
-        return JSONResponse(content=error_info, status_code=error_info.get("status_code", 400))
+        return JSONResponse(
+            content=error_info, status_code=error_info.get("status_code", 400)
+        )
 
     # Generate a unique ID for logging this batch operation
     operation_id = f"batch_detect_{int(time.time())}"
@@ -128,7 +141,9 @@ async def batch_detect_sensitive(
         if detection_engine not in engine_map:
             return JSONResponse(
                 status_code=400,
-                content={"detail": f"Invalid detection engine. Choose one of: {', '.join(engine_map)}"}
+                content={
+                    "detail": f"Invalid detection engine. Choose one of: {', '.join(engine_map)}"
+                },
             )
 
         # Invoke the detection service with all parameters
@@ -141,35 +156,41 @@ async def batch_detect_sensitive(
             threshold=threshold,
         )
         # Wrap the result, encrypting if an AES key is present
-        return session_manager.wrap_response(result.model_dump(exclude_none=True), api_key)
+        return session_manager.wrap_response(
+            result.model_dump(exclude_none=True), api_key
+        )
 
     except Exception as e:
         # Log unexpected exceptions for debugging/audit
-        log_error(f"[BATCH] Unhandled exception in batch detection: {e} [operation_id={operation_id}]")
+        log_error(
+            f"[BATCH] Unhandled exception in batch detection: {e} [operation_id={operation_id}]"
+        )
         # Securely sanitize and return the error
         error_response = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_sensitive", resource_id=str(request.url)
         )
-        return JSONResponse(content=error_response, status_code=error_response.get("status_code", 500))
+        return JSONResponse(
+            content=error_response, status_code=error_response.get("status_code", 500)
+        )
 
 
 @router.post("/hybrid_detect")
 @limiter.limit("10/minute")
 @memory_optimized(threshold_mb=200)
 async def batch_hybrid_detect_sensitive(
-        request: Request,
-        files: List[UploadFile] = File(...),
-        requested_entities: Optional[str] = Form(None),
-        use_presidio: bool = Form(True),
-        use_gemini: bool = Form(False),
-        use_gliner: bool = Form(False),
-        use_hideme: bool = Form(False),
-        max_parallel_files: Optional[int] = Form(4),
-        remove_words: Optional[str] = Form(None),
-        threshold: Optional[float] = Form(None),
-        session_key: Optional[str] = Header(None),
-        api_key_id: Optional[str] = Header(None),
-        raw_api_key: Optional[str] = Header(None),
+    request: Request,
+    files: List[UploadFile] = File(...),
+    requested_entities: Optional[str] = Form(None),
+    use_presidio: bool = Form(True),
+    use_gemini: bool = Form(False),
+    use_gliner: bool = Form(False),
+    use_hideme: bool = Form(False),
+    max_parallel_files: Optional[int] = Form(4),
+    remove_words: Optional[str] = Form(None),
+    threshold: Optional[float] = Form(None),
+    session_key: Optional[str] = Header(None),
+    api_key_id: Optional[str] = Header(None),
+    raw_api_key: Optional[str] = Header(None),
 ) -> JSONResponse:
     """
     Batch-hybrid entity detection endpoint.
@@ -220,7 +241,9 @@ async def batch_hybrid_detect_sensitive(
         error_info = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_hybrid_sensitive", endpoint=str(request.url)
         )
-        return JSONResponse(content=error_info, status_code=error_info.get("status_code", 400))
+        return JSONResponse(
+            content=error_info, status_code=error_info.get("status_code", 400)
+        )
 
     # log the start of the hybrid detection run
     operation_id = f"batch_hybrid_{int(time.time())}"
@@ -231,7 +254,7 @@ async def batch_hybrid_detect_sensitive(
         if not any([use_presidio, use_gemini, use_gliner, use_hideme]):
             return JSONResponse(
                 status_code=400,
-                content={"detail": "Select at least one detection engine"}
+                content={"detail": "Select at least one detection engine"},
             )
 
         # call the batch detection service in hybrid mode
@@ -247,12 +270,16 @@ async def batch_hybrid_detect_sensitive(
             remove_words=remove_words,
             threshold=threshold,
         )
-        # Step 5: wrap and encrypt response if an AES key is present
-        return session_manager.wrap_response(result.model_dump(exclude_none=True), api_key)
+        # wrap and encrypt response if an AES key is present
+        return session_manager.wrap_response(
+            result.model_dump(exclude_none=True), api_key
+        )
 
     except Exception as e:
         # Log any unexpected exceptions
-        log_error(f"[BATCH] Unhandled exception in hybrid detection: {e} [operation_id={operation_id}]")
+        log_error(
+            f"[BATCH] Unhandled exception in hybrid detection: {e} [operation_id={operation_id}]"
+        )
         # Securely sanitize and handle the error
         error_response = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_hybrid", resource_id=str(request.url)
@@ -266,15 +293,15 @@ async def batch_hybrid_detect_sensitive(
 @router.post("/search")
 @memory_optimized(threshold_mb=50)
 async def batch_search_text(
-        request: Request,
-        files: List[UploadFile] = File(...),
-        search_terms: str = Form(...),
-        case_sensitive: bool = Form(False),
-        ai_search: bool = Form(False),
-        max_parallel_files: Optional[int] = Form(4),
-        session_key: Optional[str] = Header(None),
-        api_key_id: Optional[str] = Header(None),
-        raw_api_key: Optional[str] = Header(None),
+    request: Request,
+    files: List[UploadFile] = File(...),
+    search_terms: str = Form(...),
+    case_sensitive: bool = Form(False),
+    ai_search: bool = Form(False),
+    max_parallel_files: Optional[int] = Form(4),
+    session_key: Optional[str] = Header(None),
+    api_key_id: Optional[str] = Header(None),
+    raw_api_key: Optional[str] = Header(None),
 ) -> JSONResponse:
     """
     Search for specific terms in multiple PDF files in parallel.
@@ -327,11 +354,15 @@ async def batch_search_text(
             ai_search=ai_search,
         )
         # Wrap the result in a JSONResponse, encrypting if an AES key is present
-        return session_manager.wrap_response(result.model_dump(exclude_none=True), api_key)
+        return session_manager.wrap_response(
+            result.model_dump(exclude_none=True), api_key
+        )
 
     except Exception as e:
         # Log any unhandled exceptions for debugging
-        log_error(f"[BATCH] Unhandled exception in batch search: {e} [operation_id={operation_id}]")
+        log_error(
+            f"[BATCH] Unhandled exception in batch search: {e} [operation_id={operation_id}]"
+        )
         # Securely handle the exception without exposing sensitive details
         error_response = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_search", resource_id=str(request.url)
@@ -347,12 +378,12 @@ async def batch_search_text(
 @limiter.limit("10/minute")
 @memory_optimized(threshold_mb=50)
 async def batch_find_words_by_bbox(
-        request: Request,
-        files: List[UploadFile] = File(...),
-        bounding_box: str = Form(...),
-        session_key: Optional[str] = Header(None),
-        api_key_id: Optional[str] = Header(None),
-        raw_api_key: Optional[str] = Header(None),
+    request: Request,
+    files: List[UploadFile] = File(...),
+    bounding_box: str = Form(...),
+    session_key: Optional[str] = Header(None),
+    api_key_id: Optional[str] = Header(None),
+    raw_api_key: Optional[str] = Header(None),
 ) -> JSONResponse:
     """
     Find words in multiple PDF files based on a provided bounding box.
@@ -378,11 +409,7 @@ async def batch_find_words_by_bbox(
     """
     # decrypt or passthrough inputs based on provided headers
     files, decrypted_fields, api_key = await session_manager.prepare_inputs(
-        files,
-        {"bounding_box": bounding_box},
-        session_key,
-        api_key_id,
-        raw_api_key
+        files, {"bounding_box": bounding_box}, session_key, api_key_id, raw_api_key
     )
     # override bounding_box with decrypted value if available
     bounding_box = decrypted_fields.get("bounding_box")
@@ -400,7 +427,9 @@ async def batch_find_words_by_bbox(
     except Exception as e:
         # log parse errors and return a client error
         log_error(f"[BATCH] Error parsing bounding box: {e}")
-        return JSONResponse(status_code=400, content={"detail": "Invalid bounding box format."})
+        return JSONResponse(
+            status_code=400, content={"detail": "Invalid bounding box format."}
+        )
 
     # log the start of the operation with a unique ID
     operation_id = f"batch_find_words_{int(time.time())}"
@@ -409,16 +438,18 @@ async def batch_find_words_by_bbox(
     try:
         # delegate to the BatchSearchService for word extraction
         result = await BatchSearchService.find_words_by_bbox(
-            files=files,
-            bounding_box=bbox,
-            operation_id=operation_id
+            files=files, bounding_box=bbox, operation_id=operation_id
         )
         # wrap and optionally encrypt the response
-        return session_manager.wrap_response(result.model_dump(exclude_none=True), api_key)
+        return session_manager.wrap_response(
+            result.model_dump(exclude_none=True), api_key
+        )
 
     except Exception as e:
         # log any unexpected exceptions
-        log_error(f"[BATCH] Unhandled exception in batch find words: {e} [operation_id={operation_id}]")
+        log_error(
+            f"[BATCH] Unhandled exception in batch find words: {e} [operation_id={operation_id}]"
+        )
         # securely handle the error without leaking internals
         error_response = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_find_words", resource_id=str(request.url)
@@ -434,15 +465,15 @@ async def batch_find_words_by_bbox(
 @limiter.limit("3/minute")
 @memory_optimized(threshold_mb=200)
 async def batch_redact_documents(
-        request: Request,
-        background_tasks: BackgroundTasks,
-        files: List[UploadFile] = File(...),
-        redaction_mappings: str = Form(...),
-        remove_images: bool = Form(False),
-        max_parallel_files: Optional[int] = None,
-        session_key: Optional[str] = Header(None),
-        api_key_id: Optional[str] = Header(None),
-        raw_api_key: Optional[str] = Header(None),
+    request: Request,
+    background_tasks: BackgroundTasks,
+    files: List[UploadFile] = File(...),
+    redaction_mappings: str = Form(...),
+    remove_images: bool = Form(False),
+    max_parallel_files: Optional[int] = None,
+    session_key: Optional[str] = Header(None),
+    api_key_id: Optional[str] = Header(None),
+    raw_api_key: Optional[str] = Header(None),
 ) -> Response:
     """
     Apply redactions to one or more PDF documents and return the results as a ZIP archive.
@@ -484,7 +515,7 @@ async def batch_redact_documents(
         {"redaction_mappings": redaction_mappings},
         session_key,
         api_key_id,
-        raw_api_key
+        raw_api_key,
     )
     # If session/raw decryption yielded a plaintext mapping, use that
     redaction_mappings = decrypted_fields.get("redaction_mappings", redaction_mappings)
@@ -501,7 +532,7 @@ async def batch_redact_documents(
             redaction_mappings=redaction_mappings,
             max_parallel_files=max_parallel_files,
             background_tasks=background_tasks,
-            remove_images=remove_images
+            remove_images=remove_images,
         )
 
         # If we obtained an AES key, we must encrypt the raw ZIP bytes
@@ -527,6 +558,10 @@ async def batch_redact_documents(
 
     except Exception as e:
         # Log and sanitize any unexpected errors
-        log_error(f"[BATCH] Unhandled exception in batch redaction: {e} [operation_id={operation_id}]")
-        err = SecurityAwareErrorHandler.handle_safe_error(e, "api_redact", resource_id=str(request.url))
+        log_error(
+            f"[BATCH] Unhandled exception in batch redaction: {e} [operation_id={operation_id}]"
+        )
+        err = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_redact", resource_id=str(request.url)
+        )
         return JSONResponse(content=err, status_code=err.get("status_code", 500))

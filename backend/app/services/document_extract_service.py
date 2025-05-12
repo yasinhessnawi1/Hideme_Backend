@@ -15,7 +15,12 @@ from fastapi import UploadFile, HTTPException
 
 # Import custom modules for PDF extraction, logging, error handling, memory monitoring, and data minimization.
 from backend.app.document_processing.pdf_extractor import PDFTextExtractor
-from backend.app.domain.models import BatchDetectionResponse, BatchSummary, BatchDetectionDebugInfo, FileResult
+from backend.app.domain.models import (
+    BatchDetectionResponse,
+    BatchSummary,
+    BatchDetectionDebugInfo,
+    FileResult,
+)
 from backend.app.utils.logging.logger import log_info, log_error
 from backend.app.utils.logging.secure_logging import log_sensitive_operation
 from backend.app.utils.security.processing_records import record_keeper
@@ -74,7 +79,9 @@ class DocumentExtractService:
             raise HTTPException(status_code=error.status_code, detail=error.body)
 
         # Extract text from the PDF using the helper method _extract_text
-        extracted_data, extraction_error = self._extract_text(content, file.filename, operation_id)
+        extracted_data, extraction_error = self._extract_text(
+            content, file.filename, operation_id
+        )
         if extraction_error:
             # Raise the error response if text extraction fails
             raise extraction_error
@@ -92,7 +99,9 @@ class DocumentExtractService:
         total_time = time.time() - start_time
         # Count the total number of pages and words in the extracted data
         pages_count = len(extracted_data.get("pages", []))
-        words_count = sum(len(page.get("words", [])) for page in extracted_data.get("pages", []))
+        words_count = sum(
+            len(page.get("words", [])) for page in extracted_data.get("pages", [])
+        )
 
         # Append performance statistics to the extracted data
         extracted_data["performance"] = {
@@ -101,13 +110,13 @@ class DocumentExtractService:
             "total_time": total_time,
             "pages_count": pages_count,
             "words_count": words_count,
-            "operation_id": operation_id
+            "operation_id": operation_id,
         }
         # Append file information details to the extracted data
         extracted_data["file_info"] = {
             "filename": file.filename,
             "content_type": file.content_type,
-            "size": f"{round(len(content) / (1024 * 1024), 2)} MB"
+            "size": f"{round(len(content) / (1024 * 1024), 2)} MB",
         }
 
         # Record processing details for compliance and auditing
@@ -117,7 +126,7 @@ class DocumentExtractService:
             entity_types_processed=[],
             processing_time=total_time,
             entity_count=0,
-            success=True
+            success=True,
         )
 
         # Log sensitive operation details with performance metrics
@@ -127,13 +136,11 @@ class DocumentExtractService:
             total_time,
             pages=pages_count,
             words=words_count,
-            extraction_time=extract_time
+            extraction_time=extract_time,
         )
 
         file_result = FileResult(
-            file=file.filename,
-            status="success",
-            results=extracted_data
+            file=file.filename, status="success", results=extracted_data
         )
 
         summary = BatchSummary(
@@ -141,7 +148,7 @@ class DocumentExtractService:
             total_files=1,
             successful=1,
             failed=0,
-            total_time=total_time
+            total_time=total_time,
         )
 
         # Retrieve current memory usage statistics after processing
@@ -150,19 +157,20 @@ class DocumentExtractService:
         debug = BatchDetectionDebugInfo(
             memory_usage=mem.get("current_usage"),
             peak_memory=mem.get("peak_usage"),
-            operation_id=operation_id
+            operation_id=operation_id,
         )
 
-        log_info(f"[SECURITY] PDF extraction completed successfully [operation_id={operation_id}]")
+        log_info(
+            f"[SECURITY] PDF extraction completed successfully [operation_id={operation_id}]"
+        )
         return BatchDetectionResponse(
-            batch_summary=summary,
-            file_results=[file_result],
-            debug=debug
+            batch_summary=summary, file_results=[file_result], debug=debug
         )
 
     @staticmethod
-    def _extract_text(content: bytes, filename: str, operation_id: str) -> Tuple[
-        Optional[Any], Optional[HTTPException]]:
+    def _extract_text(
+        content: bytes, filename: str, operation_id: str
+    ) -> Tuple[Optional[Any], Optional[HTTPException]]:
         """
         Extract text from the PDF file content using PDFTextExtractor.
 
@@ -181,7 +189,9 @@ class DocumentExtractService:
                 - extracted_data: The extracted text data (or None if extraction fails).
                 - error_response: A HTTPException containing an error message if extraction fails, otherwise None.
         """
-        log_info(f"[SECURITY] Starting PDF text extraction [operation_id={operation_id}]")
+        log_info(
+            f"[SECURITY] Starting PDF text extraction [operation_id={operation_id}]"
+        )
         try:
             # Initialize the PDFTextExtractor with the file content
             extractor = PDFTextExtractor(content)
@@ -189,15 +199,22 @@ class DocumentExtractService:
             extracted_data = extractor.extract_text()
             # Close the extractor to free up resources
             extractor.close()
-            log_info(f"[SECURITY] PDF text extraction completed [operation_id={operation_id}]")
+            log_info(
+                f"[SECURITY] PDF text extraction completed [operation_id={operation_id}]"
+            )
             return extracted_data, None
         except Exception as e:
             # Log the error and create a secure error response if extraction fails
-            log_error(f"[SECURITY] Error extracting text: {str(e)} [operation_id={operation_id}]")
+            log_error(
+                f"[SECURITY] Error extracting text: {str(e)} [operation_id={operation_id}]"
+            )
             error_response = SecurityAwareErrorHandler.handle_safe_error(
                 e, "file_text_extraction", filename
             )
-            return None, HTTPException(status_code=error_response.get("status_code", 500), detail=error_response)
+            return None, HTTPException(
+                status_code=error_response.get("status_code", 500),
+                detail=error_response,
+            )
 
     @staticmethod
     def _remove_text_from_extracted_data(extracted_data: dict) -> dict:

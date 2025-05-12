@@ -13,7 +13,7 @@ class TestGLiNERHelperGetCacheKey(unittest.TestCase):
 
         key = GLiNERHelper.get_cache_key(text)
 
-        expected_key = hashlib.md5(text.encode('utf-8')).hexdigest()
+        expected_key = hashlib.md5(text.encode("utf-8")).hexdigest()
 
         self.assertEqual(key, expected_key)
 
@@ -27,9 +27,9 @@ class TestGLiNERHelperGetCacheKey(unittest.TestCase):
 
         key = GLiNERHelper.get_cache_key(text, entities)
 
-        expected_key_data = text + '|' + ','.join(sorted(entities))
+        expected_key_data = text + "|" + ",".join(sorted(entities))
 
-        expected_key = hashlib.md5(expected_key_data.encode('utf-8')).hexdigest()
+        expected_key = hashlib.md5(expected_key_data.encode("utf-8")).hexdigest()
 
         self.assertEqual(key, expected_key)
 
@@ -39,7 +39,7 @@ class TestGLiNERHelperGetCacheKey(unittest.TestCase):
 
         key = GLiNERHelper.get_cache_key(text)
 
-        expected_key = hashlib.md5(b'').hexdigest()
+        expected_key = hashlib.md5(b"").hexdigest()
 
         self.assertEqual(key, expected_key)
 
@@ -51,9 +51,9 @@ class TestGLiNERHelperGetCacheKey(unittest.TestCase):
 
         key = GLiNERHelper.get_cache_key(text, entities)
 
-        expected_key_data = text + '|'
+        expected_key_data = text + "|"
 
-        expected_key = hashlib.md5(expected_key_data.encode('utf-8')).hexdigest()
+        expected_key = hashlib.md5(expected_key_data.encode("utf-8")).hexdigest()
 
         self.assertEqual(key, expected_key)
 
@@ -63,7 +63,7 @@ class TestGLiNERHelperGetCacheKey(unittest.TestCase):
 
         key = GLiNERHelper.get_cache_key(text)
 
-        expected_key = hashlib.md5(text.encode('utf-8')).hexdigest()
+        expected_key = hashlib.md5(text.encode("utf-8")).hexdigest()
 
         self.assertEqual(key, expected_key)
 
@@ -243,8 +243,10 @@ class TestGLiNERHelperChunkLargeSentenceByChar(unittest.TestCase):
     # Long sentences split into multiple chunks
     def test_chunk_large_sentence_by_char_long_sentence(self):
 
-        sentence = ("This is a very long sentence that needs to be split into multiple chunks "
-                    "because it exceeds the maximum character limit.")
+        sentence = (
+            "This is a very long sentence that needs to be split into multiple chunks "
+            "because it exceeds the maximum character limit."
+        )
 
         max_chars = 30
 
@@ -255,7 +257,7 @@ class TestGLiNERHelperChunkLargeSentenceByChar(unittest.TestCase):
         for chunk in chunks:
             self.assertLessEqual(len(chunk), max_chars)
 
-        self.assertEqual(' '.join(chunks), sentence)
+        self.assertEqual(" ".join(chunks), sentence)
 
     # Exact max_chars yields single chunk
     def test_chunk_large_sentence_by_char_exact_max_chars(self):
@@ -290,8 +292,10 @@ class TestGLiNERHelperChunkLargeSentenceByChar(unittest.TestCase):
     # Multiple sentences produce multiple chunks
     def test_chunk_large_sentence_by_char_multiple_chunks(self):
 
-        sentence = ("This sentence will be split into three chunks because it exceeds the "
-                    "maximum character limit.")
+        sentence = (
+            "This sentence will be split into three chunks because it exceeds the "
+            "maximum character limit."
+        )
 
         max_chars = 25
 
@@ -302,7 +306,7 @@ class TestGLiNERHelperChunkLargeSentenceByChar(unittest.TestCase):
         for chunk in chunks:
             self.assertLessEqual(len(chunk), max_chars)
 
-        self.assertEqual(' '.join(chunks), sentence)
+        self.assertEqual(" ".join(chunks), sentence)
 
     # Empty sentence yields no chunks
     def test_chunk_large_sentence_by_char_empty_sentence(self):
@@ -321,8 +325,10 @@ class TestGLiNERHelperTokenizeSentences(unittest.TestCase):
 
     # Basic sentence tokenization
     def test_tokenize_sentences_basic(self):
-        text = ("This is the first sentence. This is the second sentence. "
-                "This is the third sentence.")
+        text = (
+            "This is the first sentence. This is the second sentence. "
+            "This is the third sentence."
+        )
 
         sentences = GLiNERHelper.tokenize_sentences(text)
 
@@ -421,7 +427,10 @@ class TestBuildSentenceGroups(unittest.TestCase):
     # Split groups when sentences exceed limit
     def test_group_sentence_exceeding_max_chars(self):
 
-        sentences = ["Short sentence.", "This is a very long sentence that definitely exceeds the limit."]
+        sentences = [
+            "Short sentence.",
+            "This is a very long sentence that definitely exceeds the limit.",
+        ]
 
         max_chars = 30
 
@@ -447,8 +456,10 @@ class TestSplitIntoSentenceGroups(unittest.TestCase):
 
     # Split text into groups respecting max_chars
     def test_split_text_into_groups(self):
-        text = ("This is the first sentence. This is the second sentence? "
-                "And this is the third sentence!")
+        text = (
+            "This is the first sentence. This is the second sentence? "
+            "And this is the third sentence!"
+        )
 
         max_chars = 50
 

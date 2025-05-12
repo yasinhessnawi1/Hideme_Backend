@@ -2,11 +2,14 @@ import asyncio
 import unittest
 from unittest.mock import patch, MagicMock, AsyncMock
 
-from backend.app.utils.constant.constant import DEFAULT_BATCH_TIMEOUT, DEFAULT_ITEM_TIMEOUT
+from backend.app.utils.constant.constant import (
+    DEFAULT_BATCH_TIMEOUT,
+    DEFAULT_ITEM_TIMEOUT,
+)
 from backend.app.utils.parallel.core import (
     get_resource_lock,
     _loop_locks,
-    ParallelProcessingCore
+    ParallelProcessingCore,
 )
 from backend.app.utils.system_utils.synchronization_utils import LockPriority
 
@@ -32,7 +35,7 @@ class TestGetResourceLock(unittest.TestCase):
     """Test get_resource_lock for new and existing locks."""
 
     # new lock should be created and stored in loop map
-    @patch('asyncio.get_running_loop')
+    @patch("asyncio.get_running_loop")
     @patch(module_target("AsyncTimeoutLock"))
     def test_get_resource_lock_new(self, mock_lock_class, mock_get_loop):
         loop = asyncio.new_event_loop()
@@ -48,8 +51,7 @@ class TestGetResourceLock(unittest.TestCase):
         result = get_resource_lock()
 
         mock_lock_class.assert_called_once_with(
-            "parallel_core_lock",
-            priority=LockPriority.MEDIUM
+            "parallel_core_lock", priority=LockPriority.MEDIUM
         )
 
         self.assertIn(loop, _loop_locks)
@@ -59,7 +61,7 @@ class TestGetResourceLock(unittest.TestCase):
         self.assertEqual(result, mock_lock)
 
     # existing lock should be returned without creating a new one
-    @patch('asyncio.get_running_loop')
+    @patch("asyncio.get_running_loop")
     @patch(module_target("AsyncTimeoutLock"))
     def test_get_resource_lock_existing(self, mock_lock_class, mock_get_loop):
         loop = asyncio.new_event_loop()
@@ -85,17 +87,17 @@ class TestParallelProcessingCoreGetOptimalWorkers(unittest.TestCase):
         _loop_locks.clear()
 
     # basic scenario: moderate CPU and memory usage
-    @patch('os.cpu_count')
-    @patch('psutil.virtual_memory')
-    @patch('psutil.cpu_percent')
+    @patch("os.cpu_count")
+    @patch("psutil.virtual_memory")
+    @patch("psutil.cpu_percent")
     @patch(module_target("memory_monitor"))
     @patch(module_target("log_info"))
     def test_get_optimal_workers_basic(
-            self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
+        self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
     ):
         mock_cpu_count.return_value = 8
 
-        mock_vmem.return_value.available = 8 * 1024 ** 3
+        mock_vmem.return_value.available = 8 * 1024**3
 
         mock_cpu_percent.return_value = 50.0
 
@@ -112,25 +114,24 @@ class TestParallelProcessingCoreGetOptimalWorkers(unittest.TestCase):
         self.assertIn("Calculated optimal workers", mock_log_info.call_args[0][0])
 
     # limit workers by memory per item
-    @patch('os.cpu_count')
-    @patch('psutil.virtual_memory')
-    @patch('psutil.cpu_percent')
+    @patch("os.cpu_count")
+    @patch("psutil.virtual_memory")
+    @patch("psutil.cpu_percent")
     @patch(module_target("memory_monitor"))
     @patch(module_target("log_info"))
     def test_get_optimal_workers_with_memory_per_item(
-            self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
+        self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
     ):
         mock_cpu_count.return_value = 8
 
-        mock_vmem.return_value.available = 1 * 1024 ** 3
+        mock_vmem.return_value.available = 1 * 1024**3
 
         mock_cpu_percent.return_value = 20.0
 
         mock_memmon.get_memory_usage.return_value = 30.0
 
         result = ParallelProcessingCore.get_optimal_workers(
-            items_count=20,
-            memory_per_item=100 * 1024 ** 2
+            items_count=20, memory_per_item=100 * 1024**2
         )
 
         self.assertLessEqual(result, 8)
@@ -138,26 +139,24 @@ class TestParallelProcessingCoreGetOptimalWorkers(unittest.TestCase):
         mock_log_info.assert_called_once()
 
     # enforce custom min and max worker limits
-    @patch('os.cpu_count')
-    @patch('psutil.virtual_memory')
-    @patch('psutil.cpu_percent')
+    @patch("os.cpu_count")
+    @patch("psutil.virtual_memory")
+    @patch("psutil.cpu_percent")
     @patch(module_target("memory_monitor"))
     @patch(module_target("log_info"))
     def test_get_optimal_workers_with_custom_limits(
-            self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
+        self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
     ):
         mock_cpu_count.return_value = 16
 
-        mock_vmem.return_value.available = 16 * 1024 ** 3
+        mock_vmem.return_value.available = 16 * 1024**3
 
         mock_cpu_percent.return_value = 10.0
 
         mock_memmon.get_memory_usage.return_value = 20.0
 
         result = ParallelProcessingCore.get_optimal_workers(
-            items_count=100,
-            min_workers=4,
-            max_workers=12
+            items_count=100, min_workers=4, max_workers=12
         )
 
         self.assertGreaterEqual(result, 4)
@@ -167,17 +166,17 @@ class TestParallelProcessingCoreGetOptimalWorkers(unittest.TestCase):
         mock_log_info.assert_called_once()
 
     # if items count is small, result equals items_count
-    @patch('os.cpu_count')
-    @patch('psutil.virtual_memory')
-    @patch('psutil.cpu_percent')
+    @patch("os.cpu_count")
+    @patch("psutil.virtual_memory")
+    @patch("psutil.cpu_percent")
     @patch(module_target("memory_monitor"))
     @patch(module_target("log_info"))
     def test_get_optimal_workers_limited_by_items_count(
-            self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
+        self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
     ):
         mock_cpu_count.return_value = 8
 
-        mock_vmem.return_value.available = 8 * 1024 ** 3
+        mock_vmem.return_value.available = 8 * 1024**3
 
         mock_cpu_percent.return_value = 10.0
 
@@ -190,17 +189,17 @@ class TestParallelProcessingCoreGetOptimalWorkers(unittest.TestCase):
         mock_log_info.assert_called_once()
 
     # high system load still yields minimum workers
-    @patch('os.cpu_count')
-    @patch('psutil.virtual_memory')
-    @patch('psutil.cpu_percent')
+    @patch("os.cpu_count")
+    @patch("psutil.virtual_memory")
+    @patch("psutil.cpu_percent")
     @patch(module_target("memory_monitor"))
     @patch(module_target("log_info"))
     def test_get_optimal_workers_high_load(
-            self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
+        self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
     ):
         mock_cpu_count.return_value = 8
 
-        mock_vmem.return_value.available = 8 * 1024 ** 3
+        mock_vmem.return_value.available = 8 * 1024**3
 
         mock_cpu_percent.return_value = 90.0
 
@@ -213,17 +212,17 @@ class TestParallelProcessingCoreGetOptimalWorkers(unittest.TestCase):
         mock_log_info.assert_called_once()
 
     # fallback behavior when cpu_count returns None
-    @patch('os.cpu_count')
-    @patch('psutil.virtual_memory')
-    @patch('psutil.cpu_percent')
+    @patch("os.cpu_count")
+    @patch("psutil.virtual_memory")
+    @patch("psutil.cpu_percent")
     @patch(module_target("memory_monitor"))
     @patch(module_target("log_info"))
     def test_get_optimal_workers_cpu_count_none(
-            self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
+        self, mock_log_info, mock_memmon, mock_cpu_percent, mock_vmem, mock_cpu_count
     ):
         mock_cpu_count.return_value = None
 
-        mock_vmem.return_value.available = 8 * 1024 ** 3
+        mock_vmem.return_value.available = 8 * 1024**3
 
         mock_cpu_percent.return_value = 50.0
 
@@ -244,9 +243,11 @@ class TestValidateAndPrepareInput(unittest.TestCase):
     def test_non_empty_items(self):
         items = [1, 2, 3]
 
-        with patch('time.time', return_value=1000.0):
-            op_id, batch_timeout, item_timeout, start_time = ParallelProcessingCore._validate_and_prepare_input(
-                items, None, None, None
+        with patch("time.time", return_value=1000.0):
+            op_id, batch_timeout, item_timeout, start_time = (
+                ParallelProcessingCore._validate_and_prepare_input(
+                    items, None, None, None
+                )
             )
 
         self.assertTrue(op_id.startswith("parallel_"))
@@ -261,9 +262,11 @@ class TestValidateAndPrepareInput(unittest.TestCase):
     def test_empty_items(self):
         items = []
 
-        with patch('time.time', return_value=2000.0):
-            op_id, batch_timeout, item_timeout, start_time = ParallelProcessingCore._validate_and_prepare_input(
-                items, None, None, "custom_op"
+        with patch("time.time", return_value=2000.0):
+            op_id, batch_timeout, item_timeout, start_time = (
+                ParallelProcessingCore._validate_and_prepare_input(
+                    items, None, None, "custom_op"
+                )
             )
 
         self.assertEqual(op_id, "custom_op")
@@ -359,16 +362,24 @@ class TestCreateTasksMap(unittest.IsolatedAsyncioTestCase):
         op_id = "op123"
 
         progress_data = {
-            "completed": 0, "failed": 0, "total_items": 3,
-            "start_time": 1000.0, "last_progress_log": 1000.0, "last_index": None
+            "completed": 0,
+            "failed": 0,
+            "total_items": 3,
+            "start_time": 1000.0,
+            "last_progress_log": 1000.0,
+            "last_index": None,
         }
 
         progress_callback = None
 
         tasks_map = ParallelProcessingCore._create_tasks_map(
-            items, semaphore, processor,
-            item_timeout, op_id,
-            progress_data, progress_callback
+            items,
+            semaphore,
+            processor,
+            item_timeout,
+            op_id,
+            progress_data,
+            progress_callback,
         )
 
         self.assertEqual(len(tasks_map), 3)
@@ -392,13 +403,15 @@ class TestProcessWithSemaphore(unittest.IsolatedAsyncioTestCase):
         processor = AsyncMock(return_value="success")
 
         progress_data = {
-            "completed": 0, "failed": 0, "total_items": 1,
-            "start_time": 1000.0, "last_progress_log": 1000.0, "last_index": None
+            "completed": 0,
+            "failed": 0,
+            "total_items": 1,
+            "start_time": 1000.0,
+            "last_progress_log": 1000.0,
+            "last_index": None,
         }
 
-        with patch.object(
-                ParallelProcessingCore, "_update_progress"
-        ) as mock_update:
+        with patch.object(ParallelProcessingCore, "_update_progress") as mock_update:
             result = await ParallelProcessingCore._process_with_semaphore(
                 index=0,
                 item="test_item",
@@ -407,14 +420,12 @@ class TestProcessWithSemaphore(unittest.IsolatedAsyncioTestCase):
                 item_timeout=5.0,
                 operation_id="op_test",
                 progress_data=progress_data,
-                progress_callback=None
+                progress_callback=None,
             )
 
         self.assertEqual(result, (0, "success"))
 
-        mock_update.assert_called_once_with(
-            0, "op_test", progress_data, None
-        )
+        mock_update.assert_called_once_with(0, "op_test", progress_data, None)
 
     # timeout counts as failure
     async def test_process_with_semaphore_timeout(self):
@@ -425,8 +436,12 @@ class TestProcessWithSemaphore(unittest.IsolatedAsyncioTestCase):
         processor = AsyncMock(side_effect=asyncio.TimeoutError)
 
         progress_data = {
-            "completed": 0, "failed": 0, "total_items": 1,
-            "start_time": 1000.0, "last_progress_log": 1000.0, "last_index": None
+            "completed": 0,
+            "failed": 0,
+            "total_items": 1,
+            "start_time": 1000.0,
+            "last_progress_log": 1000.0,
+            "last_index": None,
         }
 
         result = await ParallelProcessingCore._process_with_semaphore(
@@ -437,7 +452,7 @@ class TestProcessWithSemaphore(unittest.IsolatedAsyncioTestCase):
             item_timeout=0.1,
             operation_id="op_test",
             progress_data=progress_data,
-            progress_callback=None
+            progress_callback=None,
         )
 
         self.assertEqual(result, (0, None))
@@ -453,13 +468,17 @@ class TestProcessWithSemaphore(unittest.IsolatedAsyncioTestCase):
         processor = AsyncMock(side_effect=Exception("error"))
 
         progress_data = {
-            "completed": 0, "failed": 0, "total_items": 1,
-            "start_time": 1000.0, "last_progress_log": 1000.0, "last_index": None
+            "completed": 0,
+            "failed": 0,
+            "total_items": 1,
+            "start_time": 1000.0,
+            "last_progress_log": 1000.0,
+            "last_index": None,
         }
 
         with patch(
-                module_target("SecurityAwareErrorHandler") + ".log_processing_error",
-                return_value="error_id_123"
+            module_target("SecurityAwareErrorHandler") + ".log_processing_error",
+            return_value="error_id_123",
         ):
             result = await ParallelProcessingCore._process_with_semaphore(
                 index=0,
@@ -469,7 +488,7 @@ class TestProcessWithSemaphore(unittest.IsolatedAsyncioTestCase):
                 item_timeout=5.0,
                 operation_id="op_test",
                 progress_data=progress_data,
-                progress_callback=None
+                progress_callback=None,
             )
 
         self.assertEqual(result, (0, None))
@@ -488,13 +507,11 @@ class TestUpdateProgress(unittest.TestCase):
             "total_items": 10,
             "start_time": 1000.0,
             "last_progress_log": 990.0,
-            "last_index": None
+            "last_index": None,
         }
 
         with patch(module_target("log_info")) as mock_log_info:
-            ParallelProcessingCore._update_progress(
-                5, "op_test", progress_data, None
-            )
+            ParallelProcessingCore._update_progress(5, "op_test", progress_data, None)
 
         self.assertEqual(progress_data["completed"], 1)
 
@@ -512,10 +529,7 @@ class TestGatherAndCollectResults(unittest.IsolatedAsyncioTestCase):
         async def dummy(i):
             return (i, "dummy_result")
 
-        tasks_map = {
-            i: asyncio.create_task(dummy(i), name=str(i))
-            for i in range(3)
-        }
+        tasks_map = {i: asyncio.create_task(dummy(i), name=str(i)) for i in range(3)}
 
         for t in tasks_map.values():
             await t
@@ -524,14 +538,10 @@ class TestGatherAndCollectResults(unittest.IsolatedAsyncioTestCase):
             tasks_map,
             batch_timeout=5.0,
             operation_id="op",
-            progress_data={"total_items": 3, "completed": 3}
+            progress_data={"total_items": 3, "completed": 3},
         )
 
-        expected = [
-            (0, "dummy_result"),
-            (1, "dummy_result"),
-            (2, "dummy_result")
-        ]
+        expected = [(0, "dummy_result"), (1, "dummy_result"), (2, "dummy_result")]
 
         self.assertEqual(result, expected)
 
@@ -565,7 +575,7 @@ class TestLogFinalCompletion(unittest.TestCase):
     # should log final completion and sensitive operation summary
     def test_log_final_completion(self):
         with patch(module_target("log_info")) as mock_log_info, patch(
-                module_target("log_sensitive_operation")
+            module_target("log_sensitive_operation")
         ) as mock_sensitive:
             results = [(0, "res1"), (1, None)]
 
@@ -573,22 +583,17 @@ class TestLogFinalCompletion(unittest.TestCase):
                 "completed": 1,
                 "failed": 1,
                 "total_items": 2,
-                "start_time": 1000.0
+                "start_time": 1000.0,
             }
 
-            with patch('time.time', return_value=1010.0):
+            with patch("time.time", return_value=1010.0):
                 ParallelProcessingCore._log_final_completion(
-                    results,
-                    progress_data,
-                    1000.0,
-                    "op_test"
+                    results, progress_data, 1000.0, "op_test"
                 )
 
         calls = mock_log_info.call_args_list
 
-        self.assertTrue(
-            any("Completed processing 2 items" in c[0][0] for c in calls)
-        )
+        self.assertTrue(any("Completed processing 2 items" in c[0][0] for c in calls))
 
         mock_sensitive.assert_called_once_with(
             "Parallel Processing",
@@ -596,7 +601,7 @@ class TestLogFinalCompletion(unittest.TestCase):
             10.0,
             completed=1,
             failed=1,
-            operation_id="op_test"
+            operation_id="op_test",
         )
 
 
@@ -612,15 +617,16 @@ class TestProcessPagesInParallel(unittest.IsolatedAsyncioTestCase):
         pages = [{"page": 1}, {"page": 2}]
 
         result = await ParallelProcessingCore.process_pages_in_parallel(
-            pages,
-            dummy_process,
-            max_workers=2
+            pages, dummy_process, max_workers=2
         )
 
-        self.assertEqual(result, [
-            (1, ({"page": 1, "data": "processed"}, [])),
-            (2, ({"page": 2, "data": "processed"}, []))
-        ])
+        self.assertEqual(
+            result,
+            [
+                (1, ({"page": 1, "data": "processed"}, [])),
+                (2, ({"page": 2, "data": "processed"}, [])),
+            ],
+        )
 
     # failures in processing should be caught and warning logged
     async def test_process_pages_in_parallel_failure(self):
@@ -631,14 +637,10 @@ class TestProcessPagesInParallel(unittest.IsolatedAsyncioTestCase):
 
         with patch(module_target("log_warning")) as mock_log_warning:
             result = await ParallelProcessingCore.process_pages_in_parallel(
-                pages,
-                dummy_process
+                pages, dummy_process
             )
 
-        self.assertEqual(
-            result,
-            [(1, ({"page": 1, "sensitive": []}, []))]
-        )
+        self.assertEqual(result, [(1, ({"page": 1, "sensitive": []}, []))])
 
         mock_log_warning.assert_called_once()
 
@@ -652,11 +654,7 @@ class TestProcessEntitiesInParallel(unittest.IsolatedAsyncioTestCase):
         detector = AsyncMock()
 
         result = await ParallelProcessingCore.process_entities_in_parallel(
-            detector,
-            "full text",
-            [],
-            [],
-            page_number=1
+            detector, "full text", [], [], page_number=1
         )
 
         self.assertEqual(result, ([], {"page": 1, "sensitive": []}))
@@ -672,11 +670,7 @@ class TestProcessEntitiesInParallel(unittest.IsolatedAsyncioTestCase):
 
         with patch(module_target("log_error")) as mock_log_error:
             result = await ParallelProcessingCore.process_entities_in_parallel(
-                detector,
-                "text",
-                [],
-                ["ent1"],
-                page_number=1
+                detector, "text", [], ["ent1"], page_number=1
             )
 
         processed_entities, redaction = result
@@ -697,8 +691,7 @@ class TestProcessInParallel(unittest.IsolatedAsyncioTestCase):
         mock_processor = AsyncMock()
 
         result = await ParallelProcessingCore.process_in_parallel(
-            items=[],
-            processor=mock_processor
+            items=[], processor=mock_processor
         )
 
         self.assertEqual(result, [])
@@ -711,40 +704,40 @@ class TestProcessInParallel(unittest.IsolatedAsyncioTestCase):
             return f"processed_{item}"
 
         with patch.object(
-                ParallelProcessingCore, '_validate_and_prepare_input',
-                return_value=("test_op_id", 60.0, 10.0, 1000.0)
+            ParallelProcessingCore,
+            "_validate_and_prepare_input",
+            return_value=("test_op_id", 60.0, 10.0, 1000.0),
         ) as mock_validate, patch.object(
-            ParallelProcessingCore, '_acquire_worker_count',
-            return_value=4
+            ParallelProcessingCore, "_acquire_worker_count", return_value=4
         ) as mock_acquire_worker, patch.object(
-            ParallelProcessingCore, '_init_progress_data',
+            ParallelProcessingCore,
+            "_init_progress_data",
             return_value={
                 "completed": 0,
                 "failed": 0,
                 "total_items": 3,
                 "start_time": 1000.0,
                 "last_progress_log": 1000.0,
-                "last_index": None
-            }
+                "last_index": None,
+            },
         ) as mock_init_progress, patch(
-            module_target("AsyncTimeoutSemaphore"),
-            return_value=DummyAsyncCM()
-        ) as mock_semaphore_class, patch.object(
-            ParallelProcessingCore, '_gather_tasks_with_timeout',
+            module_target("AsyncTimeoutSemaphore"), return_value=DummyAsyncCM()
+        ), patch.object(
+            ParallelProcessingCore,
+            "_gather_tasks_with_timeout",
             return_value=[
                 (0, "processed_item1"),
                 (1, "processed_item2"),
-                (2, "processed_item3")
-            ]
-        ) as mock_gather:
+                (2, "processed_item3"),
+            ],
+        ):
             result = await ParallelProcessingCore.process_in_parallel(
-                items=["item1", "item2", "item3"],
-                processor=dummy_processor
+                items=["item1", "item2", "item3"], processor=dummy_processor
             )
 
         self.assertEqual(
             result,
-            [(0, "processed_item1"), (1, "processed_item2"), (2, "processed_item3")]
+            [(0, "processed_item1"), (1, "processed_item2"), (2, "processed_item3")],
         )
 
         mock_validate.assert_called_once_with(

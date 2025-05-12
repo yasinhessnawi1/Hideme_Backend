@@ -63,16 +63,18 @@ logging.basicConfig(
             "app/logs/app_log/app.log",  # Path to the log file
             maxBytes=10485760,  # Limit log file size to 10 MB
             backupCount=5,  # Keep up to 5 backup log files
-            encoding='utf-8'  # Ensure UTF-8 encoding is used
-        )
-    ]
+            encoding="utf-8",  # Ensure UTF-8 encoding is used
+        ),
+    ],
 )
 
 """This creates a default logger for document processing within the application.
 It ensures that any logs relating to document processing are tagged and handled using this logger.
 """
 default_logger = logging.getLogger("document_processing")
-default_logger.setLevel(logging.INFO)  # Set the default logger to handle INFO level messages and above
+default_logger.setLevel(
+    logging.INFO
+)  # Set the default logger to handle INFO level messages and above
 
 """Logs an informational message after replacing specific Unicode characters
 with their corresponding text equivalents. This prevents encoding issues during logging.
@@ -109,7 +111,11 @@ Returns:
 
 def log_error(message, *args, **kwargs):
     # Replace specific Unicode and text markers in the message with the defined error text.
-    safe_message = message.replace("[OK]", ERROR_WORD).replace("❌", ERROR_WORD).replace("⚠️", WARNING_WORD)
+    safe_message = (
+        message.replace("[OK]", ERROR_WORD)
+        .replace("❌", ERROR_WORD)
+        .replace("⚠️", WARNING_WORD)
+    )
     # Log the processed message using the default logger at the ERROR level.
     default_logger.error(safe_message, *args, **kwargs)
 
@@ -129,7 +135,11 @@ Returns:
 
 def log_warning(message, *args, **kwargs):
     # Replace specific Unicode and text markers in the message with the defined warning text.
-    safe_message = message.replace("[OK]", WARNING_WORD).replace("❌", ERROR_WORD).replace("⚠️", WARNING_WORD)
+    safe_message = (
+        message.replace("[OK]", WARNING_WORD)
+        .replace("❌", ERROR_WORD)
+        .replace("⚠️", WARNING_WORD)
+    )
     # Log the processed message using the default logger at the WARNING level.
     default_logger.warning(safe_message, *args, **kwargs)
 
@@ -149,7 +159,11 @@ Returns:
 
 def log_debug(message, *args, **kwargs):
     # Replace specific markers in the message with "[DEBUG]" for clarity.
-    safe_message = message.replace("[OK]", "[DEBUG]").replace("❌", ERROR_WORD).replace("⚠️", WARNING_WORD)
+    safe_message = (
+        message.replace("[OK]", "[DEBUG]")
+        .replace("❌", ERROR_WORD)
+        .replace("⚠️", WARNING_WORD)
+    )
     # Log the processed message using the default logger at the INFO level (used for debug messages).
     default_logger.info(safe_message, *args, **kwargs)
 

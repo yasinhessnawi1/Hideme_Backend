@@ -3,6 +3,7 @@ Routes package for API endpoints.
 
 This module exports all route collections for the API.
 """
+
 from backend.app.api.routes.status_routes import router as status_router
 from backend.app.api.routes.pdf_routes import router as pdf_router
 from backend.app.api.routes.ai_routes import router as gemini_router
@@ -17,5 +18,5 @@ __all__ = [
     "gemini_router",
     "presidio_router",
     "metadata_router",
-    "batch_router"
+    "batch_router",
 ]
