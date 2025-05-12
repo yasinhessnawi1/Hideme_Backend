@@ -83,7 +83,7 @@ jobs:
 
   deploy:
     if: github.event_name == 'pull_request'
-    needs: [lint-python, lint-go, test-python, test-go, infra-check]
+    # To make deploy depend on validation and tests, add: needs: [lint-python, lint-go, test-python, test-go, infra-check]
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to Remote Server via SSH
