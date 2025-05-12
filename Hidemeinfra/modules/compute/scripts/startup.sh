@@ -3,24 +3,6 @@
 # Required environment variables:
 #   port, go_port, env, branch, dbuser, dbpass, dbname, dbconn, dbport, dbhost, gemini_api_key, repo, go_repo, domain, go_domain, SENDGRID_API_KEY, API_KEY_ENCRYPTION_KEY
 
-: "$${port:?port is required but not set}"
-: "$${go_port:?go_port is required but not set}"
-: "$${env:?env is required but not set}"
-: "$${branch:?branch is required but not set}"
-: "$${dbuser:?dbuser is required but not set}"
-: "$${dbpass:?dbpass is required but not set}"
-: "$${dbname:?dbname is required but not set}"
-: "$${dbconn:?dbconn is required but not set}"
-: "$${dbport:?dbport is required but not set}"
-: "$${dbhost:?dbhost is required but not set}"
-: "$${gemini_api_key:?gemini_api_key is required but not set}"
-: "$${repo:?repo is required but not set}"
-: "$${go_repo:?go_repo is required but not set}"
-: "$${domain:?domain is required but not set}"
-: "$${go_domain:?go_domain is required but not set}"
-: "$${SENDGRID_API_KEY:?SENDGRID_API_KEY is required but not set}"
-: "$${API_KEY_ENCRYPTION_KEY:?API_KEY_ENCRYPTION_KEY is required but not set}"
-
 echo "Starting setup with port=$port, go_port=$go_port, env=$env, branch=$branch, repo=$repo, go_repo=$go_repo, domain=$domain, go_domain=$go_domain"
 
 #############################################
@@ -273,7 +255,7 @@ echo "Creating .env file for main backend..."
 
 cat > .env << EOF
 GEMINI_API_KEY=${gemini_api_key}
-GO_BACKEND_URL=${go_domain}
+GO_BACKEND_URL=https://${go_domain}
 EOF
 
 # Set up environment variables for Go backend

@@ -84,7 +84,7 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 	// PostgreSQL connection string with safety parameters
 	// - connect_timeout: Prevents hanging indefinitely on connection attempts
 	connStr := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable connect_timeout=15",
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=require connect_timeout=15",
 		db_host,
 		db_port,
 		db_user,
