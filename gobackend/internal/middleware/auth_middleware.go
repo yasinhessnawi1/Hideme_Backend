@@ -1,3 +1,5 @@
+// auth_middleware.go
+
 // Package middleware provides HTTP middleware components for the HideMe API.
 // It includes authentication, authorization, security, and other cross-cutting concerns.
 //
@@ -168,7 +170,6 @@ func SecurityHeaders() func(http.Handler) http.Handler {
 	}
 }
 
-// TODO
 // AddRoleToContext extracts the JWT token from the Authorization header,
 // validates it, and adds the user role to the request context
 func AddRoleToContext(jwtService auth.JWTValidator) func(http.Handler) http.Handler {

@@ -1,3 +1,5 @@
+// user_handlers.go
+
 // Package handlers provides HTTP request handlers for the HideMe API.
 package handlers
 
@@ -192,12 +194,8 @@ func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For security, we need to authenticate with the current password
-	// This would typically be handled by the auth service
-	// For now, we'll just change the password directly
-
 	// Change the password
-	if err := h.userService.ChangePassword(r.Context(), userID, req.NewPassword); err != nil {
+	if err := h.userService.ChangePassword(r.Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
 	}
