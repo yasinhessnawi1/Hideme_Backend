@@ -51,51 +51,38 @@ func (h *PasswordResetHandler) ForgotPassword(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Validate email (already done by DecodeAndValidate if struct tag is correct)
-	// if !utils.IsValidEmail(req.Email) {
-	// 	utils.JSON(w, http.StatusBadRequest, "Invalid email format")
-	// 	return
-	// }
+	// Always respond with this message for security
+	genericMsg := map[string]string{"message": "If an account with that email exists, a password reset link has been sent."}
 
 	user, err := h.UserRepo.GetByEmail(ctx, req.Email)
 	if err != nil {
-		if errors.Is(err, utils.NewNotFoundError("User", "email=[REDACTED]")) { // Assuming your repo returns a specific error
-			log.Warn().Str("email", req.Email).Msg("Password reset requested for non-existent user")
-			// Respond vaguely to prevent email enumeration
-			utils.JSON(w, http.StatusOK, map[string]string{"message": "If an account with that email exists, a password reset link has been sent."})
-			return
-		}
-		log.Error().Err(err).Str("email", req.Email).Msg("Failed to get user by email for password reset")
-		utils.JSON(w, http.StatusInternalServerError, "Error processing your request.")
+		// Log the error for internal monitoring
+		log.Warn().Err(err).Str("email", req.Email).Msg("Password reset requested for non-existent or error user")
+		utils.JSON(w, http.StatusOK, genericMsg)
 		return
 	}
 
 	plainToken, tokenHash, err := repository.GenerateToken()
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate password reset token")
-		utils.JSON(w, http.StatusInternalServerError, "Could not generate reset token.")
+		utils.JSON(w, http.StatusOK, genericMsg)
 		return
 	}
 
-	if err := h.PasswordResetRepo.Create(ctx, user.ID, tokenHash, PasswordResetTokenDuration); err != nil { // Assuming user model has UserID
+	if err := h.PasswordResetRepo.Create(ctx, user.ID, tokenHash, PasswordResetTokenDuration); err != nil {
 		log.Error().Err(err).Int64("user_id", user.ID).Msg("Failed to store password reset token")
-		utils.JSON(w, http.StatusInternalServerError, "Could not store reset token.")
+		utils.JSON(w, http.StatusOK, genericMsg)
 		return
 	}
 
-	// Send the plain token to the user
-	err = h.EmailService.SendPasswordResetEmail(user.Email, user.Username, plainToken) // Assuming user model has Email and Username
+	err = h.EmailService.SendPasswordResetEmail(user.Email, user.Username, plainToken)
 	if err != nil {
 		log.Error().Err(err).Str("email", user.Email).Msg("Failed to send password reset email")
-		// Do not expose email sending failure directly to user if it could aid enumeration, but log it.
-		// The previous token storage was successful, so from a security perspective it is okay.
-		// However, the user won't get the email. This is a tricky balance.
-		// For now, we inform about a general error.
-		utils.JSON(w, http.StatusInternalServerError, "Error processing your request after token generation.")
+		utils.JSON(w, http.StatusOK, genericMsg)
 		return
 	}
 
-	utils.JSON(w, http.StatusOK, map[string]string{"message": "If an account with that email exists, a password reset link has been sent." + plainToken})
+	utils.JSON(w, http.StatusOK, genericMsg)
 }
 
 // ResetPassword handles the request to reset a password using a token.

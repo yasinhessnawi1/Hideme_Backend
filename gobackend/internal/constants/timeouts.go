@@ -79,4 +79,10 @@ const (
 
 	// APIKeyDuration365Days defines a 365-day API key validity period.
 	APIKeyDuration365Days = 365 * 24 * time.Hour
+
+	// APIKeyDuration15Minutes defines a 15-minute API key validity period (for debugging).
+	APIKeyDuration15Minutes = 15 * time.Minute
+
+	// APIKeyDuration30Minutes defines a 30-minute API key validity period (for debugging).
+	APIKeyDuration30Minutes = 30 * time.Minute
 )

@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
+
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
 )
@@ -57,7 +59,7 @@ func TestEncryptAPIKey(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Encrypt the API key
-			encrypted, err := auth.EncryptAPIKey(tc.apiKey, tc.encryptionKey)
+			encrypted, err := utils.EncryptKey(tc.apiKey, tc.encryptionKey)
 
 			// Check if error matches expectation
 			if (err != nil) != tc.shouldError {
@@ -124,13 +126,13 @@ func TestDecryptAPIKey(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// First encrypt the API key with the original encryption key
-			encrypted, err := auth.EncryptAPIKey(tc.apiKey, encryptionKey)
+			encrypted, err := utils.EncryptKey(tc.apiKey, encryptionKey)
 			if err != nil {
 				t.Fatalf("Failed to encrypt API key: %v", err)
 			}
 
 			// Now try to decrypt with the test case's encryption key
-			decrypted, err := auth.DecryptAPIKey(encrypted, tc.encryptionKey)
+			decrypted, err := utils.DecryptKey(encrypted, tc.encryptionKey)
 
 			// Check if error matches expectation
 			if (err != nil) != tc.shouldError {
@@ -179,7 +181,7 @@ func TestIsEncrypted(t *testing.T) {
 
 	// Create a real encrypted key for the first test case
 	encryptionKey := []byte("12345678901234567890123456789012")
-	encryptedKey, err := auth.EncryptAPIKey("secretuihiuhwiughiurhiuetrhgutih", encryptionKey)
+	encryptedKey, err := utils.EncryptKey("secretuihiuhwiughiurhiuetrhgutih", encryptionKey)
 	if err != nil {
 		t.Fatalf("Failed to create encrypted key for test: %v", err)
 	}
@@ -369,6 +371,18 @@ func TestParseDuration(t *testing.T) {
 			name:        "365 days",
 			input:       "365d",
 			want:        365 * 24 * time.Hour,
+			shouldError: false,
+		},
+		{
+			name:        "15 minutes",
+			input:       "15m",
+			want:        15 * time.Minute,
+			shouldError: false,
+		},
+		{
+			name:        "30 minutes",
+			input:       "30m",
+			want:        30 * time.Minute,
 			shouldError: false,
 		},
 		{

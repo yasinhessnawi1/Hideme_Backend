@@ -1,8 +1,6 @@
 package models_test
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"testing"
 	"time"
 
@@ -30,18 +28,19 @@ func TestNewDocument(t *testing.T) {
 	userID := int64(100)
 	originalFilename := "sensitive_document.pdf"
 
-	// Expected hashed name
-	hash := sha256.Sum256([]byte(originalFilename))
-	expectedHashedName := hex.EncodeToString(hash[:])
+	// Create a proper 32-byte encryption key for AES-256
+	encryptionKey := []byte("my-secret-key-must-be-32-bytes!!")
 
 	// Create a new document
 	now := time.Now()
-	document := models.NewDocument(userID, originalFilename)
+	document := models.NewDocument(userID, originalFilename, encryptionKey)
 
 	// Verify the document was created correctly
 	assert.NotNil(t, document, "NewDocument should return a non-nil Document")
 	assert.Equal(t, userID, document.UserID, "Document should have the provided user ID")
-	assert.Equal(t, expectedHashedName, document.HashedDocumentName, "Document should have the correct hashed name")
+
+	// The document name should now be encrypted, not hashed
+	assert.NotEmpty(t, document.HashedDocumentName, "Document should have an encrypted name")
 	assert.WithinDuration(t, now, document.UploadTimestamp, time.Second, "UploadTimestamp should be set to current time")
 	assert.WithinDuration(t, now, document.LastModified, time.Second, "LastModified should be set to current time")
 	assert.Equal(t, int64(0), document.ID, "A new Document should have zero ID until saved to database")

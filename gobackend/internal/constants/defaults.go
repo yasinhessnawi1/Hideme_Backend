@@ -129,4 +129,10 @@ const (
 
 	// APIKeyDurationFormat365Days is the string representation of a 365-day API key duration.
 	APIKeyDurationFormat365Days = "365d"
+
+	// APIKeyDurationFormat15Minutes is the string representation of a 15-minute API key duration (for debugging).
+	APIKeyDurationFormat15Minutes = "15m"
+
+	// APIKeyDurationFormat30Minutes is the string representation of a 30-minute API key duration (for debugging).
+	APIKeyDurationFormat30Minutes = "30m"
 )

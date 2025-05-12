@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 	"testing"
 	"time"
 
@@ -25,8 +26,11 @@ func setupDocumentRepositoryTest(t *testing.T) (*repository.PostgresDocumentRepo
 	// Create a database pool with the mock database
 	dbPool := &database.Pool{DB: db}
 
-	// Create a new repository with the mocked database
-	repo := repository.NewDocumentRepository(dbPool).(*repository.PostgresDocumentRepository)
+	// Create a test encryption key (32 bytes for AES-256)
+	encryptionKey := []byte("test-encryption-key-for-unit-tests")
+
+	// Create a new repository with the mocked database and encryption key
+	repo := repository.NewDocumentRepository(dbPool, encryptionKey).(*repository.PostgresDocumentRepository)
 
 	// Return the repository, mock and a cleanup function
 	return repo, mock, func() {
@@ -46,14 +50,15 @@ func TestDocumentRepository_Create(t *testing.T) {
 		HashedDocumentName: "hashed_name",
 		UploadTimestamp:    now,
 		LastModified:       now,
+		RedactionSchema:    "", // Add this field
 	}
 
 	// Setup for PostgreSQL RETURNING clause
 	rows := sqlmock.NewRows([]string{"document_id"}).AddRow(1)
 
-	// Expected query with placeholders for the arguments
+	// Expected query with placeholders for the arguments - now including redaction_schema
 	mock.ExpectQuery("INSERT INTO documents").
-		WithArgs(doc.UserID, doc.HashedDocumentName, doc.UploadTimestamp, doc.LastModified).
+		WithArgs(doc.UserID, sqlmock.AnyArg(), doc.UploadTimestamp, doc.LastModified, doc.RedactionSchema).
 		WillReturnRows(rows)
 
 	// Execute the method being tested
@@ -77,11 +82,12 @@ func TestDocumentRepository_Create_Error(t *testing.T) {
 		HashedDocumentName: "hashed_name",
 		UploadTimestamp:    now,
 		LastModified:       now,
+		RedactionSchema:    "", // Add this field
 	}
 
-	// Mock database error
+	// Mock database error - now expecting 5 arguments including redaction_schema
 	mock.ExpectQuery("INSERT INTO documents").
-		WithArgs(doc.UserID, doc.HashedDocumentName, doc.UploadTimestamp, doc.LastModified).
+		WithArgs(doc.UserID, sqlmock.AnyArg(), doc.UploadTimestamp, doc.LastModified, doc.RedactionSchema).
 		WillReturnError(errors.New("database error"))
 
 	// Execute the method being tested
@@ -101,20 +107,36 @@ func TestDocumentRepository_GetByID(t *testing.T) {
 	// Set up test data
 	id := int64(1)
 	now := time.Now()
+
+	// Use a proper 32-byte encryption key
+	encryptionKey := []byte("test-encryption-key-for-unit-tests")
+	if len(encryptionKey) < 32 {
+		// Pad the key to 32 bytes if needed
+		padded := make([]byte, 32)
+		copy(padded, encryptionKey)
+		encryptionKey = padded
+	}
+
+	// Create an encrypted document name
+	originalFilename := "test_document.pdf"
+	encryptedName, err := utils.EncryptKey(originalFilename, encryptionKey)
+	require.NoError(t, err, "Failed to encrypt test filename")
+
 	doc := &models.Document{
 		ID:                 id,
 		UserID:             100,
-		HashedDocumentName: "hashed_name",
+		HashedDocumentName: encryptedName, // Use the properly encrypted name
 		UploadTimestamp:    now,
 		LastModified:       now,
+		RedactionSchema:    "{}", // Add this field
 	}
 
-	// Set up query result
-	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified"}).
-		AddRow(doc.ID, doc.UserID, doc.HashedDocumentName, doc.UploadTimestamp, doc.LastModified)
+	// Set up query result - now including redaction_schema
+	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified", "redaction_schema"}).
+		AddRow(doc.ID, doc.UserID, doc.HashedDocumentName, doc.UploadTimestamp, doc.LastModified, doc.RedactionSchema)
 
-	// Expected query with placeholder for the ID
-	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE document_id = \\$1").
+	// Expected query with placeholder for the ID - now selecting redaction_schema
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified, redaction_schema FROM documents WHERE document_id = \\$1").
 		WithArgs(id).
 		WillReturnRows(rows)
 
@@ -123,14 +145,17 @@ func TestDocumentRepository_GetByID(t *testing.T) {
 
 	// Assert the results
 	assert.NoError(t, err)
+	assert.NotNil(t, result, "Result should not be nil")
 	assert.Equal(t, doc.ID, result.ID)
 	assert.Equal(t, doc.UserID, result.UserID)
-	assert.Equal(t, doc.HashedDocumentName, result.HashedDocumentName)
+	// The HashedDocumentName should now contain the decrypted value
+	assert.Equal(t, originalFilename, result.HashedDocumentName)
 	assert.WithinDuration(t, doc.UploadTimestamp, result.UploadTimestamp, time.Second)
 	assert.WithinDuration(t, doc.LastModified, result.LastModified, time.Second)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+// TestDocumentRepository_GetByID_NotFound tests the GetByID method when a document is not found
 func TestDocumentRepository_GetByID_NotFound(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupDocumentRepositoryTest(t)
@@ -140,7 +165,7 @@ func TestDocumentRepository_GetByID_NotFound(t *testing.T) {
 	id := int64(999)
 
 	// Mock database response - empty result
-	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE document_id = \\$1").
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified, redaction_schema FROM documents WHERE document_id = \\$1").
 		WithArgs(id).
 		WillReturnError(sql.ErrNoRows)
 
@@ -153,6 +178,7 @@ func TestDocumentRepository_GetByID_NotFound(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+// TestDocumentRepository_GetByID_OtherError tests the GetByID method when a database error occurs
 func TestDocumentRepository_GetByID_OtherError(t *testing.T) {
 	// Set up the test
 	repo, mock, cleanup := setupDocumentRepositoryTest(t)
@@ -162,7 +188,7 @@ func TestDocumentRepository_GetByID_OtherError(t *testing.T) {
 	id := int64(1)
 
 	// Mock database error (not ErrNoRows)
-	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE document_id = \\$1").
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified, redaction_schema FROM documents WHERE document_id = \\$1").
 		WithArgs(id).
 		WillReturnError(errors.New("database connection error"))
 
@@ -189,6 +215,20 @@ func TestDocumentRepository_GetByUserID(t *testing.T) {
 	now := time.Now()
 	totalCount := 15
 
+	// Create a proper 32-byte encryption key
+	encryptionKey := []byte("test-encryption-key-for-unit-tests")
+	if len(encryptionKey) < 32 {
+		padded := make([]byte, 32)
+		copy(padded, encryptionKey)
+		encryptionKey = padded
+	}
+
+	// Create encrypted document names
+	encryptedName1, err := utils.EncryptKey("doc1", encryptionKey)
+	require.NoError(t, err)
+	encryptedName2, err := utils.EncryptKey("doc2", encryptionKey)
+	require.NoError(t, err)
+
 	// Setup for count query
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(totalCount)
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM documents WHERE user_id = \\$1").
@@ -200,26 +240,28 @@ func TestDocumentRepository_GetByUserID(t *testing.T) {
 		{
 			ID:                 1,
 			UserID:             userID,
-			HashedDocumentName: "doc1",
+			HashedDocumentName: encryptedName1,
 			UploadTimestamp:    now,
 			LastModified:       now,
+			RedactionSchema:    "{}", // Add this field
 		},
 		{
 			ID:                 2,
 			UserID:             userID,
-			HashedDocumentName: "doc2",
+			HashedDocumentName: encryptedName2,
 			UploadTimestamp:    now.Add(-time.Hour),
 			LastModified:       now.Add(-time.Hour),
+			RedactionSchema:    "{}", // Add this field
 		},
 	}
 
-	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified"})
+	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified", "redaction_schema"}) // Include redaction_schema
 	for _, doc := range docs {
-		rows.AddRow(doc.ID, doc.UserID, doc.HashedDocumentName, doc.UploadTimestamp, doc.LastModified)
+		rows.AddRow(doc.ID, doc.UserID, doc.HashedDocumentName, doc.UploadTimestamp, doc.LastModified, doc.RedactionSchema) // Add redaction_schema value
 	}
 
-	// Expected query with pagination parameters
-	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
+	// Expected query with pagination parameters - include redaction_schema
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified, redaction_schema FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
 		WithArgs(userID, pageSize, offset).
 		WillReturnRows(rows)
 
@@ -232,6 +274,9 @@ func TestDocumentRepository_GetByUserID(t *testing.T) {
 	assert.Len(t, results, 2)
 	assert.Equal(t, docs[0].ID, results[0].ID)
 	assert.Equal(t, docs[1].ID, results[1].ID)
+	// The decrypted names should match the original values
+	assert.Equal(t, "doc1", results[0].HashedDocumentName)
+	assert.Equal(t, "doc2", results[1].HashedDocumentName)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -279,8 +324,8 @@ func TestDocumentRepository_GetByUserID_QueryError(t *testing.T) {
 		WithArgs(userID).
 		WillReturnRows(countRows)
 
-	// Mock main query error
-	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
+	// Mock main query error - update to include redaction_schema
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified, redaction_schema FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
 		WithArgs(userID, pageSize, offset).
 		WillReturnError(errors.New("query error"))
 
@@ -313,11 +358,11 @@ func TestDocumentRepository_GetByUserID_ScanError(t *testing.T) {
 		WithArgs(userID).
 		WillReturnRows(countRows)
 
-	// Setup for main query with invalid data to cause scan error
-	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified"}).
-		AddRow("invalid_id", userID, "doc1", time.Now(), time.Now()) // invalid_id will cause scan error
+	// Setup for main query with invalid data to cause scan error - update to include redaction_schema
+	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified", "redaction_schema"}).
+		AddRow("invalid_id", userID, "doc1", time.Now(), time.Now(), "{}") // invalid_id will cause scan error
 
-	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified, redaction_schema FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
 		WithArgs(userID, pageSize, offset).
 		WillReturnRows(rows)
 
@@ -350,12 +395,12 @@ func TestDocumentRepository_GetByUserID_RowsError(t *testing.T) {
 		WithArgs(userID).
 		WillReturnRows(countRows)
 
-	// Setup for main query with row error
-	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified"}).
-		AddRow(1, userID, "doc1", time.Now(), time.Now()).
+	// Setup for main query with row error - update to include redaction_schema
+	rows := sqlmock.NewRows([]string{"document_id", "user_id", "hashed_document_name", "upload_timestamp", "last_modified", "redaction_schema"}).
+		AddRow(1, userID, "doc1", time.Now(), time.Now(), "{}").
 		RowError(0, errors.New("row error"))
 
-	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
+	mock.ExpectQuery("SELECT document_id, user_id, hashed_document_name, upload_timestamp, last_modified, redaction_schema FROM documents WHERE user_id = \\$1 ORDER BY upload_timestamp DESC LIMIT \\$2 OFFSET \\$3").
 		WithArgs(userID, pageSize, offset).
 		WillReturnRows(rows)
 
@@ -979,7 +1024,6 @@ func TestDocumentRepository_AddDetectedEntity(t *testing.T) {
 		EndY:            40.5,
 		RedactionMethod: "blackout",
 	}
-	schemaJSON, _ := schema.Value()
 
 	entity := &models.DetectedEntity{
 		DocumentID:        1,
@@ -992,9 +1036,9 @@ func TestDocumentRepository_AddDetectedEntity(t *testing.T) {
 	// Setup for PostgreSQL RETURNING clause
 	rows := sqlmock.NewRows([]string{"entity_id"}).AddRow(100)
 
-	// Expected query with placeholders
+	// Expected query with placeholders - use AnyArg for the encrypted schema
 	mock.ExpectQuery("INSERT INTO detected_entities").
-		WithArgs(entity.DocumentID, entity.MethodID, entity.EntityName, schemaJSON, entity.DetectedTimestamp).
+		WithArgs(entity.DocumentID, entity.MethodID, entity.EntityName, sqlmock.AnyArg(), entity.DetectedTimestamp).
 		WillReturnRows(rows)
 
 	// Execute the method being tested
@@ -1021,7 +1065,6 @@ func TestDocumentRepository_AddDetectedEntity_Error(t *testing.T) {
 		EndY:            40.5,
 		RedactionMethod: "blackout",
 	}
-	schemaJSON, _ := schema.Value()
 
 	entity := &models.DetectedEntity{
 		DocumentID:        1,
@@ -1031,9 +1074,9 @@ func TestDocumentRepository_AddDetectedEntity_Error(t *testing.T) {
 		DetectedTimestamp: now,
 	}
 
-	// Mock query error
+	// Mock query error - use AnyArg for the encrypted schema
 	mock.ExpectQuery("INSERT INTO detected_entities").
-		WithArgs(entity.DocumentID, entity.MethodID, entity.EntityName, schemaJSON, entity.DetectedTimestamp).
+		WithArgs(entity.DocumentID, entity.MethodID, entity.EntityName, sqlmock.AnyArg(), entity.DetectedTimestamp).
 		WillReturnError(errors.New("insert error"))
 
 	// Execute the method being tested
@@ -1142,9 +1185,23 @@ func TestDocumentRepository_GetDocumentSummary(t *testing.T) {
 	// Set up test data
 	documentID := int64(1)
 	now := time.Now()
+
+	// Create a proper 32-byte encryption key
+	encryptionKey := []byte("test-encryption-key-for-unit-tests")
+	if len(encryptionKey) < 32 {
+		padded := make([]byte, 32)
+		copy(padded, encryptionKey)
+		encryptionKey = padded
+	}
+
+	// Create an encrypted document name
+	originalFilename := "test_document.pdf"
+	encryptedName, err := utils.EncryptKey(originalFilename, encryptionKey)
+	require.NoError(t, err, "Failed to encrypt test filename")
+
 	summary := &models.DocumentSummary{
 		ID:              documentID,
-		HashedName:      "hashed_document_name",
+		HashedName:      encryptedName, // Use the encrypted name
 		UploadTimestamp: now.Add(-time.Hour),
 		LastModified:    now,
 		EntityCount:     5,
@@ -1164,8 +1221,9 @@ func TestDocumentRepository_GetDocumentSummary(t *testing.T) {
 
 	// Assert the results
 	assert.NoError(t, err)
+	assert.NotNil(t, result, "Result should not be nil")
 	assert.Equal(t, summary.ID, result.ID)
-	assert.Equal(t, summary.HashedName, result.HashedName)
+	assert.Equal(t, originalFilename, result.HashedName) // Should be decrypted
 	assert.WithinDuration(t, summary.UploadTimestamp, result.UploadTimestamp, time.Second)
 	assert.WithinDuration(t, summary.LastModified, result.LastModified, time.Second)
 	assert.Equal(t, summary.EntityCount, result.EntityCount)

@@ -8,14 +8,15 @@
 package server
 
 import (
-	httpSwagger "github.com/swaggo/http-swagger"
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/handlers"
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	httpSwagger "github.com/swaggo/http-swagger"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/handlers"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -529,6 +530,38 @@ func (s *Server) GetAPIRoutes(w http.ResponseWriter, r *http.Request) {
 				},
 			},
 		},
+		"POST /api/auth/forgot-password": map[string]interface{}{
+			"description": "Initiate password reset process",
+			"headers": map[string]string{
+				"Content-Type": "application/json",
+			},
+			"body": map[string]interface{}{
+				"email": "string - Email address associated with the account",
+			},
+			"response": map[string]interface{}{
+				"success": true,
+				"data": map[string]interface{}{
+					"message": "Password reset email sent",
+				},
+			},
+		},
+		"POST /api/auth/reset-password": map[string]interface{}{
+			"description": "Reset password using token",
+			"headers": map[string]string{
+				"Content-Type": "application/json",
+			},
+			"body": map[string]interface{}{
+				"token":            "string - Password reset token",
+				"new_password":     "string - New password",
+				"confirm_password": "string - Must match new_password",
+			},
+			"response": map[string]interface{}{
+				"success": true,
+				"data": map[string]interface{}{
+					"message": "Password successfully reset",
+				},
+			},
+		},
 	}
 
 	// User routes
@@ -1005,10 +1038,10 @@ func (s *Server) GetAPIRoutes(w http.ResponseWriter, r *http.Request) {
 				"data": []map[string]interface{}{
 					{
 						"id":               1,
-						"hashed_name":      "encrypted-filename-string",
-						"upload_timestamp": "2023-01-01T12:00:00Z",
-						"last_modified":    "2023-01-01T12:00:00Z",
-						"entity_count":     5,
+						"hashed_name":      "document.pdf",
+						"upload_timestamp": "2025-05-10T21:09:03.46195Z",
+						"last_modified":    "2025-05-10T21:09:03.46195Z",
+						"entity_count":     0,
 					},
 				},
 				"total_count": 42,
@@ -1029,9 +1062,9 @@ func (s *Server) GetAPIRoutes(w http.ResponseWriter, r *http.Request) {
 				"success": true,
 				"data": map[string]interface{}{
 					"id":               1,
-					"hashed_name":      "encrypted-filename-string",
-					"upload_timestamp": "2023-01-01T12:00:00Z",
-					"last_modified":    "2023-01-01T12:00:00Z",
+					"hashed_name":      "document.pdf",
+					"upload_timestamp": "2025-05-10T21:09:03.46195Z",
+					"last_modified":    "2025-05-10T21:09:03.46195Z",
 				},
 			},
 		},

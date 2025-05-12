@@ -1,3 +1,5 @@
+// user_service.go
+
 // Package service provides business logic and service implementations.
 //
 // This package implements the application's core business logic, connecting
@@ -124,7 +126,8 @@ func (s *UserService) UpdateUser(ctx context.Context, id int64, update *models.U
 
 	// Update password if provided
 	if update.Password != "" {
-		if err := s.ChangePassword(ctx, id, update.Password); err != nil {
+		// For admin/system-initiated password change, currentPassword is not required
+		if err := s.ChangePassword(ctx, id, "", update.Password); err != nil {
 			return nil, err
 		}
 		// Password is updated in a separate transaction, no need to set changes flag
@@ -146,18 +149,34 @@ func (s *UserService) UpdateUser(ctx context.Context, id int64, update *models.U
 }
 
 // ChangePassword updates a user's password.
-// It validates the password, hashes it, and invalidates all existing sessions
+// It validates the current password, validates the new password, hashes it, and invalidates all existing sessions
 // for security.
 //
 // Parameters:
 //   - ctx: Context for the database operation
 //   - id: The user ID whose password is being changed
+//   - currentPassword: The current password for verification
 //   - newPassword: The new password (in plaintext)
 //
 // Returns:
 //   - error: Any error encountered or nil if successful
-func (s *UserService) ChangePassword(ctx context.Context, id int64, newPassword string) error {
-	// Validate password
+func (s *UserService) ChangePassword(ctx context.Context, id int64, currentPassword, newPassword string) error {
+	// Get the user to verify the current password
+	user, err := s.userRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Verify current password
+	match, err := auth.VerifyPassword(currentPassword, user.PasswordHash, user.Salt, s.passwordCfg)
+	if err != nil {
+		return fmt.Errorf("password verification error: %w", err)
+	}
+	if !match {
+		return utils.NewUnauthorizedError("Current password is incorrect")
+	}
+
+	// Validate new password
 	if err := utils.ValidatePassword(newPassword); err != nil {
 		return err
 	}
