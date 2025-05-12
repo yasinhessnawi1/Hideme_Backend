@@ -146,7 +146,7 @@ func ParseAPIKey(apiKey string) (string, string, error) {
 }
 
 // ParseDuration converts a string duration format to a time.Duration.
-// Supported formats: "30d", "90d", "180d", "365d"
+// Supported formats: "15m", "30m", "30d", "90d", "180d", "365d"
 //
 // Parameters:
 //   - duration: A string representing a duration
@@ -156,6 +156,10 @@ func ParseAPIKey(apiKey string) (string, string, error) {
 //   - A validation error if the format is invalid
 func ParseDuration(duration string) (time.Duration, error) {
 	switch duration {
+	case constants.APIKeyDurationFormat15Minutes:
+		return constants.APIKeyDuration15Minutes, nil
+	case constants.APIKeyDurationFormat30Minutes:
+		return constants.APIKeyDuration30Minutes, nil
 	case constants.APIKeyDurationFormat30Days:
 		return constants.APIKeyDuration30Days, nil
 	case constants.APIKeyDurationFormat90Days:
@@ -165,7 +169,7 @@ func ParseDuration(duration string) (time.Duration, error) {
 	case constants.APIKeyDurationFormat365Days:
 		return constants.APIKeyDuration365Days, nil
 	default:
-		return 0, utils.NewValidationError("duration", "Invalid duration. Must be one of: 30d, 90d, 180d, 365d")
+		return 0, utils.NewValidationError("duration", "Invalid duration. Must be one of: 15m, 30m, 30d, 90d, 180d, 365d")
 	}
 }
 
