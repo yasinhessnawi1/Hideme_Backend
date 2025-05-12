@@ -32,8 +32,12 @@ jobs:
       - name: Install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.59.1
+      - name: Go mod tidy
+        run: go mod tidy
+        working-directory: gobackend
       - name: Lint Go code
-        run: cd gobackend && $(go env GOPATH)/bin/golangci-lint run .
+        run: $(go env GOPATH)/bin/golangci-lint run ./...
+        working-directory: gobackend
 
   test-python:
     runs-on: ubuntu-latest
