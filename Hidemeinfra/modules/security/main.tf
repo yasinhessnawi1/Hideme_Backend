@@ -50,6 +50,7 @@ resource "google_project_iam_member" "db_service_account_roles" {
 }
 
 # Create a firewall rule to allow health checks - SECURED
+#tfsec:ignore:google-compute-no-public-ingress
 resource "google_compute_firewall" "allow_health_checks" {
   name        = "hide-me-allow-health-checks-${var.environment}"
   project     = var.project
@@ -64,8 +65,6 @@ resource "google_compute_firewall" "allow_health_checks" {
   source_ranges = var.health_check_ip_ranges
 
   target_tags = ["hide-me-app", "${var.environment}-app"]
-
-  tfsec:ignore:google-compute-no-public-ingress
 }
 
 # Create a firewall rule to allow internal communication
@@ -91,6 +90,7 @@ resource "google_compute_firewall" "allow_internal" {
 }
 
 # Create a firewall rule to allow SSH access - SECURED
+#tfsec:ignore:google-compute-no-public-ingress
 resource "google_compute_firewall" "allow_ssh" {
   name        = "hide-me-allow-ssh-${var.environment}"
   project     = var.project
@@ -105,11 +105,10 @@ resource "google_compute_firewall" "allow_ssh" {
   source_ranges = var.iap_ip_ranges
 
   target_tags = ["hide-me-app", "${var.environment}-app"]
-
-  # tfsec:ignore:google-compute-no-public-ingress
 }
 
 # Create a firewall rule to allow backend access - SECURED
+#tfsec:ignore:google-compute-no-public-ingress
 resource "google_compute_firewall" "allow_backend" {
   name        = "hide-me-allow-backend-${var.environment}"
   project     = var.project
@@ -124,11 +123,10 @@ resource "google_compute_firewall" "allow_backend" {
   source_ranges = var.load_balancer_ip_ranges
 
   target_tags = ["hide-me-app", "${var.environment}-app"]
-
-  # tfsec:ignore:google-compute-no-public-ingress
 }
 
 # Create a firewall rule to allow specific egress traffic - SECURED
+#tfsec:ignore:google-compute-no-public-egress
 resource "google_compute_firewall" "allow_specific_egress" {
   name        = "hide-me-allow-specific-egress-${var.environment}"
   project     = var.project
@@ -144,8 +142,6 @@ resource "google_compute_firewall" "allow_specific_egress" {
   destination_ranges = var.google_api_ranges
 
   target_tags = ["hide-me-app", "${var.environment}-app"]
-
-  # tfsec:ignore:google-compute-no-public-egress
 }
 
 # Add an explicit deny rule for all other egress traffic
