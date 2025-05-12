@@ -81,8 +81,8 @@ type APIKeyCreationRequest struct {
 	Name string `json:"name" validate:"required,min=1,max=100"`
 
 	// Duration specifies how long the API key should remain valid
-	// Must be one of the predefined durations (30d, 90d, 180d, 365d)
-	Duration string `json:"duration" validate:"required,oneof=30d 90d 180d 365d"` // Duration in days
+	// Must be one of the predefined durations (15m, 30m, 30d, 90d, 180d, 365d)
+	Duration string `json:"duration" validate:"required,oneof=15m 30m 30d 90d 180d 365d"` // Duration in days or minutes
 }
 
 // APIKeyResponse represents the response for API key creation.

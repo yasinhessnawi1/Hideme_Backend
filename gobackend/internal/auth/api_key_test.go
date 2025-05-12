@@ -3,10 +3,11 @@ package auth_test
 
 import (
 	"encoding/base64"
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
@@ -370,6 +371,18 @@ func TestParseDuration(t *testing.T) {
 			name:        "365 days",
 			input:       "365d",
 			want:        365 * 24 * time.Hour,
+			shouldError: false,
+		},
+		{
+			name:        "15 minutes",
+			input:       "15m",
+			want:        15 * time.Minute,
+			shouldError: false,
+		},
+		{
+			name:        "30 minutes",
+			input:       "30m",
+			want:        30 * time.Minute,
 			shouldError: false,
 		},
 		{
