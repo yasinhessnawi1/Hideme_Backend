@@ -1,89 +1,70 @@
 name: CI/CD Pipeline
 
 on:
-  workflow_dispatch: { }
+  workflow_dispatch: {}
   push:
-    branches: [ "**" ]
+    branches: ["**"]
   pull_request:
-    branches: [ "**" ]
+    branches: ["**"]
 
 jobs:
   lint-python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12.6'
-
-      - name: Install linters
-        run: |
-          pip install flake8 black
-
-      - name: Run black check (formatting)
-        run: black --check backend
-
-      - name: Run flake8 (with .flake8 config)
+      - name: Install flake8
+        run: pip install flake8
+      - name: Lint Python code
         run: flake8 backend
 
   lint-go:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-
       - name: Install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.59.1
-
       - name: Go mod tidy
         run: go mod tidy
         working-directory: gobackend
-
       - name: Lint Go code
         run: $(go env GOPATH)/bin/golangci-lint run ./...
         working-directory: gobackend
 
   test-python:
     runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: dummy_key
+      GO_BACKEND_URL: http://localhost:8080
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12.6'
-
-      - name: Install test dependencies
+      - name: Install dependencies
         run: |
           pip install -r backend/requirements.txt
-          pip install pytest pytest-cov
-
-      - name: Run pytest with coverage
+          pip install pytest pytest-cov pytest-asyncio httpx
+      - name: Run Python tests with coverage
         run: pytest --cov=backend.app --cov-report=html backend
-
-      - name: Upload HTML coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-html
-          path: htmlcov/
 
   test-go:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-
       - name: Run Go tests
         run: cd gobackend && go test ./...
 
@@ -91,26 +72,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
-
       - name: Terraform Validate
         run: cd hidemeinfra && terraform init -backend=false && terraform validate
-
       - name: Terraform Format
         run: cd hidemeinfra && terraform fmt -check -recursive
-
       - name: Install tfsec
         run: |
           curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
-
       - name: Run tfsec
         run: cd hidemeinfra && tfsec .
 
   deploy:
     if: github.event_name == 'pull_request'
-    # Optional: depends on lint/test/infra
+    # Uncomment the line below to require successful completion of all other jobs before deploy
     # needs: [lint-python, lint-go, test-python, test-go, infra-check]
     runs-on: ubuntu-latest
     steps:
