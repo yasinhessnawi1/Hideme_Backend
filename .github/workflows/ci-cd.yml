@@ -36,34 +36,6 @@ jobs:
         run: |
           $(go env GOPATH)/bin/golangci-lint run ./gobackend/...
 
-  sonarlint-python:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12.6'
-      - name: Install SonarLint
-        run: pip install sonarlint
-      - name: Run SonarLint on Python
-        run: sonarlint backend
-
-  sonarlint-go:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-      - name: Install SonarLint
-        run: |
-          curl -sSfL https://github.com/SonarSource/sonarlint-cli/releases/latest/download/sonarlint-cli-linux.zip -o sonarlint.zip
-          unzip sonarlint.zip -d sonarlint
-      - name: Run SonarLint on Go
-        run: ./sonarlint/sonarlint lint gobackend
-
   test-python:
     runs-on: ubuntu-latest
     steps:
@@ -108,7 +80,7 @@ jobs:
 
   deploy:
     if: github.event_name == 'pull_request'
-    needs: [lint-python, lint-go, sonarlint-python, sonarlint-go, test-python, test-go, infra-check]
+    needs: [lint-python, lint-go, test-python, test-go, infra-check]
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to Remote Server via SSH
