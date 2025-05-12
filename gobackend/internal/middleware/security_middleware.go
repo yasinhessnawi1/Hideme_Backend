@@ -12,9 +12,16 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
+
+// SecurityService defines methods required from SecurityService
+type SecurityService interface {
+	IsBanned(ipAddress string) bool
+	IsRateLimited(ipAddress string, category string) bool
+	BanIP(ctx context.Context, ipAddress string, reason string, duration time.Duration, bannedBy string) (*models.IPBan, error)
+}
 
 // RateLimit is middleware that limits the rate of requests from clients.
 // It uses the SecurityService to check if a client has exceeded their rate limit.
@@ -25,7 +32,7 @@ import (
 //
 // Returns:
 //   - A middleware function that can be used with an HTTP handler
-func RateLimit(securityService *service.SecurityService, category string) func(http.Handler) http.Handler {
+func RateLimit(securityService SecurityService, category string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get the client IP address, handling proxies
@@ -66,7 +73,7 @@ func RateLimit(securityService *service.SecurityService, category string) func(h
 //
 // Returns:
 //   - A middleware function that can be used with an HTTP handler
-func IPBanCheck(securityService *service.SecurityService) func(http.Handler) http.Handler {
+func IPBanCheck(securityService SecurityService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get the client IP address, handling proxies
@@ -108,7 +115,7 @@ func IPBanCheck(securityService *service.SecurityService) func(http.Handler) htt
 //
 // Returns:
 //   - A middleware function that can be used with an HTTP handler
-func AutoBan(securityService *service.SecurityService, threshold int, window, banDuration time.Duration) func(http.Handler) http.Handler {
+func AutoBan(securityService SecurityService, threshold int, window, banDuration time.Duration) func(http.Handler) http.Handler {
 	// Track suspicious activities per IP
 	type activityRecord struct {
 		count     int

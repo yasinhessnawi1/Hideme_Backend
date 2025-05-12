@@ -95,7 +95,7 @@ func (h *PasswordResetHandler) ForgotPassword(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	utils.JSON(w, http.StatusOK, map[string]string{"message": "If an account with that email exists, a password reset link has been sent." + plainToken})
+	utils.JSON(w, http.StatusOK, map[string]string{"message": "If an account with that email exists, a password reset link has been sent."})
 }
 
 // ResetPassword handles the request to reset a password using a token.

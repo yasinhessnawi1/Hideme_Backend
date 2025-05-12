@@ -2,15 +2,27 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
+
+// SecurityServiceInterface defines the interface for security service operations
+// This is used for testing purposes
+type SecurityServiceInterface interface {
+	ListBans(ctx context.Context) ([]*models.IPBan, error)
+	BanIP(ctx context.Context, ipAddress string, reason string, duration time.Duration, bannedBy string) (*models.IPBan, error)
+	UnbanIP(ctx context.Context, banID int64) error
+	IsBanned(ipAddress string) bool
+	IsRateLimited(ipAddress string, category string) bool
+}
 
 // SecurityHandler manages security-related API endpoints.
 type SecurityHandler struct {
