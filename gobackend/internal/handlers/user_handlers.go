@@ -1,3 +1,5 @@
+// user_handlers.go
+
 // Package handlers provides HTTP request handlers for the HideMe API.
 package handlers
 
@@ -192,12 +194,8 @@ func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For security, we need to authenticate with the current password
-	// This would typically be handled by the auth service
-	// For now, we'll just change the password directly
-
 	// Change the password
-	if err := h.userService.ChangePassword(r.Context(), userID, req.NewPassword); err != nil {
+	if err := h.userService.ChangePassword(r.Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
 	}
@@ -359,14 +357,21 @@ func (h *UserHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if the email is available
+	// Optionally: validate email format (if you have a util for this)
+	if !utils.IsValidEmail(email) {
+		utils.BadRequest(w, "Invalid email format", nil)
+		return
+	}
+
+	// Check if the email is available (true = available, false = taken)
 	available, err := h.userService.CheckEmail(r.Context(), email)
-	if err != nil {
+	if err != nil && !utils.IsNotFoundError(err) && !utils.IsDuplicateError(err) {
+		// Only return 500 for real server errors
 		utils.ErrorFromAppError(w, utils.ParseError(err))
 		return
 	}
 
-	// Return the result
+	// Always return 200 with the same structure, regardless of existence
 	utils.JSON(w, constants.StatusOK, map[string]interface{}{
 		"email":     email,
 		"available": available,

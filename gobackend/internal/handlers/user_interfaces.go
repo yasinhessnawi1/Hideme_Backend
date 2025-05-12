@@ -1,3 +1,5 @@
+// user_interfaces.go
+
 // Package handlers provides HTTP request handlers and service interfaces for the HideMe application.
 // This file defines service interfaces related to user management and authentication,
 // establishing clear contracts between handlers and service implementations.
@@ -7,6 +9,7 @@ package handlers
 
 import (
 	"context"
+
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
 )
 
@@ -47,6 +50,7 @@ type UserServiceInterface interface {
 	// Parameters:
 	//   - ctx: The context for the operation, which may include deadlines or cancellation
 	//   - id: The unique identifier of the user whose password will be changed
+	//   - currentPassword: The current password for verification
 	//   - newPassword: The new password to set for the user
 	//
 	// Returns:
@@ -54,7 +58,7 @@ type UserServiceInterface interface {
 	//
 	// Security considerations: Implementations must properly hash and salt the new password
 	// before storing it, and should enforce password complexity requirements.
-	ChangePassword(ctx context.Context, id int64, newPassword string) error
+	ChangePassword(ctx context.Context, id int64, currentPassword, newPassword string) error
 
 	// DeleteUser removes a user account and associated data.
 	//
