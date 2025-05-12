@@ -48,7 +48,7 @@ jobs:
           pip install -r backend/requirements.txt
           pip install pytest
       - name: Run Python tests
-        run: pytest backend || echo "No tests found."
+        run: pytest backend
 
   test-go:
     runs-on: ubuntu-latest

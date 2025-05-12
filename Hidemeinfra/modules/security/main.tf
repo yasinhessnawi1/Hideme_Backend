@@ -55,7 +55,7 @@ resource "google_compute_firewall" "allow_health_checks" {
   project     = var.project
   network     = var.network_id
   description = "Allow health checks from Google Cloud health checking systems"
-  
+
   allow {
     protocol = "tcp"
     ports    = [var.health_check_port]

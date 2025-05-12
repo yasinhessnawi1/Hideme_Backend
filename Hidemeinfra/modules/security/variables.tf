@@ -105,7 +105,7 @@ variable "google_api_ranges" {
 variable "allowed_ip_ranges" {
   description = "IP ranges allowed to access the application (empty means all)"
   type        = list(string)
-  default     = [
+  default = [
     //all only the required ip ranges
     "10.0.0.0/8",
     "172.16.0.0/12",
