@@ -10,9 +10,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+
 	_ "github.com/lib/pq" // Import PostgreSQL driver
 	"github.com/rs/zerolog/log"
-	"os"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
@@ -84,7 +85,7 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 	// PostgreSQL connection string with safety parameters
 	// - connect_timeout: Prevents hanging indefinitely on connection attempts
 	connStr := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable connect_timeout=15",
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=require connect_timeout=15",
 		db_host,
 		db_port,
 		db_user,
@@ -155,7 +156,7 @@ func (p *Pool) Close() {
 //   - An error if the transaction fails or the function returns an error
 func (p *Pool) Transaction(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	// Start a transaction
-	tx, err := p.BeginTx(ctx, nil)
+	tx, err := p.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -204,13 +205,13 @@ func (p *Pool) HealthCheck(ctx context.Context) error {
 	defer cancel()
 
 	// Ping the database to verify connection
-	if err := p.PingContext(ctx); err != nil {
+	if err := p.DB.PingContext(ctx); err != nil {
 		return fmt.Errorf("database health check failed: %w", err)
 	}
 
 	// Run a simple query to verify database functionality
 	var result int
-	if err := p.QueryRowContext(ctx, "SELECT 1").Scan(&result); err != nil {
+	if err := p.DB.QueryRowContext(ctx, "SELECT 1").Scan(&result); err != nil {
 		return fmt.Errorf("database query test failed: %w", err)
 	}
 

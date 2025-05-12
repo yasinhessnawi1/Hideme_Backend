@@ -2,9 +2,10 @@ package handlers
 
 import (
 	"errors"
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 	"net/http"
 	"strconv"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
