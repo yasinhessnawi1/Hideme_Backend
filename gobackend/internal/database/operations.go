@@ -117,7 +117,7 @@ func (c *CRUD) Create(ctx context.Context, model Table) error {
 	if idField.IsValid() {
 		// PostgreSQL implementation using RETURNING to get the auto-generated ID
 		var id interface{}
-		err := c.DB.QueryRowContext(ctx, query, values...).Scan(&id)
+		err := c.DB.DB.QueryRowContext(ctx, query, values...).Scan(&id)
 		if err != nil {
 			return fmt.Errorf("failed to create record in %s: %w", model.TableName(), err)
 		}
@@ -126,7 +126,7 @@ func (c *CRUD) Create(ctx context.Context, model Table) error {
 		idField.Set(reflect.ValueOf(id).Convert(idField.Type()))
 	} else {
 		// Execute the query without returning an ID
-		if _, err := c.DB.ExecContext(ctx, query, values...); err != nil {
+		if _, err := c.DB.DB.ExecContext(ctx, query, values...); err != nil {
 			return fmt.Errorf("failed to create record in %s: %w", model.TableName(), err)
 		}
 	}
@@ -190,7 +190,7 @@ func (c *CRUD) GetByID(ctx context.Context, model Table, id interface{}) error {
 		Msg("Getting database record by ID")
 
 	// Execute the query
-	row := c.DB.QueryRowContext(ctx, query, id)
+	row := c.DB.DB.QueryRowContext(ctx, query, id)
 
 	// Prepare slice of pointers to receive the scanned values
 	values := make([]interface{}, len(fields))
@@ -282,7 +282,7 @@ func (c *CRUD) Update(ctx context.Context, model Table) error {
 		Msg("Updating database record")
 
 	// Execute the query
-	result, err := c.DB.ExecContext(ctx, query, values...)
+	result, err := c.DB.DB.ExecContext(ctx, query, values...)
 	if err != nil {
 		return fmt.Errorf("failed to update record in %s: %w", model.TableName(), err)
 	}
@@ -340,7 +340,7 @@ func (c *CRUD) Delete(ctx context.Context, model Table, id interface{}) error {
 		Msg("Deleting database record")
 
 	// Execute the query
-	result, err := c.DB.ExecContext(ctx, query, id)
+	result, err := c.DB.DB.ExecContext(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete record from %s: %w", model.TableName(), err)
 	}
@@ -414,7 +414,7 @@ func (c *CRUD) List(ctx context.Context, model Table, dest interface{}, conditio
 		Msg("Listing database records")
 
 	// Execute the query
-	rows, err := c.DB.QueryContext(ctx, query, params...)
+	rows, err := c.DB.DB.QueryContext(ctx, query, params...)
 	if err != nil {
 		return fmt.Errorf("failed to query records from %s: %w", model.TableName(), err)
 	}
@@ -501,7 +501,7 @@ func (c *CRUD) Count(ctx context.Context, model Table, conditions map[string]int
 
 	// Execute the query
 	var count int64
-	if err := c.DB.QueryRowContext(ctx, query, params...).Scan(&count); err != nil {
+	if err := c.DB.DB.QueryRowContext(ctx, query, params...).Scan(&count); err != nil {
 		return 0, fmt.Errorf("failed to count records in %s: %w", model.TableName(), err)
 	}
 

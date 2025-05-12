@@ -152,14 +152,16 @@ type gdprLogHook struct{}
 // Returns:
 //   - The number of bytes processed and any error that occurred
 func (h gdprLogHook) Write(p []byte) (n int, err error) {
+	// If gdprLogger is nil, do nothing (prevents nil pointer dereference in CI/tests)
+	if gdprLogger == nil {
+		return len(p), nil
+	}
 	// Parse the JSON log entry
 	var logEntry map[string]interface{}
 	err = json.Unmarshal(p, &logEntry)
 	if err != nil {
 		// If we can't parse the JSON, just log the error and let logging continue
-		if gdprLogger != nil {
-			gdprLogger.Error("Failed to parse log entry", err, nil)
-		}
+		gdprLogger.Error("Failed to parse log entry", err, nil)
 		return len(p), nil // Don't return error to prevent breaking the logger
 	}
 

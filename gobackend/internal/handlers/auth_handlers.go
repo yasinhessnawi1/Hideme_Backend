@@ -13,10 +13,11 @@ package handlers
 
 import (
 	"errors"
-	"github.com/go-chi/chi/v5"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
