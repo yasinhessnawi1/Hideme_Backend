@@ -119,7 +119,7 @@ jobs:
           zone: ${{ secrets.GCP_ZONE }}
           ssh_private_key: '${{ secrets.REMOTE_SSH_KEY }}'
           command: |
-            cd $HOME/hide-me
+            cd /opt/hide-me
             git pull
             cd backend
             sudo docker compose down || true
