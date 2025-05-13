@@ -120,12 +120,13 @@ jobs:
           ssh_private_key: '${{ secrets.REMOTE_SSH_KEY }}'
           command: |
             cd /opt/hide-me
+            git config --global --add safe.directory /opt/hide-me
             git pull
             cd backend
-            sudo docker compose down || true
-            sudo docker compose build
-            sudo docker compose up -d
+            (sudo docker compose down || sudo docker-compose down || true)
+            (sudo docker compose build || sudo docker-compose build)
+            (sudo docker compose up -d || sudo docker-compose up -d)
             cd ../gobackend
-            sudo docker compose down || true
-            sudo docker compose build
-            sudo docker compose up -d
+            (sudo docker compose down || sudo docker-compose down || true)
+            (sudo docker compose build || sudo docker-compose build)
+            (sudo docker compose up -d || sudo docker-compose up -d)
