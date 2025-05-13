@@ -63,7 +63,7 @@ func (s *APIKeyService) GenerateAPIKey(userID int64, name string, duration time.
 		return nil, "", utils.NewInternalServerError(err)
 	}
 	// Base64-url encode the key for safe transport/storage
-	apiKey := base64.RawURLEncoding.EncodeToString(keyBytes)
+	apiKey := base64.URLEncoding.EncodeToString(keyBytes)
 
 	// Get the encryption key from config
 	var encryptionKey []byte
