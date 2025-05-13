@@ -25,3 +25,6 @@ go.work.sum
 .env
 internal/config/config.yaml
 .idea/*
+
+  gobackend/internal/database/certs/*
+  !gobackend/internal/database/certs/.gitkeep

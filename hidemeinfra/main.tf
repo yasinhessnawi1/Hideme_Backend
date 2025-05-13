@@ -107,7 +107,7 @@ module "compute" {
   max_instances          = var.max_instances
   app_port               = var.backend_port
   go_port                = var.go_backend_port
-  zones                  = ["${var.region}-a", "${var.region}-b", "${var.region}-c"]
+  zones                  = [var.zone]
   github_ssh_key         = var.github_ssh_key
   gemini_api_key         = var.gemini_api_key
   github_repo            = var.github_repo
@@ -121,6 +121,9 @@ module "compute" {
   ssl_email              = var.ssl_email
   SENDGRID_API_KEY       = var.SENDGRID_API_KEY
   API_KEY_ENCRYPTION_KEY = var.API_KEY_ENCRYPTION_KEY
+  server_ca_pem          = var.server_ca_pem
+  client_cert_pem        = var.client_cert_pem
+  client_key_pem         = var.client_key_pem
 }
 
 # Load Balancer Module

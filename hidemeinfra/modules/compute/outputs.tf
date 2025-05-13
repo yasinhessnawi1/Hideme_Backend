@@ -69,6 +69,21 @@ output "github_token_secret_id" {
   value       = google_secret_manager_secret.github_token.id
 }
 
+output "server_ca_pem_secret_id" {
+  description = "The ID of the Secret Manager secret containing the Cloud SQL server-ca.pem file"
+  value       = google_secret_manager_secret.server_ca_pem.id
+}
+
+output "client_cert_pem_secret_id" {
+  description = "The ID of the Secret Manager secret containing the Cloud SQL client-cert.pem file"
+  value       = google_secret_manager_secret.client_cert_pem.id
+}
+
+output "client_key_pem_secret_id" {
+  description = "The ID of the Secret Manager secret containing the Cloud SQL client-key.pem file"
+  value       = google_secret_manager_secret.client_key_pem.id
+}
+
 # Update existing server_setup_instructions output
 output "server_setup_instructions" {
   description = "Instructions for server setup"

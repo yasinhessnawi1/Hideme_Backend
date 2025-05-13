@@ -86,7 +86,7 @@ resource "google_compute_instance_template" "app_template" {
 
   # Set a short lifecycle to recreate templates when changed
   lifecycle {
-    create_before_destroy = false
+    create_before_destroy = true
   }
 }
 
@@ -128,7 +128,7 @@ resource "google_compute_region_instance_group_manager" "app_instance_group" {
     type                         = "PROACTIVE"
     instance_redistribution_type = "PROACTIVE"
     minimal_action               = "REPLACE"
-    max_surge_fixed              = 3
+    max_surge_fixed              = 2
     max_unavailable_fixed        = 0
     replacement_method           = "SUBSTITUTE"
   }
@@ -244,4 +244,56 @@ resource "google_secret_manager_secret_version" "github_token_version" {
   count       = var.github_token != "" ? 1 : 0
   secret      = google_secret_manager_secret.github_token.id
   secret_data = var.github_token
+}
+
+# === Cloud SQL Certificate Secrets ===
+resource "google_secret_manager_secret" "server_ca_pem" {
+  project   = var.project
+  secret_id = "hide-me-server-ca-pem-${var.environment}"
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "server_ca_pem_version" {
+  secret      = google_secret_manager_secret.server_ca_pem.id
+  secret_data = var.server_ca_pem
+}
+
+resource "google_secret_manager_secret" "client_cert_pem" {
+  project   = var.project
+  secret_id = "hide-me-client-cert-pem-${var.environment}"
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "client_cert_pem_version" {
+  secret      = google_secret_manager_secret.client_cert_pem.id
+  secret_data = var.client_cert_pem
+}
+
+resource "google_secret_manager_secret" "client_key_pem" {
+  project   = var.project
+  secret_id = "hide-me-client-key-pem-${var.environment}"
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "client_key_pem_version" {
+  secret      = google_secret_manager_secret.client_key_pem.id
+  secret_data = var.client_key_pem
 }

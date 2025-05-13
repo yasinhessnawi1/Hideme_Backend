@@ -205,3 +205,24 @@ variable "API_KEY_ENCRYPTION_KEY" {
   sensitive   = true
   default     = ""
 }
+
+variable "server_ca_pem" {
+  description = "Contents of the Cloud SQL server-ca.pem file (PEM format)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "client_cert_pem" {
+  description = "Contents of the Cloud SQL client-cert.pem file (PEM format)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "client_key_pem" {
+  description = "Contents of the Cloud SQL client-key.pem file (PEM format)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
