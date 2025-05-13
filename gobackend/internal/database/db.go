@@ -74,6 +74,12 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 		db_name = cfg.Database.Name
 	}
 
+	// Determine SSL parameters based on environment
+	sslParams := constants.PostgresSSLParams
+	if cfg.App.Environment == constants.EnvDevelopment {
+		sslParams = constants.PostgresSSLDisable
+	}
+
 	// Log connection attempt (without sensitive information)
 	log.Info().
 		Str("host", db_host).
@@ -83,14 +89,14 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 		Msg("Connecting to database")
 
 	// PostgreSQL connection string with safety parameters
-	// - connect_timeout: Prevents hanging indefinitely on connection attempts
 	connStr := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=verify-ca sslrootcert=internal/database/certs/server-ca.pem sslcert=internal/database/certs/client-cert.pem sslkey=internal/database/certs/client-key.pem connect_timeout=15",
+		"host=%s port=%s user=%s password=%s dbname=%s %s",
 		db_host,
 		db_port,
 		db_user,
 		db_password,
 		db_name,
+		sslParams,
 	)
 
 	// Open a connection to the database

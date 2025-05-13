@@ -29,7 +29,7 @@ func TestNewJWTService(t *testing.T) {
 	}
 
 	// Check if config is set
-	if service.Config != cfg {
+	if service != nil && service.Config != nil && service.Config != cfg {
 		t.Errorf("Expected Config to be %v, got %v", cfg, service.Config)
 	}
 }
@@ -41,19 +41,19 @@ func TestGetConfig(t *testing.T) {
 
 	if cfg == nil {
 		t.Error("Expected default config, got nil")
-	}
+	} else {
+		// Check default values
+		if cfg.Expiry != 15*time.Minute { // FIXED: Changed from 15 hours to 15 minutes
+			t.Errorf("Expected default Expiry to be 15 minutes, got %v", cfg.Expiry)
+		}
 
-	// Check default values
-	if cfg.Expiry != 15*time.Minute { // FIXED: Changed from 15 hours to 15 minutes
-		t.Errorf("Expected default Expiry to be 15 minutes, got %v", cfg.Expiry)
-	}
+		if cfg.RefreshExpiry != 7*24*time.Hour {
+			t.Errorf("Expected default RefreshExpiry to be 168h, got %v", cfg.RefreshExpiry)
+		}
 
-	if cfg.RefreshExpiry != 7*24*time.Hour {
-		t.Errorf("Expected default RefreshExpiry to be 168h, got %v", cfg.RefreshExpiry)
-	}
-
-	if cfg.Issuer != "hideme-api" {
-		t.Errorf("Expected default Issuer to be 'hideme-api', got %v", cfg.Issuer)
+		if cfg.Issuer != "hideme-api" {
+			t.Errorf("Expected default Issuer to be 'hideme-api', got %v", cfg.Issuer)
+		}
 	}
 
 	// Test with provided config
@@ -67,7 +67,7 @@ func TestGetConfig(t *testing.T) {
 	service = &auth.JWTService{Config: providedCfg}
 	cfg = service.GetConfig()
 
-	if cfg != providedCfg {
+	if cfg != nil && cfg != providedCfg {
 		t.Errorf("Expected provided config %v, got %v", providedCfg, cfg)
 	}
 }

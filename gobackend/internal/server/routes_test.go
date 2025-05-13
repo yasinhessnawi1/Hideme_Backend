@@ -4,15 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"testing"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/config"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"testing"
 )
 
 // APIResponse represents the standard API response envelope format
@@ -125,12 +127,16 @@ func (s *TestServer) SetupRoutes() {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"healthy","version":"test"}`))
+		if _, err := w.Write([]byte(`{"status":"healthy","version":"test"}`)); err != nil {
+			log.Print("failed to write response: ", err)
+		}
 	})
 
 	r.Get("/version", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"version":"test","environment":"test"}`))
+		if _, err := w.Write([]byte(`{"version":"test","environment":"test"}`)); err != nil {
+			log.Print("failed to write response: ", err)
+		}
 	})
 
 	r.Get("/api/routes", s.GetAPIRoutes)
@@ -169,7 +175,9 @@ func (s *TestServer) GetAPIRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responseBytes, _ := json.Marshal(response)
-	w.Write(responseBytes)
+	if _, err := w.Write(responseBytes); err != nil {
+		log.Print("failed to write response: ", err)
+	}
 }
 
 // TestHandlePreflight tests the handlePreflight function
@@ -668,7 +676,9 @@ func (s *MockFullServer) GetRouter() chi.Router {
 func (s *MockFullServer) GetAPIRoutes(w http.ResponseWriter, r *http.Request) {
 	s.GetAPIRoutesCalled = true
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"success":true,"data":{"routes":"test"}}`))
+	if _, err := w.Write([]byte(`{"success":true,"data":{"routes":"test"}}`)); err != nil {
+		log.Print("failed to write response: ", err)
+	}
 }
 
 // TestRealServerFunctionality tests the Server implementation with mocked dependencies

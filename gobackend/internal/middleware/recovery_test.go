@@ -26,7 +26,9 @@ func TestRecovery(t *testing.T) {
 			name: "No panic occurs",
 			handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("Success"))
+				if _, err := w.Write([]byte("Success")); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
 			}),
 			expectedStatus: http.StatusOK,
 			expectedBody:   "Success",

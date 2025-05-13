@@ -1,17 +1,13 @@
 package utils
 
-import "testing"
-
 import (
 	"bytes"
 	"encoding/base64"
-	"github.com/stretchr/testify/assert"
-	"io"
-)
-
-import (
-	"github.com/stretchr/testify/require"
 	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEncryptKey(t *testing.T) {
@@ -223,6 +219,3 @@ func TestEncryptionRoundTrip(t *testing.T) {
 		assert.Equal(t, originalKey, decryptedKey)
 	})
 }
-
-// Monkey patch for io.ReadFull
-var readFullFunc = io.ReadFull

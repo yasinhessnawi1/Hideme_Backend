@@ -85,18 +85,9 @@ func (r *PasswordResetRepository) GetUserIDByTokenHash(ctx context.Context, toke
 // Delete removes a password reset token hash from the database.
 func (r *PasswordResetRepository) Delete(ctx context.Context, tokenHash string) error {
 	query := fmt.Sprintf("DELETE FROM %s WHERE token_hash = $1", constants.TablePasswordResetTokens)
-	result, err := r.db.ExecContext(ctx, query, tokenHash)
+	_, err := r.db.ExecContext(ctx, query, tokenHash)
 	if err != nil {
 		return fmt.Errorf("failed to delete password reset token: %w", err)
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected after deleting token: %w", err)
-	}
-	if rowsAffected == 0 {
-		// It's not necessarily an error if the token was already deleted (e.g., by another request or a cleanup job)
-		// However, for strictness, you could return ErrTokenNotFound here if needed.
-		// For now, we'll consider it a successful operation if no error occurred.
 	}
 	return nil
 }
