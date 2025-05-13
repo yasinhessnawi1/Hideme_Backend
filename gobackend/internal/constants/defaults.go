@@ -115,7 +115,8 @@ const (
 	// BearerTokenPrefix is the prefix for Authorization header bearer tokens.
 	BearerTokenPrefix = "Bearer "
 
-	// APIKeyRandomStringLength is the length of randomly generated API key strings.
+	// APIKeyRandomStringLength is the number of random BYTES for API key generation (not string length).
+	// Use 16 for AES-128 or 32 for AES-256. Do NOT use 24 (192 bits) as browsers do not support it for AES-GCM.
 	APIKeyRandomStringLength = 32
 
 	// APIKeyDurationFormat30Days is the string representation of a 30-day API key duration.

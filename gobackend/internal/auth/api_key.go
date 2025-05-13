@@ -41,7 +41,7 @@ func NewAPIKeyService(config *config.APIKeySettings) *APIKeyService {
 }
 
 // GenerateAPIKey creates a new API key for a user.
-// It generates a secure random string, hashes or encrypts it for storage,
+// It generates a secure random key (16 or 32 bytes), hashes or encrypts it for storage,
 // and creates a database model with appropriate metadata.
 //
 // Parameters:
@@ -57,14 +57,13 @@ func (s *APIKeyService) GenerateAPIKey(userID int64, name string, duration time.
 	// Generate a UUID for internal reference only
 	keyID := uuid.New().String()
 
-	// Generate a cryptographically secure random string for the API key
-	randomPart, err := GenerateRandomString(constants.APIKeyRandomStringLength)
+	// Generate a cryptographically secure random key (32 bytes for AES-256, or 16 for AES-128)
+	keyBytes, err := GenerateRandomBytes(32) // 32 bytes = 256 bits (recommended)
 	if err != nil {
 		return nil, "", utils.NewInternalServerError(err)
 	}
-
-	// Use only the random part as the API key
-	apiKey := randomPart
+	// Base64-url encode the key for safe transport/storage
+	apiKey := base64.RawURLEncoding.EncodeToString(keyBytes)
 
 	// Get the encryption key from config
 	var encryptionKey []byte
