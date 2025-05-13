@@ -85,7 +85,7 @@ jobs:
         run: cd hidemeinfra && tfsec .
 
   deploy:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     # Uncomment the line below to require successful completion of all other jobs before deploy
     # needs: [lint-python, lint-go, test-python, test-go, infra-check]
     runs-on: ubuntu-latest

@@ -31,3 +31,4 @@ redis
 aiofiles
 pytest
 aiohttp
+cryptography

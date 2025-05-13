@@ -128,7 +128,7 @@ resource "google_compute_region_instance_group_manager" "app_instance_group" {
     type                         = "PROACTIVE"
     instance_redistribution_type = "PROACTIVE"
     minimal_action               = "REPLACE"
-    max_surge_fixed              = 2
+    max_surge_fixed              = 3
     max_unavailable_fixed        = 0
     replacement_method           = "SUBSTITUTE"
   }
