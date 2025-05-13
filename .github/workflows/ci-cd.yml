@@ -90,8 +90,7 @@ jobs:
     # needs: [lint-python, lint-go, test-python, test-go, infra-check]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up gcloud CLI
         uses: google-github-actions/setup-gcloud@v1
@@ -108,23 +107,19 @@ jobs:
             --format="value(name)" | head -n1)
           echo "INSTANCE_NAME=$INSTANCE" >> $GITHUB_ENV
 
-      - name: Set up IAP Tunnel Proxy
-        uses: google-github-actions/iap-tunnel@v1
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v2'
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          zone: ${{ secrets.GCP_ZONE }}
-          instance_name: ${{ env.INSTANCE_NAME }}
-          port: 22
-          local_port: 2222
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-      - name: Deploy via SSH through IAP Tunnel
-        env:
-          SSH_KEY: ${{ secrets.REMOTE_SSH_KEY }}
-        run: |
-          echo "$SSH_KEY" > id_rsa
-          chmod 600 id_rsa
-          ssh -i id_rsa -o StrictHostKeyChecking=no -p 2222 ra91mi91am_gmail_com@localhost "
+      - id: 'compute-ssh'
+        uses: 'google-github-actions/ssh-compute@v1'
+        with:
+          instance_name: ${{ env.INSTANCE_NAME }}
+          zone: ${{ secrets.GCP_ZONE }}
+          ssh_private_key: '${{ secrets.REMOTE_SSH_KEY }}'
+          user: 'ra91mi91am_gmail_com'
+          command: |
             cd /opt/Hideme_Backend
             git pull
             cd backend
@@ -135,4 +130,3 @@ jobs:
             sudo docker compose down || true
             sudo docker compose build
             sudo docker compose up -d
-          "
