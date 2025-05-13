@@ -118,9 +118,8 @@ jobs:
           instance_name: ${{ env.INSTANCE_NAME }}
           zone: ${{ secrets.GCP_ZONE }}
           ssh_private_key: '${{ secrets.REMOTE_SSH_KEY }}'
-          user: 'ra91mi91am_gmail_com'
           command: |
-            cd /opt/Hideme_Backend
+            cd $HOME/hide-me
             git pull
             cd backend
             sudo docker compose down || true
