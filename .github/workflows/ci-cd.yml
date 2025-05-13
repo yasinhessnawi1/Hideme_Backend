@@ -90,13 +90,41 @@ jobs:
     # needs: [lint-python, lint-go, test-python, test-go, infra-check]
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to Remote Server via SSH
-        uses: appleboy/ssh-action@master
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v1
         with:
-          host: ${{ secrets.REMOTE_HOST }}
-          username: ${{ secrets.REMOTE_USER }}
-          key: ${{ secrets.REMOTE_SSH_KEY }}
-          script: |
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Get instance name from group
+        id: get_instance
+        run: |
+          INSTANCE=$(gcloud compute instances list \
+            --filter="name~'^hide-me' AND zone:('${{ secrets.GCP_ZONE }}')" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --format="value(name)" | head -n1)
+          echo "INSTANCE_NAME=$INSTANCE" >> $GITHUB_ENV
+
+      - name: Set up IAP Tunnel Proxy
+        uses: google-github-actions/iap-tcp-authorized@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          zone: ${{ secrets.GCP_ZONE }}
+          instance_name: ${{ env.INSTANCE_NAME }}
+          port: 22
+          local_port: 2222
+
+      - name: Deploy via SSH through IAP Tunnel
+        env:
+          SSH_KEY: ${{ secrets.REMOTE_SSH_KEY }}
+        run: |
+          echo "$SSH_KEY" > id_rsa
+          chmod 600 id_rsa
+          ssh -i id_rsa -o StrictHostKeyChecking=no -p 2222 ra91mi91am_gmail_com@localhost "
             cd /opt/Hideme_Backend
             git pull
             cd backend
@@ -107,3 +135,4 @@ jobs:
             sudo docker compose down || true
             sudo docker compose build
             sudo docker compose up -d
+          "
