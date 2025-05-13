@@ -12,7 +12,6 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/auth"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/models"
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
@@ -28,7 +27,7 @@ type DocumentServiceInterface interface {
 
 // DocumentService implements DocumentServiceInterface using a DocumentRepository.
 type DocumentService struct {
-	docRepo repository.DocumentRepository
+	// docRepo repository.DocumentRepository // Remove unused field
 }
 
 // DocumentHandler handles HTTP requests related to documents.

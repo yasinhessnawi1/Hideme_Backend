@@ -17,26 +17,6 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
 
-// captureStdout captures stdout during function execution
-func captureStdout(fn func()) string {
-	// Create pipe to capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	// Execute the function
-	fn()
-
-	// Close writer and restore stdout
-	w.Close()
-	os.Stdout = oldStdout
-
-	// Read captured output
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	return buf.String()
-}
-
 // captureStderr captures stderr during function execution
 func captureStderr(fn func()) string {
 	// Create pipe to capture stderr
@@ -53,7 +33,9 @@ func captureStderr(fn func()) string {
 
 	// Read captured output
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		panic(err)
+	}
 	return buf.String()
 }
 
@@ -87,9 +69,15 @@ func createTestConfig() *config.AppConfig {
 	sensLogDir := filepath.Join(tempDir, "test-logs", "sensitive")
 
 	// Create the directories
-	os.MkdirAll(stdLogDir, 0755)
-	os.MkdirAll(persLogDir, 0755)
-	os.MkdirAll(sensLogDir, 0755)
+	if err := os.MkdirAll(stdLogDir, 0755); err != nil {
+		panic(err)
+	}
+	if err := os.MkdirAll(persLogDir, 0755); err != nil {
+		panic(err)
+	}
+	if err := os.MkdirAll(sensLogDir, 0755); err != nil {
+		panic(err)
+	}
 
 	return &config.AppConfig{
 		App: config.AppSettings{

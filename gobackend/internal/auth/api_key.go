@@ -118,7 +118,7 @@ func IsEncrypted(securedAPIKey string) bool {
 // Returns:
 //   - The secured API key (either encrypted or hashed)
 func HashAPIKey(apiKey string, encryptionKey []byte) string {
-	if encryptionKey != nil && len(encryptionKey) >= 32 {
+	if len(encryptionKey) >= 32 {
 		encrypted, err := utils.EncryptKey(apiKey, encryptionKey)
 		if err == nil {
 			return encrypted

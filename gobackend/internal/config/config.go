@@ -13,7 +13,6 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -342,7 +341,7 @@ func Load(configPath string) (*AppConfig, error) {
 
 	// Load configuration from file if it exists
 	if _, err := os.Stat(configPath); err == nil {
-		data, err := ioutil.ReadFile(configPath)
+		data, err := os.ReadFile(configPath)
 		if err != nil {
 			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
@@ -552,7 +551,7 @@ func setDefaults(config *AppConfig) {
 		config.Security.IPBanning.CacheRefreshInterval = 5 * time.Minute
 	}
 
-	if config.Security.IPBanning.AutoBanEnabled == false {
+	if !config.Security.IPBanning.AutoBanEnabled {
 		// Auto-ban is enabled by default in production
 		config.Security.IPBanning.AutoBanEnabled = config.App.IsProduction()
 	}

@@ -57,7 +57,9 @@ func (h *SecurityMockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusOK)
 	}
 	if h.Response != "" {
-		w.Write([]byte(h.Response))
+		if _, err := w.Write([]byte(h.Response)); err != nil {
+			panic(err)
+		}
 	}
 }
 

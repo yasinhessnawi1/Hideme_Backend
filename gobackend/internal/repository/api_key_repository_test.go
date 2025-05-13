@@ -16,31 +16,6 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/repository"
 )
 
-// Mock error types for testing specific error paths
-type mockRowsError struct {
-	sqlmock.Rows
-}
-
-func (m *mockRowsError) Err() error {
-	return errors.New("rows error")
-}
-
-type mockRowsCloseError struct {
-	sqlmock.Rows
-}
-
-func (m *mockRowsCloseError) Close() error {
-	return errors.New("close error")
-}
-
-type mockRowsScanError struct {
-	sqlmock.Rows
-}
-
-func (m *mockRowsScanError) Scan(dest ...interface{}) error {
-	return errors.New("scan error")
-}
-
 // setupAPIKeyRepositoryTest creates a new test database connection and mock
 func setupAPIKeyRepositoryTest(t *testing.T) (*repository.PostgresAPIKeyRepository, sqlmock.Sqlmock, func()) {
 	// Create a new SQL mock database

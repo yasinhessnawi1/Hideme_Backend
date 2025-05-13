@@ -1203,6 +1203,7 @@ func TestSettingsService_UpdateSearchPattern(t *testing.T) {
 					t.Errorf("Expected PatternType = %s, got %s", models.CaseSensitive, pattern.PatternType)
 				}
 				if pattern.PatternText != `\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b` {
+					t.Errorf("Expected PatternText = '%s', got %s", `\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b`, pattern.PatternText)
 				}
 			},
 		},
