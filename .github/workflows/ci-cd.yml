@@ -92,6 +92,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
       - name: Set up gcloud CLI
         uses: google-github-actions/setup-gcloud@v1
         with:
@@ -105,11 +110,7 @@ jobs:
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --format="value(name)" | head -n1)
           echo "INSTANCE_NAME=$INSTANCE" >> $GITHUB_ENV
-
-      - id: 'auth'
-        uses: 'google-github-actions/auth@v2'
-        with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          echo "Selected instance: $INSTANCE"
 
       - id: 'compute-ssh'
         uses: 'google-github-actions/ssh-compute@v1'
