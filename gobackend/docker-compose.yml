@@ -23,6 +23,7 @@ services:
       - API_KEY_ENCRYPTION_KEY=${API_KEY_ENCRYPTION_KEY}
     volumes:
       - ../gobackend/configs:/Hideme_Backend/gobackend/configs
+      - /opt/hide-me/gobackend/internal/database/certs:/app/internal/database/certs
       - goapp_logs:/var/log/hideapp
 
 

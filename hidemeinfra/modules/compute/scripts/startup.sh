@@ -293,6 +293,8 @@ CLIENT_KEY_PEM=$(gcloud secrets versions access latest --secret="hide-me-client-
 echo -e "$CLIENT_KEY_PEM" > "$CERTS_DST_DIR/client-key.pem"
 chmod 600 "$CERTS_DST_DIR/client-key.pem"
 
+chmod 755 "$CERTS_DST_DIR"
+
 # Create a basic config.yaml for Go app
 cat > /opt/hide-me/gobackend/internal/config/config.yaml << EOF
 app:
