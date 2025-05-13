@@ -627,7 +627,7 @@ class SessionEncryptionManager:
             # Read the encrypted bytes from all UploadFile streams concurrently
             contents = await asyncio.gather(*(file.read() for file in files))
 
-            # Decrypt each file’s byte content using AES-GCM
+            # Decrypt each file's byte content using AES-GCM
             decrypted_bytes_list = self.decrypt_files(contents, api_key)
 
             # Wrap the decrypted bytes back into new UploadFile objects
@@ -646,7 +646,12 @@ class SessionEncryptionManager:
             # Decrypt each field’s raw bytes into a UTF-8 string
             for name, raw_bytes in encrypted_fields.items():
                 if raw_bytes is not None:
-                    fields_out[name] = await self.decrypt_text(raw_bytes, api_key)
+                    decrypted_value = await self.decrypt_text(raw_bytes, api_key)
+                    try:
+                        parsed_value = json.loads(decrypted_value)
+                    except Exception:
+                        parsed_value = decrypted_value
+                    fields_out[name] = parsed_value
                 else:
                     fields_out[name] = None
 

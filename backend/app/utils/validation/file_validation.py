@@ -295,12 +295,18 @@ def validate_file_content(
     if content_type:
         # Normalize content type.
         normalized_content_type = content_type.split(";")[0].strip().lower()
-        # Compare with the detected MIME type.
-        if normalized_content_type != detected_mime:
+        allowed_types = ALLOWED_MIME_TYPES["pdf"]
+        # Only error if neither is in the allowed set
+        if (normalized_content_type not in allowed_types) or (detected_mime not in allowed_types):
             return (
                 False,
-                f"Content type mismatch: provided {normalized_content_type}, detected {detected_mime}",
+                f"Only PDF files are allowed, provided: {normalized_content_type}, detected: {detected_mime}",
                 detected_mime,
+            )
+        # If both are allowed, but don't match, just log a warning but do not error
+        if normalized_content_type != detected_mime:
+            log_warning(
+                f"[SECURITY] Content type mismatch: provided {normalized_content_type}, detected {detected_mime} (but both allowed)"
             )
 
     # Check if the detected MIME type is allowed for PDFs.
