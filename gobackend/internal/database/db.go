@@ -75,9 +75,13 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 	}
 
 	// Determine SSL parameters based on environment
-	sslParams := constants.PostgresSSLParams
-	if cfg.App.Environment == constants.EnvDevelopment {
+	var sslParams string
+	if cfg.App.Environment == "dev" {
 		sslParams = constants.PostgresSSLDisable
+	} else if cfg.App.Environment == "prod" {
+		sslParams = constants.PostgresSSLParams
+	} else {
+		sslParams = constants.PostgresSSLParams
 	}
 
 	// Log connection attempt (without sensitive information)
