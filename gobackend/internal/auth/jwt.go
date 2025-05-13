@@ -57,9 +57,6 @@ type CustomClaims struct {
 type JWTService struct {
 	// Config contains configuration settings for token generation and validation.
 	Config *config.JWTSettings
-
-	// config is for backward compatibility.
-	config *config.JWTSettings
 }
 
 // NewJWTService creates a new JWTService instance with the provided configuration.

@@ -47,15 +47,6 @@ func setupTestLogDirectories(t *testing.T) (string, *config.GDPRLoggingSettings)
 	return tempDir, cfg
 }
 
-// Helper function to read log file content
-func readLogFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
 // Helper to capture zerolog output for testing
 type testWriter struct {
 	entries []map[string]interface{}

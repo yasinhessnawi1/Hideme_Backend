@@ -10,9 +10,10 @@ package middleware
 
 import (
 	"context"
-	"github.com/yasinhessnawi1/Hideme_Backend/internal/handlers"
 	"net/http"
 	"strings"
+
+	"github.com/yasinhessnawi1/Hideme_Backend/internal/handlers"
 
 	"github.com/rs/zerolog/log"
 
@@ -20,6 +21,9 @@ import (
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/constants"
 	"github.com/yasinhessnawi1/Hideme_Backend/internal/utils"
 )
+
+// Define a custom type for context keys
+type contextKeyUserRole struct{}
 
 // JWTAuth is a middleware that requires a valid JWT token for a request to proceed.
 // It verifies the token signature, expiration, and that it's an access token.
@@ -193,7 +197,7 @@ func AddRoleToContext(jwtService auth.JWTValidator) func(http.Handler) http.Hand
 			}
 
 			// Add role to context
-			ctx := context.WithValue(r.Context(), handlers.GetContextKeyUserRole(), claims.Role)
+			ctx := context.WithValue(r.Context(), contextKeyUserRole{}, claims.Role)
 
 			// Call the next handler with the updated context
 			next.ServeHTTP(w, r.WithContext(ctx))

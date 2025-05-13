@@ -40,7 +40,10 @@ func createMockDBAndTx(t *testing.T) (*sql.DB, *sql.Tx, sqlmock.Sqlmock, func())
 	}
 
 	cleanup := func() {
-		tx.Rollback()
+		mock.ExpectRollback()
+		if err := tx.Rollback(); err != nil {
+			t.Errorf("tx.Rollback() failed: %v", err)
+		}
 		db.Close()
 	}
 

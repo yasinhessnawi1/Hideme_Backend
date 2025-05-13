@@ -268,7 +268,7 @@ func (s *Server) SetupRoutes() {
 // This method is primarily used for testing and for
 // integrating the router with other components.
 func (s *Server) GetRouter() chi.Router {
-	return s.router.(chi.Router)
+	return s.router
 }
 
 // handlePreflight is an explicit handler for OPTIONS preflight requests.

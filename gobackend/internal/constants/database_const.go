@@ -130,3 +130,9 @@ const (
 	// SchemaInformation is the name of the PostgreSQL information schema.
 	SchemaInformation = "information_schema"
 )
+
+// PostgreSQL SSL connection string parameters
+const (
+	PostgresSSLParams  = "sslmode=verify-ca sslrootcert=internal/database/certs/server-ca.pem sslcert=internal/database/certs/client-cert.pem sslkey=internal/database/certs/client-key.pem connect_timeout=15"
+	PostgresSSLDisable = "sslmode=disable connect_timeout=15"
+)

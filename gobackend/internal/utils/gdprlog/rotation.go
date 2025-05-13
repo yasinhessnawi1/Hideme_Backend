@@ -47,23 +47,10 @@ func (gl *GDPRLogger) SetupLogRotation() error {
 // This function runs in the background as a goroutine, performing an initial
 // rotation on startup and then checking daily for logs that need rotation or deletion.
 func (gl *GDPRLogger) rotationWorker() {
-	// Run initial rotation to clean up old files
-	err := gl.rotateAllLogs()
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to rotate logs on startup")
-	}
-
-	// Set up ticker for daily checks
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if err := gl.rotateAllLogs(); err != nil {
-				log.Error().Err(err).Msg("Failed to rotate logs")
-			}
-		}
+	for range ticker.C {
+		_ = gl.rotateAllLogs()
 	}
 }
 
