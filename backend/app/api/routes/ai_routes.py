@@ -1,14 +1,18 @@
 """
-This module defines the API endpoint for AI sensitive data detection.
-It integrates rate limiting via SlowAPI and memory optimization via a decorator,
-while delegating the file processing to AIDetectService. All errors are handled securely
-using SecurityAwareErrorHandler to prevent leaking sensitive information.
+AI Detection API Route
+
+This module defines the API endpoint for AI-based sensitive data detection.
+It supports only two secure modes of input handling:
+  1. Session-authenticated mode: requires `session_key` + `api_key_id` headers.
+  2. Raw-API-key mode: requires a standalone `raw_api_key` header.
+
+All decryption is performed using the SessionEncryptionManager.
+Responses are optionally encrypted based on whether the input was encrypted.
 """
 
-from http.client import HTTPException
 from typing import Optional
 
-from fastapi import APIRouter, File, UploadFile, Form, Request
+from fastapi import APIRouter, File, UploadFile, Form, Request, Header
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
@@ -16,6 +20,7 @@ from starlette.responses import JSONResponse
 from backend.app.services.ai_detect_service import AIDetectService
 from backend.app.utils.constant.constant import JSON_MEDIA_TYPE
 from backend.app.utils.helpers.json_helper import validate_threshold_score
+from backend.app.utils.security.session_encryption import session_manager
 from backend.app.utils.system_utils.memory_management import memory_optimized
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
 
@@ -34,57 +39,81 @@ async def ai_detect_sensitive(
     requested_entities: Optional[str] = Form(None),
     remove_words: Optional[str] = Form(None),
     threshold: Optional[float] = Form(None),
+    session_key: Optional[str] = Header(None),
+    api_key_id: Optional[str] = Header(None),
+    raw_api_key: Optional[str] = Header(None),
 ) -> JSONResponse:
     """
-    Endpoint to detect sensitive information in an uploaded file using the AI detection service.
+    Detect sensitive information in a single uploaded file using AI-based detection.
 
-    This endpoint receives an uploaded file along with optional parameters specifying
-    the entities to detect, words to remove, and a threshold to filter the detection results.
-    Processing is delegated to AIDetectService which performs AI-based sensitive data detection.
-    If any error occurs during processing, the error is securely handled using SecurityAwareErrorHandler
-    to provide a sanitized error response.
+    Supports two secure modes:
+      1. Session-authenticated mode:
+         - Requires `session_key` + `api_key_id`
+         - Inputs must be AES-GCM encrypted and base64-url encoded
+         - Response will be encrypted
+
+      2. Raw-API-key mode:
+         - Requires `raw_api_key` only
+         - Inputs may be encrypted or plaintext
+         - Response will be encrypted only if input was decrypted
 
     Parameters:
-        request (Request): The incoming HTTP request.
-        file (UploadFile): The file uploaded by the client.
-        requested_entities (Optional[str]): A comma-separated list of entities to detect.
-        remove_words (Optional[str]): A comma-separated list of words to remove from the document.
-        threshold (Optional[float]): A numeric threshold (0.00 to 1.00) for filtering the detection results.
+        request (Request): FastAPI request object for context and logging.
+        file (UploadFile): The file to scan (can be encrypted).
+        requested_entities (Optional[str]): Entity types to extract (comma-separated).
+        remove_words (Optional[str]): Words to strip before analysis.
+        threshold (Optional[float]): Confidence score filter (0.0 to 1.0).
+        session_key (Optional[str]): Bearer token for session-authenticated mode.
+        api_key_id (Optional[str]): API key ID to fetch AES decryption key.
+        raw_api_key (Optional[str]): Raw AES key for standalone API-key mode.
 
     Returns:
-        JSONResponse: The detection results as returned by AIDetectService, or a sanitized error response if an exception occurs.
+        JSONResponse:
+          - Plain JSON if public/plaintext.
+          - {"encrypted_data": "<base64-encoded-ciphertext>"} if encryption is active.
     """
     try:
-        # Validate the threshold score; will raise HTTPException if threshold is invalid.
+        # Decrypt uploaded file and form fields
+        files, decrypted_fields, api_key = await session_manager.prepare_inputs(
+            files=[file],
+            form_fields={
+                "requested_entities": requested_entities,
+                "remove_words": remove_words,
+            },
+            session_key=session_key,
+            api_key_id=api_key_id,
+            raw_api_key=raw_api_key,
+        )
+
+        # Extract decrypted values
+        file = files[0]
+        requested_entities = decrypted_fields.get("requested_entities")
+        remove_words = decrypted_fields.get("remove_words")
+
+        # Validate threshold score format (0.0–1.0)
         validate_threshold_score(threshold)
-    except HTTPException as e:
-        # Handle threshold validation error securely.
-        error_info = SecurityAwareErrorHandler.handle_safe_error(
-            e, "api_ai_detect_sensitive", endpoint=str(request.url)
+
+        # Run the AI detection business logic
+        result = await AIDetectService().detect(
+            file=file,
+            requested_entities=requested_entities,
+            remove_words=remove_words,
+            threshold=threshold,
         )
-        # Retrieve the status code from the error info, defaulting to 500 if not present.
-        status = error_info.get("status_code", 500)
-        # Return a JSONResponse with the safe error information.
-        return JSONResponse(
-            content=error_info, status_code=status, media_type=JSON_MEDIA_TYPE
+
+        # Wrap and conditionally encrypt response
+        return session_manager.wrap_response(
+            result.model_dump(exclude_none=True), api_key
         )
-    # Instantiate the AI detection service.
-    service = AIDetectService()
-    try:
-        # Delegate file processing to the AI detection service, passing all relevant parameters.
-        result = await service.detect(file, requested_entities, remove_words, threshold)
-        # Wrap the model dump in JSONResponse:
-        return JSONResponse(
-            content=result.model_dump(exclude_none=True), media_type=JSON_MEDIA_TYPE
-        )
+
     except Exception as e:
-        # Securely handle any exceptions during AI detection.
+        # sanitize any unhandled error securely
         error_info = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_ai_detect_sensitive", endpoint=str(request.url)
         )
-        # Determine the status code from the error information.
-        status = error_info.get("status_code", 500)
         # Return a JSONResponse containing the sanitized error message.
         return JSONResponse(
-            content=error_info, status_code=status, media_type=JSON_MEDIA_TYPE
+            content=error_info,
+            status_code=error_info.get("status_code", 500),
+            media_type=JSON_MEDIA_TYPE,
         )

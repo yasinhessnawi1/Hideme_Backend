@@ -66,7 +66,9 @@ MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 # MIME type for PDF files.
 APPLICATION_WORD = "application/pdf"
 # Allowed MIME types for PDF files.
-ALLOWED_MIME_TYPES = {"pdf": {APPLICATION_WORD, "application/x-pdf", "application/octet-stream"}}
+ALLOWED_MIME_TYPES = {
+    "pdf": {APPLICATION_WORD, "application/x-pdf", "application/octet-stream"}
+}
 # File signatures (magic bytes) for supported file types.
 FILE_SIGNATURES = {"pdf": [(b"%PDF", 0)]}
 # Mapping from file extension to MIME type.

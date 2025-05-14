@@ -11,12 +11,21 @@ class TestMachineLearningRouter:
 
     # Presidio detection succeeds with valid threshold
     @pytest.mark.asyncio
+    @patch("backend.app.api.routes.machine_learning.session_manager.prepare_inputs")
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
     @patch("backend.app.api.routes.machine_learning.validate_threshold_score")
     async def test_presidio_detect_success(
-        self, mock_validate_threshold_score, mock_detect
+        self, mock_validate_threshold_score, mock_detect, mock_prepare_inputs
     ):
         mock_validate_threshold_score.return_value = None
+
+        file_mock = MagicMock()
+
+        mock_prepare_inputs.return_value = (
+            [file_mock],
+            {"requested_entities": None, "remove_words": None},
+            None,
+        )
 
         mock_result = MagicMock()
 
@@ -26,15 +35,21 @@ class TestMachineLearningRouter:
 
         files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/detect", files=files, data={"threshold": 0.5})
+        headers = {"raw-api-key": "mock_raw_api_key"}
 
-        mock_validate_threshold_score.assert_called_once_with(0.5)
+        response = client.post(
+            "/ml/detect", files=files, data={"threshold": 0.5}, headers=headers
+        )
 
         assert response.status_code == 200
 
         assert response.json() == {"status": "success", "data": "mock data"}
 
+        mock_validate_threshold_score.assert_called_once_with(0.5)
+
         mock_detect.assert_called_once()
+
+        mock_prepare_inputs.assert_called_once()
 
     # Invalid threshold in Presidio detection returns 400
     @pytest.mark.asyncio
@@ -61,13 +76,25 @@ class TestMachineLearningRouter:
 
     # Internal error in Presidio detection is handled and returns 500
     @pytest.mark.asyncio
+    @patch("backend.app.api.routes.machine_learning.session_manager.prepare_inputs")
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
     @patch(
         "backend.app.api.routes.machine_learning.SecurityAwareErrorHandler.handle_safe_error"
     )
     async def test_presidio_detect_internal_error(
-        self, mock_handle_safe_error, mock_detect
+        self,
+        mock_handle_safe_error,
+        mock_detect,
+        mock_prepare_inputs,
     ):
+        file_mock = MagicMock()
+
+        mock_prepare_inputs.return_value = (
+            [file_mock],
+            {"requested_entities": None, "remove_words": None},
+            None,
+        )
+
         mock_detect.side_effect = Exception("Internal error")
 
         mock_handle_safe_error.side_effect = HTTPException(
@@ -82,7 +109,11 @@ class TestMachineLearningRouter:
 
         files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/detect", files=files, data={"threshold": 0.7})
+        headers = {"raw-api-key": "mock_raw_api_key"}
+
+        response = client.post(
+            "/ml/detect", files=files, data={"threshold": 0.7}, headers=headers
+        )
 
         assert response.status_code == 500
 
@@ -95,9 +126,11 @@ class TestMachineLearningRouter:
             }
         }
 
-        mock_handle_safe_error.assert_called_once()
+        mock_prepare_inputs.assert_called_once()
 
         mock_detect.assert_called_once()
+
+        mock_handle_safe_error.assert_called_once()
 
     # Default invalid threshold handling returns detailed error payload
     @pytest.mark.asyncio
@@ -126,8 +159,16 @@ class TestMachineLearningRouter:
 
     # GLiNER detection succeeds with valid threshold
     @pytest.mark.asyncio
+    @patch("backend.app.api.routes.machine_learning.session_manager.prepare_inputs")
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
-    async def test_gliner_detect_success(self, mock_detect):
+    async def test_gliner_detect_success(self, mock_detect, mock_prepare_inputs):
+        file_mock = MagicMock()
+        mock_prepare_inputs.return_value = (
+            [file_mock],
+            {"requested_entities": None, "remove_words": None},
+            None,
+        )
+
         mock_result = MagicMock()
 
         mock_result.model_dump.return_value = {"status": "success", "data": "mock data"}
@@ -136,11 +177,17 @@ class TestMachineLearningRouter:
 
         files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/gl_detect", files=files, data={"threshold": 0.5})
+        headers = {"raw-api-key": "mock_raw_api_key"}
+
+        response = client.post(
+            "/ml/gl_detect", files=files, data={"threshold": 0.5}, headers=headers
+        )
 
         assert response.status_code == 200
 
         assert response.json() == {"status": "success", "data": "mock data"}
+
+        mock_prepare_inputs.assert_called_once()
 
         mock_detect.assert_called_once()
 
@@ -207,8 +254,16 @@ class TestMachineLearningRouter:
 
     # HIDEME detection succeeds with valid threshold
     @pytest.mark.asyncio
+    @patch("backend.app.api.routes.machine_learning.session_manager.prepare_inputs")
     @patch("backend.app.services.machine_learning_service.MashinLearningService.detect")
-    async def test_hideme_detect_success(self, mock_detect):
+    async def test_hideme_detect_success(self, mock_detect, mock_prepare_inputs):
+        file_mock = MagicMock()
+        mock_prepare_inputs.return_value = (
+            [file_mock],
+            {"requested_entities": None, "remove_words": None},
+            None,
+        )
+
         mock_result = MagicMock()
 
         mock_result.model_dump.return_value = {"status": "success", "data": "mock data"}
@@ -217,11 +272,17 @@ class TestMachineLearningRouter:
 
         files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/ml/hm_detect", files=files, data={"threshold": 0.5})
+        headers = {"raw-api-key": "mock_raw_api_key"}
+
+        response = client.post(
+            "/ml/hm_detect", files=files, data={"threshold": 0.5}, headers=headers
+        )
 
         assert response.status_code == 200
 
         assert response.json() == {"status": "success", "data": "mock data"}
+
+        mock_prepare_inputs.assert_called_once()
 
         mock_detect.assert_called_once()
 

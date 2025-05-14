@@ -10,40 +10,56 @@ client = TestClient(create_app())
 
 class TestPdfRoutes:
 
-    # Successful PDF redaction returns PDF content
     @pytest.mark.asyncio
+    @patch("backend.app.api.routes.pdf_routes.session_manager.prepare_inputs")
     @patch(
         "backend.app.services.document_redact_service.DocumentRedactionService.redact"
     )
-    async def test_pdf_redact_success(self, mock_redact):
+    async def test_pdf_redact_success(self, mock_redact, mock_prepare_inputs):
         mock_redact.return_value = Response(
             content=b"Redacted PDF content", media_type="application/pdf"
         )
 
+        mock_prepare_inputs.return_value = (
+            [MagicMock()],
+            {"redaction_mapping": '{"sensitive": "REDACTED"}'},
+            None,
+        )
+
         files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
+
+        headers = {"raw-api-key": "mock_key"}
 
         response = client.post(
             "/pdf/redact",
             files=files,
             data={"redaction_mapping": '{"sensitive": "REDACTED"}'},
+            headers=headers,
         )
-
         assert response.status_code == 200
 
         assert response.content == b"Redacted PDF content"
 
         mock_redact.assert_called_once()
 
-    # Internal error during redaction returns 500 with details
     @pytest.mark.asyncio
+    @patch("backend.app.api.routes.pdf_routes.session_manager.prepare_inputs")
     @patch(
         "backend.app.services.document_redact_service.DocumentRedactionService.redact"
     )
     @patch(
         "backend.app.api.routes.pdf_routes.SecurityAwareErrorHandler.handle_safe_error"
     )
-    async def test_pdf_redact_internal_error(self, mock_handle_safe_error, mock_redact):
+    async def test_pdf_redact_internal_error(
+        self, mock_handle_safe_error, mock_redact, mock_prepare_inputs
+    ):
         response_cache.clear()
+
+        mock_prepare_inputs.return_value = (
+            [MagicMock()],
+            {"redaction_mapping": '{"sensitive": "REDACTED"}'},
+            None,
+        )
 
         mock_redact.side_effect = Exception("Internal error in redaction service")
 
@@ -59,10 +75,13 @@ class TestPdfRoutes:
 
         files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
+        headers = {"raw-api-key": "mock_key"}
+
         response = client.post(
             "/pdf/redact",
             files=files,
             data={"redaction_mapping": '{"sensitive": "REDACTED"}'},
+            headers=headers,
         )
 
         assert response.status_code == 500
@@ -80,13 +99,19 @@ class TestPdfRoutes:
 
         mock_redact.assert_called_once()
 
-    # Invalid mapping in redaction returns 400 error
     @pytest.mark.asyncio
+    @patch("backend.app.api.routes.pdf_routes.session_manager.prepare_inputs")
     @patch(
         "backend.app.services.document_redact_service.DocumentRedactionService.redact"
     )
-    async def test_pdf_redact_invalid_mapping(self, mock_redact):
+    async def test_pdf_redact_invalid_mapping(self, mock_redact, mock_prepare_inputs):
         response_cache.clear()
+
+        mock_prepare_inputs.return_value = (
+            [MagicMock()],
+            {"redaction_mapping": "invalid"},
+            None,
+        )
 
         mock_redact.side_effect = HTTPException(
             status_code=400, detail="Invalid redaction mapping"
@@ -94,23 +119,32 @@ class TestPdfRoutes:
 
         files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
+        headers = {"raw-api-key": "mock_key"}
+
         response = client.post(
-            "/pdf/redact", files=files, data={"redaction_mapping": "invalid"}
+            "/pdf/redact",
+            files=files,
+            data={"redaction_mapping": "invalid"},
+            headers=headers,
         )
 
         assert response.status_code == 400
 
-        assert "Invalid redaction mapping" in response.json().get("error", "")
+        assert "Invalid redaction mapping" in response.json().get(
+            "detail", ""
+        ) or response.json().get("error", "")
 
         mock_redact.assert_called_once()
 
-    # Successful PDF extract returns text and positions
     @pytest.mark.asyncio
+    @patch("backend.app.api.routes.pdf_routes.session_manager.prepare_inputs")
     @patch(
         "backend.app.services.document_extract_service.DocumentExtractService.extract"
     )
-    async def test_pdf_extract_success(self, mock_extract):
+    async def test_pdf_extract_success(self, mock_extract, mock_prepare_inputs):
         response_cache.clear()
+
+        mock_prepare_inputs.return_value = ([MagicMock()], {}, None)
 
         mock_result = MagicMock()
 
@@ -123,7 +157,9 @@ class TestPdfRoutes:
 
         files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/pdf/extract", files=files)
+        headers = {"raw-api-key": "mock_key"}
+
+        response = client.post("/pdf/extract", files=files, headers=headers)
 
         assert response.status_code == 200
 
@@ -134,8 +170,8 @@ class TestPdfRoutes:
 
         mock_extract.assert_called_once()
 
-    # Internal error during extract returns 500 with details
     @pytest.mark.asyncio
+    @patch("backend.app.api.routes.pdf_routes.session_manager.prepare_inputs")
     @patch(
         "backend.app.services.document_extract_service.DocumentExtractService.extract"
     )
@@ -143,9 +179,11 @@ class TestPdfRoutes:
         "backend.app.api.routes.pdf_routes.SecurityAwareErrorHandler.handle_safe_error"
     )
     async def test_pdf_extract_internal_error(
-        self, mock_handle_safe_error, mock_extract
+        self, mock_handle_safe_error, mock_extract, mock_prepare_inputs
     ):
         response_cache.clear()
+
+        mock_prepare_inputs.return_value = ([MagicMock()], {}, None)
 
         mock_extract.side_effect = Exception("Internal error in extraction service")
 
@@ -161,7 +199,9 @@ class TestPdfRoutes:
 
         files = {"file": ("test_file.pdf", b"file content", "application/pdf")}
 
-        response = client.post("/pdf/extract", files=files)
+        headers = {"raw-api-key": "mock_key"}
+
+        response = client.post("/pdf/extract", files=files, headers=headers)
 
         assert response.status_code == 500
 
@@ -178,13 +218,15 @@ class TestPdfRoutes:
 
         mock_extract.assert_called_once()
 
-    # Invalid file format for extract returns 400 error
     @pytest.mark.asyncio
+    @patch("backend.app.api.routes.pdf_routes.session_manager.prepare_inputs")
     @patch(
         "backend.app.services.document_extract_service.DocumentExtractService.extract"
     )
-    async def test_pdf_extract_invalid_file(self, mock_extract):
+    async def test_pdf_extract_invalid_file(self, mock_extract, mock_prepare_inputs):
         response_cache.clear()
+
+        mock_prepare_inputs.return_value = ([MagicMock()], {}, None)
 
         mock_extract.side_effect = HTTPException(
             status_code=400, detail="Invalid file format"
@@ -192,10 +234,14 @@ class TestPdfRoutes:
 
         files = {"file": ("test_file.txt", b"file content", "text/plain")}
 
-        response = client.post("/pdf/extract", files=files)
+        headers = {"raw-api-key": "mock_key"}
+
+        response = client.post("/pdf/extract", files=files, headers=headers)
 
         assert response.status_code == 400
 
-        assert "Invalid file format" in response.json().get("error", "")
+        assert "Invalid file format" in response.json().get(
+            "detail", ""
+        ) or response.json().get("error", "")
 
         mock_extract.assert_called_once()

@@ -4,16 +4,14 @@ import aiohttp
 import pytest
 import base64
 import json
-
 import importlib
-import backend.app.utils.security.session_encryption as semod
 
 from io import BytesIO
 from fastapi import UploadFile, HTTPException
 from unittest.mock import AsyncMock, patch
+import backend.app.utils.security.session_encryption as semod
 
 os.environ["GO_BACKEND_URL"] = "http://dummy"
-
 
 importlib.reload(semod)
 SessionEncryptionManager = semod.SessionEncryptionManager
@@ -51,15 +49,12 @@ class DummySession:
 
     def get(self, url, headers=None):
         if url.endswith("/api/auth/verify"):
-
             return DummyResponse(200)
 
         if url.endswith("/api/auth/verify-key"):
-
             return DummyResponse(200)
 
         if "/api/keys/" in url and url.endswith("/decode"):
-
             return DummyResponse(200, {"data": {"key": "dummy_key"}})
 
         return DummyResponse(404)
@@ -255,12 +250,19 @@ class TestSessionEncryptionManager:
         assert json.loads(manager.decrypt_bytes(ct, dummy_api_key)) == {"x": 123}
 
     # prepare_inputs public/session/raw
-    async def test_public_passthrough(self, manager, plain_upload):
+    async def test_public_passthrough(self, manager, plain_upload, dummy_api_key):
+        manager.validate_raw_api_key = AsyncMock(return_value=dummy_api_key)
+
         files, fields, api = await manager.prepare_inputs(
-            [plain_upload], {"f": "v"}, None, None, None
+            [plain_upload], {"f": "v"}, None, None, "raw"
         )
 
-        assert files == [plain_upload] and fields == {"f": "v"} and api is None
+        assert len(files) == 1
+        assert files[0].filename == "plain.txt"
+        assert files[0].headers == plain_upload.headers
+        assert await files[0].read() == b"plain"
+        assert fields == {"f": "v"}
+        assert api is None
 
     @patch.object(
         SessionEncryptionManager, "validate_and_fetch_api_key", new_callable=AsyncMock
@@ -470,7 +472,8 @@ class TestSessionEncryptionManager:
         with monkey:
             val, did = await manager._process_raw_field(blob, dummy_api_key)
 
-        assert val == b"xyz".decode(errors="ignore") and did is False
+        assert val == blob
+        assert did is False
 
     @pytest.mark.asyncio
     async def test__process_raw_files_read_error(self, manager):

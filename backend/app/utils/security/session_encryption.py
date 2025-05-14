@@ -9,7 +9,6 @@ This module provides functionality to:
 - Conditionally decrypt incoming FastAPI uploads and form fields based on header mode:
     • Session mode (session_key + api_key_id)
     • Raw-API-key mode (X-API-Key only)
-    • Public mode (no decryption)
 - Conditionally encrypt outgoing JSON responses when an AES key was used for input decryption
 
 """
@@ -18,13 +17,14 @@ import asyncio
 import base64
 import json
 import os
-import aiohttp
-
 from io import BytesIO
 from typing import List, Optional, Tuple, Dict
+
+import aiohttp
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from fastapi import HTTPException, UploadFile
-from starlette.responses import JSONResponse
+from fastapi import HTTPException, UploadFile, Response
+from starlette.responses import JSONResponse, StreamingResponse
 
 from backend.app.utils.logging.logger import log_error
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
@@ -214,6 +214,47 @@ class SessionEncryptionManager:
             raise HTTPException(status_code=400, detail=error_info)
 
     @staticmethod
+    def try_decrypt_bytes(
+        encrypted_data: bytes, api_key: str
+    ) -> Tuple[bool, Optional[bytes]]:
+        """
+        Safely attempt to decrypt AES-GCM encrypted data.
+
+        Returns (True, decrypted_data) if successful,
+        or (False, None) if the data is not encrypted, the key is wrong,
+        or the content is invalid.
+
+        Args:
+            encrypted_data (bytes): Encrypted input (nonce + ciphertext).
+            api_key (str): Base64 URL-safe encoded AES key.
+
+        Returns:
+            Tuple[bool, Optional[bytes]]: Decryption status and result.
+        """
+        try:
+            # Decode AES key from base64 format
+            key_bytes = base64.urlsafe_b64decode(api_key.encode())
+
+            # Split nonce (first 12 bytes) and ciphertext
+            nonce = encrypted_data[:12]
+            ciphertext = encrypted_data[12:]
+
+            # Initialize AES-GCM cipher and attempt decryption
+            aesgcm = AESGCM(key_bytes)
+            decrypted = aesgcm.decrypt(nonce, ciphertext, None)
+
+            return True, decrypted
+
+        except (InvalidTag, ValueError):
+            # Likely plaintext or corrupted/incorrect data
+            return False, None
+
+        except Exception as e:
+            # Catch any unexpected error and log it
+            log_error(f"[try_decrypt_bytes] Unexpected error: {e}")
+            return False, None
+
+    @staticmethod
     def encrypt_bytes(data: bytes, api_key: str) -> bytes:
         """
         Encrypt byte data using AES-GCM with the provided API key.
@@ -354,7 +395,6 @@ class SessionEncryptionManager:
         Modes:
           1. session-authenticated: session_key + api_key_id
           2. raw-API-key:           raw_api_key only
-          3. public:                no keys provided → passthrough
 
         Args:
             files:       List[UploadFile], possibly encrypted.
@@ -366,7 +406,7 @@ class SessionEncryptionManager:
         Returns:
           - decrypted (or original) files
           - decrypted (or original) form field values
-          - AES key used for decryption (None in public mode)
+          - AES key used for decryption
         """
         try:
             # Session mode if both headers present
@@ -379,8 +419,10 @@ class SessionEncryptionManager:
             if raw_api_key:
                 return await self._prepare_raw_inputs(files, form_fields, raw_api_key)
 
-            # Public mode: no decryption or encryption
-            return files, form_fields, None
+            raise HTTPException(
+                status_code=401,
+                detail="Unauthorized: Provide valid session credentials or raw API key.",
+            )
 
         except HTTPException:
             # Re-raise HTTPExceptions
@@ -492,13 +534,21 @@ class SessionEncryptionManager:
                 # If the field value is None, preserve it as None
                 if val is None:
                     fields_out[name] = None
-                else:
-                    # Process this field and capture whether decryption occurred
-                    plaintext, did_decrypt = await self._process_raw_field(val, api_key)
-                    # Store the resulting plaintext or fallback text
-                    fields_out[name] = plaintext
-                    # Update the decryption flag if this field was decrypted
-                    decrypted_any |= did_decrypt
+
+                # if it looks like JSON, skip any Base64/decrypt attempt
+                text = val.strip()
+                if (text.startswith("{") and text.endswith("}")) or (
+                    text.startswith("[") and text.endswith("]")
+                ):
+                    fields_out[name] = val
+                    continue
+
+                # Process this field and capture whether decryption occurred
+                plaintext, did_decrypt = await self._process_raw_field(val, api_key)
+                # Store the resulting plaintext or fallback text
+                fields_out[name] = plaintext
+                # Update the decryption flag if this field was decrypted
+                decrypted_any |= did_decrypt
 
             # Process uploaded files with best-effort decryption
             files_out, files_decrypted = await self._process_raw_files(files, api_key)
@@ -520,85 +570,112 @@ class SessionEncryptionManager:
 
     async def _process_raw_field(self, val: str, api_key: str) -> Tuple[str, bool]:
         """
-        Try to Base64-decode and AES-GCM decrypt a single form field value.
-        Fallback to plaintext on any failure.
+        Attempt to decrypt a single raw form field in raw-API-key mode.
+
+        If the value is base64-encoded and decrypt able using AES-GCM, return the decrypted string.
+        Otherwise, fall back to the original value.
 
         Args:
-            val: The original field string (Base64-URL or plaintext).
-            api_key: AES key for decryption.
+            val (str): Input field value (either plaintext or base64-encoded encrypted text).
+            api_key (str): Base64-encoded AES key used for decryption.
 
         Returns:
-            A tuple of (plaintext_value, did_decrypt_flag).
+            Tuple[str, bool]: (Plaintext value, True) if decrypted,
+                              (Original value, False) otherwise.
         """
-        # Attempt Base64-URL-safe decoding of the field value
         try:
+            # Try to decode the input from base64
             blob = base64.urlsafe_b64decode(val.encode())
+
+            # Check minimum length for AES-GCM (12-byte nonce + at least 1 byte ciphertext)
+            if len(blob) < 13:
+                return val, False
+
         except Exception as e:
-            # Log decode failure and return the original plaintext
-            log_error(f"[RAW] Base64 decode failed for field '{val}': {e}")
+            # Base64 decoding failed or input is clearly plaintext
+            log_error(f"[_process_raw_field] Unexpected error: {e}")
             return val, False
 
-        # Attempt AES-GCM decryption on the decoded bytes
-        try:
-            plaintext = await self.decrypt_text(blob, api_key)
-            # Return decrypted plaintext and mark as decrypted
-            return plaintext, True
-        except HTTPException:
-            # Client-facing decryption error → treat decoded bytes as text
-            return blob.decode(errors="ignore"), False
-        except Exception as e:
-            # Log unexpected decryption failure and return decoded text
-            log_error(f"[RAW] Decryption error for field '{val}': {e}")
-            return blob.decode(errors="ignore"), False
+        # Attempt decryption with the AES key
+        success, decrypted = self.try_decrypt_bytes(blob, api_key)
+
+        if success:
+            try:
+                # Decode decrypted bytes into UTF-8 string
+                plaintext = decrypted.decode("utf-8")
+                return plaintext, True
+            except UnicodeDecodeError:
+                # Decryption succeeded but output isn't valid UTF-8 text
+                return val, False
+        else:
+            # Decryption failed, return original value
+            return val, False
 
     async def _process_raw_files(
         self, files: List[UploadFile], api_key: str
     ) -> Tuple[List[UploadFile], bool]:
         """
-        Attempt AES-GCM decryption on each uploaded file.
-        Fallback to raw bytes if decryption fails.
+        Attempt AES-GCM decryption on each uploaded file in raw-API-key mode.
+
+        Decrypts each file if possible using the provided AES key.
+        Falls back to the original file content if decryption fails.
 
         Args:
-            files: List of potentially encrypted UploadFile objects.
-            api_key: AES key for decryption.
+            files (List[UploadFile]): List of uploaded files (maybe encrypted or plaintext).
+            api_key (str): Base64-encoded AES key used for decryption.
 
         Returns:
-            A tuple of (processed_files, did_decrypt_any_flag).
+            Tuple[List[UploadFile], bool]:
+                - List of UploadFiles (decrypted or original).
+                - Flag indicating if any file was successfully decrypted.
         """
-        # Read the raw bytes of all files concurrently
         try:
+            # Read all file contents asynchronously
             blobs = await asyncio.gather(*(f.read() for f in files))
         except Exception as e:
-            # Handle file-read errors securely
+            # Handle read errors gracefully
             info = SecurityAwareErrorHandler.handle_safe_error(
                 e, "process_raw_files", resource_id="read_files"
             )
             raise HTTPException(status_code=400, detail=info)
-
-        # Prepare list for processed UploadFile objects
+        # Stores processed (decrypted or original) files
         processed: List[UploadFile] = []
-        # Flag to track if any file was decrypted
+        # Tracks whether any decryption succeeded
         decrypted_any = False
 
-        # Iterate through original files and their raw byte blobs
         for orig, blob in zip(files, blobs):
-            # Attempt AES-GCM decryption for this blob
-            try:
-                decrypted = self.decrypt_bytes(blob, api_key)
-                # Wrap decrypted bytes in a new UploadFile
-                new_upload = UploadFile(
-                    filename=orig.filename,
-                    file=BytesIO(decrypted),
-                    headers=orig.headers,
+            # Skip decryption if data is too short to contain nonce + ciphertext
+            if len(blob) < 13:
+                processed.append(
+                    UploadFile(
+                        filename=orig.filename, file=BytesIO(blob), headers=orig.headers
+                    )
                 )
-                processed.append(new_upload)
-                decrypted_any = True
-            except Exception as e:
-                # Log decryption failure and fallback to raw bytes
-                log_error(f"[RAW] File decryption failed for: {e}")
-                processed.append(UploadFile(filename=orig.filename, file=BytesIO(blob)))
+                continue
 
-        # Return the list of processed files and whether any decryption succeeded
+            # Try to decrypt the blob
+            success, decrypted = self.try_decrypt_bytes(blob, api_key)
+
+            if success:
+                # Decryption succeeded; wrap decrypted content as UploadFile
+                processed.append(
+                    UploadFile(
+                        filename=orig.filename,
+                        file=BytesIO(decrypted),
+                        headers=orig.headers,
+                    )
+                )
+                decrypted_any = True
+            else:
+                # Decryption failed; fallback to original file
+                processed.append(
+                    UploadFile(
+                        filename=orig.filename,
+                        file=BytesIO(blob),
+                        headers=orig.headers,
+                    )
+                )
+
         return processed, decrypted_any
 
     async def _decrypt_with_key(
@@ -649,7 +726,7 @@ class SessionEncryptionManager:
                     decrypted_value = await self.decrypt_text(raw_bytes, api_key)
                     try:
                         parsed_value = json.loads(decrypted_value)
-                    except Exception:
+                    except json.JSONDecodeError:
                         parsed_value = decrypted_value
                     fields_out[name] = parsed_value
                 else:
@@ -707,6 +784,47 @@ class SessionEncryptionManager:
 
         # No encryption requested: return standard JSONResponse directly
         return JSONResponse(result)
+
+    async def wrap_streaming_or_file_response(
+        self,
+        response: Response,
+        api_key: Optional[str],
+    ) -> Response:
+        """
+        Encrypt a Response (streaming or regular) using AES-GCM if api_key is present.
+        If no encryption is needed, return the response as-is.
+
+        Args:
+            response (Response): The original Response or StreamingResponse.
+            api_key (Optional[str]): AES key (base64-url) to encrypt the response, if provided.
+
+        Returns:
+            JSONResponse (encrypted) or the original Response (unencrypted).
+        """
+        if not api_key:
+            return response
+
+        try:
+            # Collect full content of the response
+            raw_bytes = b""
+            if isinstance(response, StreamingResponse):
+                async for chunk in response.body_iterator:
+                    raw_bytes += chunk
+            else:
+                raw_bytes = response.body
+
+            # Encrypt using AES-GCM + Base64
+            cipher = self.encrypt_response(raw_bytes, api_key)
+            encoded = base64.urlsafe_b64encode(cipher).decode()
+            return JSONResponse({"encrypted_data": encoded})
+
+        except Exception as e:
+            error_info = SecurityAwareErrorHandler.handle_safe_error(
+                e,
+                "wrap_streaming_or_file_response",
+                resource_id="encrypt_response_output",
+            )
+            raise HTTPException(status_code=500, detail=error_info)
 
 
 # Instantiate or retrieve the singleton for application-wide use

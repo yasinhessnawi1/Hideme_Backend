@@ -297,7 +297,9 @@ def validate_file_content(
         normalized_content_type = content_type.split(";")[0].strip().lower()
         allowed_types = ALLOWED_MIME_TYPES["pdf"]
         # Only error if neither is in the allowed set
-        if (normalized_content_type not in allowed_types) or (detected_mime not in allowed_types):
+        if (normalized_content_type not in allowed_types) or (
+            detected_mime not in allowed_types
+        ):
             return (
                 False,
                 f"Only PDF files are allowed, provided: {normalized_content_type}, detected: {detected_mime}",

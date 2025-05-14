@@ -1,24 +1,32 @@
 """
 This router defines endpoints for PDF processing, including redaction and text extraction.
-It leverages dedicated services for document redaction and extraction, and includes memory optimization,
-rate limiting, and secure error handling to protect sensitive data while ensuring performance.
-The endpoints allow clients to upload PDF files and receive either a redacted version of the PDF as a stream,
-or extracted text along with positional information, with robust error handling to avoid information leakage.
+It leverages dedicated services for document redaction and extraction, and includes:
+- Session-authenticated or raw-API-key decryption/encryption
+- Memory optimization
+- Rate limiting
+- Secure error handling
+
+Clients can upload PDF files and:
+- Receive a redacted PDF stream
+- Extract text + positional data (JSON)
 """
 
-from fastapi import APIRouter, File, UploadFile, Form, Request, Response
+import base64
+from typing import Optional
+
+from fastapi import APIRouter, File, UploadFile, Form, Request, Header, Response
+from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from fastapi.responses import JSONResponse
 
 from backend.app.services.document_extract_service import DocumentExtractService
 from backend.app.services.document_redact_service import DocumentRedactionService
-from backend.app.utils.system_utils.memory_management import memory_optimized
+from backend.app.utils.security.session_encryption import session_manager
 from backend.app.utils.system_utils.error_handling import SecurityAwareErrorHandler
+from backend.app.utils.system_utils.memory_management import memory_optimized
 
-# Configure the rate limiter using the client's remote address.
+# Rate limiter by client IP
 limiter = Limiter(key_func=get_remote_address)
-# Create the API router instance.
 router = APIRouter()
 
 
@@ -28,79 +36,141 @@ router = APIRouter()
 async def pdf_redact(
     request: Request,
     file: UploadFile = File(...),
-    redaction_mapping: str = Form(None),
+    redaction_mapping: str = Form(...),
     remove_images: bool = Form(False),
+    session_key: Optional[str] = Header(None),
+    api_key_id: Optional[str] = Header(None),
+    raw_api_key: Optional[str] = Header(None),
 ) -> Response:
     """
-    Apply redactions to a PDF file using the provided redaction mapping.
+    Redact a PDF using the specified redaction mapping.
 
-    This endpoint processes a PDF file by applying redactions as defined in the provided redaction mapping.
-    If 'remove_images' is set to True, images on the PDF pages will also be redacted.
-    The endpoint returns the redacted PDF as a streamed response to minimize memory footprint.
+    Modes:
+    - Session-authenticated (session_key + api_key_id): requires encrypted inputs, returns encrypted output.
+    - Raw-API-key (raw_api_key): accepts plaintext or encrypted input; returns encrypted output if any decryption succeeded.
 
-    Parameters:
-        request (Request): The incoming HTTP request.
-        file (UploadFile): The PDF file uploaded by the client.
-        redaction_mapping (str): The redaction mapping to apply, provided as a string.
-        remove_images (bool): Flag indicating whether images should be removed during redaction.
+    Args:
+        request: The incoming HTTP request.
+        file: The uploaded PDF file (potentially encrypted).
+        redaction_mapping: JSON string of what to redact (can be encrypted).
+        remove_images: Whether to strip images from the document.
+        session_key: Bearer token for session-authenticated mode.
+        api_key_id: API key ID to retrieve AES key in session mode.
+        raw_api_key: Standalone API key for raw-mode access.
 
     Returns:
-        Response: A streamed response containing the redacted PDF, or a secure error response if an exception occurs.
+        JSONResponse or StreamingResponse containing either:
+        - Encrypted redacted ZIP content (base64-encoded), or
+        - Unencrypted redacted PDF/ZIP file stream.
     """
-    # Initialize the DocumentRedactionService instance.
-    service = DocumentRedactionService()
+    # Decrypt inputs (if encrypted) or pass through as-is
     try:
-        # Call the redaction service to process the file with provided redaction mapping and image removal flag.
-        result = await service.redact(file, redaction_mapping, remove_images)
-        # Return the resulting streamed response.
-        return result
+        files, decrypted_fields, api_key = await session_manager.prepare_inputs(
+            files=[file],
+            form_fields={"redaction_mapping": redaction_mapping},
+            session_key=session_key,
+            api_key_id=api_key_id,
+            raw_api_key=raw_api_key,
+        )
     except Exception as e:
-        # Handle any exception by generating a secure error response.
-        error_response = SecurityAwareErrorHandler.handle_safe_error(
+        # Gracefully handle decryption or validation errors
+        error_info = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_redact_decrypt", endpoint=str(request.url)
+        )
+        return JSONResponse(
+            status_code=error_info.get("status_code", 500), content=error_info
+        )
+
+    # Extract the decrypted file and mapping (fallback to original if not decrypted)
+    file = files[0]
+    mapping = decrypted_fields.get("redaction_mapping", redaction_mapping)
+
+    # Apply redactions using the redaction service
+    try:
+        service = DocumentRedactionService()
+        result: Response = await service.redact(file, mapping, remove_images)
+    except Exception as e:
+        # Catch errors in the redaction process and wrap them securely
+        err = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_pdf_redact_router", resource_id=str(request.url)
         )
-        # Retrieve the status code from the error response, default to 500 if not provided.
-        status = error_response.get("status_code", 500)
-        # Return a JSONResponse with the error details.
-        return JSONResponse(content=error_response, status_code=status)
+        return JSONResponse(content=err, status_code=err.get("status_code", 500))
+
+    # If AES key was used for decryption, encrypt the output
+    return await session_manager.wrap_streaming_or_file_response(result, api_key)
 
 
 @router.post("/extract")
 @limiter.limit("15/minute")
 @memory_optimized(threshold_mb=50)
-async def pdf_extract(request: Request, file: UploadFile = File(...)) -> Response:
+async def pdf_extract(
+    request: Request,
+    file: UploadFile = File(...),
+    session_key: Optional[str] = Header(None),
+    api_key_id: Optional[str] = Header(None),
+    raw_api_key: Optional[str] = Header(None),
+) -> Response:
     """
-    Extract text with positions from a PDF file with performance metrics and memory optimization.
+    Extract text and bounding box metadata from a PDF file.
 
-    This endpoint uses DocumentExtractService to extract text along with their positional information
-    from an uploaded PDF file. Extraction is performed in-memory with enhanced error handling.
+    Modes:
+    - Session-authenticated mode (session_key + api_key_id): requires AES-GCM encrypted input, returns encrypted output.
+    - Raw-API-key mode (raw_api_key): accepts encrypted or plaintext; encrypts response if any decryption succeeds.
 
-    Parameters:
-        request (Request): The incoming HTTP request.
-        file (UploadFile): The PDF file uploaded by the client.
+    Args:
+        request: The incoming HTTP request context.
+        file: PDF file to extract from (possibly encrypted).
+        session_key: Bearer token for session-authenticated input.
+        api_key_id: ID of the API key to fetch the AES key (used with session_key).
+        raw_api_key: Standalone API key (used in raw mode).
 
     Returns:
-        Response: A response containing the extracted text and positional information,
-                      or a secure error response if an exception occurs.
+        JSONResponse or Response with extracted text and positions.
+        Output is encrypted if decryption was applied.
     """
-    # Initialize the DocumentExtractService instance.
-    service = DocumentExtractService()  # Initialize extraction service.
+    # Decrypt the file if needed (session or raw mode)
     try:
-        # Use the extraction service to process the PDF file.
-        result = await service.extract(file)
-        # Check if the result is already a Response instance.
-        if isinstance(result, Response):
-            # Return the response directly if it is a Response.
-            return result
-        else:
-            # Otherwise, wrap the result in a JSONResponse.
-            return JSONResponse(content=result.model_dump(exclude_none=True))
+        files, _, api_key = await session_manager.prepare_inputs(
+            files=[file],
+            form_fields={},  # No form fields for this route
+            session_key=session_key,
+            api_key_id=api_key_id,
+            raw_api_key=raw_api_key,
+        )
     except Exception as e:
-        # If an exception occurs, generate a secure error response.
-        error_response = SecurityAwareErrorHandler.handle_safe_error(
+        # Gracefully handle input decryption or validation errors
+        error_info = SecurityAwareErrorHandler.handle_safe_error(
+            e, "api_extract_decrypt", endpoint=str(request.url)
+        )
+        return JSONResponse(
+            status_code=error_info.get("status_code", 500), content=error_info
+        )
+
+    file = files[0]
+
+    # Extract text and positional metadata using the service
+    try:
+        service = DocumentExtractService()
+        result = await service.extract(file)
+    except Exception as e:
+        # Catch and wrap extraction-related errors
+        err = SecurityAwareErrorHandler.handle_safe_error(
             e, "api_pdf_extract_router", resource_id=str(request.url)
         )
-        # Retrieve the status code from the error response, default to 500.
-        status = error_response.get("status_code", 500)
-        # Return a JSONResponse containing the sanitized error details.
-        return JSONResponse(content=error_response, status_code=status)
+        return JSONResponse(content=err, status_code=err.get("status_code", 500))
+
+    # If the result is a raw FastAPI Response (rare), handle like /redact
+    if isinstance(result, Response):
+        if api_key:
+            # Encrypt response if input was encrypted
+            raw_bytes = result.body
+            cipher = session_manager.encrypt_response(raw_bytes, api_key)
+            encoded = base64.urlsafe_b64encode(cipher).decode()
+            return JSONResponse({"encrypted_data": encoded})
+        return result
+
+    # If result is a Pydantic model or plain dict, serialize it
+    payload = result.model_dump(exclude_none=True)
+
+    # Wrap in encrypted response if applicable, otherwise return as JSON
+    return session_manager.wrap_response(payload, api_key)
