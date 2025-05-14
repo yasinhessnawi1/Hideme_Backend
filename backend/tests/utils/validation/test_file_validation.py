@@ -430,7 +430,11 @@ class TestFileValidation(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(ok)
 
-        self.assertIn("Content type mismatch", reason)
+        self.assertIn("Only PDF files are allowed", reason)
+
+        self.assertIn("image/png", reason)
+
+        self.assertIn("application/pdf", reason)
 
         self.assertEqual(dm, "application/pdf")
 

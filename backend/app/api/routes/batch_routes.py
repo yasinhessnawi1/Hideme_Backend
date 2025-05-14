@@ -17,10 +17,8 @@ The module includes endpoints for:
 Each endpoint now supports three modes of input handling:
   1. Session-authenticated mode: headers `session_key` + `api_key_id`
   2. Raw-API-key mode: header `raw_api_key`
-  3. Public mode: no decryption/encryption
 """
 
-import base64
 import json
 import time
 from typing import Optional, List
@@ -38,7 +36,7 @@ from fastapi import (
 )
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from starlette.responses import JSONResponse, StreamingResponse
+from starlette.responses import JSONResponse
 
 from backend.app.entity_detection import EntityDetectionEngine
 from backend.app.services import BatchDetectService, BatchRedactService
@@ -76,7 +74,6 @@ async def batch_detect_sensitive(
     This endpoint accepts multiple file uploads, optional detection parameters, and three modes of encryption:
       1. Session-authenticated (session_key + api_key_id)
       2. Raw-API-key (raw_api_key)
-      3. Public (no decryption/encryption)
 
     Steps:
       1. Conditionally decrypt inputs via SessionEncryptionManager.
@@ -198,7 +195,6 @@ async def batch_hybrid_detect_sensitive(
     This endpoint processes multiple files using a hybrid detection approach. It supports:
       - Session-authenticated mode (session_key + api_key_id)
       - Raw-API-key mode (raw_api_key)
-      - Public mode (no encryption/decryption)
 
     Detection engines (Presidio, Gemini, GLiNER, HideMe) can be toggled via boolean flags.
     A confidence 'threshold' may be provided to filter results.
@@ -309,7 +305,6 @@ async def batch_search_text(
     This endpoint supports three modes:
       - Session-authenticated: headers `session_key` + `api_key_id`
       - Raw-API-key: header `raw_api_key`
-      - Public mode: no encryption/decryption
 
     It accepts plain or encrypted inputs and returns results encrypted
     if decryption was applied to any input.
@@ -391,7 +386,6 @@ async def batch_find_words_by_bbox(
     Supports three modes:
       1. Session-authenticated: headers `session_key` + `api_key_id`
       2. Raw-API-key:           header `raw_api_key`
-      3. Public:                no decryption/encryption
 
     Parses the bounding box from JSON, delegates to the word-finding service,
     and returns results encrypted if any input was decrypted.
@@ -487,8 +481,6 @@ async def batch_redact_documents(
          - Supply `raw-api-key` header only
          - Inputs MAY be encrypted; we try to decrypt, but if decryption fails we treat them as plaintext
          - If any decryption succeeded, the response ZIP will be encrypted; otherwise it streams raw
-      3. Public mode
-         - No encryption/decryption at all; everything is plaintext
 
     **Parameters**
     - request            – the incoming FastAPI request (for logging/context)
@@ -506,7 +498,6 @@ async def batch_redact_documents(
       ```json
       { "encrypted_data": "<base64-url AES-GCM-ciphertext>" }
       ```
-    - On public mode: streams a standard ZIP file of redacted PDFs
     """
 
     # Decrypt or passthrough all inputs based on headers
@@ -535,26 +526,10 @@ async def batch_redact_documents(
             remove_images=remove_images,
         )
 
-        # If we obtained an AES key, we must encrypt the raw ZIP bytes
-        if api_key:
-            raw_zip = b""
-            if isinstance(response_obj, StreamingResponse):
-                # consume every chunk from the streaming iterator
-                async for chunk in response_obj.body_iterator:
-                    raw_zip += chunk
-            else:
-                # normal Response has .body already loaded
-                raw_zip = response_obj.body
-
-            # AES-GCM encrypt then base64-URL-encode
-            cipher = session_manager.encrypt_response(raw_zip, api_key)
-            b64 = base64.urlsafe_b64encode(cipher).decode()
-
-            # return as a small JSON blob
-            return JSONResponse({"encrypted_data": b64})
-
-        # Otherwise (public mode), just forward the raw ZIP response
-        return response_obj
+        # If we obtained an AES key, we must encrypt the raw ZIP bytes , otherwise return the response_obj.
+        return await session_manager.wrap_streaming_or_file_response(
+            response_obj, api_key
+        )
 
     except Exception as e:
         # Log and sanitize any unexpected errors

@@ -47,7 +47,7 @@ class TestFastAPIApp:
         for _ in range(11):
             response = client.post("/pdf/extract", files=files)
 
-        assert response.status_code == 415
+        assert response.status_code == 401
 
     # Test presence of security headers in responses
     def test_security_headers(self, client):
@@ -59,7 +59,7 @@ class TestFastAPIApp:
 
         assert "Strict-Transport-Security" in response.headers
 
-    # Test that oversized requests return 413
+    # Test that oversize requests return 413
     def test_invalid_request_size(self, client):
         files = {
             "file": ("test_file.pdf", b"A" * (25 * 1024 * 1024), "application/pdf")
