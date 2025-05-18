@@ -34,5 +34,5 @@ if __name__ == "__main__":
         log_level="info",  # Set the log level to "info" for server logs.
         workers=1,  # Run with a single worker process.
         limit_concurrency=100,  # Limit the number of concurrent requests.
-        timeout_keep_alive=600,  # Set the keep-alive timeout for connections (in seconds).
+        timeout_keep_alive=1200,  # Set the keep-alive timeout for connections (in seconds).
     )
