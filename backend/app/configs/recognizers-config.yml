@@ -1,26 +1,18 @@
-###############################################################################
 # Presidio configuration for Norwegian Bokmål (nb)
-# Includes tuned recognizers for PERSON, ORGANIZATION, ADDRESS, PHONE, EMAIL,
+# Includes tuned recognizers for PERSON,ADDRESS, PHONE, EMAIL,
 # DATE/TIME and all existing Norwegian-specific patterns.
-###############################################################################
 
-# ---------------------------------
 # Global configuration settings
-# ---------------------------------
 supported_languages:
   - nb                                    # Norwegian Bokmål
 
 # re.IGNORECASE (2) | re.UNICODE (32) = 34
 global_regex_flags: 34                    # case-insensitive, Unicode-aware
 
-# ---------------------------------
 # Recognizers
-# ---------------------------------
 recognizers:
 
-  # -------------------------------------------------------------------------
-  # PERSON 
-  # -------------------------------------------------------------------------
+  # PERSON
   - name: PERSON_P_Recognizer
     supported_languages: [nb]
     supported_entity: PERSON_P
@@ -37,30 +29,8 @@ recognizers:
         regex: (?<=\b(?:navn|fornavn|etternavn)\s*:?\s*)[ÆØÅA-Z][æøåa-z]{2,}\b
         score: 0.70
 
-  # -------------------------------------------------------------------------
-  # ORGANIZATION 
-  # -------------------------------------------------------------------------
-  - name: ORGANIZATION_P_Recognizer
-    supported_languages: [nb]
-    supported_entity: ORGANIZATION_P
-    type: custom
-    patterns:
-      - name: company_suffix
-        regex: \b[ÆØÅA-Z][A-Za-zÆØÅæøå&’.\- ]+?\s+(?:AS|ASA|ANS|NUF|BA)\b
-        score: 0.90
-      - name: gov_agency_suffix
-        regex: \b[ÆØÅA-Z][A-Za-zÆØÅæøå\- ]+?(?:departementet|tilsynet|direktoratet|etaten)\b
-        score: 0.80
-      - name: municipality
-        regex: \b[ÆØÅA-Z][A-Za-zÆØÅæøå]+ kommune\b
-        score: 0.60
-      - name: org_acronym
-        regex: \b[ÆØÅA-Z]{3,}\b
-        score: 0.40
 
-  # -------------------------------------------------------------------------
-  # Norwegian social-security numbers 
-  # -------------------------------------------------------------------------
+  # Norwegian social-security numbers
   - name: NO_FODSELSNUMMER_P_Recognizer
     supported_languages: [nb]
     supported_entity: NO_FODSELSNUMMER_P
@@ -73,9 +43,7 @@ recognizers:
         regex: \b[0-3]\d[0-1]\d\d\d\s?\d{5}\b
         score: 0.95
 
-  # -------------------------------------------------------------------------
-  # PHONE 
-  # -------------------------------------------------------------------------
+  # PHONE
   - name: NO_PHONE_NUMBER_P_Recognizer
     supported_languages: [nb]
     supported_entity: NO_PHONE_NUMBER_P
@@ -89,9 +57,7 @@ recognizers:
         regex: (?<!\d)\d{8}(?!\d)
         score: 0.50
 
-  # -------------------------------------------------------------------------
-  # ADDRESS 
-  # -------------------------------------------------------------------------
+  # ADDRESS
   - name: NO_ADDRESS_P_Recognizer
     supported_languages: [nb]
     supported_entity: NO_ADDRESS_P
@@ -111,9 +77,7 @@ recognizers:
           \s+\d+\s*[A-Za-z]?\b
         score: 0.60
 
-  # -------------------------------------------------------------------------
-  # BANK-ACCOUNT numbers 
-  # -------------------------------------------------------------------------
+  # BANK-ACCOUNT numbers
   - name: NO_BANK_ACCOUNT_P_Recognizer
     supported_languages: [nb]
     supported_entity: NO_BANK_ACCOUNT_P
@@ -126,9 +90,7 @@ recognizers:
         regex: \b(?:kontonr\.?|kontonummer:?|bankkontonummer:?|konto:?)\s*\d{4}[.\s]?\d{2}[.\s]?\d{5}\b
         score: 0.90
 
-  # -------------------------------------------------------------------------
-  # COMPANY-registration numbers 
-  # -------------------------------------------------------------------------
+  # COMPANY-registration numbers
   - name: NO_COMPANY_NUMBER_P_Recognizer
     supported_languages: [nb]
     supported_entity: NO_COMPANY_NUMBER_P
@@ -141,9 +103,7 @@ recognizers:
         regex: \b(?:organisasjonsnummer|organisasjonsnr|orgnr|org\.nr\.|org\s?nr)\.?:?\s*\d{3}[\s]?\d{3}[\s]?\d{3}\b
         score: 0.90
 
-  # -------------------------------------------------------------------------
-  # LICENSE-PLATE numbers 
-  # -------------------------------------------------------------------------
+  # LICENSE-PLATE numbers
   - name: NO_LICENSE_PLATE_P_Recognizer
     supported_languages: [nb]
     supported_entity: NO_LICENSE_PLATE_P
@@ -156,9 +116,7 @@ recognizers:
         regex: \b(?:reg\.?(?:istrerings)?nr\.?|bilnr\.?|bilskilt:?)\s*[A-Z]{2}[\s]?\d{4,5}\b
         score: 0.90
 
-  # -------------------------------------------------------------------------
-  # EMAIL 
-  # -------------------------------------------------------------------------
+  # EMAIL
   - name: EMAIL_ADDRESS_P_Recognizer
     supported_languages: [nb]
     supported_entity: EMAIL_ADDRESS_P
@@ -171,9 +129,7 @@ recognizers:
         regex: \b(?:e-post|epost|mail|e-mail):?\s*[A-Za-z0-9._%+\-ÆØÅæøå]+@[A-Za-z0-9.\-ÆØÅæøå]+\.[A-Za-zÆØÅæøå]{2,}\b
         score: 0.95
 
-  # -------------------------------------------------------------------------
-  # DATE / TIME 
-  # -------------------------------------------------------------------------
+  # DATE / TIME
   - name: DATE_TIME_P_Recognizer
     supported_languages: [nb]
     supported_entity: DATE_TIME_P
@@ -192,9 +148,7 @@ recognizers:
         regex: \b(?:0?[1-9]|[12][0-9]|3[01])\.?\s*(?:januar|februar|mars|april|mai|juni|juli|august|september|oktober|november|desember)\s*\d{2,4}\b
         score: 0.70
 
-  # -------------------------------------------------------------------------
-  # CRYPTO addresses 
-  # -------------------------------------------------------------------------
+  # CRYPTO addresses
   - name: CRYPTO_P_Recognizer
     supported_languages: [nb]
     supported_entity: CRYPTO_P
@@ -207,9 +161,7 @@ recognizers:
         regex: \b0x[a-fA-F0-9]{40}\b
         score: 0.85
 
-  # -------------------------------------------------------------------------
-  # IBAN code 
-  # -------------------------------------------------------------------------
+  # IBAN code
   - name: IBAN_CODE_P_Recognizer
     supported_languages: [nb]
     supported_entity: IBAN_CODE_P
@@ -219,9 +171,7 @@ recognizers:
         regex: \bNO\d{2}\s?\d{4}\s?\d{4}\s?\d{3}\b
         score: 0.90
 
-  # -------------------------------------------------------------------------
-  # IP addresses 
-  # -------------------------------------------------------------------------
+  # IP addresses
   - name: IP_ADDRESS_P_Recognizer
     supported_languages: [nb]
     supported_entity: IP_ADDRESS_P
@@ -234,9 +184,7 @@ recognizers:
         regex: \b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b
         score: 0.90
 
-  # -------------------------------------------------------------------------
-  # URL / DOMAIN 
-  # -------------------------------------------------------------------------
+  # URL / DOMAIN
   - name: URL_P_Recognizer
     supported_languages: [nb]
     supported_entity: URL_P
@@ -249,9 +197,7 @@ recognizers:
         regex: \b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]\b
         score: 0.70
 
-  # -------------------------------------------------------------------------
   # MEDICAL-license numbers
-  # -------------------------------------------------------------------------
   - name: MEDICAL_LICENSE_P_Recognizer
     supported_languages: [nb]
     supported_entity: MEDICAL_LICENSE_P
@@ -261,9 +207,7 @@ recognizers:
         regex: \bHPR-(?:\d{7}|[A-Z0-9]{9})\b
         score: 0.90
 
-  # -------------------------------------------------------------------------
   # spaCy Norwegian NER (built-in)
-  # -------------------------------------------------------------------------
   - name: SpacyRecognizer
     supported_languages: [nb]
     type: predefined

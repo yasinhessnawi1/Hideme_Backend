@@ -34,6 +34,7 @@ STATUS_CACHE_TTL = 60
 HEALTH_CACHE_TTL = 60
 METRICS_CACHE_TTL = 60
 
+
 # Timeout for extraction operations.
 DEFAULT_EXTRACTION_TIMEOUT = 60.0  # 60 seconds
 # Timeout for acquiring thread locks.
@@ -78,8 +79,8 @@ EXTENSION_TO_MIME = {".pdf": APPLICATION_WORD}
 ERROR_WORD = "[ERROR]"
 WARNING_WORD = "[WARNING]"
 # Default timeout values for batch processing.
-DEFAULT_BATCH_TIMEOUT = 600.0
-DEFAULT_ITEM_TIMEOUT = 600.0
+DEFAULT_BATCH_TIMEOUT = 1200.0
+DEFAULT_ITEM_TIMEOUT = 1200.0
 
 # File extension used for processing record files.
 JSON_CONSTANT = ".jsonl"

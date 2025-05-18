@@ -134,7 +134,7 @@ class MashinLearningService(BaseDetectionService):
                 detector,
                 minimized_data,
                 entity_list,
-                detection_timeout=600,
+                detection_timeout=1200,
                 operation_id=operation_id,
             )
             if detection_error:

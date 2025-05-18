@@ -29,6 +29,5 @@ PRESIDIO_AVAILABLE_ENTITIES = [
     "URL_P",  # Uniform Resource Locator
     "MEDICAL_LICENSE_P",  # Medical license numbers
     "PERSON_P",  # Person names (via spaCy/NER)
-    "ORGANIZATION_P",  # Organization names (via spaCy/NER)
     "LOCATION_P",  # Locations (via spaCy/NER)
 ]
