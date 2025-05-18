@@ -78,8 +78,8 @@ EXTENSION_TO_MIME = {".pdf": APPLICATION_WORD}
 ERROR_WORD = "[ERROR]"
 WARNING_WORD = "[WARNING]"
 # Default timeout values for batch processing.
-DEFAULT_BATCH_TIMEOUT = 600.0
-DEFAULT_ITEM_TIMEOUT = 600.0
+DEFAULT_BATCH_TIMEOUT = 1200.0
+DEFAULT_ITEM_TIMEOUT = 1200.0
 
 # File extension used for processing record files.
 JSON_CONSTANT = ".jsonl"
