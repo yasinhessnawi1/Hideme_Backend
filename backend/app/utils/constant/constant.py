@@ -34,6 +34,7 @@ STATUS_CACHE_TTL = 60
 HEALTH_CACHE_TTL = 60
 METRICS_CACHE_TTL = 60
 
+
 # Timeout for extraction operations.
 DEFAULT_EXTRACTION_TIMEOUT = 60.0  # 60 seconds
 # Timeout for acquiring thread locks.
