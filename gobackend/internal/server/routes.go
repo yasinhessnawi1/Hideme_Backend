@@ -62,7 +62,7 @@ func (s *Server) SetupRoutes() {
 	r.Use(middleware.Recovery())
 	r.Use(chimiddleware.RealIP)
 	r.Use(middleware.SecurityHeaders())
-
+	r.Use(corsMiddleware(allowedOrigins))
 	// Add IP ban check as early as possible in the chain
 	r.Use(middleware.IPBanCheck(securityService))
 
