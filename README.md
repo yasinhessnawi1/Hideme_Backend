@@ -2,6 +2,7 @@
 [![Build Status](https://img.shields.io/badge/Status-production-green)]()
 [![Test Coverage](https://img.shields.io/badge/Coverage-87%25-brightgreen)]()
 [![Python Version](https://img.shields.io/badge/py-3.12%2B-blue)]()
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yasinhessnawi1/Hideme_Backend)
 
 A comprehensive backend service for detecting and redacting sensitive information in documents with a focus on Norwegian
 language support, GDPR compliance, and high performance.

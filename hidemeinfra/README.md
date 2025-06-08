@@ -2,7 +2,7 @@
 [![Build Status](https://img.shields.io/badge/Status-development-yellow)]()
 [![Terraform Version](https://img.shields.io/badge/Version.Terraform--1.0.0%2B-blue)]()
 [![hashicorp/google Version](https://img.shields.io/badge/Version.Google-4.0%2B-blue)]()
-
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yasinhessnawi1/Hideme_Backend)
 ## Project Overview
 
 This repository contains the Terraform configuration for deploying the "Hide Me" application infrastructure on Google Cloud Platform (GCP). The infrastructure is designed to be scalable, secure, and maintainable, leveraging various GCP services orchestrated through modular Terraform code.
