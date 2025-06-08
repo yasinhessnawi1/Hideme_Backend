@@ -76,7 +76,7 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 
 	// Determine SSL parameters based on environment
 	var sslParams string
-	if cfg.App.Environment == "dev" {
+	if cfg.App.Environment == "dev" || cfg.App.Environment == "development" {
 		sslParams = constants.PostgresSSLDisable
 	} else if cfg.App.Environment == "prod" {
 		sslParams = constants.PostgresSSLParams

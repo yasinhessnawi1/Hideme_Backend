@@ -45,7 +45,7 @@ func (s *Server) SetupRoutes() {
 	// Create security service for rate limiting and IP banning
 	securityService := service.NewSecurityService(
 		repository.NewIPBanRepository(s.Db),
-		5*time.Minute, // Cache refresh interval
+		1*time.Minute, // Cache refresh interval
 	)
 
 	// Create security handlers
@@ -62,6 +62,9 @@ func (s *Server) SetupRoutes() {
 	r.Use(middleware.Recovery())
 	r.Use(chimiddleware.RealIP)
 	r.Use(middleware.SecurityHeaders())
+	// Custom CORS middleware that applies to all routes
+	// This ensures CORS headers are applied properly and consistently
+	r.Use(corsMiddleware(allowedOrigins))
 
 	// Add IP ban check as early as possible in the chain
 	r.Use(middleware.IPBanCheck(securityService))
@@ -71,7 +74,7 @@ func (s *Server) SetupRoutes() {
 
 	// Add auto-ban middleware that monitors for suspicious requests
 	// Ban for 24 hours after 5 suspicious activities within 5 minutes
-	r.Use(middleware.AutoBan(securityService, 5, 5*time.Minute, 24*time.Hour))
+	r.Use(middleware.AutoBan(securityService, 10, 10*time.Minute, 24*time.Hour))
 
 	// Custom CORS middleware that applies to all routes
 	// This ensures CORS headers are applied properly and consistently
