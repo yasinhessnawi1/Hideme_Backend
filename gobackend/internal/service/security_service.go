@@ -35,8 +35,8 @@ type SecurityService struct {
 func NewSecurityService(ipBanRepo repository.IPBanRepository, refreshInterval time.Duration) *SecurityService {
 	// Create default rate limiter store with 100 requests/sec burst of 30
 	limiterStore := ratelimit.NewStore(ratelimit.Rate{
-		RequestsPerSecond: 10,
-		Burst:             30,
+		RequestsPerSecond: 100,
+		Burst:             50,
 	}, 10*time.Minute)
 
 	// Configure different limits for different endpoint categories
@@ -48,7 +48,7 @@ func NewSecurityService(ipBanRepo repository.IPBanRepository, refreshInterval ti
 
 	// More generous limits for API endpoints
 	limiterStore.SetRate("api", ratelimit.Rate{
-		RequestsPerSecond: 20,
+		RequestsPerSecond: 80,
 		Burst:             50,
 	})
 
