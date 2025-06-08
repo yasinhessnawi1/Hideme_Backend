@@ -73,12 +73,16 @@ func Connect(cfg *config.AppConfig) (*Pool, error) {
 	if db_name == "" {
 		db_name = cfg.Database.Name
 	}
+	app_env := os.Getenv("APP_ENV")
+	if app_env =="" {
+		app_env = cfg.App.Environment
+	}
 
 	// Determine SSL parameters based on environment
 	var sslParams string
-	if cfg.App.Environment == "dev" || cfg.App.Environment == "development" {
+	if app_env  == "dev" || app_env  == "development" {
 		sslParams = constants.PostgresSSLDisable
-	} else if cfg.App.Environment == "prod" {
+	} else if app_env == "prod" {
 		sslParams = constants.PostgresSSLParams
 	} else {
 		sslParams = constants.PostgresSSLParams

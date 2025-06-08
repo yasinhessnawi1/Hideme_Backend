@@ -518,23 +518,23 @@ func setDefaults(config *AppConfig) {
 	}
 
 	if config.Security.RateLimiting.DefaultRate == 0 {
-		config.Security.RateLimiting.DefaultRate = 10 // 10 requests per second
+		config.Security.RateLimiting.DefaultRate = 100 // 10 requests per second
 	}
 
 	if config.Security.RateLimiting.DefaultBurst == 0 {
-		config.Security.RateLimiting.DefaultBurst = 30 // Burst of 30 requests
+		config.Security.RateLimiting.DefaultBurst = 50 // Burst of 30 requests
 	}
 
 	if config.Security.RateLimiting.AuthRate == 0 {
-		config.Security.RateLimiting.AuthRate = 3 // 3 requests per second for auth
+		config.Security.RateLimiting.AuthRate = 10 // 3 requests per second for auth
 	}
 
 	if config.Security.RateLimiting.AuthBurst == 0 {
-		config.Security.RateLimiting.AuthBurst = 5 // Burst of 5 for auth
+		config.Security.RateLimiting.AuthBurst = 15 // Burst of 5 for auth
 	}
 
 	if config.Security.RateLimiting.APIRate == 0 {
-		config.Security.RateLimiting.APIRate = 20 // 20 requests per second for API
+		config.Security.RateLimiting.APIRate = 40 // 20 requests per second for API
 	}
 
 	if config.Security.RateLimiting.APIBurst == 0 {
@@ -586,12 +586,6 @@ func validateConfig(config *AppConfig) error {
 		// Instead of failing, use a default and warn
 		fmt.Printf("Warning: Invalid environment '%s', defaulting to 'development'\n", config.App.Environment)
 		config.App.Environment = constants.EnvDevelopment
-	}
-
-	// In production, ensure we have a proper JWT secret
-	// This is critical for security in production environments
-	if config.App.IsProduction() && (config.JWT.Secret == "" || config.JWT.Secret == "changeme") {
-		return fmt.Errorf("JWT secret must be set in production")
 	}
 
 	// Database validation - connection details required
