@@ -561,11 +561,11 @@ func setDefaults(config *AppConfig) {
 	}
 
 	if config.Security.IPBanning.AutoBanWindow == 0 {
-		config.Security.IPBanning.AutoBanWindow = 5 * time.Minute // Within 5 minutes
+		config.Security.IPBanning.AutoBanWindow = 10 * time.Minute // Within 5 minutes
 	}
 
 	if config.Security.IPBanning.AutoBanDuration == 0 {
-		config.Security.IPBanning.AutoBanDuration = 24 * time.Hour // Ban for 24 hours
+		config.Security.IPBanning.AutoBanDuration = 3 * time.Hour // Ban for 3 hours
 	}
 }
 

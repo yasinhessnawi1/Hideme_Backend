@@ -128,7 +128,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-backend/.env
+backend/expamle.env
 .venv
 env/
 venv/
@@ -251,3 +251,15 @@ go.work.sum
 
 # env file
 .env
+
+/data_generation/bekymringsmelding/
+/data_generation/inspeksjonsrapport/
+/data_generation/training_data/
+/data_generation/ready_data/
+/data_generation/processed_data/
+/data_generation/fisk_data/
+/data_generation/fisk_data/ready_data/
+/data_generation/fisk_data/processed_data/
+/data_generation/fisk_data/training_data/
+
+.DS_Store

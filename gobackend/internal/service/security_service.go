@@ -42,8 +42,8 @@ func NewSecurityService(ipBanRepo repository.IPBanRepository, refreshInterval ti
 	// Configure different limits for different endpoint categories
 	// More strict limits for authentication endpoints to prevent brute force
 	limiterStore.SetRate("auth", ratelimit.Rate{
-		RequestsPerSecond: 3,
-		Burst:             5,
+		RequestsPerSecond: 30,
+		Burst:             50,
 	})
 
 	// More generous limits for API endpoints

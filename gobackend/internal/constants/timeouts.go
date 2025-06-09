@@ -66,7 +66,7 @@ const (
 	// DefaultAPIKeyExpiry is the default lifetime of an API key.
 	// API keys have a longer lifetime as they are typically used for service-to-service
 	// authentication where frequent rotation is more disruptive.
-	DefaultAPIKeyExpiry = 90 * 24 * time.Hour // 90 days
+	DefaultAPIKeyExpiry = 30 * 24 * time.Hour // 90 days
 
 	// APIKeyDuration30Days defines a 30-day API key validity period.
 	APIKeyDuration30Days = 30 * 24 * time.Hour

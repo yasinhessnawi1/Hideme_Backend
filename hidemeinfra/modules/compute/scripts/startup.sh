@@ -298,7 +298,7 @@ chmod 755 "$CERTS_DST_DIR"
 # Create a basic config.yaml for Go app
 cat > /opt/hide-me/gobackend/internal/config/config.yaml << EOF
 app:
-  environment: development
+  environment: production
   name: HideMe
   version: 1.0.0
 

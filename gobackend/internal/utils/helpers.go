@@ -73,35 +73,6 @@ func IsDuplicateKeyError(err error) bool {
 	return false
 }
 
-/*
-// IsUniqueViolation checks if an error is a unique violation for a specific constraint
-func IsUniqueViolation(err error, constraintName string) bool {
-	if mysqlErr, ok := err.(*mysql.MySQLError); ok {
-		// Check for unique violation and specific constraint
-		return mysqlErr.Number == 1062 && strings.Contains(mysqlErr.Message, constraintName)
-	}
-	return false
-}
-
-// IsNotNullViolation checks if an error is a not-null violation
-func IsNotNullViolation(err error) bool {
-	if mysqlErr, ok := err.(*mysql.MySQLError); ok {
-		// MySQL error number 1048 is "Column cannot be null"
-		return mysqlErr.Number == 1048
-	}
-	return false
-}
-
-// IsForeignKeyViolation checks if an error is a foreign key violation
-func IsForeignKeyViolation(err error) bool {
-	if mysqlErr, ok := err.(*mysql.MySQLError); ok {
-		// MySQL error number 1452 is "Cannot add or update a child row: a foreign key constraint fails"
-		return mysqlErr.Number == 1452
-	}
-	return false
-}
-*/
-
 // TruncateString truncates a string to the given maximum length and adds ellipsis if necessary.
 // This is useful for display or logging purposes where long strings need to be shortened.
 //
@@ -236,23 +207,3 @@ func RemoveString(slice []string, str string) []string {
 	}
 	return result
 }
-
-/*
-func ParseStringToInt64(s string, defaultValue int64) int64 {
-	if s == "" {
-		return defaultValue
-	}
-
-	var result int64
-	if _, err := fmt.Sscanf(s, "%d", &result); err != nil {
-		return defaultValue
-	}
-	return result
-}
-
-
-// AddJWTMethod returns an extension of the JWT method name that helps with debugging
-func AddJWTMethod(method string) string {
-	return fmt.Sprintf("%s (algorithm)", method)
-}
-*/

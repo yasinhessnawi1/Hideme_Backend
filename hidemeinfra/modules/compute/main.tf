@@ -72,9 +72,9 @@ resource "google_compute_instance_template" "app_template" {
 
   # Ensure proper shutdown for instances
   scheduling {
-    automatic_restart   = var.environment == "prod"
-    on_host_maintenance = var.environment == "prod" ? "MIGRATE" : "TERMINATE"
-    preemptible         = var.environment != "prod" # Use preemptible VMs in non-prod for cost savings
+    automatic_restart   = var.environment == "production"
+    on_host_maintenance = var.environment == "production" ? "MIGRATE" : "TERMINATE"
+    preemptible         = var.environment != "production" # Use preemptible VMs in non-prod for cost savings
   }
 
   # Enable shielded VM security features
